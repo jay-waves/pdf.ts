@@ -4,19 +4,22 @@ chrome.action.onClicked.addListener(() => {
   });
 });
 
-const FILE_PDF_REDIRECT_RULE_ID = 1;
+const PDF_REDIRECT_RULE_ID = 1;
 
-const isPdfFileUrl = (url) => {
+const isSupportedPdfUrl = (url) => {
   try {
     const parsed = new URL(url);
 
-    return parsed.protocol === 'file:' && parsed.pathname.toLowerCase().endsWith('.pdf');
+    return (
+      (parsed.protocol === 'file:' || parsed.protocol === 'https:') &&
+      parsed.pathname.toLowerCase().endsWith('.pdf')
+    );
   } catch {
     return false;
   }
 };
 
-const getFileUrlFromExtensionShortcut = (url) => {
+const getDocumentUrlFromExtensionShortcut = (url) => {
   const prefix = chrome.runtime.getURL('');
 
   if (!url.startsWith(prefix)) {
@@ -25,53 +28,35 @@ const getFileUrlFromExtensionShortcut = (url) => {
 
   const extensionPath = url.slice(prefix.length);
 
-  if (!extensionPath.toLowerCase().startsWith('file:///')) {
+  if (!extensionPath.toLowerCase().startsWith('file:///') && !extensionPath.toLowerCase().startsWith('https://')) {
     return null;
   }
 
-  const fileUrl = extensionPath;
-  return isPdfFileUrl(fileUrl) ? fileUrl : null;
+  return isSupportedPdfUrl(extensionPath) ? extensionPath : null;
 };
 
-const getViewerUrl = (fileUrl) =>
-  chrome.runtime.getURL(`viewer.html?file=${encodeURIComponent(fileUrl)}`);
+const getViewerUrl = (documentUrl) =>
+  chrome.runtime.getURL(`viewer.html?file=${encodeURIComponent(documentUrl)}`);
 
-const installPdfRedirectRule = async () => {
+const clearPdfRedirectRule = async () => {
   if (!chrome.declarativeNetRequest?.updateDynamicRules) {
     return;
   }
 
   await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [FILE_PDF_REDIRECT_RULE_ID],
-    addRules: [
-      {
-        id: FILE_PDF_REDIRECT_RULE_ID,
-        priority: 100,
-        action: {
-          type: 'redirect',
-          redirect: {
-            regexSubstitution: `chrome-extension://${chrome.runtime.id}/viewer.html?file=\\0`,
-          },
-        },
-        condition: {
-          regexFilter: '^file:///.+\\.pdf(?:[?#].*)?$',
-          isUrlFilterCaseSensitive: false,
-          resourceTypes: ['main_frame'],
-        },
-      },
-    ],
+    removeRuleIds: [PDF_REDIRECT_RULE_ID],
   });
 };
 
 const redirectPdfTab = (tabId, url) => {
-  const fileUrl = isPdfFileUrl(url) ? url : getFileUrlFromExtensionShortcut(url);
+  const documentUrl = isSupportedPdfUrl(url) ? url : getDocumentUrlFromExtensionShortcut(url);
 
-  if (!fileUrl) {
+  if (!documentUrl) {
     return;
   }
 
   chrome.tabs.update(tabId, {
-    url: getViewerUrl(fileUrl),
+    url: getViewerUrl(documentUrl),
   });
 };
 
@@ -84,11 +69,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  installPdfRedirectRule();
+  clearPdfRedirectRule();
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  installPdfRedirectRule();
+  clearPdfRedirectRule();
 });
 
-installPdfRedirectRule();
+clearPdfRedirectRule();

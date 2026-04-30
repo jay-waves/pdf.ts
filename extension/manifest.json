@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "EmbedPDF File Viewer",
-  "description": "Open local PDF files with the EmbedPDF React PDF viewer.",
+  "description": "Open local and HTTPS PDF files with the EmbedPDF React PDF viewer.",
   "version": "0.1.0",
   "minimum_chrome_version": "120",
   "action": {
@@ -11,10 +11,10 @@
     "service_worker": "service-worker.js",
     "type": "module"
   },
-  "host_permissions": ["file:///*"],
+  "host_permissions": ["file:///*", "https://*/*"],
   "permissions": ["declarativeNetRequest", "tabs"],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; connect-src 'self' file: https: blob: data:;"
   },
   "file_handlers": [
     {
