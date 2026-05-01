@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
+    "sync:version": "node scripts/sync-version.mjs",
+    "check:release-version": "node scripts/check-release-version.mjs",
+    "build": "pnpm sync:version && vite build",
+    "dev": "pnpm sync:version && vite build --watch",
     "package": "node scripts/package-extension.mjs",
     "release:prepare": "pnpm build && pnpm package"
   },

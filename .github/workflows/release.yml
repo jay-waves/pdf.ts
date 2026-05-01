@@ -30,6 +30,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check release version
+        if: github.event_name == 'release'
+        run: pnpm check:release-version
+
       - name: Build extension package
         run: pnpm release:prepare
 
