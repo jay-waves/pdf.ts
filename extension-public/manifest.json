@@ -12,7 +12,7 @@
     "type": "module"
   },
   "host_permissions": ["file:///*", "https://*/*"],
-  "permissions": ["declarativeNetRequest", "tabs"],
+  "permissions": ["tabs"],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; connect-src 'self' file: https: blob: data:;"
   },

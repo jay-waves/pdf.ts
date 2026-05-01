@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [react()],
   publicDir: resolve(__dirname, 'extension-public'),
   build: {
-    outDir: resolve(__dirname, 'extension'),
+    outDir: resolve(__dirname, 'dist/extension'),
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {

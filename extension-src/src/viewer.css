@@ -1,9 +1,121 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+  --shnctl-background-app: #f8fafc;
+  --shnctl-background-surface: #ffffff;
+  --shnctl-background-elevated: #ffffff;
+  --shnctl-foreground-primary: #0f172a;
+  --shnctl-foreground-secondary: #475569;
+  --shnctl-foreground-muted: #64748b;
+  --shnctl-border-default: #dbe3ef;
+  --shnctl-border-strong: #2563eb;
+  --shnctl-accent-primary: #2563eb;
+  --shnctl-interactive-hover: #eff6ff;
+  --shnctl-interactive-selected: #dbeafe;
+  --shnctl-overlay-bg: rgba(15, 23, 42, 0.08);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: Canvas;
-  color: CanvasText;
+  background: var(--shnctl-background-app);
+  color: var(--shnctl-foreground-primary);
+}
+
+:root[data-viewer-theme="dark"],
+:root[data-viewer-theme="nord"] {
+  color-scheme: dark;
+}
+
+:root[data-viewer-theme="dark"] {
+  --shnctl-background-app: #0f172a;
+  --shnctl-background-surface: #1e293b;
+  --shnctl-background-elevated: #263548;
+  --shnctl-foreground-primary: #f8fafc;
+  --shnctl-foreground-secondary: #cbd5e1;
+  --shnctl-foreground-muted: #94a3b8;
+  --shnctl-border-default: #334155;
+  --shnctl-border-strong: #60a5fa;
+  --shnctl-accent-primary: #60a5fa;
+  --shnctl-interactive-hover: #29384d;
+  --shnctl-interactive-selected: #1e3a8a;
+  --shnctl-overlay-bg: rgba(2, 6, 23, 0.32);
+}
+
+:root[data-viewer-theme="nord"] {
+  --shnctl-background-app: #2e3440;
+  --shnctl-background-surface: #3b4252;
+  --shnctl-background-elevated: #434c5e;
+  --shnctl-foreground-primary: #eceff4;
+  --shnctl-foreground-secondary: #d8dee9;
+  --shnctl-foreground-muted: #a7b1c2;
+  --shnctl-border-default: #4c566a;
+  --shnctl-border-strong: #88c0d0;
+  --shnctl-accent-primary: #88c0d0;
+  --shnctl-interactive-hover: #434c5e;
+  --shnctl-interactive-selected: #3b5360;
+  --shnctl-overlay-bg: rgba(46, 52, 64, 0.44);
+}
+
+:root[data-viewer-theme="light"],
+:root[data-viewer-theme="solar"] {
+  color-scheme: light;
+}
+
+:root[data-viewer-theme="solar"] {
+  --shnctl-background-app: #fdf6e3;
+  --shnctl-background-surface: #eee8d5;
+  --shnctl-background-elevated: #fffaf0;
+  --shnctl-foreground-primary: #073642;
+  --shnctl-foreground-secondary: #586e75;
+  --shnctl-foreground-muted: #839496;
+  --shnctl-border-default: #d6cfb8;
+  --shnctl-border-strong: #268bd2;
+  --shnctl-accent-primary: #268bd2;
+  --shnctl-interactive-hover: #e8dfc6;
+  --shnctl-interactive-selected: #d8edf0;
+  --shnctl-overlay-bg: rgba(147, 128, 108, 0.22);
+}
+
+:root[data-viewer-theme="morandi"] {
+  --shnctl-background-app: #f3f0ea;
+  --shnctl-background-surface: #e6e0d7;
+  --shnctl-background-elevated: #faf7f1;
+  --shnctl-foreground-primary: #353331;
+  --shnctl-foreground-secondary: #5d5853;
+  --shnctl-foreground-muted: #80796f;
+  --shnctl-border-default: #d0c8bd;
+  --shnctl-border-strong: #7b8f87;
+  --shnctl-accent-primary: #7b8f87;
+  --shnctl-interactive-hover: #ded8cf;
+  --shnctl-interactive-selected: #d9dfdb;
+  --shnctl-overlay-bg: rgba(116, 105, 96, 0.22);
+}
+
+:root[data-viewer-theme="mediterranean"] {
+  --shnctl-background-app: #f3f4ee;
+  --shnctl-background-surface: #e6ece6;
+  --shnctl-background-elevated: #fbfbf4;
+  --shnctl-foreground-primary: #263b40;
+  --shnctl-foreground-secondary: #486064;
+  --shnctl-foreground-muted: #6d7d7f;
+  --shnctl-border-default: #c9d4cf;
+  --shnctl-border-strong: #3f7278;
+  --shnctl-accent-primary: #3f7278;
+  --shnctl-interactive-hover: #dce7e2;
+  --shnctl-interactive-selected: #d7e6e3;
+  --shnctl-overlay-bg: rgba(58, 83, 92, 0.2);
+}
+
+:root[data-viewer-theme="github"] {
+  --shnctl-background-app: #f6f8fa;
+  --shnctl-background-surface: #ffffff;
+  --shnctl-background-elevated: #ffffff;
+  --shnctl-foreground-primary: #1f2328;
+  --shnctl-foreground-secondary: #59636e;
+  --shnctl-foreground-muted: #6e7781;
+  --shnctl-border-default: #d0d7de;
+  --shnctl-border-strong: #0969da;
+  --shnctl-accent-primary: #0969da;
+  --shnctl-interactive-hover: #f3f4f6;
+  --shnctl-interactive-selected: #ddf4ff;
+  --shnctl-overlay-bg: rgba(31, 35, 40, 0.16);
 }
 
 * {
@@ -32,6 +144,9 @@ input {
 }
 
 .shnctl-current-title {
+  --shnctl-acrylic-bg: color-mix(in srgb, var(--shnctl-background-surface) 70%, transparent);
+  --shnctl-acrylic-border: color-mix(in srgb, var(--shnctl-border-default) 72%, transparent);
+  --shnctl-acrylic-hover: color-mix(in srgb, var(--shnctl-interactive-hover) 72%, transparent);
   position: fixed;
   top: 72px;
   right: 18px;
@@ -41,12 +156,13 @@ input {
   gap: 2px;
   width: min(360px, calc(100vw - 36px));
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+  border: 1px solid var(--shnctl-acrylic-border);
   border-radius: 14px;
-  background: color-mix(in srgb, Canvas 92%, transparent);
-  backdrop-filter: blur(12px);
-  color: CanvasText;
-  box-shadow: 0 8px 24px color-mix(in srgb, CanvasText 10%, transparent);
+  background: var(--shnctl-acrylic-bg);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  color: var(--shnctl-foreground-primary);
+  box-shadow: none;
   text-align: left;
   cursor: pointer;
   touch-action: none;
@@ -59,16 +175,12 @@ input {
 
 .shnctl-current-title:hover,
 .shnctl-current-title:focus-visible {
-  border-color: color-mix(in srgb, Highlight 28%, transparent);
-  background: color-mix(in srgb, Highlight 10%, Canvas);
+  border-color: color-mix(in srgb, var(--shnctl-border-strong) 62%, transparent);
+  background:
+    linear-gradient(var(--shnctl-acrylic-hover), var(--shnctl-acrylic-hover)),
+    var(--shnctl-acrylic-bg);
   transform: translateY(1px);
   outline: none;
-}
-
-.shnctl-current-title-label {
-  color: color-mix(in srgb, CanvasText 55%, transparent);
-  font-size: 11px;
-  line-height: 16px;
 }
 
 .shnctl-current-title-text {
@@ -80,7 +192,7 @@ input {
 }
 
 .shnctl-current-title-page {
-  color: color-mix(in srgb, CanvasText 62%, transparent);
+  color: var(--shnctl-foreground-muted);
   font-size: 11px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;
@@ -90,10 +202,11 @@ input {
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: color-mix(in srgb, CanvasText 6%, transparent);
+  background: var(--shnctl-overlay-bg);
 }
 
 .shnctl-panel {
+  --shnctl-acrylic-bg: color-mix(in srgb, var(--shnctl-background-elevated) 72%, transparent);
   position: fixed;
   top: 50%;
   left: 50%;
@@ -104,10 +217,12 @@ input {
   min-height: min(500px, calc(100vh - 56px));
   transform: translate(-50%, -50%);
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, CanvasText 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--shnctl-border-default) 70%, transparent);
   border-radius: 6px;
-  background: Canvas;
-  color: CanvasText;
+  background: var(--shnctl-acrylic-bg);
+  backdrop-filter: blur(22px) saturate(155%);
+  -webkit-backdrop-filter: blur(22px) saturate(155%);
+  color: var(--shnctl-foreground-primary);
   box-shadow: none;
 }
 
@@ -138,17 +253,21 @@ input {
   align-items: center;
   gap: 12px;
   min-height: 28px;
-  padding: 4px 10px;
+  padding: 3px 9px;
   overflow: hidden;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 15px;
+  line-height: 22px;
   text-align: left;
   box-shadow: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
 }
 
 .shnctl-bookmark-title {
@@ -161,22 +280,24 @@ input {
 
 .shnctl-bookmark-page {
   flex: 0 0 auto;
-  color: color-mix(in srgb, CanvasText 52%, transparent);
-  font-size: 12px;
-  line-height: 18px;
+  color: var(--shnctl-foreground-muted);
+  font-size: 13px;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
 }
 
 .shnctl-bookmark:hover:not(:disabled),
 .shnctl-bookmark:focus-visible {
-  background: color-mix(in srgb, Highlight 10%, transparent);
-  color: Highlight;
+  border-color: color-mix(in srgb, var(--shnctl-border-strong) 44%, transparent);
+  background: color-mix(in srgb, var(--shnctl-interactive-selected) 76%, transparent);
+  color: var(--shnctl-foreground-primary);
+  transform: translateY(-1px);
   outline: none;
 }
 
 .shnctl-bookmark:hover:not(:disabled) .shnctl-bookmark-page,
 .shnctl-bookmark:focus-visible .shnctl-bookmark-page {
-  color: color-mix(in srgb, Highlight 72%, CanvasText);
+  color: var(--shnctl-foreground-secondary);
 }
 
 .shnctl-bookmark:disabled {
@@ -186,7 +307,7 @@ input {
 
 .shnctl-state {
   padding: 4px 0;
-  color: color-mix(in srgb, CanvasText 70%, transparent);
+  color: var(--shnctl-foreground-secondary);
   font-size: 13px;
   line-height: 20px;
 }
