@@ -22,16 +22,16 @@ This produces:
 - `dist/extension`: unpacked extension directory for local loading
 - `dist/release/pdf-ts-chrome-extension-v<version>.zip`: release asset ready for GitHub Releases
 
-Versioning uses `package.json` as the single source of truth. `pnpm build` and `pnpm dev` automatically sync the Chrome manifest version, and the Release workflow requires the GitHub Release tag to match that same version. Use tags like `v0.1.0`.
+Versioning uses `package.json` as the single source of truth. `pnpm build` and `pnpm dev` automatically sync the Chrome manifest version.
 
 ## GitHub Release flow
 
 1. Push the repository to `https://github.com/jay-waves/pdf.ts`.
-2. Commit and push your changes.
-3. Create and publish a GitHub Release in the repository UI.
-4. The `Build release package` workflow builds the extension and uploads the zip to that Release automatically.
-
-You can also run the same workflow manually from the Actions tab via `workflow_dispatch`.
+2. Update `package.json` to the version you want to release.
+3. Run `pnpm release:prepare`.
+4. Commit and push your changes.
+5. Create a git tag that matches the version, for example `v0.1.0`, and push it.
+6. Create a GitHub Release from that tag and upload `dist/release/pdf-ts-chrome-extension-v<version>.zip` manually.
 
 ## Open local PDFs
 

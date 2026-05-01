@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "sync:version": "node scripts/sync-version.mjs",
-    "check:release-version": "node scripts/check-release-version.mjs",
     "build": "pnpm sync:version && vite build",
     "dev": "pnpm sync:version && vite build --watch",
     "package": "node scripts/package-extension.mjs",
