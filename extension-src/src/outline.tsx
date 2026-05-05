@@ -1,0 +1,562 @@
+// outline + nagivation bar
+
+import { 
+    useEffect, 
+    useMemo, 
+    useState,
+    type FormEvent
+} from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import type { PluginRegistry } from '@embedpdf/core';
+import {
+  PdfZoomMode,
+  type PdfBookmarkObject,
+  type PdfErrorReason,
+  type Task,
+} from '@embedpdf/models';
+import {
+  type UICapability,
+} from '@embedpdf/react-pdf-viewer';
+import './viewer.css';
+import {
+    getActiveDocumentId,
+    getDestinationFromTarget,
+    type ScrollCapability,
+} from './utils'
+
+const EMPTY_CLEANUP = () => {};
+
+type BookmarkTask = Task<{ bookmarks: PdfBookmarkObject[] }, PdfErrorReason>;
+
+export type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
+export type OutlineCache = {
+  status: OutlineStatus;
+  bookmarks: PdfBookmarkObject[];
+};
+
+function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
+  return {
+    status: bookmarks.length ? 'ready' : 'empty',
+    bookmarks,
+  };
+}
+
+type FlattenedBookmark = {
+  title: string;
+  pageNumber: number;
+};
+
+interface BookmarkCapability {
+  getBookmarks(): BookmarkTask;
+  forDocument(documentId: string): {
+    getBookmarks(): BookmarkTask;
+  };
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+}
+
+function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, behavior: 'instant' | 'smooth' | 'auto' = 'smooth') {
+  const documentId = getActiveDocumentId(registry);
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+
+  if (!documentId || !scroll) {
+    return;
+  }
+
+  const scrollScope = scroll.forDocument(documentId);
+  if (direction < 0) {
+    scrollScope.scrollToPreviousPage(behavior);
+    return;
+  }
+
+  scrollScope.scrollToNextPage(behavior);
+}
+
+export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+
+    if (isEditableKeyboardTarget(event.target)) {
+      return;
+    }
+
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    requestPageNavigation(registry, event.key === 'ArrowLeft' ? -1 : 1);
+    onNavigate();
+  };
+
+  window.addEventListener('keydown', onKeyDown, { capture: true });
+
+  return () => {
+    window.removeEventListener('keydown', onKeyDown, { capture: true });
+  };
+}
+
+
+export function installBuiltInPageControlsHider(registry: PluginRegistry) {
+  const ui = registry.getPlugin('ui')?.provides?.() as UICapability | undefined;
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+
+  if (!ui || !scroll) {
+    return EMPTY_CLEANUP;
+  }
+
+  const hidePageControls = (documentId?: string | null) => {
+    if (!documentId) {
+      return;
+    }
+
+    ui.disableOverlay('page-controls', documentId);
+  };
+
+  hidePageControls(getActiveDocumentId(registry));
+
+  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
+    hidePageControls(event.documentId);
+  });
+
+  return () => {
+    unsubscribeLayoutReady();
+  };
+}
+
+function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
+  const flattened: FlattenedBookmark[] = [];
+
+  const walk = (items: PdfBookmarkObject[]) => {
+    for (const item of items) {
+      const destination = getDestinationFromTarget(item.target);
+      const title = item.title?.trim();
+
+      if (destination && title) {
+        flattened.push({
+          title,
+          pageNumber: destination.pageIndex + 1,
+        });
+      }
+
+      if (item.children?.length) {
+        walk(item.children);
+      }
+    }
+  };
+
+  walk(bookmarks);
+
+  flattened.sort((left, right) => {
+    if (left.pageNumber !== right.pageNumber) {
+      return left.pageNumber - right.pageNumber;
+    }
+
+    return left.title.localeCompare(right.title, 'zh-CN');
+  });
+
+  return flattened;
+}
+
+export function getCurrentBookmarkTitle(bookmarks: PdfBookmarkObject[], pageNumber: number) {
+  if (pageNumber < 1) {
+    return '';
+  }
+
+  const flattened = flattenBookmarks(bookmarks);
+  let currentTitle = '';
+
+  for (const item of flattened) {
+    if (item.pageNumber > pageNumber) {
+      break;
+    }
+
+    currentTitle = item.title;
+  }
+
+  return currentTitle;
+}
+
+export function installCurrentTitleTracker(
+  registry: PluginRegistry,
+  getBookmarks: () => PdfBookmarkObject[],
+  onChange: (value: { pageNumber: number; title: string; totalPages: number }) => void,
+) {
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  if (!scroll) {
+    return EMPTY_CLEANUP;
+  }
+
+  let currentPageNumber = 1;
+  let totalPages = 0;
+
+  const refresh = () => {
+    const title = getCurrentBookmarkTitle(getBookmarks(), currentPageNumber);
+    onChange({
+      pageNumber: currentPageNumber,
+      title,
+      totalPages,
+    });
+  };
+
+  const unsubscribePageChange = scroll.onPageChange((event) => {
+    currentPageNumber = event.pageNumber;
+    totalPages = event.totalPages;
+    refresh();
+  });
+
+  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
+    currentPageNumber = scroll.forDocument(event.documentId).getCurrentPage();
+    totalPages = event.totalPages || scroll.forDocument(event.documentId).getTotalPages();
+    refresh();
+  });
+
+  refresh();
+
+  return () => {
+    unsubscribePageChange();
+    unsubscribeLayoutReady();
+  };
+}
+
+async function loadBookmarks(registry: PluginRegistry) {
+  const documentId = getActiveDocumentId(registry);
+  const bookmark = registry.getPlugin('bookmark')?.provides?.() as BookmarkCapability | undefined;
+
+  if (!bookmark) {
+    console.error('[shnctl] bookmark plugin is not available');
+    return [];
+  }
+
+  const task = documentId ? bookmark.forDocument(documentId).getBookmarks() : bookmark.getBookmarks();
+
+  try {
+    return (await task.toPromise()).bookmarks;
+  } catch (error) {
+    console.error('[shnctl] failed to load bookmarks', {
+      documentId,
+      error,
+    });
+    throw error;
+  }
+}
+
+async function loadOutlineCache(registry: PluginRegistry) {
+  return toOutlineCache(await loadBookmarks(registry));
+}
+
+export function installOutlinePrefetch(
+  registry: PluginRegistry,
+  onLoaded: (cache: OutlineCache) => void,
+) {
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  if (!scroll) {
+    onLoaded({ status: 'error', bookmarks: [] });
+    return EMPTY_CLEANUP;
+  }
+
+  let loadedDocumentId: string | null = null;
+
+  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
+    if (!event.isInitial || loadedDocumentId === event.documentId) {
+      return;
+    }
+
+    loadedDocumentId = event.documentId;
+    onLoaded({ status: 'loading', bookmarks: [] });
+
+    loadOutlineCache(registry)
+      .then(onLoaded)
+      .catch((error) => {
+        console.error('[shnctl] outline prefetch failed after initial layout', {
+          documentId: event.documentId,
+          error,
+        });
+        onLoaded({ status: 'error', bookmarks: [] });
+      });
+  });
+
+  return () => {
+    unsubscribeLayoutReady();
+  };
+}
+
+function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject) {
+  const destination = getDestinationFromTarget(bookmark.target);
+  if (!destination) {
+    return;
+  }
+
+  const documentId = getActiveDocumentId(registry);
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  if (!documentId || !scroll) {
+    return;
+  }
+
+  const xyzZoom = destination.zoom.mode === PdfZoomMode.XYZ ? destination.zoom : undefined;
+  scroll.forDocument(documentId).scrollToPage({
+    pageNumber: destination.pageIndex + 1,
+    pageCoordinates: xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : undefined,
+    behavior: 'smooth',
+  });
+}
+
+export function ShnctlOutline({
+  registry,
+  open,
+  cache,
+  onCacheChange,
+  onClose,
+}: {
+  registry?: PluginRegistry;
+  open: boolean;
+  cache: OutlineCache;
+  onCacheChange: (cache: OutlineCache) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open || !registry || cache.status !== 'error') {
+      return;
+    }
+
+    let cancelled = false;
+    onCacheChange({ status: 'loading', bookmarks: [] });
+
+    loadOutlineCache(registry)
+      .then((nextCache) => {
+        if (cancelled) {
+          return;
+        }
+        onCacheChange(nextCache);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('[shnctl] outline retry failed when panel opened', {
+            error,
+          });
+          onCacheChange({ status: 'error', bookmarks: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cache.status, onCacheChange, open, registry]);
+
+  const body = useMemo(() => {
+    if (cache.status === 'idle' || cache.status === 'loading') {
+      return <div className="shnctl-state">Loading outline...</div>;
+    }
+
+    if (cache.status === 'empty') {
+      return <div className="shnctl-state">This PDF does not include an outline.</div>;
+    }
+
+    if (cache.status === 'error') {
+      return <div className="shnctl-state">Failed to load the outline.</div>;
+    }
+
+    return (
+      <BookmarkList
+        bookmarks={cache.bookmarks}
+        level={0}
+        onSelect={(bookmark) => {
+          if (registry) {
+            scrollToBookmark(registry, bookmark);
+          }
+        }}
+      />
+    );
+  }, [cache.bookmarks, cache.status, registry]);
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="shnctl-overlay" />
+        <Dialog.Content className="shnctl-panel" aria-describedby={undefined}>
+          <Dialog.Title className="shnctl-visually-hidden">PDF Outline</Dialog.Title>
+          <div className="shnctl-content">{body}</div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function BookmarkList({
+  bookmarks,
+  level,
+  onSelect,
+}: {
+  bookmarks: PdfBookmarkObject[];
+  level: number;
+  onSelect: (bookmark: PdfBookmarkObject) => void;
+}) {
+  return (
+    <ol className="shnctl-list">
+      {bookmarks.map((bookmark, index) => {
+        const destination = getDestinationFromTarget(bookmark.target);
+        const pageNumber = destination ? destination.pageIndex + 1 : undefined;
+
+        return (
+          <li key={`${level}-${index}-${bookmark.title}`} className="shnctl-item">
+            <button
+              type="button"
+              className="shnctl-bookmark"
+              style={{ marginLeft: `${level * 18}px`, width: `calc(100% - ${level * 18}px)` }}
+              onClick={() => onSelect(bookmark)}
+              disabled={!destination}
+            >
+              <span className="shnctl-bookmark-title">{bookmark.title || `Item ${index + 1}`}</span>
+              {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
+            </button>
+            {bookmark.children?.length ? (
+              <BookmarkList bookmarks={bookmark.children} level={level + 1} onSelect={onSelect} />
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+export function BottomNavigationControl({
+  registry,
+  title,
+  pageNumber,
+  totalPages,
+  outlineStatus,
+  visible,
+  onReveal,
+  onOpenOutline,
+}: {
+  registry?: PluginRegistry;
+  title: string;
+  pageNumber: number;
+  totalPages: number;
+  outlineStatus: OutlineStatus;
+  visible: boolean;
+  onReveal: () => void;
+  onOpenOutline: () => void;
+}) {
+  const [pageInput, setPageInput] = useState(String(pageNumber || 1));
+  const canNavigate = Boolean(registry && totalPages > 0);
+  const canGoPrevious = canNavigate && pageNumber > 1;
+  const canGoNext = canNavigate && pageNumber < totalPages;
+  const outlineTitle = title.trim();
+  const shouldShowOutlineTitle = outlineStatus === 'ready' && outlineTitle.length > 0;
+  useEffect(() => {
+    setPageInput(String(pageNumber || 1));
+  }, [pageNumber]);
+
+  const scrollToPage = (nextPageNumber: number) => {
+    onReveal();
+
+    if (!registry || !totalPages) {
+      return;
+    }
+
+    const documentId = getActiveDocumentId(registry);
+    const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+    if (!documentId || !scroll) {
+      return;
+    }
+
+    const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
+    scroll.forDocument(documentId).scrollToPage({
+      pageNumber: clampedPageNumber,
+      behavior: 'smooth',
+    });
+    setPageInput(String(clampedPageNumber));
+  };
+
+  const handlePageSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const nextPageNumber = Number.parseInt(pageInput, 10);
+    if (!Number.isFinite(nextPageNumber)) {
+      setPageInput(String(pageNumber || 1));
+      return;
+    }
+
+    scrollToPage(nextPageNumber);
+  };
+
+  const scrollByPage = (direction: -1 | 1) => {
+    onReveal();
+
+    if (!registry) {
+      return;
+    }
+
+    requestPageNavigation(registry, direction);
+  };
+
+  return (
+    <nav
+      className={`shnctl-bottom-nav${visible ? ' is-visible' : ''}`}
+      aria-label="PDF navigation"
+      onMouseEnter={onReveal}
+      onFocus={onReveal}
+    >
+      <div className="shnctl-bottom-nav-actions">
+        <button
+          type="button"
+          className="shnctl-bottom-nav-button"
+          onClick={() => scrollByPage(-1)}
+          disabled={!canGoPrevious}
+          aria-label="Previous page"
+        >
+          &lt;
+        </button>
+        <button
+          type="button"
+          className="shnctl-bottom-nav-button"
+          onClick={() => scrollByPage(1)}
+          disabled={!canGoNext}
+          aria-label="Next page"
+        >
+          &gt;
+        </button>
+      </div>
+      <div className="shnctl-bottom-nav-meta">
+        {shouldShowOutlineTitle ? (
+          <button
+            type="button"
+            className="shnctl-bottom-nav-outline"
+            title={outlineTitle}
+            onClick={() => {
+              onReveal();
+              onOpenOutline();
+            }}
+          >
+            <span className="shnctl-bottom-nav-title">{outlineTitle}</span>
+          </button>
+        ) : null}
+        <form className="shnctl-bottom-nav-page" onSubmit={handlePageSubmit} aria-label="Page jump">
+          <input
+            className="shnctl-bottom-nav-page-input"
+            value={pageInput}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Current page"
+            disabled={!canNavigate}
+            onChange={(event) => setPageInput(event.currentTarget.value)}
+            onFocus={onReveal}
+            onBlur={() => setPageInput(String(pageNumber || 1))}
+          />
+          <span className="shnctl-bottom-nav-page-total">/ {totalPages || '-'}</span>
+        </form>
+      </div>
+    </nav>
+  );
+}
