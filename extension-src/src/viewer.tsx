@@ -35,6 +35,9 @@ import {
   installReadingHistory,
   savePdfToOriginalFile
 } from './file-handle'
+import {
+  installSelectionTranslate
+} from './selection-translate'
 
 interface ZoomScope {
   getState(): { currentZoomLevel: number };
@@ -462,6 +465,7 @@ function App() {
             installBrowserZoomInterceptor(nextRegistry),
             installMiddleMousePanInterceptor(nextRegistry),
             installReadingHistory(nextRegistry, fileUrl),
+            installSelectionTranslate(nextRegistry, viewerRef.current?.container ?? null),
             installOutlinePrefetch(nextRegistry, setOutlineCache),
             installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
               currentPageNumberRef.current = pageNumber;

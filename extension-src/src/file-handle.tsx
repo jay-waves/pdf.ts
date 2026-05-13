@@ -8,8 +8,13 @@ const EMPTY_CLEANUP = () => {};
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
 const FILE_HANDLES_KEY = 'embedpdf-file-handles-v1';
 
+type ScrollStrategyValue = 'vertical' | 'horizontal';
+type SpreadModeValue = 'none' | 'odd' | 'even';
+
 interface ReadingHistoryEntry {
   pageNumber: number;
+  scrollStrategy?: ScrollStrategyValue;
+  spreadMode?: SpreadModeValue;
   updatedAt: string;
 }
 
@@ -24,6 +29,14 @@ interface StoredFileHandleEntry {
 }
 
 type StoredFileHandleStore = Record<string, StoredFileHandleEntry>;
+
+interface SpreadCapability {
+  forDocument(documentId: string): {
+    setSpreadMode(mode: SpreadModeValue): void;
+    getSpreadMode(): SpreadModeValue;
+  };
+  onSpreadChange(listener: (event: { documentId: string; spreadMode: SpreadModeValue }) => void): () => void;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
@@ -169,14 +182,24 @@ async function readHistoryStore() {
   return legacyStore;
 }
 
-async function writeHistoryEntry(fileUrl: string, pageNumber: number) {
-  if (!fileUrl || pageNumber < 1) {
+function isScrollStrategy(value: unknown): value is ScrollStrategyValue {
+  return value === 'vertical' || value === 'horizontal';
+}
+
+function isSpreadMode(value: unknown): value is SpreadModeValue {
+  return value === 'none' || value === 'odd' || value === 'even';
+}
+
+async function writeHistoryEntry(fileUrl: string, entry: Omit<ReadingHistoryEntry, 'updatedAt'>) {
+  if (!fileUrl || entry.pageNumber < 1) {
     return;
   }
 
   const store = await readHistoryStore();
   store[fileUrl] = {
-    pageNumber,
+    pageNumber: entry.pageNumber,
+    scrollStrategy: entry.scrollStrategy,
+    spreadMode: entry.spreadMode,
     updatedAt: new Date().toISOString(),
   };
   await set(READING_HISTORY_KEY, store);
@@ -196,13 +219,46 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     return EMPTY_CLEANUP;
   }
 
+  const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
   let restoredDocumentId: string | null = null;
   let pendingPageNumber = 0;
   let pendingWriteId = 0;
 
+  const getScrollStrategy = (documentId: string) => {
+    const state = registry.getStore().getState() as {
+      plugins?: {
+        scroll?: {
+          documents?: Record<string, { strategy?: unknown }>;
+        };
+      };
+    };
+
+    return state.plugins?.scroll?.documents?.[documentId]?.strategy;
+  };
+
+  const getHistoryEntry = (documentId: string): Omit<ReadingHistoryEntry, 'updatedAt'> => {
+    const scrollScope = scroll.forDocument(documentId);
+    const scrollStrategy = getScrollStrategy(documentId);
+    const spreadMode = spread?.forDocument(documentId).getSpreadMode();
+
+    return {
+      pageNumber: scrollScope.getCurrentPage(),
+      scrollStrategy: isScrollStrategy(scrollStrategy) ? scrollStrategy : undefined,
+      spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
+    };
+  };
+
   const flushPendingWrite = () => {
     pendingWriteId = 0;
-    return writeHistoryEntry(fileUrl, pendingPageNumber);
+    const documentId = getActiveDocumentId(registry);
+    if (!documentId) {
+      return Promise.resolve();
+    }
+
+    return writeHistoryEntry(fileUrl, {
+      ...getHistoryEntry(documentId),
+      pageNumber: pendingPageNumber || getHistoryEntry(documentId).pageNumber,
+    });
   };
 
   const scheduleHistoryWrite = (pageNumber: number) => {
@@ -221,6 +277,21 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     scheduleHistoryWrite(event.pageNumber);
   });
 
+  const unsubscribeSpreadChange = spread?.onSpreadChange((event) => {
+    scheduleHistoryWrite(scroll.forDocument(event.documentId).getCurrentPage());
+  });
+
+  const unsubscribeScrollStateChange = scroll.onStateChange((state) => {
+    if (!isScrollStrategy(state.strategy)) {
+      return;
+    }
+
+    const documentId = getActiveDocumentId(registry);
+    if (documentId) {
+      scheduleHistoryWrite(scroll.forDocument(documentId).getCurrentPage());
+    }
+  });
+
   const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
     if (!event.isInitial || restoredDocumentId === event.documentId) {
       return;
@@ -230,14 +301,28 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
 
     readHistoryEntry(fileUrl)
       .then((saved) => {
-        if (!saved || saved.pageNumber <= 1) {
+        if (!saved) {
           return;
         }
 
-        scroll.forDocument(event.documentId).scrollToPage({
-          pageNumber: saved.pageNumber,
-          behavior: 'instant',
-        });
+        if (isSpreadMode(saved.spreadMode)) {
+          spread?.forDocument(event.documentId).setSpreadMode(saved.spreadMode);
+        }
+
+        if (isScrollStrategy(saved.scrollStrategy)) {
+          scroll.setScrollStrategy(saved.scrollStrategy, event.documentId);
+        }
+
+        if (saved.pageNumber > 1) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              scroll.forDocument(event.documentId).scrollToPage({
+                pageNumber: saved.pageNumber,
+                behavior: 'instant',
+              });
+            });
+          });
+        }
       })
       .catch((error) => {
         console.warn('[shnctl] failed to read reading history', error);
@@ -255,7 +340,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
       return;
     }
 
-    writeHistoryEntry(fileUrl, scroll.forDocument(documentId).getCurrentPage());
+    writeHistoryEntry(fileUrl, getHistoryEntry(documentId));
   };
 
   window.addEventListener('beforeunload', onBeforeUnload);
@@ -269,6 +354,8 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     }
     window.removeEventListener('beforeunload', onBeforeUnload);
     unsubscribePageChange();
+    unsubscribeSpreadChange?.();
+    unsubscribeScrollStateChange();
     unsubscribeLayoutReady();
   };
 }

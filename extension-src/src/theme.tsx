@@ -309,6 +309,13 @@ interface SpreadCapability {
 
 interface ScrollCapability {
   getLayout(): { strategy: ScrollStrategyValue };
+  forDocument(documentId: string): {
+    getCurrentPage(): number;
+    scrollToPage(options: {
+      pageNumber: number;
+      behavior?: 'instant' | 'smooth' | 'auto';
+    }): void;
+  };
   setScrollStrategy(strategy: ScrollStrategyValue, documentId?: string): void;
 }
 
@@ -475,6 +482,33 @@ function refreshMainToolbar(registry: PluginRegistry, ui: UICapability) {
   if (documentId) {
     ui.forDocument(documentId).setActiveToolbar('top', 'main', 'main-toolbar');
   }
+}
+
+function switchScrollStrategyPreservingPage(
+  registry: PluginRegistry,
+  ui: UICapability,
+  scroll: ScrollCapability | undefined,
+  strategy: ScrollStrategyValue,
+) {
+  const documentId = getActiveDocumentId(registry);
+
+  if (!scroll || !documentId) {
+    return;
+  }
+
+  const scrollScope = scroll.forDocument(documentId);
+  const pageNumber = scrollScope.getCurrentPage();
+
+  scroll.setScrollStrategy(strategy, documentId);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scrollScope.scrollToPage({
+        pageNumber,
+        behavior: 'instant',
+      });
+      refreshMainToolbar(registry, ui);
+    });
+  });
 }
 
 function removeToolbarItemByCommandId(items: ToolbarItem[], commandId: string): ToolbarItem[] {
@@ -655,9 +689,7 @@ export function installThemeSwitcher(
       label: 'Vertical',
       icon: 'shnctl-scroll-vertical',
       action: () => {
-        const documentId = getActiveDocumentId(registry);
-        scroll?.setScrollStrategy('vertical', documentId ?? undefined);
-        refreshMainToolbar(registry, ui);
+        switchScrollStrategyPreservingPage(registry, ui, scroll, 'vertical');
       },
       active: ({ state, documentId }) => (state as UiPluginState).plugins?.scroll?.documents?.[documentId]?.strategy === 'vertical',
       disabled: () => !scroll,
@@ -668,9 +700,7 @@ export function installThemeSwitcher(
       label: 'Horizontal',
       icon: 'shnctl-scroll-horizontal',
       action: () => {
-        const documentId = getActiveDocumentId(registry);
-        scroll?.setScrollStrategy('horizontal', documentId ?? undefined);
-        refreshMainToolbar(registry, ui);
+        switchScrollStrategyPreservingPage(registry, ui, scroll, 'horizontal');
       },
       active: ({ state, documentId }) => (state as UiPluginState).plugins?.scroll?.documents?.[documentId]?.strategy === 'horizontal',
       disabled: () => !scroll,

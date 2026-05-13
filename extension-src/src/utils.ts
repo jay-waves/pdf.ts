@@ -57,6 +57,10 @@ export interface ScrollLayoutReadyEvent {
   totalPages: number;
 }
 
+export interface ScrollDocumentState {
+  strategy?: 'vertical' | 'horizontal';
+}
+
 export interface ScrollScope {
   getCurrentPage(): number;
   getTotalPages(): number;
@@ -76,12 +80,15 @@ export interface ScrollScope {
   }): void;
   scrollToNextPage(behavior?: 'instant' | 'smooth' | 'auto'): void;
   scrollToPreviousPage(behavior?: 'instant' | 'smooth' | 'auto'): void;
+  setScrollStrategy(strategy: 'vertical' | 'horizontal'): void;
 }
 
 export interface ScrollCapability {
   forDocument(documentId: string): ScrollScope;
   getCurrentPage(): number;
   getTotalPages(): number;
+  setScrollStrategy(strategy: 'vertical' | 'horizontal', documentId?: string): void;
   onPageChange(listener: (event: ScrollPageChangeEvent) => void): () => void;
   onLayoutReady(listener: (event: ScrollLayoutReadyEvent) => void): () => void;
+  onStateChange(listener: (state: ScrollDocumentState) => void): () => void;
 }
