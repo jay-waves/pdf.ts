@@ -71,12 +71,28 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, beha
   }
 
   const scrollScope = scroll.forDocument(documentId);
-  if (direction < 0) {
-    scrollScope.scrollToPreviousPage(behavior);
+  const currentPage = scrollScope.getCurrentPage();
+  const nextPage = currentPage + direction;
+
+  if (nextPage < 1 || nextPage > scrollScope.getTotalPages()) {
     return;
   }
 
-  scrollScope.scrollToNextPage(behavior);
+  const metrics = scrollScope.getMetrics();
+  const currentPageMetric =
+    metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === currentPage) ??
+    metrics.pageVisibilityMetrics[0];
+
+  scrollScope.scrollToPage({
+    pageNumber: nextPage,
+    pageCoordinates: currentPageMetric
+      ? {
+          x: currentPageMetric.original.pageX,
+          y: currentPageMetric.original.pageY,
+        }
+      : undefined,
+    behavior,
+  });
 }
 
 export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {

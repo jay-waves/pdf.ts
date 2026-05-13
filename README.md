@@ -2,6 +2,8 @@
 
 This repository contains the source for a Chrome Manifest V3 PDF viewer extension built with Vite, React, and EmbedPDF.
 
+...
+
 ## Local development
 
 ```powershell

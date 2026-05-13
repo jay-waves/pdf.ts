@@ -281,6 +281,61 @@ export const VIEWER_THEMES: ViewerTheme[] = [
 const THEME_COMMAND_ID = 'shnctl.theme.cycle';
 const THEME_BUTTON_ID = 'shnctl-theme-cycle-button';
 const THEME_STORAGE_KEY = 'shnctl-viewer-theme-v1';
+const PAGE_MODE_COMMAND_ID = 'shnctl.mode.page';
+const SINGLE_PAGE_COMMAND_ID = 'shnctl.view.single-page';
+const TWO_PAGE_ODD_COMMAND_ID = 'shnctl.view.two-page-odd';
+const VERTICAL_SCROLL_COMMAND_ID = 'shnctl.view.vertical-scroll';
+const HORIZONTAL_SCROLL_COMMAND_ID = 'shnctl.view.horizontal-scroll';
+const ROTATE_COMMAND_ID = 'shnctl.view.rotate';
+const PAGE_TOOLBAR_ID = 'shnctl-page-toolbar';
+const PAGE_MODE_TAB_ID = 'shnctl-page-mode';
+const VIEW_CONTROL_BUTTON_IDS = new Set([
+  'shnctl-single-page-button',
+  'shnctl-two-page-odd-button',
+  'shnctl-vertical-scroll-button',
+  'shnctl-horizontal-scroll-button',
+  'shnctl-rotate-button',
+]);
+const PAGE_SETTINGS_BUTTON_ID = 'page-settings-button';
+const MAIN_ZOOM_ITEM_IDS = new Set(['zoom-menu-button', 'zoom-toolbar', 'divider-3']);
+
+type SpreadModeValue = 'none' | 'odd' | 'even';
+type ScrollStrategyValue = 'vertical' | 'horizontal';
+
+interface SpreadCapability {
+  setSpreadMode(mode: SpreadModeValue): void;
+  getSpreadMode(): SpreadModeValue;
+}
+
+interface ScrollCapability {
+  getLayout(): { strategy: ScrollStrategyValue };
+  setScrollStrategy(strategy: ScrollStrategyValue, documentId?: string): void;
+}
+
+interface RotateCapability {
+  rotateForward(): void;
+}
+
+interface UiPluginState {
+  plugins?: {
+    ui?: {
+      documents?: Record<
+        string,
+        {
+          activeToolbars?: Record<string, Record<string, string>>;
+        }
+      >;
+    };
+    scroll?: {
+      documents?: Record<
+        string,
+        {
+          strategy?: ScrollStrategyValue;
+        }
+      >;
+    };
+  };
+}
 
 export function getStoredThemeIndex() {
   let storedThemeId: string | null = null;
@@ -349,6 +404,68 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
     'shnctl-palette-5': createPaletteIcon('M21.55 14.65h-3.2l-.2 1.9h1.75a1.3 1.3 0 0 1 0 2.55h-1.8'),
     'shnctl-palette-6': createPaletteIcon('M21.45 14.75h-1.8a1.55 1.55 0 0 0 0 3.1h.35a1.25 1.25 0 0 0 0-2.5h-1.85'),
     'shnctl-palette-7': createPaletteIcon('M18.3 14.65h3.35l-2.15 4.45'),
+    'shnctl-single-page': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 1.8,
+      paths: [
+        { d: 'M7 3.5h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z', stroke: 'primary', fill: 'none' },
+        { d: 'M8.5 8h7M8.5 11.5h7M8.5 15h5', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-two-page-odd': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 1.8,
+      paths: [
+        { d: 'M4 5.5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 1-2-2zM13 3.5h5a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-5z', stroke: 'primary', fill: 'none' },
+        { d: 'M7 8.5h2M15 8.5h2M7 12h2M15 12h2', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-scroll-vertical': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'M12 5v14', stroke: 'primary', fill: 'none' },
+        { d: 'M8 9l4-4 4 4', stroke: 'primary', fill: 'none' },
+        { d: 'M8 15l4 4 4-4', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-scroll-horizontal': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'M5 12h14', stroke: 'primary', fill: 'none' },
+        { d: 'M9 8l-4 4 4 4', stroke: 'primary', fill: 'none' },
+        { d: 'M15 8l4 4-4 4', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-rotate': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'M21 12a9 9 0 1 1-2.64-6.36', stroke: 'primary', fill: 'none' },
+        { d: 'M21 3v6h-6', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-page-menu': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 1.8,
+      paths: [
+        { d: 'M6.5 3.5h8.2L19 7.8v10.7a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z', stroke: 'primary', fill: 'none' },
+        { d: 'M14.5 3.8v4.4h4.2M8 11.5h8M8 15h5.5', stroke: 'primary', fill: 'none' },
+      ],
+    },
   });
 }
 
@@ -379,6 +496,78 @@ function removeToolbarItemByCommandId(items: ToolbarItem[], commandId: string): 
   }, []);
 }
 
+function removeToolbarItemsById(items: ToolbarItem[], ids: Set<string>): ToolbarItem[] {
+  return items.reduce<ToolbarItem[]>((nextItems, item) => {
+    if (ids.has(item.id)) {
+      return nextItems;
+    }
+
+    if (item.type === 'group') {
+      nextItems.push({
+        ...item,
+        items: removeToolbarItemsById(item.items as ToolbarItem[], ids),
+      });
+      return nextItems;
+    }
+
+    nextItems.push(item);
+    return nextItems;
+  }, []);
+}
+
+function appendUnique(items: string[] | undefined, item: string) {
+  return items?.includes(item) ? items : [...(items ?? []), item];
+}
+
+function prependUnique(items: string[] | undefined, item: string) {
+  return items?.includes(item) ? items : [item, ...(items ?? [])];
+}
+
+function addPageModeToResponsiveSchema(toolbar: { responsive?: any; items: ToolbarItem[] }, schema: ReturnType<UICapability['getSchema']>) {
+  const breakpoints = toolbar.responsive?.breakpoints;
+
+  if (breakpoints?.xxxs) {
+    breakpoints.xxxs.hide = appendUnique(breakpoints.xxxs.hide, PAGE_MODE_TAB_ID);
+  }
+
+  if (breakpoints?.sm) {
+    breakpoints.sm.show = appendUnique(breakpoints.sm.show, PAGE_MODE_TAB_ID);
+  }
+
+  if (breakpoints?.md) {
+    breakpoints.md.show = appendUnique(breakpoints.md.show, PAGE_MODE_TAB_ID);
+  }
+
+  const modeSelect = toolbar.items.find((item) => item.id === 'mode-select-button');
+  if (modeSelect) {
+    modeSelect.visibilityDependsOn = {
+      ...modeSelect.visibilityDependsOn,
+      itemIds: appendUnique(modeSelect.visibilityDependsOn?.itemIds, PAGE_MODE_COMMAND_ID),
+    };
+  }
+
+  const overflowMenu = schema.menus['mode-tabs-overflow-menu'];
+  if (!overflowMenu.items.some((item) => item.id === PAGE_MODE_COMMAND_ID)) {
+    overflowMenu.items.splice(1, 0, {
+      type: 'command',
+      id: PAGE_MODE_COMMAND_ID,
+      commandId: PAGE_MODE_COMMAND_ID,
+      categories: ['mode', 'page'],
+    });
+  }
+
+  const overflowBreakpoints = overflowMenu.responsive?.breakpoints;
+  if (overflowBreakpoints?.xs) {
+    overflowBreakpoints.xs.show = appendUnique(overflowBreakpoints.xs.show, PAGE_MODE_COMMAND_ID);
+  }
+  if (overflowBreakpoints?.sm) {
+    overflowBreakpoints.sm.hide = prependUnique(overflowBreakpoints.sm.hide, PAGE_MODE_COMMAND_ID);
+  }
+  if (overflowBreakpoints?.md) {
+    overflowBreakpoints.md.hide = prependUnique(overflowBreakpoints.md.hide, PAGE_MODE_COMMAND_ID);
+  }
+}
+
 export function installThemeSwitcher(
   registry: PluginRegistry,
   container: PDFViewerRef['container'],
@@ -397,6 +586,18 @@ export function installThemeSwitcher(
 
   registerThemeIcons(container);
   applyViewerTheme(container, themeIndexRef.current);
+  const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const rotate = registry.getPlugin('rotate')?.provides?.() as RotateCapability | undefined;
+  const registeredCommandIds = [
+    THEME_COMMAND_ID,
+    PAGE_MODE_COMMAND_ID,
+    SINGLE_PAGE_COMMAND_ID,
+    TWO_PAGE_ODD_COMMAND_ID,
+    VERTICAL_SCROLL_COMMAND_ID,
+    HORIZONTAL_SCROLL_COMMAND_ID,
+    ROTATE_COMMAND_ID,
+  ];
 
   const themeCommand: Command = {
     id: THEME_COMMAND_ID,
@@ -412,25 +613,129 @@ export function installThemeSwitcher(
     },
     categories: ['document'],
   };
+  const pageModeCommand: Command = {
+    id: PAGE_MODE_COMMAND_ID,
+    label: 'Page',
+    action: ({ documentId }) => {
+      ui.forDocument(documentId).setActiveToolbar('top', 'secondary', PAGE_TOOLBAR_ID);
+    },
+    active: ({ state, documentId }) => {
+      const activeToolbars = (state as UiPluginState).plugins?.ui?.documents?.[documentId]?.activeToolbars;
+      return activeToolbars?.top?.secondary === PAGE_TOOLBAR_ID;
+    },
+    categories: ['mode', 'page'],
+  };
+  const viewCommands: Command[] = [
+    {
+      id: SINGLE_PAGE_COMMAND_ID,
+      label: 'Single Page',
+      icon: 'shnctl-single-page',
+      action: () => {
+        spread?.setSpreadMode('none');
+        refreshMainToolbar(registry, ui);
+      },
+      active: () => spread?.getSpreadMode() === 'none',
+      disabled: () => !spread,
+      categories: ['document'],
+    },
+    {
+      id: TWO_PAGE_ODD_COMMAND_ID,
+      label: 'TwoPage (Odd)',
+      icon: 'shnctl-two-page-odd',
+      action: () => {
+        spread?.setSpreadMode('odd');
+        refreshMainToolbar(registry, ui);
+      },
+      active: () => spread?.getSpreadMode() === 'odd',
+      disabled: () => !spread,
+      categories: ['document'],
+    },
+    {
+      id: VERTICAL_SCROLL_COMMAND_ID,
+      label: 'Vertical',
+      icon: 'shnctl-scroll-vertical',
+      action: () => {
+        const documentId = getActiveDocumentId(registry);
+        scroll?.setScrollStrategy('vertical', documentId ?? undefined);
+        refreshMainToolbar(registry, ui);
+      },
+      active: ({ state, documentId }) => (state as UiPluginState).plugins?.scroll?.documents?.[documentId]?.strategy === 'vertical',
+      disabled: () => !scroll,
+      categories: ['document'],
+    },
+    {
+      id: HORIZONTAL_SCROLL_COMMAND_ID,
+      label: 'Horizontal',
+      icon: 'shnctl-scroll-horizontal',
+      action: () => {
+        const documentId = getActiveDocumentId(registry);
+        scroll?.setScrollStrategy('horizontal', documentId ?? undefined);
+        refreshMainToolbar(registry, ui);
+      },
+      active: ({ state, documentId }) => (state as UiPluginState).plugins?.scroll?.documents?.[documentId]?.strategy === 'horizontal',
+      disabled: () => !scroll,
+      categories: ['document'],
+    },
+    {
+      id: ROTATE_COMMAND_ID,
+      label: 'Rotate',
+      icon: 'shnctl-rotate',
+      action: () => {
+        rotate?.rotateForward();
+        refreshMainToolbar(registry, ui);
+      },
+      disabled: () => !rotate,
+      categories: ['document'],
+    },
+  ];
 
-  commands.registerCommand(themeCommand);
+  for (const command of [themeCommand, pageModeCommand, ...viewCommands]) {
+    commands.registerCommand(command);
+  }
 
   const schema = ui.getSchema();
   const toolbar = schema.toolbars['main-toolbar'];
   if (!toolbar) {
-    return () => commands.unregisterCommand(THEME_COMMAND_ID);
+    return () => {
+      for (const commandId of registeredCommandIds) {
+        commands.unregisterCommand(commandId);
+      }
+    };
   }
 
-  const items = removeToolbarItemByCommandId(structuredClone(toolbar.items) as ToolbarItem[], COMMENT_PANEL_COMMAND_ID);
-  const rightGroup = items.find((item): item is Extract<ToolbarItem, { type: 'group' }> => item.type === 'group' && item.id === 'right-group');
+  addPageModeToResponsiveSchema(toolbar, schema);
 
-  if (rightGroup && !rightGroup.items.some((item) => item.id === THEME_BUTTON_ID)) {
-    rightGroup.items.unshift({
-      type: 'command-button',
-      id: THEME_BUTTON_ID,
-      commandId: THEME_COMMAND_ID,
-      variant: 'icon',
+  const items = removeToolbarItemsById(
+    removeToolbarItemByCommandId(structuredClone(toolbar.items) as ToolbarItem[], COMMENT_PANEL_COMMAND_ID),
+    new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID]),
+  );
+  const rightGroup = items.find((item): item is Extract<ToolbarItem, { type: 'group' }> => item.type === 'group' && item.id === 'right-group');
+  const modeTabs = items.find((item): item is Extract<ToolbarItem, { type: 'tab-group' }> => item.type === 'tab-group' && item.id === 'mode-tabs');
+
+  if (modeTabs && !modeTabs.tabs.some((tab) => tab.id === PAGE_MODE_TAB_ID)) {
+    const viewModeTab = modeTabs.tabs.find((tab) => tab.id === 'view-mode');
+
+    if (viewModeTab?.visibilityDependsOn?.itemIds && !viewModeTab.visibilityDependsOn.itemIds.includes(PAGE_MODE_TAB_ID)) {
+      viewModeTab.visibilityDependsOn.itemIds = [PAGE_MODE_TAB_ID, ...viewModeTab.visibilityDependsOn.itemIds];
+    }
+
+    modeTabs.tabs.splice(1, 0, {
+      id: PAGE_MODE_TAB_ID,
+      commandId: PAGE_MODE_COMMAND_ID,
+      variant: 'text',
+      categories: ['mode', 'page'],
     });
+  }
+
+  if (rightGroup) {
+    if (!rightGroup.items.some((item) => item.id === THEME_BUTTON_ID)) {
+      rightGroup.items.unshift({
+        type: 'command-button',
+        id: THEME_BUTTON_ID,
+        commandId: THEME_COMMAND_ID,
+        variant: 'icon',
+      });
+    }
 
     ui.mergeSchema({
       toolbars: {
@@ -438,12 +743,94 @@ export function installThemeSwitcher(
           ...toolbar,
           items,
         },
+        [PAGE_TOOLBAR_ID]: {
+          id: PAGE_TOOLBAR_ID,
+          position: {
+            placement: 'top',
+            slot: 'secondary',
+            order: 0,
+          },
+          items: [
+            {
+              type: 'spacer',
+              id: 'shnctl-page-spacer-left',
+              flex: true,
+            },
+            {
+              type: 'group',
+              id: 'shnctl-page-group',
+              alignment: 'center',
+              gap: 2,
+              items: [
+                {
+                  type: 'custom',
+                  id: 'shnctl-zoom-toolbar',
+                  componentId: 'zoom-toolbar',
+                  categories: ['zoom'],
+                },
+                {
+                  type: 'divider',
+                  id: 'shnctl-page-divider-0',
+                  orientation: 'vertical',
+                },
+                {
+                  type: 'command-button',
+                  id: 'shnctl-single-page-button',
+                  commandId: SINGLE_PAGE_COMMAND_ID,
+                  variant: 'icon',
+                },
+                {
+                  type: 'command-button',
+                  id: 'shnctl-two-page-odd-button',
+                  commandId: TWO_PAGE_ODD_COMMAND_ID,
+                  variant: 'icon',
+                },
+                {
+                  type: 'divider',
+                  id: 'shnctl-page-divider-1',
+                  orientation: 'vertical',
+                },
+                {
+                  type: 'command-button',
+                  id: 'shnctl-vertical-scroll-button',
+                  commandId: VERTICAL_SCROLL_COMMAND_ID,
+                  variant: 'icon',
+                },
+                {
+                  type: 'command-button',
+                  id: 'shnctl-horizontal-scroll-button',
+                  commandId: HORIZONTAL_SCROLL_COMMAND_ID,
+                  variant: 'icon',
+                },
+                {
+                  type: 'divider',
+                  id: 'shnctl-page-divider-2',
+                  orientation: 'vertical',
+                },
+                {
+                  type: 'command-button',
+                  id: 'shnctl-rotate-button',
+                  commandId: ROTATE_COMMAND_ID,
+                  variant: 'icon',
+                },
+              ],
+            },
+            {
+              type: 'spacer',
+              id: 'shnctl-page-spacer-right',
+              flex: true,
+            },
+          ],
+          categories: ['page', 'zoom'],
+        },
       },
     });
     refreshMainToolbar(registry, ui);
   }
 
   return () => {
-    commands.unregisterCommand(THEME_COMMAND_ID);
+    for (const commandId of registeredCommandIds) {
+      commands.unregisterCommand(commandId);
+    }
   };
 }

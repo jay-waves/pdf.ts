@@ -60,6 +60,15 @@ export interface ScrollLayoutReadyEvent {
 export interface ScrollScope {
   getCurrentPage(): number;
   getTotalPages(): number;
+  getMetrics(): {
+    pageVisibilityMetrics: Array<{
+      pageNumber: number;
+      original: {
+        pageX: number;
+        pageY: number;
+      };
+    }>;
+  };
   scrollToPage(options: {
     pageNumber: number;
     pageCoordinates?: { x: number; y: number };

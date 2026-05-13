@@ -54,6 +54,50 @@ interface ViewportCapability {
   };
 }
 
+interface PanScope {
+  enablePan(): void;
+  disablePan(): void;
+  isPanMode(): boolean;
+}
+
+interface PanCapability {
+  forDocument(documentId: string): PanScope;
+}
+
+const MAX_RENDER_DPR = 1.5;
+const TILING_TILE_SIZE = 512;
+const TILING_OVERLAP_PX = 1;
+const TILING_EXTRA_RINGS = 0;
+const EMPTY_CLEANUP = () => {};
+
+function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
+  const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
+  const originalDpr = window.devicePixelRatio || 1;
+
+  try {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      configurable: true,
+      get: () => Math.min(originalDpr, maxDpr),
+    });
+  } catch {
+    return EMPTY_CLEANUP;
+  }
+
+  return () => {
+    try {
+      if (descriptor) {
+        Object.defineProperty(window, 'devicePixelRatio', descriptor);
+      } else {
+        delete (window as typeof window & { devicePixelRatio?: number }).devicePixelRatio;
+      }
+    } catch {
+      // Leaving the capped DPR in place is safer than throwing during unmount.
+    }
+  };
+}
+
+const cleanupRenderDprCap = installRenderDprCap();
+
 function requestPdfZoom(registry: PluginRegistry, direction: 1 | -1, event?: WheelEvent | KeyboardEvent) {
   const documentId = getActiveDocumentId(registry);
   const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
@@ -132,6 +176,113 @@ function installBrowserZoomInterceptor(registry: PluginRegistry) {
   return () => {
     window.removeEventListener('wheel', onWheel, { capture: true });
     window.removeEventListener('keydown', onKeyDown, { capture: true });
+  };
+}
+
+function installMiddleMousePanInterceptor(registry: PluginRegistry) {
+  let activeDocumentId: string | null = null;
+  let restorePan = false;
+  let suppressMiddleMouseUntil = 0;
+
+  const getPanScope = () => {
+    const documentId = getActiveDocumentId(registry);
+    const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
+
+    if (!documentId || !pan) {
+      return null;
+    }
+
+    return {
+      documentId,
+      scope: pan.forDocument(documentId),
+    };
+  };
+
+  const startMiddleMousePan = (event: MouseEvent | PointerEvent) => {
+    if (event.button !== 1) {
+      return;
+    }
+
+    const isPointerEvent = event instanceof PointerEvent;
+
+    if (activeDocumentId) {
+      if (!isPointerEvent) {
+        event.preventDefault();
+      }
+      return;
+    }
+
+    const panScope = getPanScope();
+    if (!panScope) {
+      return;
+    }
+
+    if (!isPointerEvent) {
+      event.preventDefault();
+    }
+    activeDocumentId = panScope.documentId;
+    restorePan = !panScope.scope.isPanMode();
+    panScope.scope.enablePan();
+  };
+
+  const finishMiddleMousePan = (event: MouseEvent | PointerEvent) => {
+    if (event.button !== 1 || !activeDocumentId) {
+      return;
+    }
+
+    event.preventDefault();
+    suppressMiddleMouseUntil = performance.now() + 180;
+    const documentId = activeDocumentId;
+    const shouldRestorePan = restorePan;
+    activeDocumentId = null;
+    restorePan = false;
+
+    window.setTimeout(() => {
+      if (!shouldRestorePan) {
+        return;
+      }
+
+      const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
+      pan?.forDocument(documentId).disablePan();
+    }, 120);
+  };
+
+  const stopBrowserMiddleMouse = (event: MouseEvent | PointerEvent) => {
+    if (event.button !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const suppressTailEvent = (event: MouseEvent | PointerEvent) => {
+    if (event.button !== 1 || performance.now() > suppressMiddleMouseUntil) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  window.addEventListener('pointerdown', startMiddleMousePan, { capture: true });
+  window.addEventListener('mousedown', startMiddleMousePan, { capture: true });
+  window.addEventListener('pointerup', finishMiddleMousePan);
+  window.addEventListener('mouseup', finishMiddleMousePan);
+  window.addEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
+  window.addEventListener('pointermove', suppressTailEvent, { capture: true });
+  window.addEventListener('pointerup', suppressTailEvent, { capture: true });
+  window.addEventListener('click', suppressTailEvent, { capture: true });
+
+  return () => {
+    window.removeEventListener('pointerdown', startMiddleMousePan, { capture: true });
+    window.removeEventListener('mousedown', startMiddleMousePan, { capture: true });
+    window.removeEventListener('pointerup', finishMiddleMousePan);
+    window.removeEventListener('mouseup', finishMiddleMousePan);
+    window.removeEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
+    window.removeEventListener('pointermove', suppressTailEvent, { capture: true });
+    window.removeEventListener('pointerup', suppressTailEvent, { capture: true });
+    window.removeEventListener('click', suppressTailEvent, { capture: true });
   };
 }
 
@@ -222,14 +373,14 @@ function App() {
       tabBar: 'never',
       disabledCategories: ['form', 'redaction', 'panel-sidebar', 'insert', 'navigation'],
       theme: VIEWER_THEMES[themeIndexRef.current]?.config ?? VIEWER_THEMES[0].config,
-      scroll: {
-        defaultBufferSize: 2,
-      },
       render: {
         defaultImageType: 'image/bmp',
       },
       tiling: {
         defaultImageType: 'image/bmp',
+        tileSize: TILING_TILE_SIZE,
+        overlapPx: TILING_OVERLAP_PX,
+        extraRings: TILING_EXTRA_RINGS,
       },
     }),
     [fileUrl],
@@ -259,6 +410,7 @@ function App() {
 
   useEffect(() => {
     return () => {
+      cleanupRenderDprCap();
       registryCleanupRef.current?.();
       registryCleanupRef.current = null;
     };
@@ -308,6 +460,7 @@ function App() {
             installPageKeyboardNavigation(nextRegistry, revealNavigation),
             installSearchKeyboardShortcut(handleOpenSearch),
             installBrowserZoomInterceptor(nextRegistry),
+            installMiddleMousePanInterceptor(nextRegistry),
             installReadingHistory(nextRegistry, fileUrl),
             installOutlinePrefetch(nextRegistry, setOutlineCache),
             installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
