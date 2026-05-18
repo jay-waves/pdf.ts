@@ -67,11 +67,45 @@ interface PanCapability {
   forDocument(documentId: string): PanScope;
 }
 
-const MAX_RENDER_DPR = 1.5;
-const TILING_TILE_SIZE = 512;
-const TILING_OVERLAP_PX = 1;
-const TILING_EXTRA_RINGS = 0;
+const MAX_RENDER_DPR = 1.75;
+const RENDER_IMAGE_TYPE = 'image/bmp';
+const TILING_TILE_SIZE = 768;
+const TILING_OVERLAP_PX = 2;
+const TILING_EXTRA_RINGS = 1;
 const EMPTY_CLEANUP = () => {};
+
+function runWhenIdle(callback: () => void) {
+  if ('requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(callback, { timeout: 1200 });
+    return () => window.cancelIdleCallback(id);
+  }
+
+  const id = window.setTimeout(callback, 120);
+  return () => window.clearTimeout(id);
+}
+
+function installWhenIdle(install: () => () => void) {
+  let cleanup = EMPTY_CLEANUP;
+  let installed = false;
+
+  const cancel = runWhenIdle(() => {
+    installed = true;
+    try {
+      cleanup = install();
+    } catch (error) {
+      console.warn('[shnctl] deferred viewer setup step failed', error);
+    }
+  });
+
+  return () => {
+    if (!installed) {
+      cancel();
+      return;
+    }
+
+    cleanup();
+  };
+}
 
 function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
@@ -310,17 +344,24 @@ function App() {
   const titleTrackerRefreshRef = useRef<(() => void) | null>(null);
   const themeIndexRef = useRef(getStoredThemeIndex());
   const navigationHideTimerRef = useRef<number>(0);
+  const navigationVisibleRef = useRef(false);
   const searchOpenRef = useRef(false);
 
   const revealNavigation = () => {
-    setNavigationVisible(true);
+    if (!navigationVisibleRef.current) {
+      navigationVisibleRef.current = true;
+      setNavigationVisible(true);
+    }
 
     if (navigationHideTimerRef.current) {
       window.clearTimeout(navigationHideTimerRef.current);
     }
 
     navigationHideTimerRef.current = window.setTimeout(() => {
-      setNavigationVisible(false);
+      if (navigationVisibleRef.current) {
+        navigationVisibleRef.current = false;
+        setNavigationVisible(false);
+      }
       navigationHideTimerRef.current = 0;
     }, 1800);
   };
@@ -377,10 +418,10 @@ function App() {
       disabledCategories: ['form', 'redaction', 'panel-sidebar', 'insert', 'navigation'],
       theme: VIEWER_THEMES[themeIndexRef.current]?.config ?? VIEWER_THEMES[0].config,
       render: {
-        defaultImageType: 'image/bmp',
+        defaultImageType: RENDER_IMAGE_TYPE,
       },
       tiling: {
-        defaultImageType: 'image/bmp',
+        defaultImageType: RENDER_IMAGE_TYPE,
         tileSize: TILING_TILE_SIZE,
         overlapPx: TILING_OVERLAP_PX,
         extraRings: TILING_EXTRA_RINGS,
@@ -448,6 +489,10 @@ function App() {
           setCurrentPageNumber(1);
           setTotalPages(0);
           setCurrentTitle('');
+          if (navigationVisibleRef.current) {
+            navigationVisibleRef.current = false;
+            setNavigationVisible(false);
+          }
 
           const refreshCurrentTitle = () => {
             const pageNumber = currentPageNumberRef.current;
@@ -456,27 +501,36 @@ function App() {
 
           titleTrackerRefreshRef.current = refreshCurrentTitle;
 
-          const cleanups: Array<() => void> = [
-            installThemeSwitcher(nextRegistry, viewerRef.current?.container ?? null, themeIndexRef),
-            installPanelCommandRedirects(nextRegistry, searchOpenRef, handleSearchOpenChange),
-            installBuiltInPageControlsHider(nextRegistry),
-            installPageKeyboardNavigation(nextRegistry, revealNavigation),
-            installSearchKeyboardShortcut(handleOpenSearch),
-            installBrowserZoomInterceptor(nextRegistry),
-            installMiddleMousePanInterceptor(nextRegistry),
-            installReadingHistory(nextRegistry, fileUrl),
-            installSelectionTranslate(nextRegistry, viewerRef.current?.container ?? null),
-            installOutlinePrefetch(nextRegistry, setOutlineCache),
-            installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
-              currentPageNumberRef.current = pageNumber;
-              setCurrentPageNumber(pageNumber);
-              setCurrentTitle(title);
-              setTotalPages(nextTotalPages);
-            }),
-            () => {
+          const installers: Array<() => () => void> = [
+            () => installBuiltInPageControlsHider(nextRegistry),
+            () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
+            () => installBrowserZoomInterceptor(nextRegistry),
+            () => installMiddleMousePanInterceptor(nextRegistry),
+            () => installReadingHistory(nextRegistry, fileUrl),
+            () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
+                currentPageNumberRef.current = pageNumber;
+                setCurrentPageNumber(pageNumber);
+                setCurrentTitle(title);
+                setTotalPages(nextTotalPages);
+              }),
+            () => installWhenIdle(() => installThemeSwitcher(nextRegistry, viewerRef.current?.container ?? null, themeIndexRef)),
+            () => installWhenIdle(() => installPanelCommandRedirects(nextRegistry, searchOpenRef, handleSearchOpenChange)),
+            () => installWhenIdle(() => installSearchKeyboardShortcut(handleOpenSearch)),
+            () => installWhenIdle(() => installSelectionTranslate(nextRegistry, viewerRef.current?.container ?? null)),
+            () => installWhenIdle(() => installOutlinePrefetch(nextRegistry, setOutlineCache, fileUrl)),
+            () => () => {
               titleTrackerRefreshRef.current = null;
             },
           ];
+
+          const cleanups = installers.flatMap((install) => {
+            try {
+              return [install()];
+            } catch (error) {
+              console.warn('[shnctl] viewer setup step failed', error);
+              return [];
+            }
+          });
 
           registryCleanupRef.current = () => {
             for (const cleanup of cleanups) {

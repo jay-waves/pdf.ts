@@ -363,5 +363,7 @@ export function installPanelCommandRedirects(
     active: () => searchOpenRef.current,
   });
 
-  return EMPTY_CLEANUP;
+  return () => {
+    commands.unregisterCommand(SEARCH_PANEL_COMMAND_ID);
+  };
 }

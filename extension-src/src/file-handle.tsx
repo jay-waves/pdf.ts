@@ -8,6 +8,16 @@ const EMPTY_CLEANUP = () => {};
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
 const FILE_HANDLES_KEY = 'embedpdf-file-handles-v1';
 
+function runWhenIdle(callback: () => void) {
+  if ('requestIdleCallback' in window) {
+    const id = window.requestIdleCallback(callback, { timeout: 1200 });
+    return () => window.cancelIdleCallback(id);
+  }
+
+  const id = window.setTimeout(callback, 120);
+  return () => window.clearTimeout(id);
+}
+
 type ScrollStrategyValue = 'vertical' | 'horizontal';
 type SpreadModeValue = 'none' | 'odd' | 'even';
 
@@ -223,6 +233,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   let restoredDocumentId: string | null = null;
   let pendingPageNumber = 0;
   let pendingWriteId = 0;
+  let cancelPendingIdleWrite: (() => void) | null = null;
 
   const getScrollStrategy = (documentId: string) => {
     const state = registry.getStore().getState() as {
@@ -266,9 +277,16 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     if (pendingWriteId) {
       window.clearTimeout(pendingWriteId);
     }
+    cancelPendingIdleWrite?.();
+    cancelPendingIdleWrite = null;
+
     pendingWriteId = window.setTimeout(() => {
-      flushPendingWrite().catch((error) => {
-        console.warn('[shnctl] failed to write reading history', error);
+      pendingWriteId = 0;
+      cancelPendingIdleWrite = runWhenIdle(() => {
+        cancelPendingIdleWrite = null;
+        flushPendingWrite().catch((error) => {
+          console.warn('[shnctl] failed to write reading history', error);
+        });
       });
     }, 300);
   };
@@ -329,30 +347,38 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
       });
   });
 
-  const onBeforeUnload = () => {
+  const flushFinalHistoryWrite = () => {
     if (pendingWriteId) {
       window.clearTimeout(pendingWriteId);
-      flushPendingWrite();
+      pendingWriteId = 0;
     }
+    cancelPendingIdleWrite?.();
+    cancelPendingIdleWrite = null;
 
     const documentId = getActiveDocumentId(registry);
     if (!documentId) {
-      return;
+      return Promise.resolve();
     }
 
-    writeHistoryEntry(fileUrl, getHistoryEntry(documentId));
+    return writeHistoryEntry(fileUrl, {
+      ...getHistoryEntry(documentId),
+      pageNumber: pendingPageNumber || getHistoryEntry(documentId).pageNumber,
+    });
   };
 
-  window.addEventListener('beforeunload', onBeforeUnload);
+  const onClose = () => {
+    flushFinalHistoryWrite().catch((error) => {
+      console.warn('[shnctl] failed to write final reading history', error);
+    });
+  };
+
+  window.addEventListener('beforeunload', onClose);
+  window.addEventListener('pagehide', onClose);
 
   return () => {
-    if (pendingWriteId) {
-      window.clearTimeout(pendingWriteId);
-      flushPendingWrite().catch((error) => {
-        console.warn('[shnctl] failed to write reading history', error);
-      });
-    }
-    window.removeEventListener('beforeunload', onBeforeUnload);
+    onClose();
+    window.removeEventListener('beforeunload', onClose);
+    window.removeEventListener('pagehide', onClose);
     unsubscribePageChange();
     unsubscribeSpreadChange?.();
     unsubscribeScrollStateChange();

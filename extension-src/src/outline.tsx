@@ -25,6 +25,7 @@ import {
 } from './utils'
 
 const EMPTY_CLEANUP = () => {};
+const outlinePrefetchCache = new Map<string, OutlineCache>();
 
 type BookmarkTask = Task<{ bookmarks: PdfBookmarkObject[] }, PdfErrorReason>;
 
@@ -274,6 +275,7 @@ async function loadOutlineCache(registry: PluginRegistry) {
 export function installOutlinePrefetch(
   registry: PluginRegistry,
   onLoaded: (cache: OutlineCache) => void,
+  cacheKey?: string,
 ) {
   const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
   if (!scroll) {
@@ -281,28 +283,61 @@ export function installOutlinePrefetch(
     return EMPTY_CLEANUP;
   }
 
-  let loadedDocumentId: string | null = null;
+  const cached = cacheKey ? outlinePrefetchCache.get(cacheKey) : undefined;
+  if (cached) {
+    onLoaded(cached);
+    return EMPTY_CLEANUP;
+  }
 
-  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
-    if (!event.isInitial || loadedDocumentId === event.documentId) {
+  let loadedDocumentId: string | null = null;
+  let cancelled = false;
+
+  const loadForDocument = (documentId: string) => {
+    if (cancelled || loadedDocumentId === documentId) {
       return;
     }
 
-    loadedDocumentId = event.documentId;
+    loadedDocumentId = documentId;
     onLoaded({ status: 'loading', bookmarks: [] });
 
     loadOutlineCache(registry)
-      .then(onLoaded)
+      .then((cache) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (cacheKey && (cache.status === 'ready' || cache.status === 'empty')) {
+          outlinePrefetchCache.set(cacheKey, cache);
+        }
+
+        onLoaded(cache);
+      })
       .catch((error) => {
         console.error('[shnctl] outline prefetch failed after initial layout', {
-          documentId: event.documentId,
+          documentId,
           error,
         });
-        onLoaded({ status: 'error', bookmarks: [] });
+        if (!cancelled) {
+          onLoaded({ status: 'error', bookmarks: [] });
+        }
       });
+  };
+
+  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
+    if (!event.isInitial) {
+      return;
+    }
+
+    loadForDocument(event.documentId);
   });
 
+  const documentId = getActiveDocumentId(registry);
+  if (documentId) {
+    window.setTimeout(() => loadForDocument(documentId), 0);
+  }
+
   return () => {
+    cancelled = true;
     unsubscribeLayoutReady();
   };
 }
