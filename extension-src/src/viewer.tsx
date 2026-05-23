@@ -216,6 +216,18 @@ function installBrowserZoomInterceptor(registry: PluginRegistry) {
   };
 }
 
+function installNativeContextMenuBlocker() {
+  const onContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+  };
+
+  window.addEventListener('contextmenu', onContextMenu, { capture: true });
+
+  return () => {
+    window.removeEventListener('contextmenu', onContextMenu, { capture: true });
+  };
+}
+
 function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   let activeDocumentId: string | null = null;
   let restorePan = false;
@@ -505,6 +517,7 @@ function App() {
             () => installBuiltInPageControlsHider(nextRegistry),
             () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
             () => installBrowserZoomInterceptor(nextRegistry),
+            installNativeContextMenuBlocker,
             () => installMiddleMousePanInterceptor(nextRegistry),
             () => installReadingHistory(nextRegistry, fileUrl),
             () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {

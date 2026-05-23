@@ -549,6 +549,34 @@ function removeToolbarItemsById(items: ToolbarItem[], ids: Set<string>): Toolbar
   }, []);
 }
 
+function isPanToolbarItem(item: ToolbarItem) {
+  const itemLike = item as ToolbarItem & {
+    commandId?: string;
+    componentId?: string;
+  };
+
+  return [itemLike.id, itemLike.commandId, itemLike.componentId].some((value) => value?.toLowerCase().includes('pan'));
+}
+
+function removeDividerBeforePanTool(items: ToolbarItem[]): ToolbarItem[] {
+  return items.reduce<ToolbarItem[]>((nextItems, item) => {
+    const nextItem =
+      item.type === 'group'
+        ? {
+            ...item,
+            items: removeDividerBeforePanTool(item.items as ToolbarItem[]),
+          }
+        : item;
+
+    if (isPanToolbarItem(nextItem) && nextItems.at(-1)?.type === 'divider') {
+      nextItems.pop();
+    }
+
+    nextItems.push(nextItem);
+    return nextItems;
+  }, []);
+}
+
 function appendUnique(items: string[] | undefined, item: string) {
   return items?.includes(item) ? items : [...(items ?? []), item];
 }
@@ -735,9 +763,11 @@ export function installThemeSwitcher(
 
   addPageModeToResponsiveSchema(toolbar, schema);
 
-  const items = removeToolbarItemsById(
-    removeToolbarItemByCommandId(structuredClone(toolbar.items) as ToolbarItem[], COMMENT_PANEL_COMMAND_ID),
-    new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID]),
+  const items = removeDividerBeforePanTool(
+    removeToolbarItemsById(
+      removeToolbarItemByCommandId(structuredClone(toolbar.items) as ToolbarItem[], COMMENT_PANEL_COMMAND_ID),
+      new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID]),
+    ),
   );
   const rightGroup = items.find((item): item is Extract<ToolbarItem, { type: 'group' }> => item.type === 'group' && item.id === 'right-group');
   const modeTabs = items.find((item): item is Extract<ToolbarItem, { type: 'tab-group' }> => item.type === 'tab-group' && item.id === 'mode-tabs');
