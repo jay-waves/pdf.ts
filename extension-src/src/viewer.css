@@ -13,6 +13,7 @@
   --shnctl-interactive-hover: #eff6ff;
   --shnctl-interactive-selected: #dbeafe;
   --shnctl-overlay-bg: rgba(15, 23, 42, 0.08);
+  --shnctl-ui-scale: 0.8;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--shnctl-background-app);
@@ -62,35 +63,19 @@
 }
 
 :root[data-viewer-theme="solar"] {
-  --shnctl-background-app: #fdf6e3;
-  --shnctl-background-surface: #eee8d5;
-  --shnctl-background-elevated: #fffaf0;
-  --shnctl-foreground-primary: #073642;
-  --shnctl-foreground-secondary: #586e75;
-  --shnctl-foreground-muted: #839496;
-  --shnctl-border-default: #d6cfb8;
-  --shnctl-border-subtle: #e1d8bf;
-  --shnctl-border-strong: #268bd2;
-  --shnctl-accent-primary: #268bd2;
-  --shnctl-interactive-hover: #e8dfc6;
-  --shnctl-interactive-selected: #d8edf0;
-  --shnctl-overlay-bg: rgba(147, 128, 108, 0.22);
-}
-
-:root[data-viewer-theme="github"] {
-  --shnctl-background-app: #f6f8fa;
-  --shnctl-background-surface: #ffffff;
-  --shnctl-background-elevated: #ffffff;
-  --shnctl-foreground-primary: #1f2328;
-  --shnctl-foreground-secondary: #59636e;
-  --shnctl-foreground-muted: #6e7781;
-  --shnctl-border-default: #d0d7de;
-  --shnctl-border-subtle: #d8dee4;
-  --shnctl-border-strong: #0969da;
-  --shnctl-accent-primary: #0969da;
-  --shnctl-interactive-hover: #f3f4f6;
-  --shnctl-interactive-selected: #ddf4ff;
-  --shnctl-overlay-bg: rgba(31, 35, 40, 0.16);
+  --shnctl-background-app: #f8f5ec;
+  --shnctl-background-surface: #f1ede3;
+  --shnctl-background-elevated: #fffdf7;
+  --shnctl-foreground-primary: #2d332f;
+  --shnctl-foreground-secondary: #5f675f;
+  --shnctl-foreground-muted: #8b9288;
+  --shnctl-border-default: #d8d0bf;
+  --shnctl-border-subtle: #e5dfd2;
+  --shnctl-border-strong: #5f8f86;
+  --shnctl-accent-primary: #5f8f86;
+  --shnctl-interactive-hover: #e9e2d4;
+  --shnctl-interactive-selected: #dbe8e3;
+  --shnctl-overlay-bg: rgba(101, 92, 75, 0.16);
 }
 
 * {
@@ -108,9 +93,14 @@ input {
 
 .app-shell {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
   overflow: hidden;
+  width: 125vw;
+  height: 125vh;
   min-height: 100vh;
+  transform: scale(0.8);
+  transform-origin: top left;
 }
 
 .viewer {
@@ -158,6 +148,7 @@ input {
   cursor: pointer;
   touch-action: none;
   user-select: none;
+  transform-origin: top right;
   transition:
     transform 140ms ease,
     background-color 140ms ease,
@@ -194,7 +185,7 @@ input {
 .shnctl-bottom-nav {
   position: fixed;
   right: 50%;
-  bottom: 32px;
+  bottom: 56px;
   z-index: 19;
   display: grid;
   grid-template-columns: auto auto;
@@ -205,6 +196,7 @@ input {
   min-height: 48px;
   padding: 6px;
   transform: translateX(50%);
+  transform-origin: bottom center;
   border: 1px solid var(--ep-border-default, var(--shnctl-border-default));
   border-radius: 8px;
   background: var(--ep-background-surface, var(--shnctl-background-surface));
@@ -359,7 +351,8 @@ input {
   width: min(760px, calc(100vw - 48px));
   height: min(780px, calc(100vh - 48px));
   min-height: min(540px, calc(100vh - 48px));
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(var(--shnctl-ui-scale));
+  transform-origin: center;
   overflow: hidden;
   border: 1px solid var(--ep-border-default, var(--shnctl-border-default));
   border-radius: 8px;
@@ -397,6 +390,7 @@ input {
   color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
   font-weight: 500;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+  transform-origin: top right;
 }
 
 .shnctl-search-toggle,
@@ -677,7 +671,7 @@ input {
   }
 
   .shnctl-bottom-nav {
-    bottom: 22px;
+    bottom: 44px;
     grid-template-columns: auto auto;
     gap: 6px;
     max-width: calc(100vw - 20px);

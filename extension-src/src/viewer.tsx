@@ -427,7 +427,7 @@ function App() {
       ...(fileUrl ? { src: fileUrl } : {}),
       worker: true,
       tabBar: 'never',
-      disabledCategories: ['form', 'redaction', 'panel-sidebar', 'insert', 'navigation'],
+      disabledCategories: ['form', 'redaction', 'panel-sidebar', 'insert', 'navigation', 'document-capture'],
       theme: VIEWER_THEMES[themeIndexRef.current]?.config ?? VIEWER_THEMES[0].config,
       render: {
         defaultImageType: RENDER_IMAGE_TYPE,
