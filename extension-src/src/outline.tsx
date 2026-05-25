@@ -3,6 +3,7 @@
 import { 
     useEffect, 
     useMemo, 
+    useRef,
     useState,
     type FormEvent
 } from 'react';
@@ -366,15 +367,19 @@ export function ShnctlOutline({
   registry,
   open,
   cache,
+  currentTitle,
   onCacheChange,
   onClose,
 }: {
   registry?: PluginRegistry;
   open: boolean;
   cache: OutlineCache;
+  currentTitle: string;
   onCacheChange: (cache: OutlineCache) => void;
   onClose: () => void;
 }) {
+  const contentRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open || !registry || cache.status !== 'error') {
       return;
@@ -404,6 +409,14 @@ export function ShnctlOutline({
     };
   }, [cache.status, onCacheChange, open, registry]);
 
+  useEffect(() => {
+    if (!open || cache.status !== 'ready') {
+      return;
+    }
+
+    scrollCurrentBookmarkIntoView(contentRef.current);
+  }, [cache.status, currentTitle, open]);
+
   const body = useMemo(() => {
     if (cache.status === 'idle' || cache.status === 'loading') {
       return <div className="shnctl-state">Loading outline...</div>;
@@ -420,6 +433,7 @@ export function ShnctlOutline({
     return (
       <BookmarkList
         bookmarks={cache.bookmarks}
+        currentTitle={currentTitle}
         level={0}
         onSelect={(bookmark) => {
           if (registry) {
@@ -428,7 +442,7 @@ export function ShnctlOutline({
         }}
       />
     );
-  }, [cache.bookmarks, cache.status, registry]);
+  }, [cache.bookmarks, cache.status, currentTitle, registry]);
 
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -436,7 +450,7 @@ export function ShnctlOutline({
         <Dialog.Overlay className="shnctl-overlay" />
         <Dialog.Content className="shnctl-panel" aria-describedby={undefined}>
           <Dialog.Title className="shnctl-visually-hidden">PDF Outline</Dialog.Title>
-          <div className="shnctl-content">{body}</div>
+          <div className="shnctl-content" ref={contentRef}>{body}</div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -445,39 +459,104 @@ export function ShnctlOutline({
 
 function BookmarkList({
   bookmarks,
+  currentTitle,
   level,
   onSelect,
 }: {
   bookmarks: PdfBookmarkObject[];
+  currentTitle: string;
   level: number;
   onSelect: (bookmark: PdfBookmarkObject) => void;
 }) {
+  const normalizedCurrentTitle = currentTitle.trim();
+
   return (
     <ol className="shnctl-list">
       {bookmarks.map((bookmark, index) => {
         const destination = getDestinationFromTarget(bookmark.target);
         const pageNumber = destination ? destination.pageIndex + 1 : undefined;
+        const children = bookmark.children ?? [];
+        const title = bookmark.title || `Item ${index + 1}`;
+        const bookmarkKey = `${level}-${index}-${title}`;
+        const isCurrent = normalizedCurrentTitle.length > 0 && title.trim() === normalizedCurrentTitle;
+        const hasCurrentChild = containsBookmarkTitle(children, normalizedCurrentTitle);
+
+        if (children.length && level === 0) {
+          return (
+            <li key={bookmarkKey} className="shnctl-item">
+              <details className="shnctl-details" open={isCurrent || hasCurrentChild}>
+                <summary className="shnctl-bookmark shnctl-summary" data-current={isCurrent ? 'true' : undefined}>
+                  <span className="shnctl-bookmark-title">{title}</span>
+                  {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
+                </summary>
+                <BookmarkList bookmarks={children} currentTitle={currentTitle} level={level + 1} onSelect={onSelect} />
+              </details>
+            </li>
+          );
+        }
 
         return (
-          <li key={`${level}-${index}-${bookmark.title}`} className="shnctl-item">
+          <li key={bookmarkKey} className="shnctl-item">
             <button
               type="button"
               className="shnctl-bookmark"
+              data-current={isCurrent ? 'true' : undefined}
               style={{ marginLeft: `${level * 18}px`, width: `calc(100% - ${level * 18}px)` }}
               onClick={() => onSelect(bookmark)}
               disabled={!destination}
             >
-              <span className="shnctl-bookmark-title">{bookmark.title || `Item ${index + 1}`}</span>
+              <span className="shnctl-bookmark-title">{title}</span>
               {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
             </button>
-            {bookmark.children?.length ? (
-              <BookmarkList bookmarks={bookmark.children} level={level + 1} onSelect={onSelect} />
+            {children.length ? (
+              <BookmarkList bookmarks={children} currentTitle={currentTitle} level={level + 1} onSelect={onSelect} />
             ) : null}
           </li>
         );
       })}
     </ol>
   );
+}
+
+function containsBookmarkTitle(bookmarks: PdfBookmarkObject[], title: string): boolean {
+  if (!title) {
+    return false;
+  }
+
+  return bookmarks.some((bookmark) => bookmark.title?.trim() === title || containsBookmarkTitle(bookmark.children ?? [], title));
+}
+
+function scrollCurrentBookmarkIntoView(root: HTMLElement | null) {
+  if (!root) {
+    return;
+  }
+
+  const scrollToCurrent = () => {
+    const currentBookmark = root.querySelector<HTMLElement>('.shnctl-bookmark[data-current="true"]');
+    if (!currentBookmark) {
+      root.scrollTo({ top: 0, behavior: 'auto' });
+      return;
+    }
+
+    const rootRect = root.getBoundingClientRect();
+    const bookmarkRect = currentBookmark.getBoundingClientRect();
+    if (!rootRect.height || !bookmarkRect.height) {
+      return;
+    }
+
+    const centeredDelta = bookmarkRect.top - rootRect.top - root.clientHeight / 2 + bookmarkRect.height / 2;
+    root.scrollTo({
+      top: Math.max(0, root.scrollTop + centeredDelta),
+      behavior: 'smooth',
+    });
+  };
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scrollToCurrent();
+      window.setTimeout(scrollToCurrent, 80);
+    });
+  });
 }
 
 export function BottomNavigationControl({

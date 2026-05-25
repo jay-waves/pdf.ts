@@ -556,6 +556,7 @@ function App() {
         registry={registry}
         open={outlineOpen}
         cache={outlineCache}
+        currentTitle={currentTitle}
         onCacheChange={setOutlineCache}
         onClose={() => setOutlineOpen(false)}
       />

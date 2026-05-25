@@ -1,7 +1,7 @@
 {
   "name": "embedpdf-chrome-extension-wrapper",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "scripts": {
     "sync:version": "node scripts/sync-version.mjs",
@@ -16,6 +16,7 @@
     "@embedpdf/react-pdf-viewer": "2.14.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "idb-keyval": "^6.2.2",
+    "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

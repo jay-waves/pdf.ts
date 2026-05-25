@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
   MatchFlag,
@@ -12,12 +11,19 @@ import {
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
 import {
+  CaseSensitive,
+  ChevronLeft,
+  ChevronRight,
+  WholeWord,
+} from 'lucide-react';
+import {
     type ScrollCapability,
     getActiveDocumentId,
 } from './utils'
 
 const EMPTY_CLEANUP = () => {};
 const SEARCH_PANEL_COMMAND_ID = 'panel:toggle-search';
+const SHNCTL_SEARCH_COMMAND_ID = 'shnctl:toggle-search';
 
 type SearchPanelState = Pick<
   SearchDocumentState,
@@ -74,6 +80,15 @@ function getSearchFlags(searchScope?: ReturnType<typeof getActiveSearchScope>) {
   }
 }
 
+function clearActiveSearch(registry?: PluginRegistry) {
+  const searchScope = getActiveSearchScope(registry);
+  if (!searchScope) {
+    return;
+  }
+
+  searchScope.searchAllPages('');
+}
+
 function scrollToSearchResult(registry: PluginRegistry | undefined, result: SearchResult | undefined) {
   if (!registry || !result) {
     return;
@@ -90,20 +105,6 @@ function scrollToSearchResult(registry: PluginRegistry | undefined, result: Sear
     pageNumber: result.pageIndex + 1,
     behavior: 'smooth',
   });
-}
-
-function renderSearchContext(result: SearchResult) {
-  const { context } = result;
-  const before = `${context.truncatedLeft ? '...' : ''}${context.before}`;
-  const after = `${context.after}${context.truncatedRight ? '...' : ''}`;
-
-  return (
-    <>
-      {before ? <span>{before} </span> : null}
-      <mark>{context.match}</mark>
-      {after ? <span> {after}</span> : null}
-    </>
-  );
 }
 
 function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
@@ -143,16 +144,6 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     searchScope.searchAllPages(nextQuery);
   };
 
-  const goToResult = (index: number) => {
-    if (!searchScope) {
-      return;
-    }
-
-    const result = searchState.results[index];
-    scrollToSearchResult(registry, result);
-    searchScope.goToResult(index);
-  };
-
   const moveResult = (direction: -1 | 1) => {
     if (!searchScope || searchState.total === 0) {
       return;
@@ -183,7 +174,6 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     canSearch: Boolean(searchScope),
     flags,
     runSearch,
-    goToResult,
     moveResult,
     toggleFlag,
   };
@@ -207,10 +197,10 @@ export function ShnctlSearch({
     canSearch,
     flags,
     runSearch,
-    goToResult,
     moveResult,
     toggleFlag,
   } = useSearchPanel(registry, open);
+  const canNavigate = searchState.total > 0;
 
   useEffect(() => {
     if (!open || !canSearch) {
@@ -223,91 +213,61 @@ export function ShnctlSearch({
     }, 0);
   }, [canSearch, open]);
 
+  if (!open) {
+    return null;
+  }
+
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onClose();
-        }
-      }}
-    >
-      <Dialog.Portal>
-        <Dialog.Overlay className="shnctl-overlay" />
-        <Dialog.Content className="shnctl-search-panel" aria-describedby={undefined}>
-          <div className="shnctl-search-header">
-            <Dialog.Title className="shnctl-search-title">Search</Dialog.Title>
-            <Dialog.Close className="shnctl-search-close" aria-label="Close search">
-              x
-            </Dialog.Close>
-          </div>
-          <form
-            className="shnctl-search-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              runSearch();
-            }}
-          >
-            <input
-              ref={inputRef}
-              className="shnctl-search-input"
-              value={query}
-              placeholder="Find in document"
-              disabled={!canSearch}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-            />
-            <button type="submit" className="shnctl-search-button" disabled={!canSearch}>
-              Find
-            </button>
-          </form>
-          <div className="shnctl-search-tools">
-            <button
-              type="button"
-              className={`shnctl-search-toggle${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
-              onClick={() => toggleFlag(MatchFlag.MatchCase)}
-              disabled={!canSearch}
-            >
-              Aa
-            </button>
-            <button
-              type="button"
-              className={`shnctl-search-toggle${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
-              onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
-              disabled={!canSearch}
-            >
-              Word
-            </button>
-            <div className="shnctl-search-counter">
-              {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
-            </div>
-            <button type="button" className="shnctl-search-step" onClick={() => moveResult(-1)} disabled={searchState.total === 0}>
-              &lt;
-            </button>
-            <button type="button" className="shnctl-search-step" onClick={() => moveResult(1)} disabled={searchState.total === 0}>
-              &gt;
-            </button>
-          </div>
-          <div className="shnctl-search-results">
-            {!canSearch ? <div className="shnctl-state">Search is not ready.</div> : null}
-            {canSearch && !searchState.query ? <div className="shnctl-state">Enter text to search this PDF.</div> : null}
-            {canSearch && searchState.query && !searchState.loading && searchState.total === 0 ? (
-              <div className="shnctl-state">No matches found.</div>
-            ) : null}
-            {searchState.results.map((result, index) => (
-              <button
-                type="button"
-                key={`${result.pageIndex}-${result.charIndex}-${index}`}
-                className={`shnctl-search-result${index === activeIndex ? ' is-active' : ''}`}
-                onClick={() => goToResult(index)}
-              >
-                <span className="shnctl-search-result-page">Page {result.pageIndex + 1}</span>
-                <span className="shnctl-search-result-context">{renderSearchContext(result)}</span>
-              </button>
-            ))}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <div className="shnctl-search-bar" role="search" aria-label="PDF search">
+      <button type="button" className="shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" title="Previous result">
+        <ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <div className="shnctl-search-counter">
+        {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
+      </div>
+      <button type="button" className="shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" title="Next result">
+        <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <form
+        className="shnctl-search-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          runSearch();
+        }}
+      >
+        <input
+          ref={inputRef}
+          className="shnctl-search-input"
+          value={query}
+          type="search"
+          placeholder={canSearch ? 'Find in document' : 'Search is not ready'}
+          disabled={!canSearch}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+      </form>
+      <button
+        type="button"
+        className={`shnctl-search-toggle${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
+        onClick={() => toggleFlag(MatchFlag.MatchCase)}
+        disabled={!canSearch}
+        aria-label="Match case"
+        aria-pressed={flags.includes(MatchFlag.MatchCase)}
+        title="Match case"
+      >
+        <CaseSensitive size={18} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className={`shnctl-search-toggle${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
+        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
+        disabled={!canSearch}
+        aria-label="Match whole word"
+        aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
+        title="Match whole word"
+      >
+        <WholeWord size={18} strokeWidth={2} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
@@ -341,29 +301,146 @@ export function installPanelCommandRedirects(
   const commands = registry.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
   const ui = registry.getPlugin('ui')?.provides?.() as UICapability | undefined;
 
-  if (!commands) {
-    return EMPTY_CLEANUP;
-  }
-
   const closeBuiltInSidebars = (documentId: string) => {
     const scope = ui?.forDocument(documentId);
     scope?.closeSidebarSlot('right', 'main');
+    scope?.closeSidebarSlot('left', 'main');
   };
 
-  commands.registerCommand({
-    id: SEARCH_PANEL_COMMAND_ID,
-    label: 'Search',
-    icon: 'search',
-    shortcuts: ['Ctrl+F', 'Meta+F'],
-    categories: ['panel', 'panel-search'],
-    action: ({ documentId }) => {
-      closeBuiltInSidebars(documentId);
-      onSearchOpenChange(!searchOpenRef.current);
-    },
-    active: () => searchOpenRef.current,
-  });
+  const refreshMainToolbar = (documentId?: string) => {
+    if (!ui || !documentId) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      ui.forDocument(documentId).setActiveToolbar('top', 'main', 'main-toolbar');
+    });
+  };
+
+  if (commands) {
+    try {
+      commands.unregisterCommand(SHNCTL_SEARCH_COMMAND_ID);
+    } catch {
+      // The command may not be registered yet depending on plugin startup order.
+    }
+
+    commands.registerCommand({
+      id: SHNCTL_SEARCH_COMMAND_ID,
+      label: 'Search',
+      icon: 'search',
+      shortcuts: ['Ctrl+F', 'Meta+F'],
+      categories: ['tools'],
+      action: ({ documentId }) => {
+        closeBuiltInSidebars(documentId);
+        if (searchOpenRef.current) {
+          clearActiveSearch(registry);
+          onSearchOpenChange(false);
+          refreshMainToolbar(documentId);
+          return;
+        }
+
+        onSearchOpenChange(true);
+        refreshMainToolbar(documentId);
+      },
+      active: () => searchOpenRef.current,
+    });
+  }
+
+  const restoreToolbar = replaceToolbarSearchButton(ui);
 
   return () => {
-    commands.unregisterCommand(SEARCH_PANEL_COMMAND_ID);
+    restoreToolbar();
+    commands?.unregisterCommand(SHNCTL_SEARCH_COMMAND_ID);
   };
+}
+
+function replaceToolbarSearchButton(ui?: UICapability) {
+  if (!ui) {
+    return EMPTY_CLEANUP;
+  }
+
+  type ToolbarItem = {
+    id?: string;
+    commandId?: string;
+    items?: ToolbarItem[];
+    [key: string]: unknown;
+  };
+
+  try {
+    const schema = ui.getSchema();
+    const toolbar = schema.toolbars?.['main-toolbar'];
+    if (!toolbar?.items) {
+      return EMPTY_CLEANUP;
+    }
+
+    const originalItems = structuredClone(toolbar.items) as ToolbarItem[];
+    const items = removeSearchToolbarItems(originalItems);
+    const rightGroup = findToolbarItem(items, 'right-group') ?? findLastGroup(items);
+    const searchButton = {
+      type: 'command-button',
+      id: 'shnctl-search-button',
+      commandId: SHNCTL_SEARCH_COMMAND_ID,
+      variant: 'icon',
+    };
+
+    if (rightGroup?.items) {
+      rightGroup.items.unshift(searchButton);
+    } else {
+      items.push(searchButton);
+    }
+
+    ui.mergeSchema({
+      toolbars: {
+        'main-toolbar': {
+          ...toolbar,
+          items,
+        },
+      },
+    });
+
+    return () => {
+      ui.mergeSchema({
+        toolbars: {
+          'main-toolbar': {
+            ...toolbar,
+            items: originalItems,
+          },
+        },
+      });
+    };
+  } catch (error) {
+    console.warn('[shnctl] failed to customize search toolbar button', error);
+    return EMPTY_CLEANUP;
+  }
+}
+
+function removeSearchToolbarItems<T extends { id?: string; commandId?: string; items?: T[] }>(items: T[]): T[] {
+  return items
+    .filter((item) => !isSearchToolbarItem(item))
+    .map((item) => (item.items ? { ...item, items: removeSearchToolbarItems(item.items) } : item));
+}
+
+function isSearchToolbarItem(item: { id?: string; commandId?: string }) {
+  const id = item.id?.toLowerCase() ?? '';
+  const commandId = item.commandId?.toLowerCase() ?? '';
+  return id.includes('search') || commandId === SEARCH_PANEL_COMMAND_ID || commandId.includes('search');
+}
+
+function findToolbarItem<T extends { id?: string; items?: T[] }>(items: T[], id: string): T | undefined {
+  for (const item of items) {
+    if (item.id === id) {
+      return item;
+    }
+
+    const child = item.items ? findToolbarItem(item.items, id) : undefined;
+    if (child) {
+      return child;
+    }
+  }
+
+  return undefined;
+}
+
+function findLastGroup<T extends { items?: T[] }>(items: T[]): T | undefined {
+  return [...items].reverse().find((item) => Array.isArray(item.items));
 }
