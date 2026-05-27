@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PDF Viewer",
-  "description": "Open local and HTTPS PDF files with PDF Viewer.",
+  "description": "Open local PDF files with PDF Viewer.",
   "version": "0.3.3",
   "minimum_chrome_version": "120",
   "icons": {
@@ -24,8 +24,7 @@
     "type": "module"
   },
   "host_permissions": [
-    "file:///*",
-    "https://*/*"
+    "file:///*"
   ],
   "permissions": [
     "tabs"

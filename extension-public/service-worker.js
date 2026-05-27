@@ -8,10 +8,7 @@ const isSupportedPdfUrl = (url) => {
   try {
     const parsed = new URL(url);
 
-    return (
-      (parsed.protocol === 'file:' || parsed.protocol === 'https:') &&
-      parsed.pathname.toLowerCase().endsWith('.pdf')
-    );
+    return parsed.protocol === 'file:' && parsed.pathname.toLowerCase().endsWith('.pdf');
   } catch {
     return false;
   }
@@ -26,7 +23,7 @@ const getDocumentUrlFromExtensionShortcut = (url) => {
 
   const extensionPath = url.slice(prefix.length);
 
-  if (!extensionPath.toLowerCase().startsWith('file:///') && !extensionPath.toLowerCase().startsWith('https://')) {
+  if (!extensionPath.toLowerCase().startsWith('file:///')) {
     return null;
   }
 

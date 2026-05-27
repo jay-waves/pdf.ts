@@ -8,7 +8,7 @@ import {
 export const isPdfDocumentUrl = (value: string) => {
   try {
     const url = new URL(value);
-    const isSupportedProtocol = url.protocol === 'file:' || url.protocol === 'https:';
+    const isSupportedProtocol = url.protocol === 'file:';
 
     return isSupportedProtocol && url.pathname.toLowerCase().endsWith('.pdf');
   } catch {
