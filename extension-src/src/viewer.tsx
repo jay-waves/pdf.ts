@@ -73,6 +73,18 @@ const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 1;
 const EMPTY_CLEANUP = () => {};
+const PDFIUM_WASM_URL = chrome.runtime.getURL('assets/pdfium.wasm');
+const DISABLED_VIEWER_CATEGORIES = [
+  'attachment',
+  'document-capture',
+  'form',
+  'fullscreen',
+  'insert',
+  'panel-sidebar',
+  'redaction',
+  'signature',
+  'stamp',
+];
 
 function runWhenIdle(callback: () => void) {
   if ('requestIdleCallback' in window) {
@@ -426,8 +438,16 @@ function App() {
     () => ({
       ...(fileUrl ? { src: fileUrl } : {}),
       worker: true,
+      wasmUrl: PDFIUM_WASM_URL,
+      fontFallback: {
+        fonts: {},
+      },
+      stamp: {
+        defaultLibrary: false,
+        manifests: [],
+      },
       tabBar: 'never',
-      disabledCategories: ['form', 'redaction', 'panel-sidebar', 'insert', 'navigation', 'document-capture'],
+      disabledCategories: DISABLED_VIEWER_CATEGORIES,
       theme: VIEWER_THEMES[themeIndexRef.current]?.config ?? VIEWER_THEMES[0].config,
       render: {
         defaultImageType: RENDER_IMAGE_TYPE,

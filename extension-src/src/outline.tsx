@@ -290,15 +290,16 @@ export function installOutlinePrefetch(
     return EMPTY_CLEANUP;
   }
 
+  let loadingDocumentId: string | null = null;
   let loadedDocumentId: string | null = null;
   let cancelled = false;
 
   const loadForDocument = (documentId: string) => {
-    if (cancelled || loadedDocumentId === documentId) {
+    if (cancelled || loadingDocumentId === documentId || loadedDocumentId === documentId) {
       return;
     }
 
-    loadedDocumentId = documentId;
+    loadingDocumentId = documentId;
     onLoaded({ status: 'loading', bookmarks: [] });
 
     loadOutlineCache(registry)
@@ -307,6 +308,9 @@ export function installOutlinePrefetch(
           return;
         }
 
+        loadingDocumentId = null;
+        loadedDocumentId = documentId;
+
         if (cacheKey && (cache.status === 'ready' || cache.status === 'empty')) {
           outlinePrefetchCache.set(cacheKey, cache);
         }
@@ -314,6 +318,7 @@ export function installOutlinePrefetch(
         onLoaded(cache);
       })
       .catch((error) => {
+        loadingDocumentId = null;
         console.error('[shnctl] outline prefetch failed after initial layout', {
           documentId,
           error,
@@ -334,7 +339,7 @@ export function installOutlinePrefetch(
 
   const documentId = getActiveDocumentId(registry);
   if (documentId) {
-    window.setTimeout(() => loadForDocument(documentId), 0);
+    window.setTimeout(() => loadForDocument(documentId), 300);
   }
 
   return () => {
