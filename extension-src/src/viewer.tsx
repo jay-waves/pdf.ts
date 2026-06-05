@@ -22,14 +22,15 @@ import {
   type OutlineCache
 } from './outline'
 import { 
-  ShnctlSearch, 
+  ShnctlSearch,
   installSearchKeyboardShortcut,
   installPanelCommandRedirects
 } from './search'
 import {
   getStoredThemeIndex,
   VIEWER_THEMES,
-  installThemeSwitcher
+  installThemeSwitcher,
+  setSearchOpenAttribute,
 } from './theme'
 import {
   installReadingHistory,
@@ -402,6 +403,11 @@ function App() {
 
   useEffect(() => {
     searchOpenRef.current = searchOpen;
+    setSearchOpenAttribute(searchOpen);
+
+    return () => {
+      setSearchOpenAttribute(false);
+    };
   }, [searchOpen]);
 
   useEffect(() => {
@@ -496,7 +502,27 @@ function App() {
     setOutlineOpen(true);
   };
 
-  const handleOpenSearch = () => {
+  const handleOpenSearch = (targetRegistry = registry) => {
+    const documentId = targetRegistry ? getActiveDocumentId(targetRegistry) : undefined;
+    const ui = targetRegistry?.getPlugin('ui')?.provides?.() as
+      | {
+          forDocument(documentId: string): {
+            closeSidebarSlot(placement: 'left' | 'right', slot: string): void;
+            setActiveToolbar(placement: 'top', slot: 'main' | 'secondary', toolbarId: string): void;
+          };
+        }
+      | undefined;
+
+    if (documentId && ui) {
+      const scope = ui.forDocument(documentId);
+      scope.closeSidebarSlot('right', 'main');
+      scope.closeSidebarSlot('left', 'main');
+
+      requestAnimationFrame(() => {
+        scope.setActiveToolbar('top', 'main', 'main-toolbar');
+      });
+    }
+
     searchOpenRef.current = true;
     setSearchOpen(true);
   };
@@ -548,7 +574,7 @@ function App() {
               }),
             () => installWhenIdle(() => installThemeSwitcher(nextRegistry, viewerRef.current?.container ?? null, themeIndexRef)),
             () => installWhenIdle(() => installPanelCommandRedirects(nextRegistry, searchOpenRef, handleSearchOpenChange)),
-            () => installWhenIdle(() => installSearchKeyboardShortcut(handleOpenSearch)),
+            () => installWhenIdle(() => installSearchKeyboardShortcut(() => handleOpenSearch(nextRegistry))),
             () => installWhenIdle(() => installSelectionTranslate(nextRegistry, viewerRef.current?.container ?? null)),
             () => installWhenIdle(() => installOutlinePrefetch(nextRegistry, setOutlineCache, fileUrl)),
             () => () => {
@@ -580,7 +606,7 @@ function App() {
         onCacheChange={setOutlineCache}
         onClose={() => setOutlineOpen(false)}
       />
-      <ShnctlSearch registry={registry} open={searchOpen} onClose={() => handleSearchOpenChange(false)} />
+      <ShnctlSearch registry={registry} open={searchOpen} />
       <BottomNavigationControl
         registry={registry}
         title={currentTitle}
