@@ -10,6 +10,10 @@ import {
 import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
+  CornerDownLeft,
+  CornerUpRight,
+} from 'lucide-react';
+import {
   PdfZoomMode,
   type PdfBookmarkObject,
   type PdfErrorReason,
@@ -651,7 +655,7 @@ export function BottomNavigationControl({
           disabled={!canGoPrevious}
           aria-label="Previous page"
         >
-          &lt;
+          <CornerDownLeft size={20} strokeWidth={1.8} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -660,7 +664,7 @@ export function BottomNavigationControl({
           disabled={!canGoNext}
           aria-label="Next page"
         >
-          &gt;
+          <CornerUpRight size={20} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
       <div className="shnctl-bottom-nav-meta">

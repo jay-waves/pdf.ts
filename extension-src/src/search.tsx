@@ -24,6 +24,7 @@ import {
 const EMPTY_CLEANUP = () => {};
 const SEARCH_PANEL_COMMAND_ID = 'panel:toggle-search';
 const SHNCTL_SEARCH_COMMAND_ID = 'shnctl:toggle-search';
+const SHNCTL_SEARCH_ICON_ID = 'shnctl-search';
 
 type SearchPanelState = Pick<
   SearchDocumentState,
@@ -327,7 +328,7 @@ export function installPanelCommandRedirects(
     commands.registerCommand({
       id: SHNCTL_SEARCH_COMMAND_ID,
       label: 'Search',
-      icon: 'search',
+      icon: SHNCTL_SEARCH_ICON_ID,
       shortcuts: ['Ctrl+F', 'Meta+F'],
       categories: ['tools'],
       action: ({ documentId }) => {

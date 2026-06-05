@@ -175,7 +175,7 @@ function injectStyles() {
       background: rgba(255, 255, 255, 0.98);
       box-shadow: 0 12px 34px rgba(15, 23, 42, 0.18);
       color: #111827;
-      font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 13px/1.45 "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       pointer-events: auto;

@@ -149,12 +149,17 @@ export const VIEWER_THEMES: ViewerTheme[] = [
 const THEME_COMMAND_ID = 'shnctl.theme.cycle';
 const THEME_BUTTON_ID = 'shnctl-theme-cycle-button';
 const THEME_STORAGE_KEY = 'shnctl-viewer-theme-v1';
+const TOOLBAR_PIN_COMMAND_ID = 'shnctl.toolbar.pin';
+const TOOLBAR_PIN_BUTTON_ID = 'shnctl-toolbar-pin-button';
+const TOOLBAR_PIN_STORAGE_KEY = 'shnctl-toolbar-pinned-v1';
 const PAGE_MODE_COMMAND_ID = 'shnctl.mode.page';
 const SINGLE_PAGE_COMMAND_ID = 'shnctl.view.single-page';
 const TWO_PAGE_ODD_COMMAND_ID = 'shnctl.view.two-page-odd';
 const VERTICAL_SCROLL_COMMAND_ID = 'shnctl.view.vertical-scroll';
 const HORIZONTAL_SCROLL_COMMAND_ID = 'shnctl.view.horizontal-scroll';
 const ROTATE_COMMAND_ID = 'shnctl.view.rotate';
+const PAN_COMMAND_ID = 'shnctl.tool.pan';
+const PAN_BUTTON_ID = 'shnctl-pan-button';
 const PAGE_TOOLBAR_ID = 'shnctl-page-toolbar';
 const PAGE_MODE_TAB_ID = 'shnctl-page-mode';
 const VIEW_CONTROL_BUTTON_IDS = new Set([
@@ -166,6 +171,92 @@ const VIEW_CONTROL_BUTTON_IDS = new Set([
 ]);
 const PAGE_SETTINGS_BUTTON_ID = 'page-settings-button';
 const MAIN_ZOOM_ITEM_IDS = new Set(['zoom-menu-button', 'zoom-toolbar', 'divider-3']);
+const MAIN_TOOL_ITEM_IDS = new Set(['pan-button', 'pointer-button', 'divider-2']);
+const TOOLBAR_LABEL_OVERRIDES = [
+  { itemId: 'view-mode', label: 'VIEW' },
+  { itemId: PAGE_MODE_TAB_ID, label: 'PAGE' },
+  { itemId: 'annotate-mode', label: 'MARKUP' },
+  { itemId: 'shapes-mode', label: 'DRAW' },
+];
+const TOOLBAR_UI_FONT_FAMILY = '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+const TOOLBAR_AUTO_HIDE_STYLE_ATTRIBUTE = 'data-shnctl-toolbar-auto-hide-style';
+const TOOLBAR_AUTO_HIDE_CSS = `
+[data-epdf]:not([data-shnctl-toolbar-pinned="true"]) [data-epdf-i="main-toolbar"] {
+  --shnctl-main-toolbar-hidden-offset: 42px;
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: 0 !important;
+  z-index: 30 !important;
+  transform: translateY(calc(-1 * var(--shnctl-main-toolbar-hidden-offset))) !important;
+  opacity: 0.08 !important;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out !important;
+  will-change: transform, opacity;
+}
+
+[data-epdf]:not([data-shnctl-toolbar-pinned="true"]) [data-epdf-i="main-toolbar"]::after {
+  position: absolute;
+  right: 0;
+  bottom: -14px;
+  left: 0;
+  height: 14px;
+  content: "";
+}
+
+[data-epdf]:not([data-shnctl-toolbar-pinned="true"]) :is(
+  [data-epdf-i="shnctl-page-toolbar"],
+  [data-epdf-i="annotation-toolbar"],
+  [data-epdf-i="shapes-toolbar"],
+  [data-epdf-i="insert-toolbar"],
+  [data-epdf-i="form-toolbar"],
+  [data-epdf-i="redaction-toolbar"]
+) {
+  --shnctl-main-toolbar-hidden-offset: 42px;
+  --shnctl-page-toolbar-hidden-offset: 48px;
+  position: fixed !important;
+  top: var(--shnctl-main-toolbar-hidden-offset) !important;
+  right: 0 !important;
+  left: 0 !important;
+  z-index: 29 !important;
+  transform: translateY(calc(-1 * (var(--shnctl-main-toolbar-hidden-offset) + var(--shnctl-page-toolbar-hidden-offset)))) !important;
+  opacity: 0.08 !important;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out !important;
+  will-change: transform, opacity;
+}
+
+[data-epdf]:not([data-shnctl-toolbar-pinned="true"]):has(:is(
+  [data-epdf-i="main-toolbar"],
+  [data-epdf-i="shnctl-page-toolbar"],
+  [data-epdf-i="annotation-toolbar"],
+  [data-epdf-i="shapes-toolbar"],
+  [data-epdf-i="insert-toolbar"],
+  [data-epdf-i="form-toolbar"],
+  [data-epdf-i="redaction-toolbar"]
+):is(:hover, :focus-within)) [data-epdf-i="main-toolbar"] {
+  transform: translateY(0) !important;
+  opacity: 1 !important;
+}
+
+[data-epdf]:not([data-shnctl-toolbar-pinned="true"]):has(:is(
+  [data-epdf-i="main-toolbar"],
+  [data-epdf-i="shnctl-page-toolbar"],
+  [data-epdf-i="annotation-toolbar"],
+  [data-epdf-i="shapes-toolbar"],
+  [data-epdf-i="insert-toolbar"],
+  [data-epdf-i="form-toolbar"],
+  [data-epdf-i="redaction-toolbar"]
+):is(:hover, :focus-within)) :is(
+  [data-epdf-i="shnctl-page-toolbar"],
+  [data-epdf-i="annotation-toolbar"],
+  [data-epdf-i="shapes-toolbar"],
+  [data-epdf-i="insert-toolbar"],
+  [data-epdf-i="form-toolbar"],
+  [data-epdf-i="redaction-toolbar"]
+) {
+  transform: translateY(0) !important;
+  opacity: 1 !important;
+}
+`;
 
 type SpreadModeValue = 'none' | 'odd' | 'even';
 type ScrollStrategyValue = 'vertical' | 'horizontal';
@@ -191,6 +282,14 @@ interface RotateCapability {
   rotateForward(): void;
 }
 
+interface PanCapability {
+  forDocument(documentId: string): {
+    enablePan(): void;
+    disablePan(): void;
+    isPanMode(): boolean;
+  };
+}
+
 interface UiPluginState {
   plugins?: {
     ui?: {
@@ -210,6 +309,120 @@ interface UiPluginState {
       >;
     };
   };
+}
+
+function getDomRoots(root: ParentNode = document) {
+  const roots: ParentNode[] = [root];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+
+  while (walker.nextNode()) {
+    const element = walker.currentNode as Element;
+    if (element.shadowRoot) {
+      roots.push(...getDomRoots(element.shadowRoot));
+    }
+  }
+
+  return roots;
+}
+
+function getStoredToolbarPinned() {
+  try {
+    return window.localStorage.getItem(TOOLBAR_PIN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setStoredToolbarPinned(pinned: boolean) {
+  try {
+    window.localStorage.setItem(TOOLBAR_PIN_STORAGE_KEY, pinned ? 'true' : 'false');
+  } catch {
+    // Pinning should still work for this session if storage is unavailable.
+  }
+}
+
+function applyToolbarPinnedState(root: ParentNode, pinned = getStoredToolbarPinned()) {
+  const uiRoots = Array.from(root.querySelectorAll('[data-epdf]'));
+
+  if (root instanceof Element && root.matches('[data-epdf]')) {
+    uiRoots.unshift(root);
+  }
+
+  for (const uiRoot of uiRoots) {
+    if (pinned) {
+      uiRoot.setAttribute('data-shnctl-toolbar-pinned', 'true');
+    } else {
+      uiRoot.removeAttribute('data-shnctl-toolbar-pinned');
+    }
+  }
+}
+
+function applyToolbarPinnedStateToAllRoots(pinned = getStoredToolbarPinned()) {
+  for (const root of getDomRoots()) {
+    applyToolbarPinnedState(root, pinned);
+  }
+}
+
+function ensureToolbarAutoHideStyle(root: ParentNode) {
+  const styleRoot = root instanceof ShadowRoot ? root : document.head;
+  if (!styleRoot || styleRoot.querySelector(`style[${TOOLBAR_AUTO_HIDE_STYLE_ATTRIBUTE}]`)) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.setAttribute(TOOLBAR_AUTO_HIDE_STYLE_ATTRIBUTE, '');
+  style.textContent = TOOLBAR_AUTO_HIDE_CSS;
+  styleRoot.appendChild(style);
+}
+
+function applyToolbarDomOverrides() {
+  for (const root of getDomRoots()) {
+    ensureToolbarAutoHideStyle(root);
+    applyToolbarPinnedState(root);
+
+    for (const { itemId, label } of TOOLBAR_LABEL_OVERRIDES) {
+      const button = root.querySelector(`[data-epdf-i="${itemId}"] > button`);
+      if (!(button instanceof HTMLButtonElement)) {
+        continue;
+      }
+
+      if (button.textContent !== label) {
+        button.textContent = label;
+      }
+
+      button.style.setProperty('font-family', TOOLBAR_UI_FONT_FAMILY, 'important');
+      button.style.setProperty('font-size', '14px', 'important');
+      button.style.setProperty('font-weight', '700', 'important');
+      button.style.setProperty('line-height', '20px', 'important');
+      button.style.setProperty('letter-spacing', '0.02em', 'important');
+      button.style.setProperty('text-transform', 'uppercase', 'important');
+      button.style.setProperty('-webkit-font-smoothing', 'antialiased');
+    }
+  }
+}
+
+function installToolbarDomOverrides() {
+  let scheduled = false;
+  const scheduleApply = () => {
+    if (scheduled) {
+      return;
+    }
+
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      applyToolbarDomOverrides();
+    });
+  };
+
+  const observer = new MutationObserver(scheduleApply);
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+
+  scheduleApply();
+  return () => observer.disconnect();
 }
 
 export function getStoredThemeIndex() {
@@ -251,42 +464,45 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
     return;
   }
 
-  const createPaletteIcon = (countPath: string) => ({
+  const createPaletteIcon = () => ({
     viewBox: '0 0 24 24',
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
-    strokeWidth: 1.8,
+    strokeWidth: 2,
     paths: [
-      {
-        d: 'M12 3.4c-4.75 0-8.6 3.35-8.6 7.9 0 4 3.2 7.3 7.2 7.3h1.15c.9 0 1.5-.62 1.5-1.42 0-.7-.48-1.25-1.2-1.25h-.42c-.9 0-1.62-.7-1.62-1.58 0-.9.72-1.62 1.62-1.62h2.68c3.47 0 6.29-2.03 6.29-4.82 0-2.88-3.85-4.51-8.6-4.51z',
-        stroke: 'primary',
-        fill: 'none',
-      },
-      { d: 'M7.4 10.2h.02', stroke: 'primary', fill: 'none', strokeWidth: 2.4 },
-      { d: 'M10.25 7.35h.02', stroke: 'primary', fill: 'none', strokeWidth: 2.4 },
-      { d: 'M14.15 7.35h.02', stroke: 'primary', fill: 'none', strokeWidth: 2.4 },
-      { d: 'M16.95 10.2h.02', stroke: 'primary', fill: 'none', strokeWidth: 2.4 },
-      { d: 'M15.6 16.9a4.4 4.4 0 1 0 8.8 0a4.4 4.4 0 1 0 -8.8 0', stroke: 'none', fill: 'secondary' },
-      { d: countPath, stroke: '#ffffff', fill: 'none', strokeWidth: 1.55 },
+      { d: 'm14.622 17.897-10.68-2.913', stroke: 'primary', fill: 'none' },
+      { d: 'M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z', stroke: 'primary', fill: 'none' },
+      { d: 'M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15', stroke: 'primary', fill: 'none' },
     ],
   });
 
   container.registerIcons({
-    'shnctl-palette-1': createPaletteIcon('M20 14.7v4.4'),
-    'shnctl-palette-2': createPaletteIcon('M18.35 14.65h3.25v1.5h-3.25v2.95h3.25'),
-    'shnctl-palette-3': createPaletteIcon('M18.35 14.65h3.25v1.55h-2.35M21.6 16.2v2.9h-3.25'),
-    'shnctl-palette-4': createPaletteIcon('M18.3 14.65v2.45h3.3M21.6 14.65v4.45'),
-    'shnctl-palette-5': createPaletteIcon('M21.55 14.65h-3.2l-.2 1.9h1.75a1.3 1.3 0 0 1 0 2.55h-1.8'),
-    'shnctl-palette-6': createPaletteIcon('M21.45 14.75h-1.8a1.55 1.55 0 0 0 0 3.1h.35a1.25 1.25 0 0 0 0-2.5h-1.85'),
-    'shnctl-palette-7': createPaletteIcon('M18.3 14.65h3.35l-2.15 4.45'),
+    'shnctl-palette-1': createPaletteIcon(),
+    'shnctl-palette-2': createPaletteIcon(),
+    'shnctl-palette-3': createPaletteIcon(),
+    'shnctl-palette-4': createPaletteIcon(),
+    'shnctl-palette-5': createPaletteIcon(),
+    'shnctl-palette-6': createPaletteIcon(),
+    'shnctl-palette-7': createPaletteIcon(),
+    'shnctl-search': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'm21 21-4.34-4.34', stroke: 'primary', fill: 'none' },
+        { d: 'M19 11a8 8 0 1 1-16 0 8 8 0 0 1 16 0', stroke: 'primary', fill: 'none' },
+      ],
+    },
     'shnctl-single-page': {
       viewBox: '0 0 24 24',
       strokeLinecap: 'round',
       strokeLinejoin: 'round',
       strokeWidth: 1.8,
       paths: [
-        { d: 'M7 3.5h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z', stroke: 'primary', fill: 'none' },
-        { d: 'M8.5 8h7M8.5 11.5h7M8.5 15h5', stroke: 'primary', fill: 'none' },
+        { d: 'M5 8V5c0-1 1-2 2-2h10c1 0 2 1 2 2v3', stroke: 'primary', fill: 'none' },
+        { d: 'M19 16v3c0 1-1 2-2 2H7c-1 0-2-1-2-2v-3', stroke: 'primary', fill: 'none' },
+        { d: 'M4 12h16', stroke: 'primary', fill: 'none' },
       ],
     },
     'shnctl-two-page-odd': {
@@ -295,8 +511,9 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
       strokeLinejoin: 'round',
       strokeWidth: 1.8,
       paths: [
-        { d: 'M4 5.5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 1-2-2zM13 3.5h5a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-5z', stroke: 'primary', fill: 'none' },
-        { d: 'M7 8.5h2M15 8.5h2M7 12h2M15 12h2', stroke: 'primary', fill: 'none' },
+        { d: 'M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3', stroke: 'primary', fill: 'none' },
+        { d: 'M16 5h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3', stroke: 'primary', fill: 'none' },
+        { d: 'M12 4v16', stroke: 'primary', fill: 'none' },
       ],
     },
     'shnctl-scroll-vertical': {
@@ -305,9 +522,14 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
       strokeLinejoin: 'round',
       strokeWidth: 2,
       paths: [
-        { d: 'M12 5v14', stroke: 'primary', fill: 'none' },
-        { d: 'M8 9l4-4 4 4', stroke: 'primary', fill: 'none' },
-        { d: 'M8 15l4 4 4-4', stroke: 'primary', fill: 'none' },
+        { d: 'M12 22v-6', stroke: 'primary', fill: 'none' },
+        { d: 'M12 8V2', stroke: 'primary', fill: 'none' },
+        { d: 'M4 12H2', stroke: 'primary', fill: 'none' },
+        { d: 'M10 12H8', stroke: 'primary', fill: 'none' },
+        { d: 'M16 12h-2', stroke: 'primary', fill: 'none' },
+        { d: 'M22 12h-2', stroke: 'primary', fill: 'none' },
+        { d: 'm15 19-3 3-3-3', stroke: 'primary', fill: 'none' },
+        { d: 'm15 5-3-3-3 3', stroke: 'primary', fill: 'none' },
       ],
     },
     'shnctl-scroll-horizontal': {
@@ -316,9 +538,14 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
       strokeLinejoin: 'round',
       strokeWidth: 2,
       paths: [
-        { d: 'M5 12h14', stroke: 'primary', fill: 'none' },
-        { d: 'M9 8l-4 4 4 4', stroke: 'primary', fill: 'none' },
-        { d: 'M15 8l4 4-4 4', stroke: 'primary', fill: 'none' },
+        { d: 'M16 12h6', stroke: 'primary', fill: 'none' },
+        { d: 'M8 12H2', stroke: 'primary', fill: 'none' },
+        { d: 'M12 2v2', stroke: 'primary', fill: 'none' },
+        { d: 'M12 8v2', stroke: 'primary', fill: 'none' },
+        { d: 'M12 14v2', stroke: 'primary', fill: 'none' },
+        { d: 'M12 20v2', stroke: 'primary', fill: 'none' },
+        { d: 'm19 15 3-3-3-3', stroke: 'primary', fill: 'none' },
+        { d: 'm5 9-3 3 3 3', stroke: 'primary', fill: 'none' },
       ],
     },
     'shnctl-rotate': {
@@ -327,8 +554,8 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
       strokeLinejoin: 'round',
       strokeWidth: 2,
       paths: [
-        { d: 'M21 12a9 9 0 1 1-2.64-6.36', stroke: 'primary', fill: 'none' },
-        { d: 'M21 3v6h-6', stroke: 'primary', fill: 'none' },
+        { d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', stroke: 'primary', fill: 'none' },
+        { d: 'M3 3v5h5', stroke: 'primary', fill: 'none' },
       ],
     },
     'shnctl-page-menu': {
@@ -339,6 +566,28 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
       paths: [
         { d: 'M6.5 3.5h8.2L19 7.8v10.7a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2z', stroke: 'primary', fill: 'none' },
         { d: 'M14.5 3.8v4.4h4.2M8 11.5h8M8 15h5.5', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-toolbar-pin': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'M12 17v5', stroke: 'primary', fill: 'none' },
+        { d: 'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z', stroke: 'primary', fill: 'none' },
+      ],
+    },
+    'shnctl-hand': {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2', stroke: 'primary', fill: 'none' },
+        { d: 'M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2', stroke: 'primary', fill: 'none' },
+        { d: 'M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8', stroke: 'primary', fill: 'none' },
+        { d: 'M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15', stroke: 'primary', fill: 'none' },
       ],
     },
   });
@@ -514,13 +763,18 @@ export function installThemeSwitcher(
     return EMPTY_CLEANUP;
   }
 
+  const cleanupToolbarDomOverrides = installToolbarDomOverrides();
+
   registerThemeIcons(container);
   applyViewerTheme(container, themeIndexRef.current);
   const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
   const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
   const rotate = registry.getPlugin('rotate')?.provides?.() as RotateCapability | undefined;
+  const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
   const registeredCommandIds = [
     THEME_COMMAND_ID,
+    TOOLBAR_PIN_COMMAND_ID,
+    PAN_COMMAND_ID,
     PAGE_MODE_COMMAND_ID,
     SINGLE_PAGE_COMMAND_ID,
     TWO_PAGE_ODD_COMMAND_ID,
@@ -543,9 +797,49 @@ export function installThemeSwitcher(
     },
     categories: ['document'],
   };
+  applyToolbarPinnedStateToAllRoots();
+  const toolbarPinCommand: Command = {
+    id: TOOLBAR_PIN_COMMAND_ID,
+    label: 'Pin toolbar',
+    icon: 'shnctl-toolbar-pin',
+    action: () => {
+      const pinned = !getStoredToolbarPinned();
+      setStoredToolbarPinned(pinned);
+      applyToolbarPinnedStateToAllRoots(pinned);
+      refreshMainToolbar(registry, ui);
+    },
+    active: () => getStoredToolbarPinned(),
+    categories: ['document'],
+  };
+  const panCommand: Command = {
+    id: PAN_COMMAND_ID,
+    label: 'Toggle Pan Mode',
+    icon: 'shnctl-hand',
+    action: ({ documentId }) => {
+      const activeDocumentId = documentId ?? getActiveDocumentId(registry);
+
+      if (!pan || !activeDocumentId) {
+        return;
+      }
+
+      const panScope = pan.forDocument(activeDocumentId);
+      if (panScope.isPanMode()) {
+        panScope.disablePan();
+      } else {
+        panScope.enablePan();
+      }
+      refreshMainToolbar(registry, ui);
+    },
+    active: ({ documentId }) => {
+      const activeDocumentId = documentId ?? getActiveDocumentId(registry);
+      return Boolean(pan && activeDocumentId && pan.forDocument(activeDocumentId).isPanMode());
+    },
+    disabled: () => !pan,
+    categories: ['tools', 'pan'],
+  };
   const pageModeCommand: Command = {
     id: PAGE_MODE_COMMAND_ID,
-    label: 'Page',
+    label: 'PAGE',
     action: ({ documentId }) => {
       ui.forDocument(documentId).setActiveToolbar('top', 'secondary', PAGE_TOOLBAR_ID);
     },
@@ -615,7 +909,7 @@ export function installThemeSwitcher(
     },
   ];
 
-  for (const command of [themeCommand, pageModeCommand, ...viewCommands]) {
+  for (const command of [themeCommand, toolbarPinCommand, panCommand, pageModeCommand, ...viewCommands]) {
     commands.registerCommand(command);
   }
 
@@ -623,6 +917,7 @@ export function installThemeSwitcher(
   const toolbar = schema.toolbars['main-toolbar'];
   if (!toolbar) {
     return () => {
+      cleanupToolbarDomOverrides();
       for (const commandId of registeredCommandIds) {
         commands.unregisterCommand(commandId);
       }
@@ -634,7 +929,7 @@ export function installThemeSwitcher(
   const items = removeDividerBeforePanTool(
     removeToolbarItemsById(
       removeToolbarItemByCommandId(structuredClone(toolbar.items) as ToolbarItem[], COMMENT_PANEL_COMMAND_ID),
-      new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID]),
+      new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, ...MAIN_TOOL_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID]),
     ),
   );
   const rightGroup = items.find((item): item is Extract<ToolbarItem, { type: 'group' }> => item.type === 'group' && item.id === 'right-group');
@@ -661,6 +956,22 @@ export function installThemeSwitcher(
         type: 'command-button',
         id: THEME_BUTTON_ID,
         commandId: THEME_COMMAND_ID,
+        variant: 'icon',
+      });
+    }
+    if (!rightGroup.items.some((item) => item.id === PAN_BUTTON_ID)) {
+      rightGroup.items.push({
+        type: 'command-button',
+        id: PAN_BUTTON_ID,
+        commandId: PAN_COMMAND_ID,
+        variant: 'icon',
+      });
+    }
+    if (!rightGroup.items.some((item) => item.id === TOOLBAR_PIN_BUTTON_ID)) {
+      rightGroup.items.push({
+        type: 'command-button',
+        id: TOOLBAR_PIN_BUTTON_ID,
+        commandId: TOOLBAR_PIN_COMMAND_ID,
         variant: 'icon',
       });
     }
@@ -757,6 +1068,7 @@ export function installThemeSwitcher(
   }
 
   return () => {
+    cleanupToolbarDomOverrides();
     for (const commandId of registeredCommandIds) {
       commands.unregisterCommand(commandId);
     }
