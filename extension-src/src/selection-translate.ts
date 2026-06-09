@@ -1,5 +1,11 @@
 import type { PluginRegistry } from '@embedpdf/core';
-import type { PDFViewerRef } from '@embedpdf/react-pdf-viewer';
+import type {
+  CommandsCapability,
+  PDFViewerRef,
+  SelectionCapability,
+  SelectionMenuSchema,
+  UICapability,
+} from '@embedpdf/react-pdf-viewer';
 
 const EMPTY_CLEANUP = () => {};
 const TRANSLATE_SELECTION_COMMAND_ID = 'shnctl.selection.translate';
@@ -8,52 +14,6 @@ const TRANSLATE_SELECTION_ICON_ID = 'shnctl-translate';
 const TRANSLATION_TARGET_LANGUAGE = 'zh';
 const FALLBACK_SOURCE_LANGUAGE = 'en';
 const MAX_TEXT_LENGTH = 4000;
-
-interface PdfTask<T> {
-  toPromise(): Promise<T>;
-}
-
-interface SelectionScope {
-  getSelectedText(): PdfTask<string[]>;
-}
-
-interface SelectionCapability {
-  forDocument(documentId: string): SelectionScope;
-  onSelectionChange(listener: (event: { documentId: string; selection: unknown | null }) => void): () => void;
-}
-
-interface Command {
-  id: string;
-  label?: string;
-  icon?: string;
-  action(context: { documentId: string }): void;
-}
-
-interface CommandsCapability {
-  registerCommand(command: Command): void;
-  unregisterCommand(commandId: string): void;
-}
-
-interface SelectionMenuCommandItem {
-  type: 'command-button';
-  id: string;
-  commandId: string;
-  variant?: 'icon' | 'text' | 'icon-text';
-}
-
-interface SelectionMenuSchema {
-  id: string;
-  items: Array<SelectionMenuCommandItem | { type: string; id: string; items?: SelectionMenuSchema['items'] }>;
-}
-
-interface UISchema {
-  selectionMenus?: Record<string, SelectionMenuSchema>;
-}
-
-interface UICapability {
-  getSchema(): UISchema;
-  mergeSchema(schema: Partial<UISchema>): void;
-}
 
 interface ChromeTranslator {
   translate(text: string): Promise<string>;

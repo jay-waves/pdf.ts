@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
+  type AnnotationCapability,
+  type CommandsCapability,
+  type PanCapability,
   PDFViewer,
   PDFViewerConfig,
   type PDFViewerRef,
@@ -58,16 +61,6 @@ interface ViewportCapability {
   };
 }
 
-interface PanScope {
-  enablePan(): void;
-  disablePan(): void;
-  isPanMode(): boolean;
-}
-
-interface PanCapability {
-  forDocument(documentId: string): PanScope;
-}
-
 const MAX_RENDER_DPR = 1.75;
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
@@ -118,6 +111,22 @@ function installWhenIdle(install: () => () => void) {
 
     cleanup();
   };
+}
+
+function installTextMarkupViewReset(registry: PluginRegistry) {
+  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+  const commands = registry.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
+
+  if (!annotation || !commands) {
+    return EMPTY_CLEANUP;
+  }
+
+  return annotation.onAnnotationEvent((event) => {
+    const activeToolId = annotation.forDocument(event.documentId).getActiveTool()?.id;
+    if (event.type === 'create' && activeToolId && ['highlight', 'underline', 'strikeout', 'squiggly'].includes(activeToolId)) {
+      requestAnimationFrame(() => commands.execute('mode:view', event.documentId, 'api'));
+    }
+  });
 }
 
 function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
@@ -565,6 +574,7 @@ function App() {
             () => installBrowserZoomInterceptor(nextRegistry),
             installNativeContextMenuBlocker,
             () => installMiddleMousePanInterceptor(nextRegistry),
+            () => installTextMarkupViewReset(nextRegistry),
             () => installReadingHistory(nextRegistry, fileUrl),
             () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;

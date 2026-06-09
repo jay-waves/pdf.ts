@@ -16,10 +16,9 @@ import {
 import {
   PdfZoomMode,
   type PdfBookmarkObject,
-  type PdfErrorReason,
-  type Task,
 } from '@embedpdf/models';
 import {
+  type BookmarkCapability,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
 import './viewer.css';
@@ -31,8 +30,6 @@ import {
 
 const EMPTY_CLEANUP = () => {};
 const outlinePrefetchCache = new Map<string, OutlineCache>();
-
-type BookmarkTask = Task<{ bookmarks: PdfBookmarkObject[] }, PdfErrorReason>;
 
 export type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 export type OutlineCache = {
@@ -51,13 +48,6 @@ type FlattenedBookmark = {
   title: string;
   pageNumber: number;
 };
-
-interface BookmarkCapability {
-  getBookmarks(): BookmarkTask;
-  forDocument(documentId: string): {
-    getBookmarks(): BookmarkTask;
-  };
-}
 
 function isEditableKeyboardTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
