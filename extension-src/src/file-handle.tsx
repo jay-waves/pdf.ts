@@ -48,6 +48,10 @@ interface SpreadCapability {
   onSpreadChange(listener: (event: { documentId: string; spreadMode: SpreadModeValue }) => void): () => void;
 }
 
+interface ZoomCapability {
+  onZoomChange(listener: (event: { documentId: string }) => void): () => void;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
 }
@@ -230,9 +234,13 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   }
 
   const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
+  const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
   let restoredDocumentId: string | null = null;
   let pendingPageNumber = 0;
   let pendingWriteId = 0;
+  let zoomSettleId = 0;
+  let zoomAnchorPage = 0;
+  let lastScrollStrategy: ScrollStrategyValue | undefined;
   let cancelPendingIdleWrite: (() => void) | null = null;
 
   const getScrollStrategy = (documentId: string) => {
@@ -292,15 +300,56 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   };
 
   const unsubscribePageChange = scroll.onPageChange((event) => {
+    if (zoomAnchorPage && event.documentId === getActiveDocumentId(registry)) {
+      return;
+    }
+
     scheduleHistoryWrite(event.pageNumber);
   });
 
+  const unsubscribeZoomChange = zoom?.onZoomChange((event) => {
+    if (event.documentId !== getActiveDocumentId(registry)) {
+      return;
+    }
+
+    if (!zoomAnchorPage) {
+      zoomAnchorPage = pendingPageNumber || scroll.forDocument(event.documentId).getCurrentPage();
+    }
+
+    if (pendingWriteId) {
+      window.clearTimeout(pendingWriteId);
+      pendingWriteId = 0;
+    }
+    cancelPendingIdleWrite?.();
+    cancelPendingIdleWrite = null;
+
+    if (zoomSettleId) {
+      window.clearTimeout(zoomSettleId);
+    }
+    zoomSettleId = window.setTimeout(() => {
+      zoomSettleId = 0;
+      const pageNumber = zoomAnchorPage;
+      zoomAnchorPage = 0;
+      scheduleHistoryWrite(pageNumber);
+    }, 350);
+  });
+
   const unsubscribeSpreadChange = spread?.onSpreadChange((event) => {
+    if (zoomAnchorPage && event.documentId === getActiveDocumentId(registry)) {
+      return;
+    }
+
     scheduleHistoryWrite(scroll.forDocument(event.documentId).getCurrentPage());
   });
 
   const unsubscribeScrollStateChange = scroll.onStateChange((state) => {
     if (!isScrollStrategy(state.strategy)) {
+      return;
+    }
+
+    const strategyChanged = lastScrollStrategy !== undefined && lastScrollStrategy !== state.strategy;
+    lastScrollStrategy = state.strategy;
+    if (!strategyChanged || zoomAnchorPage) {
       return;
     }
 
@@ -352,6 +401,10 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
       window.clearTimeout(pendingWriteId);
       pendingWriteId = 0;
     }
+    if (zoomSettleId) {
+      window.clearTimeout(zoomSettleId);
+      zoomSettleId = 0;
+    }
     cancelPendingIdleWrite?.();
     cancelPendingIdleWrite = null;
 
@@ -362,7 +415,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
 
     return writeHistoryEntry(fileUrl, {
       ...getHistoryEntry(documentId),
-      pageNumber: pendingPageNumber || getHistoryEntry(documentId).pageNumber,
+      pageNumber: zoomAnchorPage || pendingPageNumber || getHistoryEntry(documentId).pageNumber,
     });
   };
 
@@ -380,6 +433,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     window.removeEventListener('beforeunload', onClose);
     window.removeEventListener('pagehide', onClose);
     unsubscribePageChange();
+    unsubscribeZoomChange?.();
     unsubscribeSpreadChange?.();
     unsubscribeScrollStateChange();
     unsubscribeLayoutReady();
