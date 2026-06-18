@@ -717,9 +717,11 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
     strokeLinejoin: 'round' as const,
     strokeWidth: 2,
     paths: [
-      { d: 'm14.622 17.897-10.68-2.913', stroke: 'primary', fill: 'none' },
-      { d: 'M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z', stroke: 'primary', fill: 'none' },
-      { d: 'M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15', stroke: 'primary', fill: 'none' },
+      { d: 'M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z', stroke: 'primary', fill: 'none' },
+      { d: 'M13.5 7a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1', stroke: 'primary', fill: 'primary' },
+      { d: 'M17.5 11a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1', stroke: 'primary', fill: 'primary' },
+      { d: 'M6.5 13a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1', stroke: 'primary', fill: 'primary' },
+      { d: 'M8.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1', stroke: 'primary', fill: 'primary' },
     ],
   });
 
