@@ -8,7 +8,7 @@ import {
   type ToolbarItem,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import { getActiveDocumentId } from './utils';
+import { getActiveDocumentId, type ScrollCapability } from './utils';
 
 type ViewerTheme = {
   id: string;
@@ -366,17 +366,6 @@ type ScrollStrategyValue = 'vertical' | 'horizontal';
 interface SpreadCapability {
   setSpreadMode(mode: SpreadModeValue): void;
   getSpreadMode(): SpreadModeValue;
-}
-
-interface ScrollCapability {
-  forDocument(documentId: string): {
-    getCurrentPage(): number;
-    scrollToPage(options: {
-      pageNumber: number;
-      behavior?: 'instant' | 'smooth' | 'auto';
-    }): void;
-  };
-  setScrollStrategy(strategy: ScrollStrategyValue, documentId?: string): void;
 }
 
 interface RotateCapability {

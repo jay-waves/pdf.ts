@@ -75,13 +75,14 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, beha
   const currentPageMetric =
     metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === currentPage) ??
     metrics.pageVisibilityMetrics[0];
+  const viewport = registry.getPlugin('viewport')?.provides?.() as { getViewportGap(): number } | undefined;
 
   scrollScope.scrollToPage({
     pageNumber: nextPage,
     pageCoordinates: currentPageMetric
       ? {
           x: currentPageMetric.original.pageX,
-          y: currentPageMetric.original.pageY,
+          y: currentPageMetric.original.pageY - (viewport?.getViewportGap() ?? 0) / currentPageMetric.scaled.scale,
         }
       : undefined,
     behavior,
@@ -112,22 +113,45 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
     navigate(event.key === 'ArrowLeft' ? -1 : 1);
   };
 
-  const onMouseDown = (event: MouseEvent) => {
+  const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
     if (event.button !== 3 && event.button !== 4) {
       return;
     }
 
     event.preventDefault();
-    event.stopPropagation();
+    event.stopImmediatePropagation();
+  };
+
+  const onSideButtonUp = (event: MouseEvent) => {
+    stopSideButtonEvent(event);
+    if (event.button !== 3 && event.button !== 4) {
+      return;
+    }
+
     navigate(event.button === 3 ? -1 : 1);
   };
 
+  const onPointerMove = (event: PointerEvent) => {
+    if (!(event.buttons & 24)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+
   window.addEventListener('keydown', onKeyDown, { capture: true });
-  window.addEventListener('mousedown', onMouseDown, { capture: true });
+  window.addEventListener('mousedown', stopSideButtonEvent, { capture: true });
+  window.addEventListener('mouseup', onSideButtonUp, { capture: true });
+  window.addEventListener('pointermove', onPointerMove, { capture: true });
+  window.addEventListener('auxclick', stopSideButtonEvent, { capture: true });
 
   return () => {
     window.removeEventListener('keydown', onKeyDown, { capture: true });
-    window.removeEventListener('mousedown', onMouseDown, { capture: true });
+    window.removeEventListener('mousedown', stopSideButtonEvent, { capture: true });
+    window.removeEventListener('mouseup', onSideButtonUp, { capture: true });
+    window.removeEventListener('pointermove', onPointerMove, { capture: true });
+    window.removeEventListener('auxclick', stopSideButtonEvent, { capture: true });
   };
 }
 
