@@ -76,6 +76,9 @@ export interface ScrollScope {
         pageX: number;
         pageY: number;
       };
+      scaled: {
+        scale: number;
+      };
     }>;
   };
   scrollToPage(options: {
