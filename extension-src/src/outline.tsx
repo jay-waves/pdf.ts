@@ -89,6 +89,11 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, beha
 }
 
 export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {
+  const navigate = (direction: -1 | 1) => {
+    requestPageNavigation(registry, direction);
+    onNavigate();
+  };
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
       return;
@@ -104,14 +109,25 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
 
     event.preventDefault();
     event.stopPropagation();
-    requestPageNavigation(registry, event.key === 'ArrowLeft' ? -1 : 1);
-    onNavigate();
+    navigate(event.key === 'ArrowLeft' ? -1 : 1);
+  };
+
+  const onMouseDown = (event: MouseEvent) => {
+    if (event.button !== 3 && event.button !== 4) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    navigate(event.button === 3 ? -1 : 1);
   };
 
   window.addEventListener('keydown', onKeyDown, { capture: true });
+  window.addEventListener('mousedown', onMouseDown, { capture: true });
 
   return () => {
     window.removeEventListener('keydown', onKeyDown, { capture: true });
+    window.removeEventListener('mousedown', onMouseDown, { capture: true });
   };
 }
 
