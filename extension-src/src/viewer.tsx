@@ -10,38 +10,30 @@ import {
   type PDFViewerRef,
 } from '@embedpdf/react-pdf-viewer';
 import './viewer.css';
+import { getActiveDocumentId, getInitialFileUrl, runWhenIdle } from './utils';
 import {
-  getActiveDocumentId,
-  getInitialFileUrl
-} from './utils'
-import { 
-  ShnctlOutline, 
+  BottomNavigationControl,
+  ShnctlOutline,
+  getCurrentBookmarkTitle,
   installBuiltInPageControlsHider,
   installCurrentTitleTracker,
   installOutlinePrefetch,
   installPageKeyboardNavigation,
-  BottomNavigationControl,
-  getCurrentBookmarkTitle,
-  type OutlineCache
-} from './outline'
-import { 
+  type OutlineCache,
+} from './outline';
+import {
   ShnctlSearch,
+  installPanelCommandRedirects,
   installSearchKeyboardShortcut,
-  installPanelCommandRedirects
-} from './search'
+} from './search';
 import {
   getStoredThemeIndex,
   VIEWER_THEMES,
   installThemeSwitcher,
   setSearchOpenAttribute,
-} from './theme'
-import {
-  installReadingHistory,
-  savePdfToOriginalFile
-} from './file-handle'
-import {
-  installSelectionTranslate
-} from './selection-translate'
+} from './theme';
+import { installReadingHistory, savePdfToOriginalFile } from './file-handle';
+import { installSelectionTranslate } from './selection-translate';
 
 interface ZoomScope {
   getState(): { currentZoomLevel: number };
@@ -67,7 +59,7 @@ const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 1;
 const EMPTY_CLEANUP = () => {};
-const PDFIUM_WASM_URL = chrome.runtime.getURL('assets/pdfium.wasm');
+const PDFIUM_WASM_URL = new URL('/assets/pdfium.wasm', location.href).href;
 const DISABLED_VIEWER_CATEGORIES = [
   'attachment',
   'document-capture',
@@ -79,16 +71,6 @@ const DISABLED_VIEWER_CATEGORIES = [
   'signature',
   'stamp',
 ];
-
-function runWhenIdle(callback: () => void) {
-  if ('requestIdleCallback' in window) {
-    const id = window.requestIdleCallback(callback, { timeout: 1200 });
-    return () => window.cancelIdleCallback(id);
-  }
-
-  const id = window.setTimeout(callback, 120);
-  return () => window.clearTimeout(id);
-}
 
 function installWhenIdle(install: () => () => void) {
   let cleanup = EMPTY_CLEANUP;
@@ -147,7 +129,7 @@ function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
       if (descriptor) {
         Object.defineProperty(window, 'devicePixelRatio', descriptor);
       } else {
-        delete (window as typeof window & { devicePixelRatio?: number }).devicePixelRatio;
+        Reflect.deleteProperty(window, 'devicePixelRatio');
       }
     } catch {
       // Leaving the capped DPR in place is safer than throwing during unmount.
@@ -420,17 +402,17 @@ function App() {
   }, [searchOpen]);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        savePdfToOriginalFile(viewerRef, fileHandleRef, fileUrl).catch((err) => {
-          console.warn('Save cancelled or failed', err);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        savePdfToOriginalFile(viewerRef, fileHandleRef, fileUrl).catch((error) => {
+          console.warn('Save cancelled or failed', error);
         });
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fileUrl]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
