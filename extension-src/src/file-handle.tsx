@@ -2,21 +2,11 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { PDFViewerRef } from '@embedpdf/react-pdf-viewer';
 import type React from 'react';
 import { get, set } from 'idb-keyval';
-import { getActiveDocumentId, type ScrollCapability } from './utils';
+import { getActiveDocumentId, runWhenIdle, type ScrollCapability } from './utils';
 
 const EMPTY_CLEANUP = () => {};
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
 const FILE_HANDLES_KEY = 'embedpdf-file-handles-v1';
-
-function runWhenIdle(callback: () => void) {
-  if ('requestIdleCallback' in window) {
-    const id = window.requestIdleCallback(callback, { timeout: 1200 });
-    return () => window.cancelIdleCallback(id);
-  }
-
-  const id = window.setTimeout(callback, 120);
-  return () => window.clearTimeout(id);
-}
 
 type ScrollStrategyValue = 'vertical' | 'horizontal';
 type SpreadModeValue = 'none' | 'odd' | 'even';

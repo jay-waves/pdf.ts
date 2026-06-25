@@ -27,6 +27,11 @@ export function getActiveDocumentId(registry: PluginRegistry) {
   return registry.getStore().getState().core.activeDocumentId;
 }
 
+export function runWhenIdle(callback: () => void) {
+  const id = requestIdleCallback(callback, { timeout: 1200 });
+  return () => cancelIdleCallback(id);
+}
+
 export function getDestinationFromTarget(target?: PdfLinkTarget): PdfDestinationObject | undefined {
   if (!target) {
     return undefined;

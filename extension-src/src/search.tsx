@@ -6,14 +6,11 @@ import {
 } from '@embedpdf/models';
 import {
   type SearchCapability,
-  type SearchDocumentState,
   type CommandsCapability,
+  type ToolbarItem,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import {
-    type ScrollCapability,
-    getActiveDocumentId,
-} from './utils'
+import { getActiveDocumentId, type ScrollCapability } from './utils';
 
 const EMPTY_CLEANUP = () => {};
 const SEARCH_PANEL_COMMAND_ID = 'panel:toggle-search';
@@ -31,11 +28,11 @@ const MODE_TAB_IDS = new Set([
   'redact-mode',
 ]);
 
+type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 type SearchPanelState = Pick<
-  SearchDocumentState,
+  ReturnType<SearchScope['getState']>,
   'results' | 'total' | 'activeResultIndex' | 'query' | 'loading' | 'active'
 >;
-type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 
 function ChevronLeftIcon() {
   return (
@@ -96,7 +93,7 @@ function getInitialSearchState(): SearchPanelState {
   };
 }
 
-function toSearchPanelState(state: SearchDocumentState): SearchPanelState {
+function toSearchPanelState(state: ReturnType<SearchScope['getState']>): SearchPanelState {
   return {
     results: state.results,
     total: state.total,
@@ -560,15 +557,6 @@ function replaceToolbarSearchEntry(ui?: UICapability) {
     return EMPTY_CLEANUP;
   }
 
-  type ToolbarItem = {
-    id?: string;
-    commandId?: string;
-    items?: ToolbarItem[];
-    tabs?: ToolbarItem[];
-    type?: string;
-    [key: string]: unknown;
-  };
-
   try {
     const schema = ui.getSchema();
     const toolbar = schema.toolbars?.['main-toolbar'];
@@ -576,17 +564,17 @@ function replaceToolbarSearchEntry(ui?: UICapability) {
       return EMPTY_CLEANUP;
     }
 
-    const originalItems = structuredClone(toolbar.items) as ToolbarItem[];
+    const originalItems = structuredClone(toolbar.items);
     const items = removeSearchToolbarItems(originalItems);
     const modeTabs = findToolbarItem(items, 'mode-tabs');
     const searchTab = {
       id: SHNCTL_SEARCH_TAB_ID,
       commandId: SHNCTL_SEARCH_COMMAND_ID,
-      variant: 'text',
+      variant: 'text' as const,
       categories: ['mode', 'search'],
     };
 
-    if (modeTabs?.tabs) {
+    if (modeTabs?.type === 'tab-group') {
       modeTabs.tabs.splice(Math.min(2, modeTabs.tabs.length), 0, searchTab);
     } else {
       items.push({
@@ -622,14 +610,18 @@ function replaceToolbarSearchEntry(ui?: UICapability) {
   }
 }
 
-function removeSearchToolbarItems<T extends { id?: string; commandId?: string; items?: T[] }>(items: T[]): T[] {
+function removeSearchToolbarItems(items: ToolbarItem[]): ToolbarItem[] {
   return items
     .filter((item) => !isSearchToolbarItem(item))
-    .map((item) => ({
-      ...item,
-      ...(item.items ? { items: removeSearchToolbarItems(item.items) } : {}),
-      ...('tabs' in item && Array.isArray(item.tabs) ? { tabs: removeSearchToolbarItems(item.tabs) } : {}),
-    }));
+    .map((item) => {
+      if (item.type === 'group') {
+        return { ...item, items: removeSearchToolbarItems(item.items) };
+      }
+      if (item.type === 'tab-group') {
+        return { ...item, tabs: item.tabs.filter((tab) => !isSearchToolbarItem(tab)) };
+      }
+      return item;
+    });
 }
 
 function isSearchToolbarItem(item: { id?: string; commandId?: string }) {
@@ -638,20 +630,15 @@ function isSearchToolbarItem(item: { id?: string; commandId?: string }) {
   return id.includes('search') || commandId === SEARCH_PANEL_COMMAND_ID || commandId.includes('search');
 }
 
-function findToolbarItem<T extends { id?: string; items?: T[]; tabs?: T[] }>(items: T[], id: string): T | undefined {
+function findToolbarItem(items: ToolbarItem[], id: string): ToolbarItem | undefined {
   for (const item of items) {
     if (item.id === id) {
       return item;
     }
 
-    const child = item.items ? findToolbarItem(item.items, id) : undefined;
+    const child = item.type === 'group' ? findToolbarItem(item.items, id) : undefined;
     if (child) {
       return child;
-    }
-
-    const tab = item.tabs ? findToolbarItem(item.tabs, id) : undefined;
-    if (tab) {
-      return tab;
     }
   }
 

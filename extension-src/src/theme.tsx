@@ -1,4 +1,4 @@
-import { type MutableRefObject } from 'react';
+import type { MutableRefObject } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
   type Command,
@@ -8,9 +8,7 @@ import {
   type ToolbarItem,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import {
-    getActiveDocumentId,
-} from './utils'
+import { getActiveDocumentId } from './utils';
 
 type ViewerTheme = {
   id: string;
@@ -371,7 +369,6 @@ interface SpreadCapability {
 }
 
 interface ScrollCapability {
-  getLayout(): { strategy: ScrollStrategyValue };
   forDocument(documentId: string): {
     getCurrentPage(): number;
     scrollToPage(options: {
@@ -730,9 +727,6 @@ function registerThemeIcons(container: PDFViewerRef['container']) {
     'shnctl-palette-2': createPaletteIcon(),
     'shnctl-palette-3': createPaletteIcon(),
     'shnctl-palette-4': createPaletteIcon(),
-    'shnctl-palette-5': createPaletteIcon(),
-    'shnctl-palette-6': createPaletteIcon(),
-    'shnctl-palette-7': createPaletteIcon(),
     'shnctl-search': {
       viewBox: '0 0 24 24',
       strokeLinecap: 'round',

@@ -1,5 +1,3 @@
-// outline + nagivation bar
-
 import { 
     useEffect, 
     useMemo, 
@@ -21,7 +19,6 @@ import {
   type BookmarkCapability,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import './viewer.css';
 import {
     getActiveDocumentId,
     getDestinationFromTarget,
