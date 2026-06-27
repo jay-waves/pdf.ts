@@ -16,5 +16,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["extension-src"]
+  "include": ["src", "viewer.html"]
 }

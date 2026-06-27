@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { PluginRegistry } from '@embedpdf/core';
+import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import {
   type AnnotationCapability,
   type CommandsCapability,
@@ -53,13 +54,13 @@ interface ViewportCapability {
   };
 }
 
-const MAX_RENDER_DPR = 1.75;
+const MAX_RENDER_DPR = 1.5;
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
-const TILING_EXTRA_RINGS = 1;
+const TILING_EXTRA_RINGS = 0;
 const EMPTY_CLEANUP = () => {};
-const PDFIUM_WASM_URL = new URL('/assets/pdfium.wasm', location.href).href;
+const PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, location.href).href;
 const DISABLED_VIEWER_CATEGORIES = [
   'attachment',
   'document-capture',

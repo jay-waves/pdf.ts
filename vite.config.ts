@@ -3,16 +3,14 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  root: resolve(__dirname, 'extension-src'),
   plugins: [react()],
-  publicDir: resolve(__dirname, 'extension-public'),
   build: {
-    outDir: resolve(__dirname, 'dist/extension'),
+    outDir: resolve(__dirname, 'release/extension'),
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
       input: {
-        viewer: resolve(__dirname, 'extension-src/viewer.html'),
+        viewer: resolve(__dirname, 'viewer.html'),
       },
       output: {
         entryFileNames: 'assets/[name].js',

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const packageJsonPath = resolve(repoRoot, 'package.json');
-const manifestPath = resolve(repoRoot, 'extension-public', 'manifest.json');
+const manifestPath = resolve(repoRoot, 'public', 'manifest.json');
 
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
