@@ -13,6 +13,7 @@
   "dependencies": {
     "@embedpdf/core": "2.14.1",
     "@embedpdf/models": "^2.14.1",
+    "@embedpdf/pdfium": "2.14.1",
     "@embedpdf/react-pdf-viewer": "2.14.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "idb-keyval": "^6.2.2",

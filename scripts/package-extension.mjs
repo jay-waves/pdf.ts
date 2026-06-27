@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const buildDir = resolve(repoRoot, 'dist', 'extension');
-const stagingRoot = resolve(repoRoot, 'dist', 'release');
+const buildDir = resolve(repoRoot, 'release', 'extension');
+const stagingRoot = resolve(repoRoot, 'release', 'package');
 const packageDirName = 'pdf-ts-chrome-extension';
 const stagingDir = resolve(stagingRoot, packageDirName);
 const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
