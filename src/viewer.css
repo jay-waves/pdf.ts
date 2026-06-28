@@ -119,14 +119,14 @@ input {
   --shnctl-acrylic-border: color-mix(in srgb, var(--shnctl-border-default) 72%, transparent);
   --shnctl-acrylic-hover: color-mix(in srgb, var(--shnctl-interactive-hover) 72%, transparent);
   position: fixed;
-  top: 72px;
-  right: 18px;
+  top: 64px;
+  right: 16px;
   z-index: 19;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: min(360px, calc(100vw - 36px));
-  padding: 10px 12px;
+  width: min(330px, calc(100vw - 32px));
+  padding: 8px 10px;
   border: 1px solid var(--shnctl-acrylic-border);
   border-radius: 14px;
   background: var(--shnctl-acrylic-bg);
@@ -157,8 +157,8 @@ input {
 
 .shnctl-current-title-text {
   overflow: hidden;
-  font-size: 14px;
-  line-height: 22px;
+  font-size: 13px;
+  line-height: 20px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -166,8 +166,8 @@ input {
 
 .shnctl-current-title-page {
   color: var(--shnctl-foreground-muted);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 11px;
+  line-height: 16px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -175,16 +175,16 @@ input {
 .shnctl-bottom-nav {
   position: fixed;
   right: 50%;
-  bottom: 56px;
+  bottom: 48px;
   z-index: 19;
   display: grid;
   grid-template-columns: auto auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: fit-content;
   max-width: calc(100vw - 32px);
-  min-height: 48px;
-  padding: 6px;
+  min-height: 42px;
+  padding: 5px;
   transform: translateX(50%);
   transform-origin: bottom center;
   border: 1px solid var(--ep-border-default, var(--shnctl-border-default));
@@ -231,7 +231,7 @@ input {
 .shnctl-bottom-nav-button,
 .shnctl-bottom-nav-outline {
   min-width: 0;
-  height: 36px;
+  height: 32px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
@@ -241,7 +241,7 @@ input {
 .shnctl-bottom-nav-button {
   display: grid;
   place-items: center;
-  width: 36px;
+  width: 32px;
   line-height: 1;
   cursor: pointer;
 }
@@ -277,8 +277,8 @@ input {
 .shnctl-bottom-nav-title {
   display: block;
   overflow: hidden;
-  font-size: 15px;
-  line-height: 34px;
+  font-size: 14px;
+  line-height: 30px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -286,16 +286,16 @@ input {
 .shnctl-bottom-nav-page {
   display: flex;
   flex: 0 0 auto;
-  min-width: 88px;
-  height: 36px;
-  padding: 0 10px;
+  min-width: 78px;
+  height: 32px;
+  padding: 0 8px;
   align-items: center;
   justify-content: center;
   gap: 4px;
   border: 1px solid transparent;
   border-radius: 6px;
   color: var(--ep-foreground-secondary, var(--shnctl-foreground-secondary));
-  font-size: 15px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -306,15 +306,15 @@ input {
 }
 
 .shnctl-bottom-nav-page-input {
-  width: 36px;
+  width: 32px;
   min-width: 0;
-  height: 26px;
+  height: 24px;
   padding: 0 2px;
   border: 0;
   background: transparent;
   color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
-  font-size: 15px;
-  line-height: 24px;
+  font-size: 14px;
+  line-height: 22px;
   text-align: right;
   font-variant-numeric: tabular-nums;
   outline: none;
@@ -368,18 +368,18 @@ input {
 
 .shnctl-search-bar {
   position: fixed;
-  top: 48px;
+  top: 44px;
   right: 0;
   left: 0;
   z-index: 29;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   box-sizing: border-box;
-  height: 42px;
-  min-height: 42px;
-  padding: 4px 16px;
+  height: 38px;
+  min-height: 38px;
+  padding: 3px 14px;
   border-bottom: 1px solid var(--ep-border-default, var(--shnctl-border-default));
   background: var(--color-bg-surface-alt, var(--ep-background-surface-alt, var(--shnctl-background-surface-alt))) !important;
   background-color: var(--color-bg-surface-alt, var(--ep-background-surface-alt, var(--shnctl-background-surface-alt))) !important;
@@ -391,7 +391,7 @@ input {
 .shnctl-search-step {
   display: inline-grid;
   flex: 0 0 auto;
-  height: 32px;
+  height: 30px;
   place-items: center;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -404,8 +404,8 @@ input {
 
 .shnctl-search-toggle svg,
 .shnctl-search-step svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .shnctl-search-form {
@@ -422,8 +422,8 @@ input {
   width: 100%;
   flex: 1 1 auto;
   min-width: 0;
-  height: 32px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 8px;
   border: 0;
   border-radius: 4px;
   background: var(--color-bg-input, var(--ep-background-input, var(--shnctl-background-input)));
@@ -439,15 +439,15 @@ input {
 
 .shnctl-search-toggle,
 .shnctl-search-step {
-  width: 32px;
-  min-width: 32px;
+  width: 30px;
+  min-width: 30px;
   padding: 0;
 }
 
 .shnctl-search-submit {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
   border-radius: 6px;
 }
 

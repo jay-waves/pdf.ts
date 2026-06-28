@@ -200,6 +200,35 @@ const secondaryToolbarCloseElements = new WeakSet<Element>();
 let toolbarVisibilityHideTimer: number | undefined;
 const TOOLBAR_AUTO_HIDE_CSS = `
 [data-epdf] :is(
+  [data-epdf-i="main-toolbar"],
+  [data-epdf-i="shnctl-page-toolbar"],
+  [data-epdf-i="annotation-toolbar"],
+  [data-epdf-i="shapes-toolbar"],
+  [data-epdf-i="insert-toolbar"],
+  [data-epdf-i="form-toolbar"],
+  [data-epdf-i="redaction-toolbar"]
+) [data-epdf-i] > button {
+  min-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding-inline: 6px !important;
+  font-size: 13px !important;
+}
+
+[data-epdf] :is(
+  [data-epdf-i="main-toolbar"],
+  [data-epdf-i="shnctl-page-toolbar"],
+  [data-epdf-i="annotation-toolbar"],
+  [data-epdf-i="shapes-toolbar"],
+  [data-epdf-i="insert-toolbar"],
+  [data-epdf-i="form-toolbar"],
+  [data-epdf-i="redaction-toolbar"]
+) svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+[data-epdf] :is(
   [data-epdf-i="shnctl-page-toolbar"],
   [data-epdf-i="annotation-toolbar"],
   [data-epdf-i="shapes-toolbar"],
@@ -207,10 +236,10 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   [data-epdf-i="form-toolbar"],
   [data-epdf-i="redaction-toolbar"]
 ) {
-  min-height: 42px !important;
-  height: 42px !important;
-  padding-top: 4px !important;
-  padding-bottom: 4px !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
   box-sizing: border-box !important;
 }
 
@@ -245,7 +274,7 @@ const TOOLBAR_AUTO_HIDE_CSS = `
 }
 
 [data-epdf]:not([data-shnctl-toolbar-pinned="true"]) [data-epdf-i="main-toolbar"] {
-  --shnctl-main-toolbar-hidden-offset: 42px;
+  --shnctl-main-toolbar-hidden-offset: 38px;
   position: fixed !important;
   top: 0 !important;
   right: 0 !important;
@@ -274,9 +303,9 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   [data-epdf-i="form-toolbar"],
   [data-epdf-i="redaction-toolbar"]
 ) {
-  --shnctl-main-toolbar-hidden-offset: 42px;
-  --shnctl-secondary-toolbar-top-offset: 48px;
-  --shnctl-page-toolbar-hidden-offset: 42px;
+  --shnctl-main-toolbar-hidden-offset: 38px;
+  --shnctl-secondary-toolbar-top-offset: 44px;
+  --shnctl-page-toolbar-hidden-offset: 38px;
   position: fixed !important;
   top: var(--shnctl-secondary-toolbar-top-offset) !important;
   right: 0 !important;
@@ -346,8 +375,8 @@ html[data-shnctl-toolbar-pinned="true"] .shnctl-search-bar {
 }
 
 .shnctl-search-bar {
-  --shnctl-secondary-toolbar-top-offset: 48px;
-  --shnctl-page-toolbar-hidden-offset: 42px;
+  --shnctl-secondary-toolbar-top-offset: 44px;
+  --shnctl-page-toolbar-hidden-offset: 38px;
   transform: translateY(calc(-1 * (var(--shnctl-secondary-toolbar-top-offset) + var(--shnctl-page-toolbar-hidden-offset)))) !important;
   opacity: 0 !important;
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out !important;
@@ -617,9 +646,9 @@ function applyToolbarDomOverrides(registry: PluginRegistry, ui: UICapability) {
       }
 
       button.style.setProperty('font-family', TOOLBAR_UI_FONT_FAMILY, 'important');
-      button.style.setProperty('font-size', '14px', 'important');
+      button.style.setProperty('font-size', '13px', 'important');
       button.style.setProperty('font-weight', '700', 'important');
-      button.style.setProperty('line-height', '20px', 'important');
+      button.style.setProperty('line-height', '18px', 'important');
       button.style.setProperty('letter-spacing', '0.02em', 'important');
       button.style.setProperty('text-transform', 'uppercase', 'important');
       button.style.setProperty('-webkit-font-smoothing', 'antialiased');

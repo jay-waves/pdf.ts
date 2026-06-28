@@ -121,11 +121,25 @@ function installTextMarkupViewReset(registry: PluginRegistry) {
 function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
   const originalDpr = window.devicePixelRatio || 1;
+  const cappedOriginalDpr = Math.min(originalDpr, maxDpr);
+  let nativeDescriptor: PropertyDescriptor | undefined = descriptor;
+
+  for (let target = Object.getPrototypeOf(window); !nativeDescriptor && target; target = Object.getPrototypeOf(target)) {
+    nativeDescriptor = Object.getOwnPropertyDescriptor(target, 'devicePixelRatio');
+  }
+
+  const getNativeDpr = () => {
+    if (nativeDescriptor?.get) {
+      return nativeDescriptor.get.call(window) || originalDpr;
+    }
+
+    return originalDpr;
+  };
 
   try {
     Object.defineProperty(window, 'devicePixelRatio', {
       configurable: true,
-      get: () => Math.min(originalDpr, maxDpr),
+      get: () => cappedOriginalDpr * (getNativeDpr() / originalDpr),
     });
   } catch {
     return EMPTY_CLEANUP;
