@@ -11,10 +11,10 @@
     "release:prepare": "pnpm build && pnpm package"
   },
   "dependencies": {
-    "@embedpdf/core": "2.14.1",
-    "@embedpdf/models": "^2.14.1",
-    "@embedpdf/pdfium": "2.14.1",
-    "@embedpdf/react-pdf-viewer": "2.14.1",
+    "@embedpdf/core": "2.14.4",
+    "@embedpdf/models": "2.14.4",
+    "@embedpdf/pdfium": "2.14.4",
+    "@embedpdf/react-pdf-viewer": "2.14.4",
     "@radix-ui/react-dialog": "^1.1.15",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^1.16.0",
