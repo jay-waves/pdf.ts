@@ -304,7 +304,7 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   [data-epdf-i="redaction-toolbar"]
 ) {
   --shnctl-main-toolbar-hidden-offset: 38px;
-  --shnctl-secondary-toolbar-top-offset: 44px;
+  --shnctl-secondary-toolbar-top-offset: 48px;
   --shnctl-page-toolbar-hidden-offset: 38px;
   position: fixed !important;
   top: var(--shnctl-secondary-toolbar-top-offset) !important;
@@ -375,7 +375,7 @@ html[data-shnctl-toolbar-pinned="true"] .shnctl-search-bar {
 }
 
 .shnctl-search-bar {
-  --shnctl-secondary-toolbar-top-offset: 44px;
+  --shnctl-secondary-toolbar-top-offset: 48px;
   --shnctl-page-toolbar-hidden-offset: 38px;
   transform: translateY(calc(-1 * (var(--shnctl-secondary-toolbar-top-offset) + var(--shnctl-page-toolbar-hidden-offset)))) !important;
   opacity: 0 !important;
