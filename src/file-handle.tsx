@@ -46,6 +46,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
 }
 
+function getFileName(fileUrl: string) {
+  try {
+    return decodeURIComponent(new URL(fileUrl).pathname.split('/').pop() || 'document.pdf');
+  } catch {
+    return 'document.pdf';
+  }
+}
+
 function getPermissionOptions(readWrite: boolean): FileSystemHandlePermissionDescriptor {
   return readWrite ? { mode: 'readwrite' } : { mode: 'read' };
 }
@@ -112,7 +120,10 @@ export async function initFileHandle(
     return storedHandle;
   }
 
-  const [pickedHandle] = await window.showOpenFilePicker({
+  const pickedHandle = await window.showSaveFilePicker({
+    id: 'pdf-file',
+    suggestedName: getFileName(fileUrl),
+    startIn: 'documents',
     types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
     excludeAcceptAllOption: true,
   });
@@ -132,29 +143,30 @@ export async function savePdfToOriginalFile(
   fileUrl?: string,
 ) {
   if (!viewerRef.current) {
-    return;
+    return false;
   }
 
   const registry = await viewerRef.current.registry;
   const exportPlugin = registry?.getPlugin('export')?.provides?.();
 
   if (!exportPlugin) {
-    return;
-  }
-
-  const arrayBuffer = await exportPlugin.saveAsCopy().toPromise();
-  if (!arrayBuffer) {
-    return;
+    return false;
   }
 
   const fileHandle = await initFileHandle(fileUrl, fileHandleRef, true);
   if (!fileHandle) {
-    return;
+    return false;
+  }
+
+  const arrayBuffer = await exportPlugin.saveAsCopy().toPromise();
+  if (!arrayBuffer) {
+    return false;
   }
 
   const writable = await fileHandle.createWritable();
   await writable.write(new Blob([arrayBuffer], { type: 'application/pdf' }));
   await writable.close();
+  return true;
 }
 
 function readLegacyHistoryStore() {

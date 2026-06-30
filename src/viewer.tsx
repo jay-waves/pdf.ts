@@ -118,6 +118,20 @@ function installTextMarkupViewReset(registry: PluginRegistry) {
   });
 }
 
+function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (dirty: boolean) => void) {
+  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+
+  if (!annotation) {
+    return EMPTY_CLEANUP;
+  }
+
+  return annotation.onAnnotationEvent((event) => {
+    if (event.type !== 'loaded' && event.committed) {
+      onDirtyChange(true);
+    }
+  });
+}
+
 function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
   const originalDpr = window.devicePixelRatio || 1;
@@ -462,6 +476,10 @@ function App() {
   const navigationVisibleRef = useRef(false);
   const searchOpenRef = useRef(false);
 
+  const setHasUnsavedChanges = (dirty: boolean) => {
+    document.title = dirty ? `*${document.title.replace(/^\*/, '')}` : document.title.replace(/^\*/, '');
+  };
+
   const revealNavigation = () => {
     if (!navigationVisibleRef.current) {
       navigationVisibleRef.current = true;
@@ -504,9 +522,17 @@ function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        savePdfToOriginalFile(viewerRef, fileHandleRef, fileUrl).catch((error) => {
-          console.warn('Save cancelled or failed', error);
-        });
+        savePdfToOriginalFile(viewerRef, fileHandleRef, fileUrl)
+          .then((saved) => {
+            if (!saved) {
+              return;
+            }
+
+            setHasUnsavedChanges(false);
+          })
+          .catch((error) => {
+            console.warn('Save cancelled or failed', error);
+          });
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -637,6 +663,7 @@ function App() {
           setCurrentPageNumber(1);
           setTotalPages(0);
           setCurrentTitle('');
+          setHasUnsavedChanges(false);
           if (navigationVisibleRef.current) {
             navigationVisibleRef.current = false;
             setNavigationVisible(false);
@@ -656,6 +683,7 @@ function App() {
             installNativeContextMenuBlocker,
             () => installMiddleMousePanInterceptor(nextRegistry),
             () => installTextMarkupViewReset(nextRegistry),
+            () => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges),
             () => installReadingHistory(nextRegistry, fileUrl),
             () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
