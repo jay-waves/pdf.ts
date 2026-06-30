@@ -9,12 +9,24 @@ interface FileSystemHandle {
   requestPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
 }
 
+type WellKnownDirectory = 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos';
+type FilePickerAcceptType = {
+  description?: string;
+  accept: Record<string, string[]>;
+};
+
 interface Window {
   showOpenFilePicker(options?: {
-    types?: Array<{
-      description?: string;
-      accept: Record<string, string[]>;
-    }>;
+    id?: string;
+    startIn?: WellKnownDirectory | FileSystemHandle;
+    types?: FilePickerAcceptType[];
     excludeAcceptAllOption?: boolean;
   }): Promise<FileSystemFileHandle[]>;
+  showSaveFilePicker(options?: {
+    id?: string;
+    suggestedName?: string;
+    startIn?: WellKnownDirectory | FileSystemHandle;
+    types?: FilePickerAcceptType[];
+    excludeAcceptAllOption?: boolean;
+  }): Promise<FileSystemFileHandle>;
 }
