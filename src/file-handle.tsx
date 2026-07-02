@@ -238,6 +238,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
   const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
   let restoredDocumentId: string | null = null;
+  let historyReady = false;
   let pendingPageNumber = 0;
   let pendingWriteId = 0;
   let zoomSettleId = 0;
@@ -283,6 +284,10 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   };
 
   const scheduleHistoryWrite = (pageNumber: number) => {
+    if (!historyReady) {
+      return;
+    }
+
     pendingPageNumber = pageNumber;
     if (pendingWriteId) {
       window.clearTimeout(pendingWriteId);
@@ -310,6 +315,10 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   });
 
   const unsubscribeZoomChange = zoom?.onZoomChange((event) => {
+    if (!historyReady) {
+      return;
+    }
+
     if (event.documentId !== getActiveDocumentId(registry)) {
       return;
     }
@@ -371,6 +380,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     readHistoryEntry(fileUrl)
       .then((saved) => {
         if (!saved) {
+          historyReady = true;
           return;
         }
 
@@ -389,11 +399,15 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
                 pageNumber: saved.pageNumber,
                 behavior: 'instant',
               });
+              historyReady = true;
             });
           });
+        } else {
+          historyReady = true;
         }
       })
       .catch((error) => {
+        historyReady = true;
         console.warn('[shnctl] failed to read reading history', error);
       });
   });
@@ -409,6 +423,10 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     }
     cancelPendingIdleWrite?.();
     cancelPendingIdleWrite = null;
+
+    if (!historyReady) {
+      return Promise.resolve();
+    }
 
     const documentId = getActiveDocumentId(registry);
     if (!documentId) {
