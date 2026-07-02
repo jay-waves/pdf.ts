@@ -67,6 +67,11 @@ const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
 const EMPTY_CLEANUP = () => {};
 const PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, location.href).href;
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  event.preventDefault();
+  event.returnValue = '';
+}
 const DISABLED_VIEWER_CATEGORIES = [
   'attachment',
   'document-capture',
@@ -471,13 +476,27 @@ function App() {
   const outlineCacheRef = useRef(outlineCache);
   const currentPageNumberRef = useRef(1);
   const titleTrackerRefreshRef = useRef<(() => void) | null>(null);
+  const hasUnsavedChangesRef = useRef(false);
+  const cleanDocumentTitleRef = useRef(document.title);
   const themeIndexRef = useRef(getStoredThemeIndex());
   const navigationHideTimerRef = useRef<number>(0);
   const navigationVisibleRef = useRef(false);
   const searchOpenRef = useRef(false);
 
+  const renderDocumentTitle = () => {
+    const title = `${hasUnsavedChangesRef.current ? '*' : ''}${cleanDocumentTitleRef.current}`;
+    document.title = title;
+    document.querySelector('title')?.replaceChildren(title);
+  };
+
   const setHasUnsavedChanges = (dirty: boolean) => {
-    document.title = dirty ? `*${document.title.replace(/^\*/, '')}` : document.title.replace(/^\*/, '');
+    hasUnsavedChangesRef.current = dirty;
+    if (dirty) {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+    } else {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+    renderDocumentTitle();
   };
 
   const revealNavigation = () => {
@@ -589,7 +608,8 @@ function App() {
     const fileUrl = params.get('file');
 
     if (!fileUrl) {
-      document.title = 'PDF';
+      cleanDocumentTitleRef.current = 'PDF';
+      renderDocumentTitle();
       return;
     }
 
@@ -600,9 +620,11 @@ function App() {
         .filter(Boolean)
         .pop();
 
-      document.title = name || 'PDF';
+      cleanDocumentTitleRef.current = name || 'PDF';
+      renderDocumentTitle();
     } catch {
-      document.title = 'PDF';
+      cleanDocumentTitleRef.current = 'PDF';
+      renderDocumentTitle();
     }
   }, []);
 
