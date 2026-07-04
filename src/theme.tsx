@@ -19,6 +19,7 @@ type ViewerTheme = {
 
 const EMPTY_CLEANUP = () => {};
 const COMMENT_PANEL_COMMAND_ID = 'panel:toggle-comment';
+const COMMENT_BUTTON_ID = 'comment-button';
 export const VIEWER_THEMES: ViewerTheme[] = [
   {
     id: 'light',
@@ -182,6 +183,7 @@ const TOOLBAR_AUTO_HIDE_STYLE_ATTRIBUTE = 'data-shnctl-toolbar-auto-hide-style';
 const TOOLBAR_PINNED_ATTRIBUTE = 'data-shnctl-toolbar-pinned';
 const TOOLBAR_VISIBLE_ATTRIBUTE = 'data-shnctl-toolbar-visible';
 const SEARCH_OPEN_ATTRIBUTE = 'data-shnctl-search-open';
+const TOOLBAR_HIDE_DELAY_MS = 320;
 const TOOLBAR_VISIBILITY_SELECTOR = [
   '[data-epdf-i="main-toolbar"]',
   '[data-epdf-i="shnctl-page-toolbar"]',
@@ -572,6 +574,10 @@ function isAnyToolbarVisibleTargetActive() {
 }
 
 function scheduleToolbarHidden() {
+  if (isToolbarPinned()) {
+    return;
+  }
+
   if (toolbarVisibilityHideTimer !== undefined) {
     window.clearTimeout(toolbarVisibilityHideTimer);
   }
@@ -579,7 +585,7 @@ function scheduleToolbarHidden() {
   toolbarVisibilityHideTimer = window.setTimeout(() => {
     toolbarVisibilityHideTimer = undefined;
     setToolbarVisible(isAnyToolbarVisibleTargetActive());
-  }, 120);
+  }, TOOLBAR_HIDE_DELAY_MS);
 }
 
 function ensureToolbarVisibilityListeners(root: ParentNode) {
@@ -596,17 +602,15 @@ function ensureToolbarVisibilityListeners(root: ParentNode) {
     toolbarVisibilityElements.add(target);
     target.addEventListener('mouseenter', () => setToolbarVisible(true));
     target.addEventListener('focusin', () => setToolbarVisible(true));
-    target.addEventListener('mouseleave', () => {
-      if (!isToolbarPinned()) {
-        scheduleToolbarHidden();
-      }
-    });
-    target.addEventListener('focusout', () => {
-      if (!isToolbarPinned()) {
-        scheduleToolbarHidden();
-      }
-    });
+    target.addEventListener('mouseleave', scheduleToolbarHidden);
+    target.addEventListener('focusout', scheduleToolbarHidden);
   }
+}
+
+function isToolbarVisibilityTarget(event: Event) {
+  return event
+    .composedPath()
+    .some((item): item is Element => item instanceof Element && item.matches(TOOLBAR_VISIBILITY_SELECTOR));
 }
 
 function ensureSecondaryToolbarCloseListeners(root: ParentNode, registry: PluginRegistry, ui: UICapability) {
@@ -671,6 +675,13 @@ function installToolbarDomOverrides(registry: PluginRegistry, ui: UICapability) 
   };
 
   const observer = new MutationObserver(scheduleApply);
+  const onPointerDown = (event: PointerEvent) => {
+    if (!isToolbarVisibilityTarget(event)) {
+      scheduleToolbarHidden();
+    }
+  };
+
+  document.addEventListener('pointerdown', onPointerDown, { capture: true });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
@@ -678,6 +689,7 @@ function installToolbarDomOverrides(registry: PluginRegistry, ui: UICapability) 
 
   scheduleApply();
   return () => {
+    document.removeEventListener('pointerdown', onPointerDown, { capture: true });
     observer.disconnect();
     if (toolbarVisibilityHideTimer !== undefined) {
       window.clearTimeout(toolbarVisibilityHideTimer);
@@ -887,25 +899,6 @@ function switchScrollStrategyPreservingPage(
       refreshMainToolbar(registry, ui);
     });
   });
-}
-
-function removeToolbarItemByCommandId(items: ToolbarItem[], commandId: string): ToolbarItem[] {
-  return items.reduce<ToolbarItem[]>((nextItems, item) => {
-    if (item.type === 'command-button' && item.commandId === commandId) {
-      return nextItems;
-    }
-
-    if (item.type === 'group') {
-      nextItems.push({
-        ...item,
-        items: removeToolbarItemByCommandId(item.items as ToolbarItem[], commandId),
-      });
-      return nextItems;
-    }
-
-    nextItems.push(item);
-    return nextItems;
-  }, []);
 }
 
 function removeToolbarItemsById(items: ToolbarItem[], ids: Set<string>): ToolbarItem[] {
@@ -1177,6 +1170,7 @@ export function installThemeSwitcher(
 
   const schema = ui.getSchema();
   const toolbar = schema.toolbars['main-toolbar'];
+  const annotationToolbar = schema.toolbars['annotation-toolbar'];
   if (!toolbar) {
     return () => {
       cleanupToolbarDomOverrides();
@@ -1190,10 +1184,12 @@ export function installThemeSwitcher(
 
   const items = removeDividerBeforePanTool(
     removeToolbarItemsById(
-      removeToolbarItemByCommandId(structuredClone(toolbar.items) as ToolbarItem[], COMMENT_PANEL_COMMAND_ID),
-      new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, ...MAIN_TOOL_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID]),
+      structuredClone(toolbar.items) as ToolbarItem[],
+      new Set([...VIEW_CONTROL_BUTTON_IDS, ...MAIN_ZOOM_ITEM_IDS, ...MAIN_TOOL_ITEM_IDS, PAGE_SETTINGS_BUTTON_ID, PAGE_MODE_TAB_ID, COMMENT_BUTTON_ID]),
     ),
   );
+  const annotationToolbarItems = annotationToolbar ? structuredClone(annotationToolbar.items) as ToolbarItem[] : undefined;
+  const annotationTools = annotationToolbarItems?.find((item): item is Extract<ToolbarItem, { type: 'group' }> => item.type === 'group' && item.id === 'annotation-tools');
   const rightGroup = items.find((item): item is Extract<ToolbarItem, { type: 'group' }> => item.type === 'group' && item.id === 'right-group');
   const modeTabs = items.find((item): item is Extract<ToolbarItem, { type: 'tab-group' }> => item.type === 'tab-group' && item.id === 'mode-tabs');
 
@@ -1238,12 +1234,29 @@ export function installThemeSwitcher(
       });
     }
 
+    if (annotationTools && !annotationTools.items.some((item) => item.id === COMMENT_BUTTON_ID)) {
+      const styleButtonIndex = annotationTools.items.findIndex((item) => item.id === 'toggle-annotation-style');
+      annotationTools.items.splice(styleButtonIndex >= 0 ? styleButtonIndex : annotationTools.items.length, 0, {
+        type: 'command-button',
+        id: COMMENT_BUTTON_ID,
+        commandId: COMMENT_PANEL_COMMAND_ID,
+        variant: 'icon',
+        categories: ['panel', 'panel-comment'],
+      });
+    }
+
     ui.mergeSchema({
       toolbars: {
         'main-toolbar': {
           ...toolbar,
           items,
         },
+        ...(annotationToolbar && annotationToolbarItems ? {
+          'annotation-toolbar': {
+            ...annotationToolbar,
+            items: annotationToolbarItems,
+          },
+        } : {}),
         [PAGE_TOOLBAR_ID]: {
           id: PAGE_TOOLBAR_ID,
           position: {
