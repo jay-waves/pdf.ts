@@ -4,7 +4,6 @@ import type { PluginRegistry } from '@embedpdf/core';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import {
   type AnnotationCapability,
-  type CommandsCapability,
   type PanCapability,
   PDFViewer,
   PDFViewerConfig,
@@ -54,6 +53,12 @@ interface ViewportCapability {
   };
 }
 
+interface UiSchemaCapability {
+  getSchema(): {
+    sidebars?: Record<string, { width?: string }>;
+  };
+}
+
 interface ZoomAnchor {
   documentId: string;
   pageNumber: number;
@@ -65,6 +70,8 @@ const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
+const COMMENT_PANEL_WIDTH = '30vw';
+const TEXT_MARKUP_TOOL_IDS = ['highlight', 'underline', 'strikeout', 'squiggly'];
 const EMPTY_CLEANUP = () => {};
 const PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, location.href).href;
 
@@ -107,22 +114,6 @@ function installWhenIdle(install: () => () => void) {
   };
 }
 
-function installTextMarkupViewReset(registry: PluginRegistry) {
-  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
-  const commands = registry.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
-
-  if (!annotation || !commands) {
-    return EMPTY_CLEANUP;
-  }
-
-  return annotation.onAnnotationEvent((event) => {
-    const activeToolId = annotation.forDocument(event.documentId).getActiveTool()?.id;
-    if (event.type === 'create' && activeToolId && ['highlight', 'underline', 'strikeout', 'squiggly'].includes(activeToolId)) {
-      requestAnimationFrame(() => commands.execute('mode:view', event.documentId, 'api'));
-    }
-  });
-}
-
 function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (dirty: boolean) => void) {
   const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
 
@@ -135,6 +126,17 @@ function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (
       onDirtyChange(true);
     }
   });
+}
+
+function installCommentPanelWidth(registry: PluginRegistry) {
+  const ui = registry.getPlugin('ui')?.provides?.() as UiSchemaCapability | undefined;
+  const commentPanel = ui?.getSchema().sidebars?.['comment-panel'];
+
+  if (commentPanel) {
+    commentPanel.width = COMMENT_PANEL_WIDTH;
+  }
+
+  return EMPTY_CLEANUP;
 }
 
 function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
@@ -599,6 +601,13 @@ function App() {
         overlapPx: TILING_OVERLAP_PX,
         extraRings: TILING_EXTRA_RINGS,
       },
+      annotations: {
+        locked: { type: 'include', categories: ['form'] },
+        tools: TEXT_MARKUP_TOOL_IDS.map((id) => ({
+          id,
+          behavior: { deactivateToolAfterCreate: true },
+        })),
+      },
     }),
     [fileUrl],
   );
@@ -704,8 +713,8 @@ function App() {
             () => installBrowserZoomInterceptor(nextRegistry),
             installNativeContextMenuBlocker,
             () => installMiddleMousePanInterceptor(nextRegistry),
-            () => installTextMarkupViewReset(nextRegistry),
             () => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges),
+            () => installCommentPanelWidth(nextRegistry),
             () => installReadingHistory(nextRegistry, fileUrl),
             () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
