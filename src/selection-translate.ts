@@ -14,6 +14,8 @@ const TRANSLATE_SELECTION_ICON_ID = 'shnctl-translate';
 const TRANSLATION_TARGET_LANGUAGE = 'zh';
 const FALLBACK_SOURCE_LANGUAGE = 'en';
 const MAX_TEXT_LENGTH = 4000;
+const translatorCache = new Map<string, Promise<ChromeTranslator>>();
+let languageDetectorPromise: Promise<ChromeLanguageDetector> | null = null;
 
 interface ChromeTranslator {
   translate(text: string): Promise<string>;
@@ -62,43 +64,59 @@ async function detectSourceLanguage(text: string) {
   }
 
   try {
-    const availability = await LanguageDetector.availability();
-    if (availability === 'unavailable') {
-      return FALLBACK_SOURCE_LANGUAGE;
+    if (!languageDetectorPromise) {
+      languageDetectorPromise = (async () => {
+        const availability = await LanguageDetector.availability();
+        if (availability === 'unavailable') {
+          throw new Error('Language detector is unavailable.');
+        }
+
+        return LanguageDetector.create();
+      })();
+      languageDetectorPromise.catch(() => {
+        languageDetectorPromise = null;
+      });
     }
 
-    const detector = await LanguageDetector.create();
-    try {
-      const [bestMatch] = await detector.detect(text);
-      return bestMatch?.detectedLanguage || FALLBACK_SOURCE_LANGUAGE;
-    } finally {
-      detector.destroy?.();
-    }
+    const detector = await languageDetectorPromise;
+    const [bestMatch] = await detector.detect(text);
+    return bestMatch?.detectedLanguage || FALLBACK_SOURCE_LANGUAGE;
   } catch {
     return FALLBACK_SOURCE_LANGUAGE;
   }
 }
 
-async function translateSelectedText(text: string) {
-  const Translator = getTranslatorApi();
-  if (!Translator) {
-    throw new Error('Chrome Translator API is not available in this browser.');
+async function getTranslator(sourceLanguage: string, targetLanguage: string) {
+  const cacheKey = `${sourceLanguage}:${targetLanguage}`;
+  let translatorPromise = translatorCache.get(cacheKey);
+  if (!translatorPromise) {
+    const Translator = getTranslatorApi();
+    if (!Translator) {
+      throw new Error('Chrome Translator API is not available in this browser.');
+    }
+
+    translatorPromise = (async () => {
+      const availability = await Translator.availability({ sourceLanguage, targetLanguage });
+      if (availability === 'unavailable') {
+        throw new Error(`Translation is not available for ${sourceLanguage} to ${targetLanguage}.`);
+      }
+
+      return Translator.create({ sourceLanguage, targetLanguage });
+    })();
+    translatorCache.set(cacheKey, translatorPromise);
+    translatorPromise.catch(() => {
+      translatorCache.delete(cacheKey);
+    });
   }
 
+  return translatorPromise;
+}
+
+async function translateSelectedText(text: string) {
   const sourceLanguage = await detectSourceLanguage(text);
   const targetLanguage = getTargetLanguage(sourceLanguage);
-  const availability = await Translator.availability({ sourceLanguage, targetLanguage });
-
-  if (availability === 'unavailable') {
-    throw new Error(`Translation is not available for ${sourceLanguage} to ${targetLanguage}.`);
-  }
-
-  const translator = await Translator.create({ sourceLanguage, targetLanguage });
-  try {
-    return await translator.translate(text);
-  } finally {
-    translator.destroy?.();
-  }
+  const translator = await getTranslator(sourceLanguage, targetLanguage);
+  return translator.translate(text);
 }
 
 function registerTranslateIcon(container: PDFViewerRef['container']) {
