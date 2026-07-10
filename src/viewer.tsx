@@ -5,12 +5,21 @@ import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import {
   type AnnotationCapability,
   type PanCapability,
+  LockModeType,
   PDFViewer,
   PDFViewerConfig,
   type PDFViewerRef,
 } from '@embedpdf/react-pdf-viewer';
 import './viewer.css';
-import { getActiveDocumentId, getInitialFileUrl, runWhenIdle, type ScrollCapability } from './utils';
+import {
+  getActiveDocumentId,
+  getCurrentScrollAnchor,
+  getInitialFileUrl,
+  restoreScrollAnchorAfterLayout,
+  runWhenIdle,
+  type ScrollAnchor,
+  type ScrollCapability,
+} from './utils';
 import {
   BottomNavigationControl,
   ShnctlOutline,
@@ -57,12 +66,6 @@ interface UiSchemaCapability {
   getSchema(): {
     sidebars?: Record<string, { width?: string }>;
   };
-}
-
-interface ZoomAnchor {
-  documentId: string;
-  pageNumber: number;
-  pageCoordinates?: { x: number; y: number };
 }
 
 const MAX_RENDER_DPR = 1.5;
@@ -128,6 +131,25 @@ function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (
   });
 }
 
+function installTextMarkupToolReset(registry: PluginRegistry) {
+  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+
+  if (!annotation) {
+    return EMPTY_CLEANUP;
+  }
+
+  return annotation.onAnnotationEvent((event) => {
+    if (event.type !== 'create') {
+      return;
+    }
+
+    const scope = annotation.forDocument(event.documentId);
+    if (TEXT_MARKUP_TOOL_IDS.includes(scope.getActiveTool()?.id ?? '')) {
+      scope.setActiveTool(null);
+    }
+  });
+}
+
 function installCommentPanelWidth(registry: PluginRegistry) {
   const ui = registry.getPlugin('ui')?.provides?.() as UiSchemaCapability | undefined;
   const commentPanel = ui?.getSchema().sidebars?.['comment-panel'];
@@ -181,48 +203,6 @@ function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
 
 const cleanupRenderDprCap = installRenderDprCap();
 
-function getCurrentZoomAnchor(registry: PluginRegistry): ZoomAnchor | null {
-  const documentId = getActiveDocumentId(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-
-  if (!documentId || !scroll) {
-    return null;
-  }
-
-  const scrollScope = scroll.forDocument(documentId);
-  const pageNumber = scrollScope.getCurrentPage();
-  const metrics = scrollScope.getMetrics();
-  const pageMetric =
-    metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === pageNumber) ??
-    metrics.pageVisibilityMetrics[0];
-  const viewport = registry.getPlugin('viewport')?.provides?.() as { getViewportGap(): number } | undefined;
-
-  return {
-    documentId,
-    pageNumber,
-    pageCoordinates: pageMetric
-      ? {
-          x: pageMetric.original.pageX,
-          y: pageMetric.original.pageY - (viewport?.getViewportGap() ?? 0) / (pageMetric.scaled.scale || 1),
-        }
-      : undefined,
-  };
-}
-
-function restoreZoomAnchor(registry: PluginRegistry, anchor: ZoomAnchor) {
-  if (getActiveDocumentId(registry) !== anchor.documentId) {
-    return;
-  }
-
-  // TODO: track upstream EmbedPDF zoom/virtual-scroll anchor handling and remove this workaround when fixed.
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-  scroll?.forDocument(anchor.documentId).scrollToPage({
-    pageNumber: anchor.pageNumber,
-    pageCoordinates: anchor.pageCoordinates,
-    behavior: 'instant',
-  });
-}
-
 function requestPdfZoom(registry: PluginRegistry, direction: 1 | -1, event?: WheelEvent | KeyboardEvent) {
   const documentId = getActiveDocumentId(registry);
   const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
@@ -231,7 +211,7 @@ function requestPdfZoom(registry: PluginRegistry, direction: 1 | -1, event?: Whe
     return null;
   }
 
-  const anchor = getCurrentZoomAnchor(registry);
+  const anchor = getCurrentScrollAnchor(registry);
   const zoomScope = zoom.forDocument(documentId);
   const currentZoom = zoomScope.getState().currentZoomLevel || 1;
   const delta = currentZoom * 0.12 * direction;
@@ -253,10 +233,10 @@ function requestPdfZoom(registry: PluginRegistry, direction: 1 | -1, event?: Whe
 
 function installBrowserZoomInterceptor(registry: PluginRegistry) {
   let lastWheelZoomAt = 0;
-  let zoomRestoreAnchor: ZoomAnchor | null = null;
+  let zoomRestoreAnchor: ScrollAnchor | null = null;
   let zoomRestoreTimer = 0;
 
-  const scheduleZoomAnchorRestore = (anchor: ZoomAnchor | null) => {
+  const scheduleZoomAnchorRestore = (anchor: ScrollAnchor | null) => {
     if (!anchor) {
       return;
     }
@@ -271,14 +251,7 @@ function installBrowserZoomInterceptor(registry: PluginRegistry) {
       zoomRestoreTimer = 0;
       const nextAnchor = zoomRestoreAnchor;
       zoomRestoreAnchor = null;
-
-      if (!nextAnchor) {
-        return;
-      }
-
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => restoreZoomAnchor(registry, nextAnchor));
-      });
+      restoreScrollAnchorAfterLayout(registry, nextAnchor);
     }, 180);
   };
 
@@ -314,7 +287,7 @@ function installBrowserZoomInterceptor(registry: PluginRegistry) {
     if (event.key === '0') {
       const documentId = getActiveDocumentId(registry);
       const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
-      const anchor = getCurrentZoomAnchor(registry);
+      const anchor = getCurrentScrollAnchor(registry);
 
       if (documentId && zoom) {
         zoom.forDocument(documentId).requestZoom('fit-page');
@@ -602,7 +575,7 @@ function App() {
         extraRings: TILING_EXTRA_RINGS,
       },
       annotations: {
-        locked: { type: 'include', categories: ['form'] },
+        locked: { type: LockModeType.Include, categories: ['form'] },
         tools: TEXT_MARKUP_TOOL_IDS.map((id) => ({
           id,
           behavior: { deactivateToolAfterCreate: true },
@@ -714,6 +687,7 @@ function App() {
             installNativeContextMenuBlocker,
             () => installMiddleMousePanInterceptor(nextRegistry),
             () => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges),
+            () => installTextMarkupToolReset(nextRegistry),
             () => installCommentPanelWidth(nextRegistry),
             () => installReadingHistory(nextRegistry, fileUrl),
             () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {

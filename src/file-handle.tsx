@@ -2,7 +2,12 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { PDFViewerRef } from '@embedpdf/react-pdf-viewer';
 import type React from 'react';
 import { get, set } from 'idb-keyval';
-import { getActiveDocumentId, runWhenIdle, type ScrollCapability } from './utils';
+import {
+  getActiveDocumentId,
+  restoreScrollAnchorAfterLayout,
+  runWhenIdle,
+  type ScrollCapability,
+} from './utils';
 
 const EMPTY_CLEANUP = () => {};
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
@@ -36,10 +41,6 @@ interface SpreadCapability {
     getSpreadMode(): SpreadModeValue;
   };
   onSpreadChange(listener: (event: { documentId: string; spreadMode: SpreadModeValue }) => void): () => void;
-}
-
-interface ZoomCapability {
-  onZoomChange(listener: (event: { documentId: string }) => void): () => void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -236,14 +237,9 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
   }
 
   const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
-  const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
   let restoredDocumentId: string | null = null;
   let historyReady = false;
-  let pendingPageNumber = 0;
   let pendingWriteId = 0;
-  let zoomSettleId = 0;
-  let zoomAnchorPage = 0;
-  let lastScrollStrategy: ScrollStrategyValue | undefined;
   let cancelPendingIdleWrite: (() => void) | null = null;
 
   const getScrollStrategy = (documentId: string) => {
@@ -277,18 +273,14 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
       return Promise.resolve();
     }
 
-    return writeHistoryEntry(fileUrl, {
-      ...getHistoryEntry(documentId),
-      pageNumber: pendingPageNumber || getHistoryEntry(documentId).pageNumber,
-    });
+    return writeHistoryEntry(fileUrl, getHistoryEntry(documentId));
   };
 
-  const scheduleHistoryWrite = (pageNumber: number) => {
+  const scheduleHistoryWrite = () => {
     if (!historyReady) {
       return;
     }
 
-    pendingPageNumber = pageNumber;
     if (pendingWriteId) {
       window.clearTimeout(pendingWriteId);
     }
@@ -306,67 +298,11 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     }, 300);
   };
 
-  const unsubscribePageChange = scroll.onPageChange((event) => {
-    if (zoomAnchorPage && event.documentId === getActiveDocumentId(registry)) {
-      return;
-    }
-
-    scheduleHistoryWrite(event.pageNumber);
-  });
-
-  const unsubscribeZoomChange = zoom?.onZoomChange((event) => {
-    if (!historyReady) {
-      return;
-    }
-
-    if (event.documentId !== getActiveDocumentId(registry)) {
-      return;
-    }
-
-    if (!zoomAnchorPage) {
-      zoomAnchorPage = pendingPageNumber || scroll.forDocument(event.documentId).getCurrentPage();
-    }
-
-    if (pendingWriteId) {
-      window.clearTimeout(pendingWriteId);
-      pendingWriteId = 0;
-    }
-    cancelPendingIdleWrite?.();
-    cancelPendingIdleWrite = null;
-
-    if (zoomSettleId) {
-      window.clearTimeout(zoomSettleId);
-    }
-    zoomSettleId = window.setTimeout(() => {
-      zoomSettleId = 0;
-      const pageNumber = zoomAnchorPage;
-      zoomAnchorPage = 0;
-      scheduleHistoryWrite(pageNumber);
-    }, 350);
-  });
-
-  const unsubscribeSpreadChange = spread?.onSpreadChange((event) => {
-    if (zoomAnchorPage && event.documentId === getActiveDocumentId(registry)) {
-      return;
-    }
-
-    scheduleHistoryWrite(scroll.forDocument(event.documentId).getCurrentPage());
-  });
-
+  const unsubscribePageChange = scroll.onPageChange(() => scheduleHistoryWrite());
+  const unsubscribeSpreadChange = spread?.onSpreadChange(() => scheduleHistoryWrite());
   const unsubscribeScrollStateChange = scroll.onStateChange((state) => {
-    if (!isScrollStrategy(state.strategy)) {
-      return;
-    }
-
-    const strategyChanged = lastScrollStrategy !== undefined && lastScrollStrategy !== state.strategy;
-    lastScrollStrategy = state.strategy;
-    if (!strategyChanged || zoomAnchorPage) {
-      return;
-    }
-
-    const documentId = getActiveDocumentId(registry);
-    if (documentId) {
-      scheduleHistoryWrite(scroll.forDocument(documentId).getCurrentPage());
+    if (isScrollStrategy(state.strategy)) {
+      scheduleHistoryWrite();
     }
   });
 
@@ -392,19 +328,11 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
           scroll.setScrollStrategy(saved.scrollStrategy, event.documentId);
         }
 
-        if (saved.pageNumber > 1) {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              scroll.forDocument(event.documentId).scrollToPage({
-                pageNumber: saved.pageNumber,
-                behavior: 'instant',
-              });
-              historyReady = true;
-            });
-          });
-        } else {
-          historyReady = true;
-        }
+        restoreScrollAnchorAfterLayout(registry, {
+          documentId: event.documentId,
+          pageNumber: saved.pageNumber,
+        });
+        historyReady = true;
       })
       .catch((error) => {
         historyReady = true;
@@ -416,10 +344,6 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     if (pendingWriteId) {
       window.clearTimeout(pendingWriteId);
       pendingWriteId = 0;
-    }
-    if (zoomSettleId) {
-      window.clearTimeout(zoomSettleId);
-      zoomSettleId = 0;
     }
     cancelPendingIdleWrite?.();
     cancelPendingIdleWrite = null;
@@ -433,10 +357,7 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
       return Promise.resolve();
     }
 
-    return writeHistoryEntry(fileUrl, {
-      ...getHistoryEntry(documentId),
-      pageNumber: zoomAnchorPage || pendingPageNumber || getHistoryEntry(documentId).pageNumber,
-    });
+    return writeHistoryEntry(fileUrl, getHistoryEntry(documentId));
   };
 
   const onClose = () => {
@@ -453,7 +374,6 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
     window.removeEventListener('beforeunload', onClose);
     window.removeEventListener('pagehide', onClose);
     unsubscribePageChange();
-    unsubscribeZoomChange?.();
     unsubscribeSpreadChange?.();
     unsubscribeScrollStateChange();
     unsubscribeLayoutReady();
