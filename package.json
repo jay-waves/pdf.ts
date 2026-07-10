@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "sync:version": "node scripts/sync-version.mjs",
-    "build": "pnpm sync:version && vite build",
+    "typecheck": "tsgo --noEmit",
+    "build": "pnpm typecheck && pnpm sync:version && vite build",
     "dev": "pnpm sync:version && vite build --watch",
     "package": "node scripts/package-extension.mjs",
     "release:prepare": "pnpm build && pnpm package"
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.8.0",
     "vite": "^7.0.0"

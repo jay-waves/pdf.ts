@@ -32,6 +32,71 @@ export function runWhenIdle(callback: () => void) {
   return () => cancelIdleCallback(id);
 }
 
+export interface ScrollAnchor {
+  documentId: string;
+  pageNumber: number;
+  pageCoordinates?: { x: number; y: number };
+}
+
+export function getCurrentScrollAnchor(registry: PluginRegistry): ScrollAnchor | null {
+  const documentId = getActiveDocumentId(registry);
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+
+  if (!documentId || !scroll) {
+    return null;
+  }
+
+  const scrollScope = scroll.forDocument(documentId);
+  const pageNumber = scrollScope.getCurrentPage();
+  const metrics = scrollScope.getMetrics();
+  const pageMetric =
+    metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === pageNumber) ??
+    metrics.pageVisibilityMetrics[0];
+  const viewport = registry.getPlugin('viewport')?.provides?.() as { getViewportGap(): number } | undefined;
+
+  return {
+    documentId,
+    pageNumber,
+    pageCoordinates: pageMetric
+      ? {
+          x: pageMetric.original.pageX,
+          y: pageMetric.original.pageY - (viewport?.getViewportGap() ?? 0) / (pageMetric.scaled.scale || 1),
+        }
+      : undefined,
+  };
+}
+
+function restoreScrollAnchor(registry: PluginRegistry, anchor: ScrollAnchor) {
+  if (getActiveDocumentId(registry) !== anchor.documentId) {
+    return;
+  }
+
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  scroll?.forDocument(anchor.documentId).scrollToPage({
+    pageNumber: anchor.pageNumber,
+    pageCoordinates: anchor.pageCoordinates,
+    behavior: 'instant',
+  });
+}
+
+export function restoreScrollAnchorAfterLayout(registry: PluginRegistry, anchor: ScrollAnchor | null, delay = 0) {
+  if (!anchor) {
+    return;
+  }
+
+  const restore = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => restoreScrollAnchor(registry, anchor));
+    });
+  };
+
+  if (delay > 0) {
+    return window.setTimeout(restore, delay);
+  }
+
+  restore();
+}
+
 export function getDestinationFromTarget(target?: PdfLinkTarget): PdfDestinationObject | undefined {
   if (!target) {
     return undefined;

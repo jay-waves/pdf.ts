@@ -8,7 +8,12 @@ import {
   type ToolbarItem,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import { getActiveDocumentId, type ScrollCapability } from './utils';
+import {
+  getActiveDocumentId,
+  getCurrentScrollAnchor,
+  restoreScrollAnchorAfterLayout,
+  type ScrollCapability,
+} from './utils';
 
 type ViewerTheme = {
   id: string;
@@ -45,12 +50,39 @@ export const VIEWER_THEMES: ViewerTheme[] = [
     config: {
       preference: 'dark',
       dark: {
+        background: {
+          app: '#161616',
+          surface: '#333333',
+          surfaceAlt: '#262626',
+          elevated: '#333333',
+          overlay: 'rgba(22, 22, 22, 0.72)',
+          input: '#161616',
+        },
+        foreground: {
+          primary: '#f4f4f4',
+          secondary: '#e0e0e0',
+          muted: '#a8a8a8',
+          disabled: '#6f6f6f',
+          onAccent: '#161616',
+        },
+        border: {
+          default: '#333333',
+          subtle: '#262626',
+          strong: '#525252',
+        },
         accent: {
-          primary: '#60a5fa',
-          primaryHover: '#3b82f6',
-          primaryActive: '#2563eb',
-          primaryLight: '#1e3a8a',
-          primaryForeground: '#0f172a',
+          primary: '#f4f4f4',
+          primaryHover: '#e0e0e0',
+          primaryActive: '#c6c6c6',
+          primaryLight: '#333333',
+          primaryForeground: '#161616',
+        },
+        interactive: {
+          hover: '#333333',
+          active: '#525252',
+          selected: '#333333',
+          focus: '#f4f4f4',
+          focusRing: '#8d8d8d',
         },
       },
     },
@@ -183,6 +215,7 @@ const TOOLBAR_AUTO_HIDE_STYLE_ATTRIBUTE = 'data-shnctl-toolbar-auto-hide-style';
 const TOOLBAR_PINNED_ATTRIBUTE = 'data-shnctl-toolbar-pinned';
 const TOOLBAR_VISIBLE_ATTRIBUTE = 'data-shnctl-toolbar-visible';
 const SEARCH_OPEN_ATTRIBUTE = 'data-shnctl-search-open';
+const VIEWER_THEME_ATTRIBUTE = 'data-viewer-theme';
 const TOOLBAR_HIDE_DELAY_MS = 320;
 const TOOLBAR_VISIBILITY_SELECTOR = [
   '[data-epdf-i="main-toolbar"]',
@@ -385,11 +418,15 @@ html[data-shnctl-toolbar-pinned="true"] .shnctl-search-bar {
   will-change: transform, opacity;
 }
 
-html[data-shnctl-toolbar-visible="true"] .shnctl-search-bar {
-  transform: translateY(0) !important;
-  opacity: 1 !important;
-}
-`;
+	html[data-shnctl-toolbar-visible="true"] .shnctl-search-bar {
+	  transform: translateY(0) !important;
+	  opacity: 1 !important;
+	}
+
+	[data-epdf][data-viewer-theme="dark"] :is(canvas, img) {
+	  filter: brightness(0.9);
+	}
+	`;
 
 type SpreadModeValue = 'none' | 'odd' | 'even';
 type ScrollStrategyValue = 'vertical' | 'horizontal';
@@ -481,6 +518,28 @@ function applyToolbarPinnedState(root: ParentNode, pinned = getStoredToolbarPinn
     document.documentElement.setAttribute(TOOLBAR_PINNED_ATTRIBUTE, 'true');
   } else {
     document.documentElement.removeAttribute(TOOLBAR_PINNED_ATTRIBUTE);
+  }
+}
+
+function applyViewerThemeAttribute(root: ParentNode, themeId = document.documentElement.dataset.viewerTheme) {
+  if (!themeId) {
+    return;
+  }
+
+  const uiRoots = Array.from(root.querySelectorAll('[data-epdf]'));
+
+  if (root instanceof Element && root.matches('[data-epdf]')) {
+    uiRoots.unshift(root);
+  }
+
+  for (const uiRoot of uiRoots) {
+    uiRoot.setAttribute(VIEWER_THEME_ATTRIBUTE, themeId);
+  }
+}
+
+function applyViewerThemeAttributeToAllRoots(themeId = document.documentElement.dataset.viewerTheme) {
+  for (const root of getDomRoots()) {
+    applyViewerThemeAttribute(root, themeId);
   }
 }
 
@@ -638,6 +697,7 @@ function applyToolbarDomOverrides(registry: PluginRegistry, ui: UICapability) {
     ensureToolbarVisibilityListeners(root);
     ensureSecondaryToolbarCloseListeners(root, registry, ui);
     applyToolbarPinnedState(root);
+    applyViewerThemeAttribute(root);
 
     for (const { itemId, label } of TOOLBAR_LABEL_OVERRIDES) {
       const button = root.querySelector(`[data-epdf-i="${itemId}"] > button`);
@@ -726,6 +786,7 @@ function applyViewerTheme(container: PDFViewerRef['container'], themeIndex: numb
 
   container?.setTheme(theme.config);
   document.documentElement.dataset.viewerTheme = theme.id;
+  applyViewerThemeAttributeToAllRoots(theme.id);
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme.id);
   } catch {
@@ -874,31 +935,21 @@ function refreshMainToolbar(registry: PluginRegistry, ui: UICapability) {
   }
 }
 
-function switchScrollStrategyPreservingPage(
+function switchPageLayoutPreservingAnchor(
   registry: PluginRegistry,
   ui: UICapability,
-  scroll: ScrollCapability | undefined,
-  strategy: ScrollStrategyValue,
+  updateLayout: (documentId: string) => void,
 ) {
   const documentId = getActiveDocumentId(registry);
 
-  if (!scroll || !documentId) {
+  if (!documentId) {
     return;
   }
 
-  const scrollScope = scroll.forDocument(documentId);
-  const pageNumber = scrollScope.getCurrentPage();
-
-  scroll.setScrollStrategy(strategy, documentId);
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      scrollScope.scrollToPage({
-        pageNumber,
-        behavior: 'instant',
-      });
-      refreshMainToolbar(registry, ui);
-    });
-  });
+  const anchor = getCurrentScrollAnchor(registry);
+  updateLayout(documentId);
+  restoreScrollAnchorAfterLayout(registry, anchor);
+  requestAnimationFrame(() => refreshMainToolbar(registry, ui));
 }
 
 function removeToolbarItemsById(items: ToolbarItem[], ids: Set<string>): ToolbarItem[] {
@@ -1110,8 +1161,9 @@ export function installThemeSwitcher(
       label: 'Single Page',
       icon: 'shnctl-single-page',
       action: () => {
-        spread?.setSpreadMode('none');
-        refreshMainToolbar(registry, ui);
+        if (spread) {
+          switchPageLayoutPreservingAnchor(registry, ui, () => spread.setSpreadMode('none'));
+        }
       },
       active: () => spread?.getSpreadMode() === 'none',
       disabled: () => !spread,
@@ -1122,8 +1174,9 @@ export function installThemeSwitcher(
       label: 'TwoPage (Odd)',
       icon: 'shnctl-two-page-odd',
       action: () => {
-        spread?.setSpreadMode('odd');
-        refreshMainToolbar(registry, ui);
+        if (spread) {
+          switchPageLayoutPreservingAnchor(registry, ui, () => spread.setSpreadMode('odd'));
+        }
       },
       active: () => spread?.getSpreadMode() === 'odd',
       disabled: () => !spread,
@@ -1134,7 +1187,9 @@ export function installThemeSwitcher(
       label: 'Vertical',
       icon: 'shnctl-scroll-vertical',
       action: () => {
-        switchScrollStrategyPreservingPage(registry, ui, scroll, 'vertical');
+        if (scroll) {
+          switchPageLayoutPreservingAnchor(registry, ui, (documentId) => scroll.setScrollStrategy('vertical', documentId));
+        }
       },
       active: ({ state, documentId }) => (state as UiPluginState).plugins?.scroll?.documents?.[documentId]?.strategy === 'vertical',
       disabled: () => !scroll,
@@ -1145,7 +1200,9 @@ export function installThemeSwitcher(
       label: 'Horizontal',
       icon: 'shnctl-scroll-horizontal',
       action: () => {
-        switchScrollStrategyPreservingPage(registry, ui, scroll, 'horizontal');
+        if (scroll) {
+          switchPageLayoutPreservingAnchor(registry, ui, (documentId) => scroll.setScrollStrategy('horizontal', documentId));
+        }
       },
       active: ({ state, documentId }) => (state as UiPluginState).plugins?.scroll?.documents?.[documentId]?.strategy === 'horizontal',
       disabled: () => !scroll,
