@@ -6,8 +6,8 @@ import type {
   SelectionMenuSchema,
   UICapability,
 } from '@embedpdf/react-pdf-viewer';
+import { EMPTY_CLEANUP } from './utils';
 
-const EMPTY_CLEANUP = () => {};
 const TRANSLATE_SELECTION_COMMAND_ID = 'shnctl.selection.translate';
 const TRANSLATE_SELECTION_ITEM_ID = 'shnctl-selection-translate-button';
 const TRANSLATE_SELECTION_ICON_ID = 'shnctl-translate';
@@ -37,14 +37,6 @@ interface ChromeLanguageDetectorConstructor {
   create(): Promise<ChromeLanguageDetector>;
 }
 
-function getTranslatorApi() {
-  return (globalThis as typeof globalThis & { Translator?: ChromeTranslatorConstructor }).Translator;
-}
-
-function getLanguageDetectorApi() {
-  return (globalThis as typeof globalThis & { LanguageDetector?: ChromeLanguageDetectorConstructor }).LanguageDetector;
-}
-
 function normalizeText(parts: string[]) {
   return parts
     .join(' ')
@@ -53,12 +45,10 @@ function normalizeText(parts: string[]) {
     .slice(0, MAX_TEXT_LENGTH);
 }
 
-function getTargetLanguage(sourceLanguage: string) {
-  return sourceLanguage.toLowerCase().startsWith('zh') ? 'en' : TRANSLATION_TARGET_LANGUAGE;
-}
-
 async function detectSourceLanguage(text: string) {
-  const LanguageDetector = getLanguageDetectorApi();
+  const LanguageDetector = (
+    globalThis as typeof globalThis & { LanguageDetector?: ChromeLanguageDetectorConstructor }
+  ).LanguageDetector;
   if (!LanguageDetector) {
     return FALLBACK_SOURCE_LANGUAGE;
   }
@@ -90,7 +80,9 @@ async function getTranslator(sourceLanguage: string, targetLanguage: string) {
   const cacheKey = `${sourceLanguage}:${targetLanguage}`;
   let translatorPromise = translatorCache.get(cacheKey);
   if (!translatorPromise) {
-    const Translator = getTranslatorApi();
+    const Translator = (
+      globalThis as typeof globalThis & { Translator?: ChromeTranslatorConstructor }
+    ).Translator;
     if (!Translator) {
       throw new Error('Chrome Translator API is not available in this browser.');
     }
@@ -114,7 +106,7 @@ async function getTranslator(sourceLanguage: string, targetLanguage: string) {
 
 async function translateSelectedText(text: string) {
   const sourceLanguage = await detectSourceLanguage(text);
-  const targetLanguage = getTargetLanguage(sourceLanguage);
+  const targetLanguage = sourceLanguage.toLowerCase().startsWith('zh') ? 'en' : TRANSLATION_TARGET_LANGUAGE;
   const translator = await getTranslator(sourceLanguage, targetLanguage);
   return translator.translate(text);
 }
@@ -208,24 +200,16 @@ function installSelectionMenuItem(ui: UICapability) {
   });
 }
 
-function clampPanelPosition(x: number, y: number, panel: HTMLElement) {
-  const width = Math.max(panel.offsetWidth, 160);
-  const height = Math.max(panel.offsetHeight, 48);
-  return {
-    x: Math.min(Math.max(12, x), window.innerWidth - width - 12),
-    y: Math.min(Math.max(12, y), window.innerHeight - height - 12),
-  };
-}
-
 function showPanel(panel: HTMLElement, anchorPoint: { x: number; y: number }, text: string, isError = false) {
   const gap = 10;
   panel.classList.toggle('is-error', isError);
   panel.textContent = text;
   panel.hidden = false;
+  const width = Math.max(panel.offsetWidth, 160);
+  const height = Math.max(panel.offsetHeight, 48);
 
-  const position = clampPanelPosition(anchorPoint.x + gap, anchorPoint.y + gap, panel);
-  panel.style.left = `${position.x}px`;
-  panel.style.top = `${position.y}px`;
+  panel.style.left = `${Math.min(Math.max(12, anchorPoint.x + gap), window.innerWidth - width - 12)}px`;
+  panel.style.top = `${Math.min(Math.max(12, anchorPoint.y + gap), window.innerHeight - height - 12)}px`;
 }
 
 export function installSelectionTranslate(registry: PluginRegistry, container: PDFViewerRef['container']) {

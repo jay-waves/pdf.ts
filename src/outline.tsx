@@ -1,10 +1,4 @@
-import { 
-    useEffect, 
-    useMemo, 
-    useRef,
-    useState,
-    type FormEvent
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
@@ -20,12 +14,12 @@ import {
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
 import {
-    getActiveDocumentId,
-    getDestinationFromTarget,
-    type ScrollCapability,
-} from './utils'
+  EMPTY_CLEANUP,
+  getActiveDocumentId,
+  getDestinationFromTarget,
+  type ScrollCapability,
+} from './utils';
 
-const EMPTY_CLEANUP = () => {};
 const outlinePrefetchCache = new Map<string, OutlineCache>();
 
 export type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -40,11 +34,6 @@ function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
     bookmarks,
   };
 }
-
-type FlattenedBookmark = {
-  title: string;
-  pageNumber: number;
-};
 
 function isEditableKeyboardTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
@@ -178,13 +167,11 @@ export function installBuiltInPageControlsHider(registry: PluginRegistry) {
     hidePageControls(event.documentId);
   });
 
-  return () => {
-    unsubscribeLayoutReady();
-  };
+  return unsubscribeLayoutReady;
 }
 
 function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
-  const flattened: FlattenedBookmark[] = [];
+  const flattened: Array<{ title: string; pageNumber: number }> = [];
 
   const walk = (items: PdfBookmarkObject[]) => {
     for (const item of items) {
@@ -300,10 +287,6 @@ async function loadBookmarks(registry: PluginRegistry) {
   }
 }
 
-async function loadOutlineCache(registry: PluginRegistry) {
-  return toOutlineCache(await loadBookmarks(registry));
-}
-
 export function installOutlinePrefetch(
   registry: PluginRegistry,
   onLoaded: (cache: OutlineCache) => void,
@@ -333,7 +316,8 @@ export function installOutlinePrefetch(
     loadingDocumentId = documentId;
     onLoaded({ status: 'loading', bookmarks: [] });
 
-    loadOutlineCache(registry)
+    loadBookmarks(registry)
+      .then(toOutlineCache)
       .then((cache) => {
         if (cancelled) {
           return;
@@ -424,7 +408,8 @@ export function ShnctlOutline({
     let cancelled = false;
     onCacheChange({ status: 'loading', bookmarks: [] });
 
-    loadOutlineCache(registry)
+    loadBookmarks(registry)
+      .then(toOutlineCache)
       .then((nextCache) => {
         if (cancelled) {
           return;

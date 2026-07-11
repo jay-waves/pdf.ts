@@ -5,12 +5,13 @@ import {
   type PdfLinkTarget,
 } from '@embedpdf/models';
 
+export const EMPTY_CLEANUP = () => {};
+
 export const isPdfDocumentUrl = (value: string) => {
   try {
     const url = new URL(value);
-    const isSupportedProtocol = url.protocol === 'file:';
 
-    return isSupportedProtocol && url.pathname.toLowerCase().endsWith('.pdf');
+    return url.protocol === 'file:' && url.pathname.toLowerCase().endsWith('.pdf');
   } catch {
     return false;
   }
