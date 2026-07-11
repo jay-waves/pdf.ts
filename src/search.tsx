@@ -10,9 +10,8 @@ import {
   type ToolbarItem,
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import { getActiveDocumentId, type ScrollCapability } from './utils';
+import { EMPTY_CLEANUP, getActiveDocumentId, type ScrollCapability } from './utils';
 
-const EMPTY_CLEANUP = () => {};
 const SEARCH_PANEL_COMMAND_ID = 'panel:toggle-search';
 const SHNCTL_SEARCH_COMMAND_ID = 'shnctl:toggle-search';
 const SHNCTL_SEARCH_ICON_ID = 'shnctl-search';
@@ -104,13 +103,9 @@ function toSearchPanelState(state: ReturnType<SearchScope['getState']>): SearchP
   };
 }
 
-function getSearchCapability(registry?: PluginRegistry) {
-  return registry?.getPlugin('search')?.provides?.() as SearchCapability | undefined;
-}
-
 function getActiveSearchScope(registry?: PluginRegistry): SearchScope | undefined {
   const documentId = registry ? getActiveDocumentId(registry) : undefined;
-  const search = getSearchCapability(registry);
+  const search = registry?.getPlugin('search')?.provides?.() as SearchCapability | undefined;
 
   if (!documentId || !search) {
     return undefined;
@@ -129,15 +124,6 @@ function getSearchFlags(searchScope?: ReturnType<typeof getActiveSearchScope>) {
   } catch {
     return [];
   }
-}
-
-function clearActiveSearch(registry?: PluginRegistry) {
-  const searchScope = getActiveSearchScope(registry);
-  if (!searchScope) {
-    return;
-  }
-
-  searchScope.searchAllPages('');
 }
 
 function scrollToSearchResult(registry: PluginRegistry | undefined, result: SearchResult | undefined) {

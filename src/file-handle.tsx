@@ -3,13 +3,13 @@ import type { PDFViewerRef } from '@embedpdf/react-pdf-viewer';
 import type React from 'react';
 import { get, set } from 'idb-keyval';
 import {
+  EMPTY_CLEANUP,
   getActiveDocumentId,
   restoreScrollAnchorAfterLayout,
   runWhenIdle,
   type ScrollCapability,
 } from './utils';
 
-const EMPTY_CLEANUP = () => {};
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
 const FILE_HANDLES_KEY = 'embedpdf-file-handles-v1';
 
@@ -44,7 +44,7 @@ interface SpreadCapability {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object';
+  return value !== null && typeof value === 'object';
 }
 
 function getFileName(fileUrl: string) {
@@ -55,22 +55,10 @@ function getFileName(fileUrl: string) {
   }
 }
 
-function getPermissionOptions(readWrite: boolean): FileSystemHandlePermissionDescriptor {
-  return readWrite ? { mode: 'readwrite' } : { mode: 'read' };
-}
-
 export async function verifyPermission(handle: FileSystemHandle, readWrite = true) {
-  const options = getPermissionOptions(readWrite);
+  const options: FileSystemHandlePermissionDescriptor = readWrite ? { mode: 'readwrite' } : { mode: 'read' };
 
-  if ((await handle.queryPermission(options)) === 'granted') {
-    return true;
-  }
-
-  if ((await handle.requestPermission(options)) === 'granted') {
-    return true;
-  }
-
-  return false;
+  return (await handle.queryPermission(options)) === 'granted' || (await handle.requestPermission(options)) === 'granted';
 }
 
 async function readStoredFileHandles() {
@@ -98,8 +86,7 @@ async function getStoredFileHandle(fileUrl: string, readWrite = true) {
     return null;
   }
 
-  const hasPermission = await verifyPermission(entry.handle, readWrite);
-  return hasPermission ? entry.handle : null;
+  return (await verifyPermission(entry.handle, readWrite)) ? entry.handle : null;
 }
 
 export async function initFileHandle(
@@ -173,11 +160,7 @@ export async function savePdfToOriginalFile(
 function readLegacyHistoryStore() {
   try {
     const raw = window.localStorage.getItem(READING_HISTORY_KEY);
-    if (!raw) {
-      return {};
-    }
-
-    const parsed = JSON.parse(raw);
+    const parsed = raw ? JSON.parse(raw) : undefined;
     return isRecord(parsed) ? (parsed as ReadingHistoryStore) : {};
   } catch {
     return {};
@@ -220,10 +203,6 @@ async function writeHistoryEntry(fileUrl: string, entry: Omit<ReadingHistoryEntr
     updatedAt: new Date().toISOString(),
   };
   await set(READING_HISTORY_KEY, store);
-}
-
-async function readHistoryEntry(fileUrl: string) {
-  return (await readHistoryStore())[fileUrl];
 }
 
 export function installReadingHistory(registry: PluginRegistry, fileUrl?: string) {
@@ -313,7 +292,8 @@ export function installReadingHistory(registry: PluginRegistry, fileUrl?: string
 
     restoredDocumentId = event.documentId;
 
-    readHistoryEntry(fileUrl)
+    readHistoryStore()
+      .then((store) => store[fileUrl])
       .then((saved) => {
         if (!saved) {
           historyReady = true;

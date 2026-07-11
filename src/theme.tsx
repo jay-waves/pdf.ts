@@ -9,6 +9,7 @@ import {
   type UICapability,
 } from '@embedpdf/react-pdf-viewer';
 import {
+  EMPTY_CLEANUP,
   getActiveDocumentId,
   getCurrentScrollAnchor,
   restoreScrollAnchorAfterLayout,
@@ -22,7 +23,6 @@ type ViewerTheme = {
   config: ThemeConfig;
 };
 
-const EMPTY_CLEANUP = () => {};
 const COMMENT_PANEL_COMMAND_ID = 'panel:toggle-comment';
 const COMMENT_BUTTON_ID = 'comment-button';
 export const VIEWER_THEMES: ViewerTheme[] = [
@@ -271,10 +271,10 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   [data-epdf-i="form-toolbar"],
   [data-epdf-i="redaction-toolbar"]
 ) {
-  min-height: 38px !important;
-  height: 38px !important;
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
+  min-height: 44px !important;
+  height: 44px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
   box-sizing: border-box !important;
 }
 
@@ -288,12 +288,12 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   [data-epdf-i="redact-mode"]
 ) button {
   border-bottom-color: transparent !important;
-  color: var(--color-fg-primary, var(--ep-foreground-primary)) !important;
+  color: var(--shnctl-foreground-primary, var(--color-fg-primary, var(--ep-foreground-primary))) !important;
 }
 
 [data-epdf][data-shnctl-search-open="true"] [data-epdf-i="shnctl-search-mode"] button {
-  border-bottom-color: var(--color-accent, var(--ep-accent-primary)) !important;
-  color: var(--color-accent, var(--ep-accent-primary)) !important;
+  border-bottom-color: var(--shnctl-accent-primary, var(--color-accent, var(--ep-accent-primary))) !important;
+  color: var(--shnctl-accent-primary, var(--color-accent, var(--ep-accent-primary))) !important;
 }
 
 [data-epdf][data-shnctl-search-open="true"] :is(
@@ -340,7 +340,7 @@ const TOOLBAR_AUTO_HIDE_CSS = `
 ) {
   --shnctl-main-toolbar-hidden-offset: 38px;
   --shnctl-secondary-toolbar-top-offset: 48px;
-  --shnctl-page-toolbar-hidden-offset: 38px;
+  --shnctl-page-toolbar-hidden-offset: 44px;
   position: fixed !important;
   top: var(--shnctl-secondary-toolbar-top-offset) !important;
   right: 0 !important;
@@ -411,7 +411,7 @@ html[data-shnctl-toolbar-pinned="true"] .shnctl-search-bar {
 
 .shnctl-search-bar {
   --shnctl-secondary-toolbar-top-offset: 48px;
-  --shnctl-page-toolbar-hidden-offset: 38px;
+  --shnctl-page-toolbar-hidden-offset: 44px;
   transform: translateY(calc(-1 * (var(--shnctl-secondary-toolbar-top-offset) + var(--shnctl-page-toolbar-hidden-offset)))) !important;
   opacity: 0 !important;
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease-out !important;
@@ -500,24 +500,12 @@ function setStoredToolbarPinned(pinned: boolean) {
 }
 
 function applyToolbarPinnedState(root: ParentNode, pinned = getStoredToolbarPinned()) {
-  const uiRoots = Array.from(root.querySelectorAll('[data-epdf]'));
-
-  if (root instanceof Element && root.matches('[data-epdf]')) {
-    uiRoots.unshift(root);
-  }
-
-  for (const uiRoot of uiRoots) {
+  for (const uiRoot of [document.documentElement, ...getEpUiRoots(root)]) {
     if (pinned) {
       uiRoot.setAttribute(TOOLBAR_PINNED_ATTRIBUTE, 'true');
     } else {
       uiRoot.removeAttribute(TOOLBAR_PINNED_ATTRIBUTE);
     }
-  }
-
-  if (pinned) {
-    document.documentElement.setAttribute(TOOLBAR_PINNED_ATTRIBUTE, 'true');
-  } else {
-    document.documentElement.removeAttribute(TOOLBAR_PINNED_ATTRIBUTE);
   }
 }
 
@@ -526,26 +514,8 @@ function applyViewerThemeAttribute(root: ParentNode, themeId = document.document
     return;
   }
 
-  const uiRoots = Array.from(root.querySelectorAll('[data-epdf]'));
-
-  if (root instanceof Element && root.matches('[data-epdf]')) {
-    uiRoots.unshift(root);
-  }
-
-  for (const uiRoot of uiRoots) {
+  for (const uiRoot of getEpUiRoots(root)) {
     uiRoot.setAttribute(VIEWER_THEME_ATTRIBUTE, themeId);
-  }
-}
-
-function applyViewerThemeAttributeToAllRoots(themeId = document.documentElement.dataset.viewerTheme) {
-  for (const root of getDomRoots()) {
-    applyViewerThemeAttribute(root, themeId);
-  }
-}
-
-function applyToolbarPinnedStateToAllRoots(pinned = getStoredToolbarPinned()) {
-  for (const root of getDomRoots()) {
-    applyToolbarPinnedState(root, pinned);
   }
 }
 
@@ -561,15 +531,15 @@ function ensureToolbarAutoHideStyle(root: ParentNode) {
   styleRoot.appendChild(style);
 }
 
-function getEpUiRoots() {
+function getEpUiRoots(root: ParentNode = document) {
   const uiRoots = new Set<Element>();
-  for (const root of getDomRoots()) {
-    for (const uiRoot of Array.from(root.querySelectorAll('[data-epdf]'))) {
+  for (const domRoot of getDomRoots(root)) {
+    for (const uiRoot of Array.from(domRoot.querySelectorAll('[data-epdf]'))) {
       uiRoots.add(uiRoot);
     }
 
-    if (root instanceof Element && root.matches('[data-epdf]')) {
-      uiRoots.add(root);
+    if (domRoot instanceof Element && domRoot.matches('[data-epdf]')) {
+      uiRoots.add(domRoot);
     }
   }
 
@@ -582,32 +552,20 @@ function setToolbarVisible(visible: boolean) {
     toolbarVisibilityHideTimer = undefined;
   }
 
-  const uiRoots = getEpUiRoots();
-
-  if (visible) {
-    document.documentElement.setAttribute(TOOLBAR_VISIBLE_ATTRIBUTE, 'true');
-    for (const uiRoot of uiRoots) {
+  for (const uiRoot of [document.documentElement, ...getEpUiRoots()]) {
+    if (visible) {
       uiRoot.setAttribute(TOOLBAR_VISIBLE_ATTRIBUTE, 'true');
-    }
-  } else {
-    document.documentElement.removeAttribute(TOOLBAR_VISIBLE_ATTRIBUTE);
-    for (const uiRoot of uiRoots) {
+    } else {
       uiRoot.removeAttribute(TOOLBAR_VISIBLE_ATTRIBUTE);
     }
   }
 }
 
 export function setSearchOpenAttribute(open: boolean) {
-  const uiRoots = getEpUiRoots();
-
-  if (open) {
-    document.documentElement.setAttribute(SEARCH_OPEN_ATTRIBUTE, 'true');
-    for (const uiRoot of uiRoots) {
+  for (const uiRoot of [document.documentElement, ...getEpUiRoots()]) {
+    if (open) {
       uiRoot.setAttribute(SEARCH_OPEN_ATTRIBUTE, 'true');
-    }
-  } else {
-    document.documentElement.removeAttribute(SEARCH_OPEN_ATTRIBUTE);
-    for (const uiRoot of uiRoots) {
+    } else {
       uiRoot.removeAttribute(SEARCH_OPEN_ATTRIBUTE);
     }
   }
@@ -786,7 +744,7 @@ function applyViewerTheme(container: PDFViewerRef['container'], themeIndex: numb
 
   container?.setTheme(theme.config);
   document.documentElement.dataset.viewerTheme = theme.id;
-  applyViewerThemeAttributeToAllRoots(theme.id);
+  applyViewerThemeAttribute(document, theme.id);
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme.id);
   } catch {
@@ -1102,7 +1060,7 @@ export function installThemeSwitcher(
     },
     categories: ['document'],
   };
-  applyToolbarPinnedStateToAllRoots();
+  applyToolbarPinnedState(document);
   const toolbarPinCommand: Command = {
     id: TOOLBAR_PIN_COMMAND_ID,
     label: 'Pin toolbar',
@@ -1110,7 +1068,7 @@ export function installThemeSwitcher(
     action: () => {
       const pinned = !getStoredToolbarPinned();
       setStoredToolbarPinned(pinned);
-      applyToolbarPinnedStateToAllRoots(pinned);
+      applyToolbarPinnedState(document, pinned);
       refreshMainToolbar(registry, ui);
     },
     active: () => getStoredToolbarPinned(),

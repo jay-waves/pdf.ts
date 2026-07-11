@@ -28,21 +28,21 @@
 }
 
 :root[data-viewer-theme="dark"] {
-  --shnctl-background-app: #0f172a;
-  --shnctl-background-surface: #1e293b;
-  --shnctl-background-surface-alt: #3a4150;
-  --shnctl-background-input: #2f3745;
-  --shnctl-background-elevated: #263548;
-  --shnctl-foreground-primary: #f8fafc;
-  --shnctl-foreground-secondary: #cbd5e1;
-  --shnctl-foreground-muted: #94a3b8;
-  --shnctl-border-default: #334155;
-  --shnctl-border-subtle: #475569;
-  --shnctl-border-strong: #60a5fa;
-  --shnctl-accent-primary: #60a5fa;
-  --shnctl-interactive-hover: #29384d;
-  --shnctl-interactive-selected: #1e3a8a;
-  --shnctl-overlay-bg: rgba(2, 6, 23, 0.32);
+  --shnctl-background-app: #161616;
+  --shnctl-background-surface: #333333;
+  --shnctl-background-surface-alt: #262626;
+  --shnctl-background-input: #161616;
+  --shnctl-background-elevated: #333333;
+  --shnctl-foreground-primary: #f4f4f4;
+  --shnctl-foreground-secondary: #e0e0e0;
+  --shnctl-foreground-muted: #a8a8a8;
+  --shnctl-border-default: #333333;
+  --shnctl-border-subtle: #262626;
+  --shnctl-border-strong: #525252;
+  --shnctl-accent-primary: #f4f4f4;
+  --shnctl-interactive-hover: #333333;
+  --shnctl-interactive-selected: #333333;
+  --shnctl-overlay-bg: rgba(22, 22, 22, 0.72);
 }
 
 :root[data-viewer-theme="nord"] {
@@ -187,10 +187,10 @@ input {
   padding: 5px;
   transform: translateX(50%);
   transform-origin: bottom center;
-  border: 1px solid var(--ep-border-default, var(--shnctl-border-default));
+  border: 1px solid var(--shnctl-border-default, var(--ep-border-default));
   border-radius: 8px;
-  background: var(--ep-background-surface, var(--shnctl-background-surface));
-  color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
+  background: var(--shnctl-background-surface, var(--ep-background-surface));
+  color: var(--shnctl-foreground-primary, var(--ep-foreground-primary));
   font-weight: 500;
   opacity: 0;
   pointer-events: none;
@@ -263,8 +263,8 @@ input {
 .shnctl-bottom-nav-outline:hover:not(:disabled),
 .shnctl-bottom-nav-button:focus-visible,
 .shnctl-bottom-nav-outline:focus-visible {
-  border-color: var(--ep-border-subtle, var(--shnctl-border-subtle));
-  background: var(--ep-interactive-hover, var(--shnctl-interactive-hover));
+  border-color: var(--shnctl-border-subtle, var(--ep-border-subtle));
+  background: var(--shnctl-interactive-hover, var(--ep-interactive-hover));
   outline: none;
 }
 
@@ -294,15 +294,15 @@ input {
   gap: 4px;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: var(--ep-foreground-secondary, var(--shnctl-foreground-secondary));
+  color: var(--shnctl-foreground-secondary, var(--ep-foreground-secondary));
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .shnctl-bottom-nav-page:focus-within {
-  border-color: var(--ep-border-subtle, var(--shnctl-border-subtle));
-  background: var(--ep-interactive-hover, var(--shnctl-interactive-hover));
+  border-color: var(--shnctl-border-subtle, var(--ep-border-subtle));
+  background: var(--shnctl-interactive-hover, var(--ep-interactive-hover));
 }
 
 .shnctl-bottom-nav-page-input {
@@ -312,7 +312,7 @@ input {
   padding: 0 2px;
   border: 0;
   background: transparent;
-  color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
+  color: var(--shnctl-foreground-primary, var(--ep-foreground-primary));
   font-size: 14px;
   line-height: 22px;
   text-align: right;
@@ -321,11 +321,11 @@ input {
 }
 
 .shnctl-bottom-nav-page-input:disabled {
-  color: var(--ep-foreground-muted, var(--shnctl-foreground-muted));
+  color: var(--shnctl-foreground-muted, var(--ep-foreground-muted));
 }
 
 .shnctl-bottom-nav-page-total {
-  color: var(--ep-foreground-muted, var(--shnctl-foreground-muted));
+  color: var(--shnctl-foreground-muted, var(--ep-foreground-muted));
 }
 
 .shnctl-overlay {
@@ -347,9 +347,9 @@ input {
   transform: translate(-50%, -50%);
   transform-origin: center;
   overflow: hidden;
-  border: 1px solid var(--ep-border-default, var(--shnctl-border-default));
+  border: 1px solid var(--shnctl-border-default, var(--ep-border-default));
   border-radius: 8px;
-  background: var(--ep-background-surface, var(--shnctl-background-surface));
+  background: var(--shnctl-background-surface, var(--ep-background-surface));
   color: var(--shnctl-foreground-primary);
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
 }
@@ -377,13 +377,12 @@ input {
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  height: 38px;
-  min-height: 38px;
-  padding: 3px 14px;
-  border-bottom: 1px solid var(--ep-border-default, var(--shnctl-border-default));
-  background: var(--color-bg-surface-alt, var(--ep-background-surface-alt, var(--shnctl-background-surface-alt))) !important;
-  background-color: var(--color-bg-surface-alt, var(--ep-background-surface-alt, var(--shnctl-background-surface-alt))) !important;
-  color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
+  height: 44px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--shnctl-border-default, var(--ep-border-default));
+  background: var(--shnctl-background-surface-alt, var(--ep-background-surface-alt)) !important;
+  color: var(--shnctl-foreground-primary, var(--ep-foreground-primary));
   transform-origin: top center;
 }
 
@@ -391,7 +390,7 @@ input {
 .shnctl-search-step {
   display: inline-grid;
   flex: 0 0 auto;
-  height: 30px;
+  height: 32px;
   place-items: center;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -422,45 +421,45 @@ input {
   width: 100%;
   flex: 1 1 auto;
   min-width: 0;
-  height: 30px;
+  height: 32px;
   padding: 0 8px;
   border: 0;
   border-radius: 4px;
-  background: var(--color-bg-input, var(--ep-background-input, var(--shnctl-background-input)));
-  color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
+  background: var(--shnctl-background-input, var(--ep-background-input));
+  color: var(--shnctl-foreground-primary, var(--ep-foreground-primary));
   font: inherit;
   font-size: 13px;
   outline: none;
 }
 
 .shnctl-search-form:focus-within .shnctl-search-input {
-  box-shadow: inset 0 0 0 1px var(--ep-border-strong, var(--shnctl-border-strong));
+  box-shadow: inset 0 0 0 1px var(--shnctl-border-strong, var(--ep-border-strong));
 }
 
 .shnctl-search-toggle,
 .shnctl-search-step {
-  width: 30px;
-  min-width: 30px;
+  width: 32px;
+  min-width: 32px;
   padding: 0;
 }
 
 .shnctl-search-submit {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   border-radius: 6px;
 }
 
 .shnctl-search-toggle.is-active {
   border-color: transparent;
-  background: var(--ep-interactive-selected, var(--shnctl-interactive-selected));
-  color: var(--ep-accent-primary, var(--shnctl-accent-primary));
+  background: var(--shnctl-interactive-selected, var(--ep-interactive-selected));
+  color: var(--shnctl-accent-primary, var(--ep-accent-primary));
 }
 
 .shnctl-search-counter {
   flex: 0 0 auto;
   min-width: 58px;
-  color: var(--ep-foreground-secondary, var(--shnctl-foreground-secondary));
+  color: var(--shnctl-foreground-secondary, var(--ep-foreground-secondary));
   font-size: 13px;
   line-height: 20px;
   text-align: center;
@@ -472,8 +471,8 @@ input {
 .shnctl-search-step:hover:not(:disabled),
 .shnctl-search-toggle:focus-visible,
 .shnctl-search-step:focus-visible {
-  border-color: var(--color-accent, var(--ep-accent-primary, var(--shnctl-accent-primary)));
-  background: var(--ep-interactive-hover, var(--shnctl-interactive-hover));
+  border-color: var(--shnctl-accent-primary, var(--ep-accent-primary));
+  background: var(--shnctl-interactive-hover, var(--ep-interactive-hover));
   outline: none;
 }
 
@@ -511,14 +510,14 @@ input {
 }
 
 .shnctl-comment-result-title {
-  color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
+  color: var(--shnctl-foreground-primary, var(--ep-foreground-primary));
   font-size: 13px;
   line-height: 18px;
   font-weight: 600;
 }
 
 .shnctl-comment-result-text {
-  color: var(--ep-foreground-secondary, var(--shnctl-foreground-secondary));
+  color: var(--shnctl-foreground-secondary, var(--ep-foreground-secondary));
   font-size: 12px;
   line-height: 18px;
 }
@@ -541,7 +540,7 @@ input {
   bottom: 4px;
   left: 0;
   width: 1px;
-  background: var(--ep-border-subtle, var(--shnctl-border-subtle));
+  background: var(--shnctl-border-subtle, var(--ep-border-subtle));
   content: "";
 }
 
@@ -596,7 +595,7 @@ input {
 .shnctl-bookmark-page {
   flex: 0 0 auto;
   min-width: 34px;
-  color: var(--ep-foreground-muted, var(--shnctl-foreground-muted));
+  color: var(--shnctl-foreground-muted, var(--ep-foreground-muted));
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
@@ -606,8 +605,8 @@ input {
 
 .shnctl-bookmark:hover:not(:disabled),
 .shnctl-bookmark:focus-visible {
-  background: var(--ep-interactive-hover, var(--shnctl-interactive-hover));
-  color: var(--ep-foreground-primary, var(--shnctl-foreground-primary));
+  background: var(--shnctl-interactive-hover, var(--ep-interactive-hover));
+  color: var(--shnctl-foreground-primary, var(--ep-foreground-primary));
   outline: none;
 }
 
@@ -629,7 +628,7 @@ input {
 
 .shnctl-state {
   padding: 6px 2px;
-  color: var(--ep-foreground-muted, var(--shnctl-foreground-muted));
+  color: var(--shnctl-foreground-muted, var(--ep-foreground-muted));
   font-size: 15px;
   font-weight: 500;
   line-height: 20px;

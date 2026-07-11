@@ -12,6 +12,7 @@ import {
 } from '@embedpdf/react-pdf-viewer';
 import './viewer.css';
 import {
+  EMPTY_CLEANUP,
   getActiveDocumentId,
   getCurrentScrollAnchor,
   getInitialFileUrl,
@@ -62,12 +63,6 @@ interface ViewportCapability {
   };
 }
 
-interface UiSchemaCapability {
-  getSchema(): {
-    sidebars?: Record<string, { width?: string }>;
-  };
-}
-
 const MAX_RENDER_DPR = 1.5;
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
@@ -75,7 +70,6 @@ const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
 const COMMENT_PANEL_WIDTH = '30vw';
 const TEXT_MARKUP_TOOL_IDS = ['highlight', 'underline', 'strikeout', 'squiggly'];
-const EMPTY_CLEANUP = () => {};
 const PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, location.href).href;
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -151,7 +145,9 @@ function installTextMarkupToolReset(registry: PluginRegistry) {
 }
 
 function installCommentPanelWidth(registry: PluginRegistry) {
-  const ui = registry.getPlugin('ui')?.provides?.() as UiSchemaCapability | undefined;
+  const ui = registry.getPlugin('ui')?.provides?.() as
+    | { getSchema(): { sidebars?: Record<string, { width?: string }> } }
+    | undefined;
   const commentPanel = ui?.getSchema().sidebars?.['comment-panel'];
 
   if (commentPanel) {
@@ -586,9 +582,6 @@ function App() {
   );
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const fileUrl = params.get('file');
-
     if (!fileUrl) {
       cleanDocumentTitleRef.current = 'PDF';
       renderDocumentTitle();
@@ -608,7 +601,7 @@ function App() {
       cleanDocumentTitleRef.current = 'PDF';
       renderDocumentTitle();
     }
-  }, []);
+  }, [fileUrl]);
 
   useEffect(() => {
     return () => {
@@ -617,10 +610,6 @@ function App() {
       registryCleanupRef.current = null;
     };
   }, []);
-
-  const handleOpenOutline = () => {
-    setOutlineOpen(true);
-  };
 
   const handleOpenSearch = (targetRegistry = registry) => {
     const documentId = targetRegistry ? getActiveDocumentId(targetRegistry) : undefined;
@@ -739,7 +728,7 @@ function App() {
         outlineStatus={outlineCache.status}
         visible={navigationVisible}
         onReveal={revealNavigation}
-        onOpenOutline={handleOpenOutline}
+        onOpenOutline={() => setOutlineOpen(true)}
       />
     </main>
   );
