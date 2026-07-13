@@ -97,16 +97,16 @@ export const VIEWER_THEMES: ViewerTheme[] = [
         background: {
           app: '#2e3440',
           surface: '#3b4252',
-          surfaceAlt: '#353c4a',
+          surfaceAlt: '#434c5e',
           elevated: '#434c5e',
           overlay: 'rgba(46, 52, 64, 0.68)',
-          input: '#2e3440',
+          input: '#434c5e',
         },
         foreground: {
           primary: '#eceff4',
-          secondary: '#d8dee9',
-          muted: '#a7b1c2',
-          disabled: '#6f7888',
+          secondary: '#e5e9f0',
+          muted: '#d8dee9',
+          disabled: '#4c566a',
           onAccent: '#2e3440',
         },
         border: {
@@ -118,13 +118,13 @@ export const VIEWER_THEMES: ViewerTheme[] = [
           primary: '#88c0d0',
           primaryHover: '#8fbcbb',
           primaryActive: '#81a1c1',
-          primaryLight: '#3b5360',
+          primaryLight: '#4c566a',
           primaryForeground: '#2e3440',
         },
         interactive: {
           hover: '#434c5e',
           active: '#4c566a',
-          selected: '#3b5360',
+          selected: '#4c566a',
           focus: '#88c0d0',
           focusRing: '#5e81ac',
         },
@@ -139,36 +139,36 @@ export const VIEWER_THEMES: ViewerTheme[] = [
       preference: 'light',
       light: {
         background: {
-          app: '#f8f5ec',
-          surface: '#f1ede3',
-          surfaceAlt: '#f5f1e8',
-          elevated: '#fffdf7',
-          overlay: 'rgba(101, 92, 75, 0.16)',
-          input: '#fbf8f0',
+          app: '#fbfaf6',
+          surface: '#f7f4ee',
+          surfaceAlt: '#faf8f3',
+          elevated: '#fffefa',
+          overlay: 'rgba(101, 92, 75, 0.12)',
+          input: '#fffefa',
         },
         foreground: {
           primary: '#2d332f',
-          secondary: '#5f675f',
-          muted: '#8b9288',
-          disabled: '#a9aea4',
-          onAccent: '#fbf8f0',
+          secondary: '#646b63',
+          muted: '#969c92',
+          disabled: '#aeb4aa',
+          onAccent: '#fffefa',
         },
         border: {
-          default: '#d8d0bf',
-          subtle: '#e5dfd2',
+          default: '#ddd6c9',
+          subtle: '#eee9df',
           strong: '#5f8f86',
         },
         accent: {
           primary: '#5f8f86',
           primaryHover: '#527d75',
           primaryActive: '#466c65',
-          primaryLight: '#dbe8e3',
-          primaryForeground: '#fbf8f0',
+          primaryLight: '#e4eee9',
+          primaryForeground: '#fffefa',
         },
         interactive: {
-          hover: '#e9e2d4',
-          active: '#ddd5c6',
-          selected: '#dbe8e3',
+          hover: '#f0ebe2',
+          active: '#e5ded1',
+          selected: '#e4eee9',
           focus: '#5f8f86',
           focusRing: '#9eb8b1',
         },
@@ -204,12 +204,13 @@ const PAGE_SETTINGS_BUTTON_ID = 'page-settings-button';
 const MAIN_ZOOM_ITEM_IDS = new Set(['zoom-menu-button', 'zoom-toolbar', 'divider-3']);
 const MAIN_TOOL_ITEM_IDS = new Set(['pan-button', 'pointer-button', 'divider-2']);
 const TOOLBAR_LABEL_OVERRIDES = [
-  { itemId: 'view-mode', label: 'VIEW' },
-  { itemId: PAGE_MODE_TAB_ID, label: 'PAGE' },
-  { itemId: 'shnctl-search-mode', label: 'SEARCH' },
-  { itemId: 'annotate-mode', label: 'MARKUP' },
-  { itemId: 'shapes-mode', label: 'DRAW' },
+  { itemId: 'view-mode', label: 'View' },
+  { itemId: PAGE_MODE_TAB_ID, label: 'Page' },
+  { itemId: 'shnctl-search-mode', label: 'Search' },
+  { itemId: 'annotate-mode', label: 'Markup' },
+  { itemId: 'shapes-mode', label: 'Draw' },
 ];
+const TOOLBAR_MODE_TAB_WIDTH = '72px';
 const TOOLBAR_UI_FONT_FAMILY = '"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
 const TOOLBAR_AUTO_HIDE_STYLE_ATTRIBUTE = 'data-shnctl-toolbar-auto-hide-style';
 const TOOLBAR_PINNED_ATTRIBUTE = 'data-shnctl-toolbar-pinned';
@@ -233,7 +234,73 @@ const SECONDARY_TOOLBAR_CLOSE_TAB_IDS = new Set([
 const toolbarVisibilityElements = new WeakSet<Element>();
 const secondaryToolbarCloseElements = new WeakSet<Element>();
 let toolbarVisibilityHideTimer: number | undefined;
+const MODE_TAB_BUTTON_SELECTOR = [
+  'button[data-epdf-i="view-mode"]',
+  'button[data-epdf-i="shnctl-page-mode"]',
+  'button[data-epdf-i="shnctl-search-mode"]',
+  'button[data-epdf-i="annotate-mode"]',
+  'button[data-epdf-i="shapes-mode"]',
+  '[data-epdf-i="view-mode"] > button',
+  '[data-epdf-i="shnctl-page-mode"] > button',
+  '[data-epdf-i="shnctl-search-mode"] > button',
+  '[data-epdf-i="annotate-mode"] > button',
+  '[data-epdf-i="shapes-mode"] > button',
+].join(', ');
 const TOOLBAR_AUTO_HIDE_CSS = `
+[data-epdf] {
+  --shnctl-scrollbar-track: #f8fafc;
+  --shnctl-scrollbar-thumb: #cbd5e1;
+  --shnctl-scrollbar-thumb-hover: #94a3b8;
+  scrollbar-color: var(--shnctl-scrollbar-thumb) var(--shnctl-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+[data-epdf][data-viewer-theme="dark"] {
+  --shnctl-scrollbar-track: #161616;
+  --shnctl-scrollbar-thumb: #525252;
+  --shnctl-scrollbar-thumb-hover: #6f6f6f;
+}
+
+[data-epdf][data-viewer-theme="nord"] {
+  --shnctl-scrollbar-track: #2e3440;
+  --shnctl-scrollbar-thumb: #4c566a;
+  --shnctl-scrollbar-thumb-hover: #5e81ac;
+}
+
+[data-epdf][data-viewer-theme="solar"] {
+  --shnctl-scrollbar-track: #fbfaf6;
+  --shnctl-scrollbar-thumb: #d1c8b8;
+  --shnctl-scrollbar-thumb-hover: #a9a091;
+}
+
+[data-epdf] * {
+  scrollbar-color: var(--shnctl-scrollbar-thumb) var(--shnctl-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+[data-epdf]::-webkit-scrollbar,
+[data-epdf] ::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+}
+
+[data-epdf]::-webkit-scrollbar-track,
+[data-epdf] ::-webkit-scrollbar-track {
+  background: var(--shnctl-scrollbar-track) !important;
+}
+
+[data-epdf]::-webkit-scrollbar-thumb,
+[data-epdf] ::-webkit-scrollbar-thumb {
+  border: 2px solid var(--shnctl-scrollbar-track) !important;
+  border-radius: 999px !important;
+  background-color: var(--shnctl-scrollbar-thumb) !important;
+}
+
+[data-epdf]::-webkit-scrollbar-thumb:hover,
+[data-epdf] ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--shnctl-scrollbar-thumb-hover) !important;
+}
+
 [data-epdf] :is(
   [data-epdf-i="main-toolbar"],
   [data-epdf-i="shnctl-page-toolbar"],
@@ -250,6 +317,30 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   font-size: 13px !important;
 }
 
+[data-epdf] [data-epdf-i="mode-tabs"] :is(${MODE_TAB_BUTTON_SELECTOR}) {
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 72px !important;
+  min-width: 72px !important;
+  font-family: ${TOOLBAR_UI_FONT_FAMILY} !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  line-height: 18px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+[data-epdf] [data-epdf-i="mode-tabs"] :is(${MODE_TAB_BUTTON_SELECTOR}) * {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+  text-transform: inherit !important;
+}
+
 [data-epdf] :is(
   [data-epdf-i="main-toolbar"],
   [data-epdf-i="shnctl-page-toolbar"],
@@ -261,6 +352,14 @@ const TOOLBAR_AUTO_HIDE_CSS = `
 ) svg {
   width: 18px !important;
   height: 18px !important;
+}
+
+[data-epdf] [data-epdf-i="main-toolbar"] {
+  min-height: 44px !important;
+  height: 44px !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+  box-sizing: border-box !important;
 }
 
 [data-epdf] :is(
@@ -309,7 +408,7 @@ const TOOLBAR_AUTO_HIDE_CSS = `
 }
 
 [data-epdf]:not([data-shnctl-toolbar-pinned="true"]) [data-epdf-i="main-toolbar"] {
-  --shnctl-main-toolbar-hidden-offset: 38px;
+  --shnctl-main-toolbar-hidden-offset: 34px;
   position: fixed !important;
   top: 0 !important;
   right: 0 !important;
@@ -338,8 +437,8 @@ const TOOLBAR_AUTO_HIDE_CSS = `
   [data-epdf-i="form-toolbar"],
   [data-epdf-i="redaction-toolbar"]
 ) {
-  --shnctl-main-toolbar-hidden-offset: 38px;
-  --shnctl-secondary-toolbar-top-offset: 48px;
+  --shnctl-main-toolbar-hidden-offset: 34px;
+  --shnctl-secondary-toolbar-top-offset: 44px;
   --shnctl-page-toolbar-hidden-offset: 44px;
   position: fixed !important;
   top: var(--shnctl-secondary-toolbar-top-offset) !important;
@@ -410,7 +509,7 @@ html[data-shnctl-toolbar-pinned="true"] .shnctl-search-bar {
 }
 
 .shnctl-search-bar {
-  --shnctl-secondary-toolbar-top-offset: 48px;
+  --shnctl-secondary-toolbar-top-offset: 44px;
   --shnctl-page-toolbar-hidden-offset: 44px;
   transform: translateY(calc(-1 * (var(--shnctl-secondary-toolbar-top-offset) + var(--shnctl-page-toolbar-hidden-offset)))) !important;
   opacity: 0 !important;
@@ -423,9 +522,13 @@ html[data-shnctl-toolbar-pinned="true"] .shnctl-search-bar {
 	  opacity: 1 !important;
 	}
 
-	[data-epdf][data-viewer-theme="dark"] :is(canvas, img) {
-	  filter: brightness(0.9);
-	}
+[data-epdf][data-viewer-theme="dark"] :is(canvas, img) {
+  filter: brightness(0.76) contrast(1.22) saturate(1);
+}
+
+[data-epdf][data-viewer-theme="nord"] :is(canvas, img) {
+  filter: brightness(0.9);
+}
 	`;
 
 type SpreadModeValue = 'none' | 'odd' | 'even';
@@ -630,10 +733,20 @@ function isToolbarVisibilityTarget(event: Event) {
     .some((item): item is Element => item instanceof Element && item.matches(TOOLBAR_VISIBILITY_SELECTOR));
 }
 
+function getToolbarItemButton(root: ParentNode, itemId: string) {
+  const item = root.querySelector(`[data-epdf-i="${itemId}"]`);
+  if (item instanceof HTMLButtonElement) {
+    return item;
+  }
+
+  const button = item?.querySelector('button');
+  return button instanceof HTMLButtonElement ? button : null;
+}
+
 function ensureSecondaryToolbarCloseListeners(root: ParentNode, registry: PluginRegistry, ui: UICapability) {
   for (const itemId of SECONDARY_TOOLBAR_CLOSE_TAB_IDS) {
-    const element = root.querySelector(`[data-epdf-i="${itemId}"] > button`);
-    if (!(element instanceof HTMLButtonElement) || secondaryToolbarCloseElements.has(element)) {
+    const element = getToolbarItemButton(root, itemId);
+    if (!element || secondaryToolbarCloseElements.has(element)) {
       continue;
     }
 
@@ -658,8 +771,8 @@ function applyToolbarDomOverrides(registry: PluginRegistry, ui: UICapability) {
     applyViewerThemeAttribute(root);
 
     for (const { itemId, label } of TOOLBAR_LABEL_OVERRIDES) {
-      const button = root.querySelector(`[data-epdf-i="${itemId}"] > button`);
-      if (!(button instanceof HTMLButtonElement)) {
+      const button = getToolbarItemButton(root, itemId);
+      if (!button) {
         continue;
       }
 
@@ -669,10 +782,16 @@ function applyToolbarDomOverrides(registry: PluginRegistry, ui: UICapability) {
 
       button.style.setProperty('font-family', TOOLBAR_UI_FONT_FAMILY, 'important');
       button.style.setProperty('font-size', '13px', 'important');
-      button.style.setProperty('font-weight', '700', 'important');
+      button.style.setProperty('font-weight', '650', 'important');
       button.style.setProperty('line-height', '18px', 'important');
-      button.style.setProperty('letter-spacing', '0.02em', 'important');
-      button.style.setProperty('text-transform', 'uppercase', 'important');
+      button.style.setProperty('letter-spacing', '0', 'important');
+      button.style.setProperty('text-transform', 'none', 'important');
+      button.style.setProperty('box-sizing', 'border-box', 'important');
+      button.style.setProperty('display', 'inline-flex', 'important');
+      button.style.setProperty('width', TOOLBAR_MODE_TAB_WIDTH, 'important');
+      button.style.setProperty('min-width', TOOLBAR_MODE_TAB_WIDTH, 'important');
+      button.style.setProperty('align-items', 'center', 'important');
+      button.style.setProperty('justify-content', 'center', 'important');
       button.style.setProperty('-webkit-font-smoothing', 'antialiased');
     }
   }
@@ -1102,7 +1221,7 @@ export function installThemeSwitcher(
   };
   const pageModeCommand: Command = {
     id: PAGE_MODE_COMMAND_ID,
-    label: 'PAGE',
+    label: 'Page',
     action: ({ documentId }) => {
       ui.forDocument(documentId).setActiveToolbar('top', 'secondary', PAGE_TOOLBAR_ID);
     },

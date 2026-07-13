@@ -140,21 +140,23 @@ function injectStyles() {
       max-height: min(320px, calc(100vh - 24px));
       overflow: auto;
       padding: 10px 12px;
-      border: 1px solid rgba(17, 24, 39, 0.14);
+      border: 1px solid color-mix(in srgb, var(--shnctl-border-default, #dbe3ef) 82%, transparent);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.98);
-      box-shadow: 0 12px 34px rgba(15, 23, 42, 0.18);
-      color: #111827;
-      font: 13px/1.45 "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: color-mix(in srgb, var(--shnctl-background-elevated, #ffffff) 96%, transparent);
+      box-shadow: 0 12px 34px color-mix(in srgb, var(--shnctl-background-app, #0f172a) 24%, transparent);
+      color: var(--shnctl-foreground-primary, #111827);
+      font: 13px/1.45 var(--shnctl-ui-font-family, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       pointer-events: auto;
       user-select: text;
       -webkit-user-select: text;
+      backdrop-filter: blur(18px) saturate(150%);
+      -webkit-backdrop-filter: blur(18px) saturate(150%);
     }
 
     .shnctl-translate-panel.is-error {
-      color: #991b1b;
+      color: color-mix(in srgb, #dc2626 82%, var(--shnctl-foreground-primary, #111827));
     }
   `;
   document.head.append(style);
