@@ -484,7 +484,7 @@ export function installPanelCommandRedirects(
 
     commands.registerCommand({
       id: SHNCTL_SEARCH_COMMAND_ID,
-      label: 'SEARCH',
+      label: 'Search',
       icon: SHNCTL_SEARCH_ICON_ID,
       shortcuts: ['Ctrl+F', 'Meta+F'],
       categories: ['tools'],
