@@ -63,6 +63,7 @@ const TOOLBAR_HIDE_DELAY_MS = 420;
 
 interface ShnctlToolbarProps {
   registry?: PluginRegistry;
+  activeDocumentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
   colorPaletteOpen: boolean;
@@ -137,28 +138,17 @@ function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: Toolbar
   );
 }
 
-function getDocumentScope<T>(registry: PluginRegistry | undefined, pluginId: string): { documentId: string; capability: T } | null {
-  const documentId = registry ? getActiveDocumentId(registry) : undefined;
+function getDocumentScope<T>(
+  registry: PluginRegistry | undefined,
+  pluginId: string,
+  documentId: string | null | undefined = registry ? getActiveDocumentId(registry) : undefined,
+): { documentId: string; capability: T } | null {
   const capability = registry?.getPlugin(pluginId)?.provides?.() as T | undefined;
 
   return documentId && capability ? { documentId, capability } : null;
 }
 
-function useRegistryTick(registry?: PluginRegistry) {
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    if (!registry) {
-      return;
-    }
-
-    const store = registry.getStore();
-    return store.subscribe(() => setTick((tick) => tick + 1));
-  }, [registry]);
-}
-
-function useToolbarState(registry: PluginRegistry | undefined) {
-  useRegistryTick(registry);
+function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?: string | null) {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [panMode, setPanMode] = useState(false);
@@ -167,7 +157,7 @@ function useToolbarState(registry: PluginRegistry | undefined) {
   const [scrollStrategy, setScrollStrategy] = useState<ScrollStrategyValue>(ScrollStrategy.Vertical);
 
   useEffect(() => {
-    const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom');
+    const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom', activeDocumentId);
     if (!scopeInfo) {
       return;
     }
@@ -180,10 +170,10 @@ function useToolbarState(registry: PluginRegistry | undefined) {
 
     syncZoom();
     return zoomScope.onStateChange(syncZoom);
-  }, [registry]);
+  }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const scopeInfo = getDocumentScope<PanCapability>(registry, 'pan');
+    const scopeInfo = getDocumentScope<PanCapability>(registry, 'pan', activeDocumentId);
     if (!scopeInfo) {
       return;
     }
@@ -191,10 +181,10 @@ function useToolbarState(registry: PluginRegistry | undefined) {
     const panScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     setPanMode(panScope.isPanMode());
     return panScope.onPanModeChange(setPanMode);
-  }, [registry]);
+  }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const scopeInfo = getDocumentScope<AnnotationCapability>(registry, 'annotation');
+    const scopeInfo = getDocumentScope<AnnotationCapability>(registry, 'annotation', activeDocumentId);
     if (!scopeInfo) {
       return;
     }
@@ -202,40 +192,36 @@ function useToolbarState(registry: PluginRegistry | undefined) {
     const annotationScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     setActiveTool(annotationScope.getActiveTool()?.id ?? null);
     return annotationScope.onActiveToolChange((tool) => setActiveTool(tool?.id ?? null));
-  }, [registry]);
+  }, [activeDocumentId, registry]);
 
   useEffect(() => {
     const spread = registry?.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
-    if (!spread) {
+    if (!spread || !activeDocumentId) {
       return;
     }
 
-    setSpreadMode(spread.getSpreadMode());
-    return spread.onSpreadChange((event) => setSpreadMode(event.spreadMode));
-  }, [registry]);
+    const spreadScope = spread.forDocument(activeDocumentId);
+    setSpreadMode(spreadScope.getSpreadMode());
+    return spreadScope.onSpreadChange(setSpreadMode);
+  }, [activeDocumentId, registry]);
 
   useEffect(() => {
     const scroll = registry?.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-    if (!registry || !scroll) {
+    if (!registry || !scroll || !activeDocumentId) {
       return;
     }
 
     try {
-      const documentId = getActiveDocumentId(registry);
-      if (!documentId) {
-        setScrollStrategy(ScrollStrategy.Vertical);
-        return;
-      }
       const state = registry.getStore().getState() as {
         plugins?: { scroll?: { documents?: Record<string, { strategy?: ScrollStrategyValue }> } };
       };
-      setScrollStrategy(state.plugins?.scroll?.documents?.[documentId]?.strategy ?? ScrollStrategy.Vertical);
+      setScrollStrategy(state.plugins?.scroll?.documents?.[activeDocumentId]?.strategy ?? ScrollStrategy.Vertical);
     } catch {
       setScrollStrategy(ScrollStrategy.Vertical);
     }
 
     return scroll.onStateChange((state) => setScrollStrategy(state.strategy ?? ScrollStrategy.Vertical));
-  }, [registry]);
+  }, [activeDocumentId, registry]);
 
   return { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy };
 }
@@ -257,6 +243,7 @@ function switchLayoutPreservingAnchor(registry: PluginRegistry | undefined, upda
 
 export function ShnctlToolbar({
   registry,
+  activeDocumentId,
   searchOpen,
   thumbnailsOpen,
   colorPaletteOpen,
@@ -277,11 +264,11 @@ export function ShnctlToolbar({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const tooltipTimerRef = useRef<number | undefined>(undefined);
-  const { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry);
+  const { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
   const availableModeItems = documentEditingEnabled ? MODE_ITEMS : MODE_ITEMS.filter(({ id }) => id !== 'draw');
   const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
   const activeModeItem = availableModeItems.find(({ id }) => id === mode) ?? availableModeItems[0];
-  const canUseRegistry = Boolean(registry && getActiveDocumentId(registry));
+  const canUseRegistry = Boolean(registry && activeDocumentId);
 
   const clearToolbarHideTimer = () => {
     if (toolbarHideTimerRef.current !== undefined) {
