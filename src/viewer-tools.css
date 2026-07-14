@@ -31,13 +31,18 @@
 
 .shnctl-search-toggle svg,
 .shnctl-search-step svg {
-  width: 14px;
-  height: 14px;
-}
-
-.shnctl-search-option svg {
   width: 16px;
   height: 16px;
+}
+
+.shnctl-search-submit svg {
+  width: 15px;
+  height: 15px;
+}
+
+.shnctl-search-option .shnctl-search-case-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .shnctl-search-form {
