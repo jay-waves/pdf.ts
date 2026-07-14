@@ -582,3 +582,7 @@
   border-radius: 3px;
   outline: none;
 }
+
+.shnctl-context-menu-tooltip {
+  z-index: 2147483647;
+}

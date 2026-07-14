@@ -12,7 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  WholeWord,
+  SpellCheck,
   X,
 } from 'lucide-react';
 import { getActiveDocumentId, type ScrollCapability } from './utils';
@@ -325,35 +325,13 @@ export function ShnctlSearch({
   return (
     <div className="shnctl-toolbar-secondary shnctl-search-bar" role="search" aria-label="PDF search">
       <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" data-shnctl-tooltip="Previous result">
-        <ChevronLeft size={14} strokeWidth={2} />
+        <ChevronLeft size={16} strokeWidth={2} />
       </button>
       <div className="shnctl-search-counter">
         {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
       </div>
       <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" data-shnctl-tooltip="Next result">
-        <ChevronRight size={14} strokeWidth={2} />
-      </button>
-      <button
-        type="button"
-        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
-        onClick={() => toggleFlag(MatchFlag.MatchCase)}
-        disabled={!canSearch}
-        aria-label="Match case"
-        aria-pressed={flags.includes(MatchFlag.MatchCase)}
-        data-shnctl-tooltip="Match case"
-      >
-        <CaseSensitive size={16} strokeWidth={2} />
-      </button>
-      <button
-        type="button"
-        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
-        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
-        disabled={!canSearch}
-        aria-label="Match whole word"
-        aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
-        data-shnctl-tooltip="Match whole word"
-      >
-        <WholeWord size={16} strokeWidth={2} />
+        <ChevronRight size={16} strokeWidth={2} />
       </button>
       <form
         className="shnctl-search-form"
@@ -387,9 +365,31 @@ export function ShnctlSearch({
           ) : null}
         </div>
         <button type="submit" className="shnctl-action shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search" data-shnctl-tooltip="Search">
-          <Search size={14} strokeWidth={2} />
+          <Search size={15} strokeWidth={2} />
         </button>
       </form>
+      <button
+        type="button"
+        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
+        onClick={() => toggleFlag(MatchFlag.MatchCase)}
+        disabled={!canSearch}
+        aria-label="Match case"
+        aria-pressed={flags.includes(MatchFlag.MatchCase)}
+        data-shnctl-tooltip="Match case"
+      >
+        <CaseSensitive className="shnctl-search-case-icon" strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
+        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
+        disabled={!canSearch}
+        aria-label="Match whole word"
+        aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
+        data-shnctl-tooltip="Match whole word"
+      >
+        <SpellCheck size={16} strokeWidth={2} />
+      </button>
     </div>
   );
 }
