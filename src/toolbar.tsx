@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import type { PDFViewerRef } from '@embedpdf/react-pdf-viewer';
+import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
+import type { ExportCapability } from '@embedpdf/plugin-export';
+import type { HistoryCapability } from '@embedpdf/plugin-history';
+import type { PanCapability } from '@embedpdf/plugin-pan';
+import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { ScrollStrategy } from '@embedpdf/plugin-scroll';
+import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
+import { ZoomMode, type ZoomCapability, type ZoomLevel } from '@embedpdf/plugin-zoom';
 import {
   ArrowDownUp,
   ArrowLeftRight,
@@ -9,20 +16,24 @@ import {
   GalleryHorizontal,
   Hand,
   Highlighter,
+  LineSquiggle,
+  Eye,
   Menu,
   MessageSquareMore,
   Minus,
+  MoveUpRight,
   Palette,
   PaintBucket,
-  PanelRight,
+  PencilRuler,
   Pin,
   Plus,
   Printer,
   Redo2,
   RotateCw,
+  Search,
   ShieldCheck,
-  Signature,
   Square,
+  StickyNote,
   Strikethrough,
   Type,
   Underline,
@@ -31,7 +42,7 @@ import {
 import {
   getActiveDocumentId,
   getCurrentScrollAnchor,
-  restoreScrollAnchorAfterLayout,
+  restoreScrollAnchor,
   type ScrollCapability,
 } from './utils';
 import {
@@ -41,98 +52,28 @@ import {
   VIEWER_THEMES,
 } from './theme';
 import { ShnctlSearch } from './search';
+import { ShnctlIconButton } from './tool-button';
+import { documentEditingEnabled } from '#platform';
 
 type ToolbarMode = 'view' | 'page' | 'search' | 'draw';
-type SpreadModeValue = 'none' | 'odd' | 'even';
-type ScrollStrategyValue = 'vertical' | 'horizontal';
-type ZoomLevel = 'automatic' | 'fit-page' | 'fit-width' | number;
+type SpreadModeValue = SpreadMode;
+type ScrollStrategyValue = ScrollStrategy;
 
 const TOOLBAR_HIDE_DELAY_MS = 420;
 
-interface ZoomScope {
-  requestZoom(level: ZoomLevel): void;
-  zoomIn(): void;
-  zoomOut(): void;
-  getState(): { currentZoomLevel: number; zoomLevel: ZoomLevel };
-  onStateChange(listener: (state: { currentZoomLevel: number; zoomLevel: ZoomLevel }) => void): () => void;
-}
-
-interface ZoomCapability {
-  forDocument(documentId: string): ZoomScope;
-}
-
-interface SpreadCapability {
-  setSpreadMode(mode: SpreadModeValue): void;
-  getSpreadMode(): SpreadModeValue;
-  onSpreadChange(listener: { documentId: string; spreadMode: SpreadModeValue } | ((event: { documentId: string; spreadMode: SpreadModeValue }) => void)): () => void;
-}
-
-interface RotateCapability {
-  rotateForward(): void;
-}
-
-interface PanCapability {
-  forDocument(documentId: string): {
-    enablePan(): void;
-    disablePan(): void;
-    isPanMode(): boolean;
-    onPanModeChange(listener: (isPanMode: boolean) => void): () => void;
-  };
-}
-
-interface AnnotationCapability {
-  forDocument(documentId: string): {
-    getActiveTool(): { id: string } | null;
-    setActiveTool(toolId: string | null): void;
-    onActiveToolChange(listener: (tool: { id: string } | null) => void): () => void;
-    undo?(): void;
-    redo?(): void;
-  };
-  undo?(documentId?: string): void;
-  redo?(documentId?: string): void;
-}
-
-interface ExportCapability {
-  saveAsCopy(): { toPromise(): Promise<ArrayBuffer> };
-  download?(): void;
-  forDocument?(documentId: string): {
-    saveAsCopy(): { toPromise(): Promise<ArrayBuffer> };
-    download?(): void;
-  };
-}
-
-interface CommandsCapability {
-  execute(commandId: string, documentId?: string, source?: 'keyboard' | 'ui' | 'api'): void;
-  resolve?(commandId: string, documentId?: string): { disabled?: boolean; visible?: boolean };
-}
-
-interface UiSidebarCapability {
-  forDocument(documentId: string): {
-    openModal?(modalId: string, props?: Record<string, unknown>): void;
-    toggleSidebar?(placement: 'left' | 'right', slot: string, sidebarId: string): void;
-    openSidebarSlot?(placement: 'left' | 'right', slot: string, sidebarId?: string): void;
-    closeSidebarSlot?(placement: 'left' | 'right', slot: string): void;
-    isSidebarOpen?(placement: 'left' | 'right', slot: string): boolean;
-    setActiveSidebar?(placement: 'left' | 'right', slot: string, sidebarId: string): void;
-  };
-}
-
-interface UiModalCapability {
-  openModal(modalId: string, props?: Record<string, unknown>, documentId?: string): void;
-}
-
 interface ShnctlToolbarProps {
   registry?: PluginRegistry;
-  container: PDFViewerRef['container'];
   searchOpen: boolean;
   thumbnailsOpen: boolean;
-  signaturesOpen: boolean;
   colorPaletteOpen: boolean;
+  commentsOpen: boolean;
   themeIndexRef: React.MutableRefObject<number>;
   onSearchOpenChange(open: boolean): void;
   onToggleThumbnails(): void;
-  onOpenSignatures(): void;
   onToggleColorPalette(): void;
+  onToggleComments(): void;
+  onOpenPrint(): void;
+  onOpenProtect(): void;
 }
 
 interface ToolbarButtonProps {
@@ -149,25 +90,31 @@ interface ToolbarTooltip {
   top: number;
 }
 
-const MODE_LABELS: Record<ToolbarMode, string> = {
-  view: 'View',
-  page: 'Page',
-  search: 'Search',
-  draw: 'Draw',
-};
+const MODE_ITEMS: Array<{
+  id: ToolbarMode;
+  label: string;
+  icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
+}> = [
+  { id: 'view', label: 'VIEW', icon: Eye },
+  { id: 'page', label: 'PAGE', icon: StickyNote },
+  { id: 'search', label: 'SEARCH', icon: Search },
+  ...(documentEditingEnabled ? [{ id: 'draw' as const, label: 'DRAW', icon: PencilRuler }] : []),
+];
 
-const DRAW_TOOLS = [
+const DRAW_TOOLS = documentEditingEnabled ? [
   { id: 'highlight', label: 'Highlight', icon: Highlighter },
   { id: 'underline', label: 'Underline', icon: Underline },
   { id: 'strikeout', label: 'Strikeout', icon: Strikethrough },
   { id: 'square', label: 'Rectangle', icon: Square },
+  { id: 'lineArrow', label: 'Arrow', icon: MoveUpRight },
+  { id: 'ink', label: 'Ink', icon: LineSquiggle },
   { id: 'textComment', label: 'Comment', icon: MessageSquareMore },
   { id: 'freeText', label: 'Text', icon: Type },
-];
+] : [];
 
 const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
-  { label: 'Fit page', value: 'fit-page' },
-  { label: 'Fit width', value: 'fit-width' },
+  { label: 'Fit page', value: ZoomMode.FitPage },
+  { label: 'Fit width', value: ZoomMode.FitWidth },
   { label: '50%', value: 0.5 },
   { label: '75%', value: 0.75 },
   { label: '100%', value: 1 },
@@ -178,17 +125,15 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
 
 function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: ToolbarButtonProps) {
   return (
-    <button
-      type="button"
-      className={`shnctl-toolbar-button${active ? ' is-active' : ''}`}
-      onClick={onClick}
+    <ShnctlIconButton
+      className="shnctl-toolbar-button"
+      label={label}
+      icon={Icon}
+      active={active}
       disabled={disabled}
-      aria-label={label}
-      aria-pressed={active}
-      data-shnctl-tooltip={label}
-    >
-      <Icon size={14} strokeWidth={2} />
-    </button>
+      tooltip="data"
+      onClick={onClick}
+    />
   );
 }
 
@@ -212,14 +157,14 @@ function useRegistryTick(registry?: PluginRegistry) {
   }, [registry]);
 }
 
-function useToolbarState(registry: PluginRegistry | undefined, searchOpen: boolean) {
+function useToolbarState(registry: PluginRegistry | undefined) {
   useRegistryTick(registry);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [panMode, setPanMode] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [spreadMode, setSpreadMode] = useState<SpreadModeValue>('none');
-  const [scrollStrategy, setScrollStrategy] = useState<ScrollStrategyValue>('vertical');
+  const [spreadMode, setSpreadMode] = useState<SpreadModeValue>(SpreadMode.None);
+  const [scrollStrategy, setScrollStrategy] = useState<ScrollStrategyValue>(ScrollStrategy.Vertical);
 
   useEffect(() => {
     const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom');
@@ -278,18 +223,18 @@ function useToolbarState(registry: PluginRegistry | undefined, searchOpen: boole
     try {
       const documentId = getActiveDocumentId(registry);
       if (!documentId) {
-        setScrollStrategy('vertical');
+        setScrollStrategy(ScrollStrategy.Vertical);
         return;
       }
       const state = registry.getStore().getState() as {
         plugins?: { scroll?: { documents?: Record<string, { strategy?: ScrollStrategyValue }> } };
       };
-      setScrollStrategy(state.plugins?.scroll?.documents?.[documentId]?.strategy ?? 'vertical');
+      setScrollStrategy(state.plugins?.scroll?.documents?.[documentId]?.strategy ?? ScrollStrategy.Vertical);
     } catch {
-      setScrollStrategy('vertical');
+      setScrollStrategy(ScrollStrategy.Vertical);
     }
 
-    return scroll.onStateChange((state) => setScrollStrategy(state.strategy ?? 'vertical'));
+    return scroll.onStateChange((state) => setScrollStrategy(state.strategy ?? ScrollStrategy.Vertical));
   }, [registry]);
 
   return { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy };
@@ -307,21 +252,22 @@ function switchLayoutPreservingAnchor(registry: PluginRegistry | undefined, upda
 
   const anchor = getCurrentScrollAnchor(registry);
   updateLayout(documentId);
-  restoreScrollAnchorAfterLayout(registry, anchor);
+  restoreScrollAnchor(registry, anchor);
 }
 
 export function ShnctlToolbar({
   registry,
-  container,
   searchOpen,
   thumbnailsOpen,
-  signaturesOpen,
   colorPaletteOpen,
+  commentsOpen,
   themeIndexRef,
   onSearchOpenChange,
   onToggleThumbnails,
-  onOpenSignatures,
   onToggleColorPalette,
+  onToggleComments,
+  onOpenPrint,
+  onOpenProtect,
 }: ShnctlToolbarProps) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [documentMenuOpen, setDocumentMenuOpen] = useState(false);
@@ -331,8 +277,10 @@ export function ShnctlToolbar({
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const tooltipTimerRef = useRef<number | undefined>(undefined);
-  const { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, searchOpen);
+  const { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry);
+  const availableModeItems = documentEditingEnabled ? MODE_ITEMS : MODE_ITEMS.filter(({ id }) => id !== 'draw');
   const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
+  const activeModeItem = availableModeItems.find(({ id }) => id === mode) ?? availableModeItems[0];
   const canUseRegistry = Boolean(registry && getActiveDocumentId(registry));
 
   const clearToolbarHideTimer = () => {
@@ -397,7 +345,7 @@ export function ShnctlToolbar({
   };
 
   useEffect(() => {
-    if (activeTool && !searchOpen) {
+    if (documentEditingEnabled && activeTool && !searchOpen) {
       setSelectedMode('draw');
     }
   }, [activeTool, searchOpen]);
@@ -408,8 +356,8 @@ export function ShnctlToolbar({
     setDocumentMenuOpen(false);
     setSelectedMode(nextMode);
 
-    const annotation = getDocumentScope<AnnotationCapability>(registry, 'annotation');
-    if (nextMode !== 'draw') {
+    const annotation = documentEditingEnabled ? getDocumentScope<AnnotationCapability>(registry, 'annotation') : null;
+    if (documentEditingEnabled && nextMode !== 'draw') {
       annotation?.capability.forDocument(annotation.documentId).setActiveTool(null);
     }
 
@@ -441,7 +389,7 @@ export function ShnctlToolbar({
     }
 
     themeIndexRef.current = (themeIndexRef.current + 1) % VIEWER_THEMES.length;
-    applyViewerThemeByIndex(container, themeIndexRef.current);
+    applyViewerThemeByIndex(themeIndexRef.current);
   };
 
   const togglePinned = () => {
@@ -504,103 +452,31 @@ export function ShnctlToolbar({
     rotate?.rotateForward();
   };
 
-  const executeDocumentCommand = (commandId: 'document:print' | 'document:protect' | 'document:export') => {
-    setDocumentMenuOpen(false);
-    const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    const commands = registry?.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
-
-    if (commands && documentId) {
-      try {
-        const command = commands.resolve?.(commandId, documentId);
-        if (command?.visible !== false && !command?.disabled) {
-          commands.execute(commandId, documentId, 'ui');
-          return true;
-        }
-      } catch (error) {
-        console.warn(`[shnctl] failed to execute ${commandId}`, error);
-      }
-    }
-
-    return false;
-  };
-
-  const openNativeModal = (modalId: 'print-modal' | 'protect-modal' | 'view-permissions-modal') => {
-    const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    const ui = registry?.getPlugin('ui')?.provides?.() as UiModalCapability | undefined;
-    if (!ui || !documentId) {
-      return false;
-    }
-
-    ui.openModal(modalId, undefined, documentId);
-    return true;
-  };
-
   const printDocument = () => {
-    if (!executeDocumentCommand('document:print')) {
-      openNativeModal('print-modal');
-    }
+    setDocumentMenuOpen(false);
+    closeSearch();
+    onOpenPrint();
   };
 
   const openSecurityDialog = () => {
-    if (!executeDocumentCommand('document:protect')) {
-      openNativeModal('protect-modal') || openNativeModal('view-permissions-modal');
-    }
+    setDocumentMenuOpen(false);
+    closeSearch();
+    onOpenProtect();
   };
 
-  const exportDocument = async () => {
-    if (executeDocumentCommand('document:export')) {
-      return;
-    }
-
+  const exportDocument = () => {
+    setDocumentMenuOpen(false);
     const exportCapability = registry?.getPlugin('export')?.provides?.() as ExportCapability | undefined;
     if (!exportCapability) {
       return;
     }
 
     const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    const exportScope = documentId ? exportCapability.forDocument?.(documentId) : undefined;
-    if (exportScope?.download || exportCapability.download) {
-      (exportScope?.download ?? exportCapability.download)?.();
-      return;
+    if (documentId) {
+      exportCapability.forDocument(documentId).download();
+    } else {
+      exportCapability.download();
     }
-
-    try {
-      const arrayBuffer = await (exportScope ?? exportCapability).saveAsCopy().toPromise();
-      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${document.title?.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'document'}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.warn('[shnctl] failed to export PDF', error);
-    }
-  };
-
-  const toggleCommentSidebar = () => {
-    const scopeInfo = getDocumentScope<UiSidebarCapability>(registry, 'ui');
-    if (!scopeInfo) {
-      return;
-    }
-
-    const sidebar = scopeInfo.capability.forDocument(scopeInfo.documentId);
-    if (sidebar.isSidebarOpen?.('right', 'main')) {
-      sidebar.closeSidebarSlot?.('right', 'main');
-      return;
-    }
-
-    sidebar.openSidebarSlot?.('right', 'main', 'comment-panel');
-    sidebar.setActiveSidebar?.('right', 'main', 'comment-panel');
-  };
-
-  const openSignaturePanel = () => {
-    setDocumentMenuOpen(false);
-    setModeMenuOpen(false);
-    closeSearch();
-    onOpenSignatures();
   };
 
   const toggleThumbnailsPanel = () => {
@@ -611,20 +487,49 @@ export function ShnctlToolbar({
   };
 
   const runAnnotationHistory = (direction: 'undo' | 'redo') => {
-    const scopeInfo = getDocumentScope<AnnotationCapability>(registry, 'annotation');
+    const scopeInfo = getDocumentScope<HistoryCapability>(registry, 'history');
     if (!scopeInfo) {
       return;
     }
 
-    const annotationScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
+    const historyScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     if (direction === 'undo') {
-      annotationScope.undo?.();
-      scopeInfo.capability.undo?.(scopeInfo.documentId);
+      historyScope.undo();
     } else {
-      annotationScope.redo?.();
-      scopeInfo.capability.redo?.(scopeInfo.documentId);
+      historyScope.redo();
     }
   };
+
+  useEffect(() => {
+    if (!documentEditingEnabled) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || event.altKey) {
+        return;
+      }
+
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tagName = target.tagName.toLowerCase();
+        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable) {
+          return;
+        }
+      }
+
+      const key = event.key.toLowerCase();
+      const direction = key === 'y' || (key === 'z' && event.shiftKey) ? 'redo' : key === 'z' ? 'undo' : null;
+      if (!direction) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      runAnnotationHistory(direction);
+    };
+
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [registry]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -670,7 +575,7 @@ export function ShnctlToolbar({
           <div className="shnctl-toolbar-group">
             <button
               type="button"
-              className="shnctl-toolbar-button shnctl-document-menu-button"
+              className="shnctl-action shnctl-toolbar-button shnctl-document-menu-button"
               onClick={() => {
                 setModeMenuOpen(false);
                 setDocumentMenuOpen((open) => !open);
@@ -678,10 +583,12 @@ export function ShnctlToolbar({
               aria-label="Document menu"
               aria-haspopup="menu"
               aria-expanded={documentMenuOpen}
-              data-shnctl-tooltip="Document menu"
             >
               <Menu size={14} strokeWidth={2} />
             </button>
+            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleTheme} disabled={!registry} />
+            <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
+            <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
             {documentMenuOpen ? (
               <div className="shnctl-toolbar-menu shnctl-document-menu" role="menu" onMouseLeave={() => setDocumentMenuOpen(false)}>
                 <button type="button" role="menuitem" className={thumbnailsOpen ? 'is-active' : ''} onClick={toggleThumbnailsPanel} disabled={!canUseRegistry}>
@@ -692,18 +599,28 @@ export function ShnctlToolbar({
                   <Printer size={14} strokeWidth={2} />
                   <span>Print</span>
                 </button>
-                <button type="button" role="menuitem" onClick={openSecurityDialog} disabled={!canUseRegistry}>
+                {documentEditingEnabled ? <button type="button" role="menuitem" onClick={openSecurityDialog} disabled={!canUseRegistry}>
                   <ShieldCheck size={14} strokeWidth={2} />
                   <span>Security</span>
-                </button>
-                <button type="button" role="menuitem" className={signaturesOpen ? 'is-active' : ''} onClick={openSignaturePanel} disabled={!canUseRegistry}>
-                  <Signature size={14} strokeWidth={2} />
-                  <span>Signatures</span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => void exportDocument()} disabled={!canUseRegistry}>
+                </button> : null}
+                {documentEditingEnabled ? <button
+                  type="button"
+                  role="menuitem"
+                  className={commentsOpen ? 'is-active' : ''}
+                  onClick={() => {
+                    setDocumentMenuOpen(false);
+                    closeSearch();
+                    onToggleComments();
+                  }}
+                  disabled={!canUseRegistry}
+                >
+                  <MessageSquareMore size={14} strokeWidth={2} />
+                  <span>Comments</span>
+                </button> : null}
+                {documentEditingEnabled ? <button type="button" role="menuitem" onClick={() => void exportDocument()} disabled={!canUseRegistry}>
                   <Download size={14} strokeWidth={2} />
                   <span>Export</span>
-                </button>
+                </button> : null}
               </div>
             ) : null}
           </div>
@@ -718,39 +635,33 @@ export function ShnctlToolbar({
               aria-haspopup="menu"
               aria-expanded={modeMenuOpen}
             >
-              <span>{MODE_LABELS[mode]}</span>
+              <activeModeItem.icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
+              <span>{activeModeItem.label}</span>
             </button>
             {modeMenuOpen ? (
               <div className="shnctl-toolbar-menu" role="menu" onMouseLeave={() => setModeMenuOpen(false)}>
-                {(['view', 'page', 'search', 'draw'] as ToolbarMode[]).map((item) => (
-                  <button key={item} type="button" role="menuitem" className={mode === item ? 'is-active' : ''} onClick={() => setMode(item)}>
-                    {MODE_LABELS[item]}
+                {availableModeItems.map(({ id, label, icon: Icon }) => (
+                  <button key={id} type="button" role="menuitem" className={mode === id ? 'is-active' : ''} onClick={() => setMode(id)}>
+                    <Icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
+                    <span>{label}</span>
                   </button>
                 ))}
               </div>
             ) : null}
-            {(['view', 'page', 'search', 'draw'] as ToolbarMode[]).map((item) => (
+            {availableModeItems.map(({ id, label, icon: Icon }) => (
               <button
-                key={item}
+                key={id}
                 type="button"
-                className={`shnctl-toolbar-tab${mode === item ? ' is-active' : ''}`}
-                onClick={() => setMode(item)}
-                data-shnctl-tooltip={MODE_LABELS[item]}
+                className={`shnctl-toolbar-tab${mode === id ? ' is-active' : ''}`}
+                onClick={() => setMode(id)}
               >
-                {MODE_LABELS[item]}
+                <Icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
+                <span>{label}</span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="shnctl-toolbar-zone shnctl-toolbar-zone-right">
-          <div className="shnctl-toolbar-group">
-            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleTheme} disabled={!registry} />
-            <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
-            <ToolbarButton label="Comment sidebar" icon={PanelRight} onClick={toggleCommentSidebar} disabled={!canUseRegistry} />
-            <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
-          </div>
-        </div>
       </div>
 
       {mode === 'page' ? (
@@ -775,9 +686,9 @@ export function ShnctlToolbar({
           </div>
           <div className="shnctl-toolbar-divider" />
           <div className="shnctl-toolbar-group">
-            <ToolbarButton label={spreadMode === 'odd' ? 'Single page' : 'Two page'} icon={GalleryHorizontal} active={spreadMode === 'odd'} onClick={() => setSpread(spreadMode === 'odd' ? 'none' : 'odd')} disabled={!canUseRegistry} />
-            <ToolbarButton label="Vertical scroll" icon={ArrowDownUp} active={scrollStrategy === 'vertical'} onClick={() => setScroll('vertical')} disabled={!canUseRegistry} />
-            <ToolbarButton label="Horizontal scroll" icon={ArrowLeftRight} active={scrollStrategy === 'horizontal'} onClick={() => setScroll('horizontal')} disabled={!canUseRegistry} />
+            <ToolbarButton label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'} icon={GalleryHorizontal} active={spreadMode === SpreadMode.Odd} onClick={() => setSpread(spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd)} disabled={!canUseRegistry} />
+            <ToolbarButton label="Vertical scroll" icon={ArrowDownUp} active={scrollStrategy === ScrollStrategy.Vertical} onClick={() => setScroll(ScrollStrategy.Vertical)} disabled={!canUseRegistry} />
+            <ToolbarButton label="Horizontal scroll" icon={ArrowLeftRight} active={scrollStrategy === ScrollStrategy.Horizontal} onClick={() => setScroll(ScrollStrategy.Horizontal)} disabled={!canUseRegistry} />
             <ToolbarButton label="Rotate" icon={RotateCw} onClick={rotateForward} disabled={!canUseRegistry} />
           </div>
         </div>
@@ -785,7 +696,7 @@ export function ShnctlToolbar({
 
       {mode === 'search' ? <ShnctlSearch registry={registry} open /> : null}
 
-      {mode === 'draw' ? (
+      {documentEditingEnabled && mode === 'draw' ? (
         <div className="shnctl-toolbar-secondary" role="toolbar" aria-label="Draw toolbar">
           <div className="shnctl-toolbar-group shnctl-draw-tools">
             {DRAW_TOOLS.map(({ id, label, icon }) => (

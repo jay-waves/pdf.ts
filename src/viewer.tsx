@@ -1,140 +1,79 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { PluginRegistry } from '@embedpdf/core';
+import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
+import { EmbedPDF } from '@embedpdf/core/react';
+import { usePdfiumEngine } from '@embedpdf/engines/react';
+import { Rotation } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
-import {
-  type AnnotationCapability,
-  type PanCapability,
-  LockModeType,
-  PDFViewer,
-  PDFViewerConfig,
-  type PDFViewerRef,
-} from '@embedpdf/react-pdf-viewer';
+import { AnnotationLayer, AnnotationPluginPackage, LockModeType, type AnnotationCapability } from '@embedpdf/plugin-annotation/react';
+import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
+import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
+import { ExportPluginPackage } from '@embedpdf/plugin-export/react';
+import { FormPluginPackage } from '@embedpdf/plugin-form/react';
+import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
+import { GlobalPointerProvider, InteractionManagerPluginPackage, PagePointerProvider } from '@embedpdf/plugin-interaction-manager/react';
+import { PanPluginPackage, type PanCapability } from '@embedpdf/plugin-pan/react';
+import { PrintPluginPackage } from '@embedpdf/plugin-print/react';
+import { RenderLayer, RenderPluginPackage } from '@embedpdf/plugin-render/react';
+import { Rotate, RotatePluginPackage } from '@embedpdf/plugin-rotate/react';
+import { Scroller, ScrollPluginPackage, ScrollStrategy } from '@embedpdf/plugin-scroll/react';
+import { SearchLayer, SearchPluginPackage } from '@embedpdf/plugin-search/react';
+import { SelectionLayer, SelectionPluginPackage } from '@embedpdf/plugin-selection/react';
+import { SpreadMode, SpreadPluginPackage } from '@embedpdf/plugin-spread/react';
+import { ThumbnailPluginPackage } from '@embedpdf/plugin-thumbnail/react';
+import { TilingLayer, TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
+import { Viewport, ViewportPluginPackage } from '@embedpdf/plugin-viewport/react';
+import { ZoomMode, ZoomPluginPackage, type ZoomCapability } from '@embedpdf/plugin-zoom/react';
 import './viewer.css';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
-  getCurrentScrollAnchor,
   getInitialFileUrl,
-  restoreScrollAnchorAfterLayout,
   runWhenIdle,
-  type ScrollAnchor,
   type ScrollCapability,
 } from './utils';
 import {
   BottomNavigationControl,
   ShnctlOutline,
   getCurrentBookmarkTitle,
-  installBuiltInPageControlsHider,
   installCurrentTitleTracker,
   installOutlinePrefetch,
   installPageKeyboardNavigation,
   type OutlineCache,
 } from './outline';
+import { installSearchKeyboardShortcut } from './search';
 import {
-  installPanelCommandRedirects,
-  installSearchKeyboardShortcut,
-} from './search';
-import {
+  applyViewerThemeByIndex,
   getStoredThemeIndex,
-  VIEWER_THEMES,
-  installThemeSwitcher,
   setViewerScrollStrategyAttribute,
 } from './theme';
 import { ShnctlToolbar } from './toolbar';
 import { ShnctlThumbnails } from './thumbnails';
-import { ShnctlSignatures } from './signatures';
 import { ShnctlColorPalette } from './color-palette';
-import { installReadingHistory, savePdfToOriginalFile } from './file-handle';
+import { ShnctlComments } from './comments';
+import { ShnctlPrintDialog, ShnctlProtectDialog } from './document-dialogs';
+import { ShnctlContextMenu } from './context-menu';
+import { ShnctlZoomGesture } from './zoom-gesture';
+import { savePdfToOriginalFile } from './file-handle';
 import { installSelectionTranslate } from './selection-translate';
-
-interface ZoomScope {
-  getState(): { currentZoomLevel: number };
-  requestZoom(level: 'fit-page'): void;
-  requestZoomBy(delta: number, center?: { vx: number; vy: number }): void;
-}
-
-interface ZoomCapability {
-  forDocument(documentId: string): ZoomScope;
-}
-
-interface ViewportCapability {
-  forDocument(documentId: string): {
-    getBoundingRect(): {
-      origin: { x: number; y: number };
-    };
-  };
-}
-
-interface CommandsRegistryCapability {
-  registerCommand(command: {
-    id: string;
-    label?: string;
-    icon?: string;
-    categories?: string[];
-    action(context: { documentId: string; registry: PluginRegistry }): void;
-  }): void;
-  unregisterCommand(commandId: string): void;
-}
-
-interface UiSchemaCapability {
-  getSchema(): {
-    sidebars?: Record<string, unknown>;
-  };
-  forDocument(documentId: string): {
-    closeSidebarSlot?(placement: 'left' | 'right', slot: string): void;
-  };
-}
+import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
+import { documentEditingEnabled, platform } from '#platform';
 
 const MAX_RENDER_DPR = 1.5;
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
-const COMMENT_PANEL_WIDTH = '24vw';
-const TEXT_MARKUP_TOOL_IDS = ['highlight', 'underline', 'strikeout', 'squiggly'];
-const NATIVE_TOOLBAR_IDS = [
-  'main-toolbar',
-  'annotation-toolbar',
-  'shapes-toolbar',
-  'insert-toolbar',
-  'form-toolbar',
-  'redaction-toolbar',
-  'shnctl-page-toolbar',
-] as const;
-const DISABLED_INSERT_COMMAND_IDS = [
-  'insert:add-attachment',
-  'insert:add-image',
-  'insert:add-rubber-stamp',
-] as const;
-const DISABLED_NATIVE_SIDEBAR_IDS = [
-  'annotation-panel',
-  'rubber-stamp-panel',
-] as const;
-const ANNOTATION_STYLE_COMMAND_IDS = [
-  'annotation:toggle-annotation-style',
-  'panel:toggle-annotation-style',
-] as const;
-const PAINT_BUCKET_ICON_ID = 'paint-bucket';
-const PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, location.href).href;
+const NAVIGATION_AUTO_HIDE_DELAY_MS = 1200;
+const PDFIUM_WASM_URL = platform.getPdfiumWasmUrl(new URL(pdfiumWasmUrl, import.meta.url).href);
+// usePdfiumEngine tracks fontFallback by reference. Keep it module-stable so
+// ordinary React re-renders cannot tear down and recreate the WASM engine.
+const PDFIUM_FONT_FALLBACK = { fonts: {} };
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
   event.preventDefault();
   event.returnValue = '';
 }
-const DISABLED_VIEWER_CATEGORIES = [
-  'attachment',
-  'document-capture',
-  'form',
-  'fullscreen',
-  'insert-attachment',
-  'insert-image',
-  'insert-link',
-  'insert-rubber-stamp',
-  'panel-sidebar',
-  'redaction',
-  'stamp',
-];
 
 function installWhenIdle(install: () => () => void) {
   let cleanup = EMPTY_CLEANUP;
@@ -171,191 +110,6 @@ function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (
       onDirtyChange(true);
     }
   });
-}
-
-function installTextMarkupToolReset(registry: PluginRegistry) {
-  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
-
-  if (!annotation) {
-    return EMPTY_CLEANUP;
-  }
-
-  return annotation.onAnnotationEvent((event) => {
-    if (event.type !== 'create') {
-      return;
-    }
-
-    const scope = annotation.forDocument(event.documentId);
-    if (TEXT_MARKUP_TOOL_IDS.includes(scope.getActiveTool()?.id ?? '')) {
-      scope.setActiveTool(null);
-    }
-  });
-}
-
-function installCommentPanelWidth(registry: PluginRegistry) {
-  const ui = registry.getPlugin('ui')?.provides?.() as
-    | { getSchema(): { sidebars?: Record<string, { width?: string }> } }
-    | undefined;
-  const commentPanel = ui?.getSchema().sidebars?.['comment-panel'];
-
-  if (commentPanel) {
-    commentPanel.width = COMMENT_PANEL_WIDTH;
-  }
-
-  return EMPTY_CLEANUP;
-}
-
-function installNativeToolbarDisabler(registry: PluginRegistry) {
-  const ui = registry.getPlugin('ui')?.provides?.() as
-    | {
-        getSchema(): {
-          toolbars?: Record<string, unknown>;
-          sidebars?: Record<string, unknown>;
-        };
-        forDocument(documentId: string): {
-          closeToolbarSlot(placement: 'top', slot: 'main' | 'secondary'): void;
-          isToolbarOpen(placement: 'top', slot: 'main' | 'secondary'): boolean;
-        };
-        onToolbarChanged(listener: (event: { documentId: string; placement: string; slot: string }) => void): () => void;
-      }
-    | undefined;
-
-  if (!ui) {
-    return EMPTY_CLEANUP;
-  }
-
-  const toolbars = ui.getSchema().toolbars;
-  if (toolbars) {
-    for (const toolbarId of NATIVE_TOOLBAR_IDS) {
-      delete toolbars[toolbarId];
-    }
-  }
-  const sidebars = ui.getSchema().sidebars;
-  if (sidebars) {
-    for (const sidebarId of DISABLED_NATIVE_SIDEBAR_IDS) {
-      delete sidebars[sidebarId];
-    }
-  }
-
-  const closeNativeToolbar = (documentId = getActiveDocumentId(registry)) => {
-    if (!documentId) {
-      return;
-    }
-
-    const scope = ui.forDocument(documentId);
-    if (scope.isToolbarOpen('top', 'main')) {
-      scope.closeToolbarSlot('top', 'main');
-    }
-    if (scope.isToolbarOpen('top', 'secondary')) {
-      scope.closeToolbarSlot('top', 'secondary');
-    }
-  };
-
-  requestAnimationFrame(() => closeNativeToolbar());
-  const unsubscribe = ui.onToolbarChanged((event) => {
-    if (event.placement !== 'top' || (event.slot !== 'main' && event.slot !== 'secondary')) {
-      return;
-    }
-
-    requestAnimationFrame(() => closeNativeToolbar(event.documentId));
-  });
-
-  return unsubscribe;
-}
-
-function registerPaintBucketIcon(container: PDFViewerRef['container']) {
-  container?.registerIcons({
-    [PAINT_BUCKET_ICON_ID]: {
-      viewBox: '0 0 24 24',
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      strokeWidth: 2,
-      paths: [
-        { d: 'M11 7 6 2', stroke: 'primary', fill: 'none' },
-        { d: 'M18.992 12H2.041', stroke: 'primary', fill: 'none' },
-        {
-          d: 'M21.145 18.38A3.34 3.34 0 0 1 20 16.5a3.3 3.3 0 0 1-1.145 1.88c-.575.46-.855 1.02-.855 1.595A2 2 0 0 0 20 22a2 2 0 0 0 2-2.025c0-.58-.285-1.13-.855-1.595',
-          stroke: 'primary',
-          fill: 'none',
-        },
-        {
-          d: 'm8.5 4.5 2.148-2.148a1.205 1.205 0 0 1 1.704 0l7.296 7.296a1.205 1.205 0 0 1 0 1.704l-7.592 7.592a3.615 3.615 0 0 1-5.112 0l-3.888-3.888a3.615 3.615 0 0 1 0-5.112L5.67 7.33',
-          stroke: 'primary',
-          fill: 'none',
-        },
-      ],
-    },
-  });
-}
-
-function installAnnotationStyleCommandRedirect(
-  registry: PluginRegistry,
-  container: PDFViewerRef['container'],
-  openColorPalette: () => void,
-) {
-  const commands = registry.getPlugin('commands')?.provides?.() as CommandsRegistryCapability | undefined;
-  const ui = registry.getPlugin('ui')?.provides?.() as UiSchemaCapability | undefined;
-
-  if (!commands || !ui) {
-    return EMPTY_CLEANUP;
-  }
-
-  registerPaintBucketIcon(container);
-  const sidebars = ui.getSchema().sidebars;
-  if (sidebars) {
-    delete sidebars['annotation-panel'];
-  }
-
-  for (const commandId of ANNOTATION_STYLE_COMMAND_IDS) {
-    try {
-      commands.unregisterCommand(commandId);
-    } catch {
-      // Optional command depending on the active snippet schema.
-    }
-
-    commands.registerCommand({
-      id: commandId,
-      label: 'Style',
-      icon: PAINT_BUCKET_ICON_ID,
-      categories: commandId.startsWith('panel:')
-        ? ['panel', 'panel-annotation-style']
-        : ['annotation', 'annotation-style'],
-      action: ({ documentId }) => {
-        const scope = ui.forDocument(documentId);
-        scope.closeSidebarSlot?.('left', 'main');
-        scope.closeSidebarSlot?.('right', 'main');
-        openColorPalette();
-      },
-    });
-  }
-
-  return () => {
-    for (const commandId of ANNOTATION_STYLE_COMMAND_IDS) {
-      commands.unregisterCommand(commandId);
-    }
-  };
-}
-
-function installSignatureOnlyInsertCommands(registry: PluginRegistry) {
-  const commands = registry.getPlugin('commands')?.provides?.() as
-    | {
-        unregisterCommand(commandId: string): void;
-      }
-    | undefined;
-
-  if (!commands) {
-    return EMPTY_CLEANUP;
-  }
-
-  for (const commandId of DISABLED_INSERT_COMMAND_IDS) {
-    try {
-      commands.unregisterCommand(commandId);
-    } catch {
-      // Some commands are optional depending on snippet configuration.
-    }
-  }
-
-  return EMPTY_CLEANUP;
 }
 
 function installScrollStrategyAttribute(registry: PluginRegistry) {
@@ -432,75 +186,7 @@ function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
 
 const cleanupRenderDprCap = installRenderDprCap();
 
-function requestPdfZoom(registry: PluginRegistry, direction: 1 | -1, event?: WheelEvent | KeyboardEvent) {
-  const documentId = getActiveDocumentId(registry);
-  const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
-
-  if (!documentId || !zoom) {
-    return null;
-  }
-
-  const anchor = getCurrentScrollAnchor(registry);
-  const zoomScope = zoom.forDocument(documentId);
-  const currentZoom = zoomScope.getState().currentZoomLevel || 1;
-  const delta = currentZoom * 0.12 * direction;
-  const viewportCapability = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
-  const viewport = viewportCapability?.forDocument(documentId);
-  const viewportRect = viewport?.getBoundingRect?.();
-  const clientX = event instanceof WheelEvent ? event.clientX : window.innerWidth / 2;
-  const clientY = event instanceof WheelEvent ? event.clientY : window.innerHeight / 2;
-  const center = viewportRect
-    ? {
-        vx: clientX - viewportRect.origin.x,
-        vy: clientY - viewportRect.origin.y,
-      }
-    : undefined;
-
-  zoomScope.requestZoomBy(delta, center);
-  return anchor;
-}
-
-function installBrowserZoomInterceptor(registry: PluginRegistry) {
-  let lastWheelZoomAt = 0;
-  let zoomRestoreAnchor: ScrollAnchor | null = null;
-  let zoomRestoreTimer = 0;
-
-  const scheduleZoomAnchorRestore = (anchor: ScrollAnchor | null) => {
-    if (!anchor) {
-      return;
-    }
-
-    zoomRestoreAnchor ??= anchor;
-
-    if (zoomRestoreTimer) {
-      window.clearTimeout(zoomRestoreTimer);
-    }
-
-    zoomRestoreTimer = window.setTimeout(() => {
-      zoomRestoreTimer = 0;
-      const nextAnchor = zoomRestoreAnchor;
-      zoomRestoreAnchor = null;
-      restoreScrollAnchorAfterLayout(registry, nextAnchor);
-    }, 180);
-  };
-
-  const onWheel = (event: WheelEvent) => {
-    if (!event.ctrlKey && !event.metaKey) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const now = performance.now();
-    if (now - lastWheelZoomAt < 45) {
-      return;
-    }
-
-    lastWheelZoomAt = now;
-    scheduleZoomAnchorRestore(requestPdfZoom(registry, event.deltaY < 0 ? 1 : -1, event));
-  };
-
+function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (!event.ctrlKey && !event.metaKey) {
       return;
@@ -513,31 +199,25 @@ function installBrowserZoomInterceptor(registry: PluginRegistry) {
     event.preventDefault();
     event.stopPropagation();
 
-    if (event.key === '0') {
-      const documentId = getActiveDocumentId(registry);
-      const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
-      const anchor = getCurrentScrollAnchor(registry);
-
-      if (documentId && zoom) {
-        zoom.forDocument(documentId).requestZoom('fit-page');
-        scheduleZoomAnchorRestore(anchor);
-      }
-
+    const documentId = getActiveDocumentId(registry);
+    const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
+    if (!documentId || !zoom) {
       return;
     }
 
-    scheduleZoomAnchorRestore(requestPdfZoom(registry, event.key === '-' || event.key === '_' ? -1 : 1, event));
+    const zoomScope = zoom.forDocument(documentId);
+    if (event.key === '0') {
+      zoomScope.requestZoom(ZoomMode.FitPage);
+    } else if (event.key === '-' || event.key === '_') {
+      zoomScope.zoomOut();
+    } else {
+      zoomScope.zoomIn();
+    }
   };
 
-  window.addEventListener('wheel', onWheel, { capture: true, passive: false });
   window.addEventListener('keydown', onKeyDown, { capture: true });
 
   return () => {
-    if (zoomRestoreTimer) {
-      window.clearTimeout(zoomRestoreTimer);
-    }
-
-    window.removeEventListener('wheel', onWheel, { capture: true });
     window.removeEventListener('keydown', onKeyDown, { capture: true });
   };
 }
@@ -649,15 +329,29 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   };
 }
 
-function App() {
-  const fileUrl = getInitialFileUrl();
+interface AppProps {
+  fileUrl?: string;
+  wasmUrl: string;
+}
+
+function App({ fileUrl, wasmUrl }: AppProps) {
+  const documentKey = platform.getDocumentKey();
+  const editingEnabled = documentEditingEnabled;
+  const { engine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
+    wasmUrl,
+    worker: true,
+    fontFallback: PDFIUM_FONT_FALLBACK,
+  });
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
-  const [signaturesOpen, setSignaturesOpen] = useState(false);
   const [colorPaletteOpen, setColorPaletteOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentTargetId, setCommentTargetId] = useState<string | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [protectOpen, setProtectOpen] = useState(false);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
     bookmarks: [],
@@ -666,7 +360,7 @@ function App() {
   const [totalPages, setTotalPages] = useState(0);
   const [currentTitle, setCurrentTitle] = useState('');
   const [navigationVisible, setNavigationVisible] = useState(false);
-  const viewerRef = useRef<PDFViewerRef>(null);
+  const viewerRootRef = useRef<HTMLElement>(null);
   const registryCleanupRef = useRef<(() => void) | null>(null);
   const outlineCacheRef = useRef(outlineCache);
   const currentPageNumberRef = useRef(1);
@@ -676,8 +370,6 @@ function App() {
   const themeIndexRef = useRef(getStoredThemeIndex());
   const navigationHideTimerRef = useRef<number>(0);
   const navigationVisibleRef = useRef(false);
-  const searchOpenRef = useRef(false);
-  const thumbnailsOpenRef = useRef(false);
 
   const renderDocumentTitle = () => {
     const title = `${hasUnsavedChangesRef.current ? '*' : ''}${cleanDocumentTitleRef.current}`;
@@ -711,7 +403,7 @@ function App() {
         setNavigationVisible(false);
       }
       navigationHideTimerRef.current = 0;
-    }, 1800);
+    }, NAVIGATION_AUTO_HIDE_DELAY_MS);
   };
 
   useEffect(() => {
@@ -725,18 +417,16 @@ function App() {
   }, [currentPageNumber]);
 
   useEffect(() => {
-    searchOpenRef.current = searchOpen;
-  }, [searchOpen]);
+    applyViewerThemeByIndex(themeIndexRef.current);
+  }, []);
 
   useEffect(() => {
-    thumbnailsOpenRef.current = thumbnailsOpen;
-  }, [thumbnailsOpen]);
+    if (!editingEnabled) return;
 
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        savePdfToOriginalFile(viewerRef, fileHandleRef, fileUrl)
+        savePdfToOriginalFile(registry, fileHandleRef, fileUrl)
           .then((saved) => {
             if (!saved) {
               return;
@@ -751,7 +441,7 @@ function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fileUrl]);
+  }, [editingEnabled, fileUrl, registry]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -770,39 +460,57 @@ function App() {
     };
   }, []);
 
-  const viewerConfig = useMemo<PDFViewerConfig>(
-    () => ({
-      ...(fileUrl ? { src: fileUrl } : {}),
-      worker: true,
-      wasmUrl: PDFIUM_WASM_URL,
-      fontFallback: {
-        fonts: {},
-      },
-      stamp: {
-        defaultLibrary: false,
-        manifests: [],
-      },
-      tabBar: 'never',
-      disabledCategories: DISABLED_VIEWER_CATEGORIES,
-      theme: VIEWER_THEMES[themeIndexRef.current]?.config ?? VIEWER_THEMES[0].config,
-      render: {
+  const plugins = useMemo(
+    () => [
+      createPluginRegistration(DocumentManagerPluginPackage, {
+        initialDocuments: fileUrl ? [{ url: fileUrl }] : [],
+      }),
+      createPluginRegistration(ViewportPluginPackage, { viewportGap: 10 }),
+      createPluginRegistration(ScrollPluginPackage, {
+        defaultStrategy: ScrollStrategy.Vertical,
+        defaultPageGap: 10,
+      }),
+      createPluginRegistration(RenderPluginPackage, {
         defaultImageType: RENDER_IMAGE_TYPE,
-      },
-      tiling: {
+      }),
+      createPluginRegistration(TilingPluginPackage, {
         defaultImageType: RENDER_IMAGE_TYPE,
         tileSize: TILING_TILE_SIZE,
         overlapPx: TILING_OVERLAP_PX,
         extraRings: TILING_EXTRA_RINGS,
-      },
-      annotations: {
-        locked: { type: LockModeType.Include, categories: ['form'] },
-        tools: TEXT_MARKUP_TOOL_IDS.map((id) => ({
-          id,
-          behavior: { deactivateToolAfterCreate: true },
-        })),
-      },
-    }),
-    [fileUrl],
+      }),
+      createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitPage }),
+      createPluginRegistration(SpreadPluginPackage, { defaultSpreadMode: SpreadMode.None }),
+      createPluginRegistration(RotatePluginPackage, { defaultRotation: Rotation.Degree0 }),
+      createPluginRegistration(InteractionManagerPluginPackage),
+      createPluginRegistration(PanPluginPackage, { defaultMode: 'mobile' }),
+      createPluginRegistration(SelectionPluginPackage),
+      ...(editingEnabled ? [
+        createPluginRegistration(HistoryPluginPackage),
+        createPluginRegistration(AnnotationPluginPackage, {
+          locked: { type: LockModeType.Include, categories: ['form'] },
+          deactivateToolAfterCreate: true,
+          tools: ['square', 'lineArrow', 'ink'].map((id) => ({
+            id,
+            defaults: { strokeWidth: 2 },
+          })),
+        }),
+        createPluginRegistration(FormPluginPackage),
+      ] : []),
+      createPluginRegistration(SearchPluginPackage),
+      createPluginRegistration(ThumbnailPluginPackage, {
+        width: 150,
+        gap: 10,
+        buffer: 3,
+        labelHeight: 30,
+      }),
+      createPluginRegistration(BookmarkPluginPackage),
+      createPluginRegistration(PrintPluginPackage),
+      ...(editingEnabled ? [
+        createPluginRegistration(ExportPluginPackage, { defaultFileName: 'document.pdf' }),
+      ] : []),
+    ],
+    [editingEnabled, fileUrl],
   );
 
   useEffect(() => {
@@ -835,39 +543,22 @@ function App() {
     };
   }, []);
 
-  const handleOpenSearch = (targetRegistry = registry) => {
-    const documentId = targetRegistry ? getActiveDocumentId(targetRegistry) : undefined;
-    const ui = targetRegistry?.getPlugin('ui')?.provides?.() as
-      | {
-          forDocument(documentId: string): {
-            closeSidebarSlot(placement: 'left' | 'right', slot: string): void;
-          };
-        }
-      | undefined;
-
-    if (documentId && ui) {
-      const scope = ui.forDocument(documentId);
-      scope.closeSidebarSlot('right', 'main');
-      scope.closeSidebarSlot('left', 'main');
-    }
-
-    searchOpenRef.current = true;
+  const handleOpenSearch = (_targetRegistry = registry) => {
     setSearchOpen(true);
   };
 
   const handleSearchOpenChange = (open: boolean) => {
-    searchOpenRef.current = open;
     setSearchOpen(open);
   };
 
 
   return (
-    <main className="app-shell">
-      <PDFViewer
-        ref={viewerRef}
-        config={viewerConfig}
-        className="viewer"
-        onReady={(nextRegistry) => {
+    <main ref={viewerRootRef} className="app-shell">
+      {engine ? (
+        <EmbedPDF
+          engine={engine}
+          plugins={plugins}
+          onInitialized={async (nextRegistry) => {
           registryCleanupRef.current?.();
 
           setRegistry(nextRegistry);
@@ -876,8 +567,11 @@ function App() {
           setTotalPages(0);
           setCurrentTitle('');
           setThumbnailsOpen(false);
-          setSignaturesOpen(false);
           setColorPaletteOpen(false);
+          setCommentsOpen(false);
+          setCommentTargetId(null);
+          setPrintOpen(false);
+          setProtectOpen(false);
           setHasUnsavedChanges(false);
           if (navigationVisibleRef.current) {
             navigationVisibleRef.current = false;
@@ -892,34 +586,22 @@ function App() {
           titleTrackerRefreshRef.current = refreshCurrentTitle;
 
           const installers: Array<() => () => void> = [
-            () => installBuiltInPageControlsHider(nextRegistry),
             () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
-            () => installBrowserZoomInterceptor(nextRegistry),
-            () => installNativeToolbarDisabler(nextRegistry),
-            () => installSignatureOnlyInsertCommands(nextRegistry),
-            () => installAnnotationStyleCommandRedirect(nextRegistry, viewerRef.current?.container ?? null, () => setColorPaletteOpen(true)),
+            () => installPdfZoomKeyboardShortcuts(nextRegistry),
             () => installScrollStrategyAttribute(nextRegistry),
             () => installMiddleMousePanInterceptor(nextRegistry),
-            () => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges),
-            () => installTextMarkupToolReset(nextRegistry),
-            () => installCommentPanelWidth(nextRegistry),
-            () => installReadingHistory(nextRegistry, fileUrl),
+            ...(editingEnabled ? [() => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges)] : []),
+            () => installPlatformReadingHistory(nextRegistry, documentKey),
             () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
                 setCurrentPageNumber(pageNumber);
                 setCurrentTitle(title);
                 setTotalPages(nextTotalPages);
               }),
-            () => installWhenIdle(() => installThemeSwitcher(
-              nextRegistry,
-              viewerRef.current?.container ?? null,
-              themeIndexRef,
-              () => setThumbnailsOpen((open) => !open),
-              () => thumbnailsOpenRef.current,
-            )),
-            () => installWhenIdle(() => installPanelCommandRedirects(nextRegistry, searchOpenRef, handleSearchOpenChange)),
             () => installWhenIdle(() => installSearchKeyboardShortcut(() => handleOpenSearch(nextRegistry))),
-            () => installWhenIdle(() => installSelectionTranslate(nextRegistry, viewerRef.current?.container ?? null)),
+            ...(platform.capabilities.translation ? [
+              () => installWhenIdle(() => installSelectionTranslate(nextRegistry)),
+            ] : []),
             () => installWhenIdle(() => installOutlinePrefetch(nextRegistry, setOutlineCache, fileUrl)),
             () => () => {
               titleTrackerRefreshRef.current = null;
@@ -940,20 +622,94 @@ function App() {
               cleanup();
             }
           };
-        }}
-      />
+          }}
+        >
+          {({ activeDocumentId }) => (
+            <>
+              {activeDocumentId ? (
+                <DocumentContent documentId={activeDocumentId}>
+                  {({ isLoading, isError, isLoaded }) => (
+                    <>
+                      {isLoading && <div className="viewer-status">Loading document...</div>}
+                      {isError && <div className="viewer-status viewer-status-error">Unable to load PDF.</div>}
+                      {isLoaded && (
+                        <GlobalPointerProvider documentId={activeDocumentId}>
+                          <Viewport
+                            documentId={activeDocumentId}
+                            className="viewer"
+                            onDragStart={(event) => event.preventDefault()}
+                          >
+                            <ShnctlZoomGesture documentId={activeDocumentId}>
+                          <Scroller
+                            documentId={activeDocumentId}
+                            renderPage={({ pageIndex, width, height }) => (
+                              <Rotate documentId={activeDocumentId} pageIndex={pageIndex}>
+                                <PagePointerProvider
+                                  documentId={activeDocumentId}
+                                  pageIndex={pageIndex}
+                                  style={{ position: 'relative', width, height, backgroundColor: '#fff' }}
+                                >
+                                  <RenderLayer
+                                    documentId={activeDocumentId}
+                                    pageIndex={pageIndex}
+                                    scale={0.5}
+                                    className="shnctl-page-render-image"
+                                    draggable={false}
+                                    style={{ pointerEvents: 'none' }}
+                                  />
+                                  <TilingLayer
+                                    documentId={activeDocumentId}
+                                    pageIndex={pageIndex}
+                                    className="shnctl-page-tiling-layer"
+                                  />
+                                  <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                  <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                  {editingEnabled ? <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} /> : null}
+                                </PagePointerProvider>
+                              </Rotate>
+                            )}
+                          />
+                            </ShnctlZoomGesture>
+                          </Viewport>
+                        </GlobalPointerProvider>
+                      )}
+                    </>
+                  )}
+                </DocumentContent>
+              ) : (
+                <div className="viewer-status">No PDF document.</div>
+              )}
+              <ShnctlThumbnails
+                registry={registry}
+                open={thumbnailsOpen}
+                totalPages={totalPages}
+                currentPageNumber={currentPageNumber}
+                onClose={() => setThumbnailsOpen(false)}
+              />
+            </>
+          )}
+        </EmbedPDF>
+      ) : (
+        <div className="viewer-status viewer-status-error">
+          {engineError ? `Unable to initialize PDF engine: ${engineError.message}` : engineLoading ? 'Loading PDF engine...' : 'PDF engine unavailable.'}
+        </div>
+      )}
       <ShnctlToolbar
         registry={registry}
-        container={viewerRef.current?.container ?? null}
         searchOpen={searchOpen}
         thumbnailsOpen={thumbnailsOpen}
-        signaturesOpen={signaturesOpen}
         colorPaletteOpen={colorPaletteOpen}
+        commentsOpen={commentsOpen}
         themeIndexRef={themeIndexRef}
         onSearchOpenChange={handleSearchOpenChange}
         onToggleThumbnails={() => setThumbnailsOpen((open) => !open)}
-        onOpenSignatures={() => setSignaturesOpen((open) => !open)}
         onToggleColorPalette={() => setColorPaletteOpen((open) => !open)}
+        onToggleComments={() => {
+          setCommentTargetId(null);
+          setCommentsOpen((open) => !open);
+        }}
+        onOpenPrint={() => setPrintOpen(true)}
+        onOpenProtect={() => setProtectOpen(true)}
       />
       <ShnctlOutline
         registry={registry}
@@ -963,23 +719,43 @@ function App() {
         onCacheChange={setOutlineCache}
         onClose={() => setOutlineOpen(false)}
       />
-      <ShnctlThumbnails
-        registry={registry}
-        open={thumbnailsOpen}
-        totalPages={totalPages}
-        currentPageNumber={currentPageNumber}
-        onClose={() => setThumbnailsOpen(false)}
-      />
-      <ShnctlSignatures
-        registry={registry}
-        open={signaturesOpen}
-        onClose={() => setSignaturesOpen(false)}
-      />
-      <ShnctlColorPalette
+      {editingEnabled ? <ShnctlColorPalette
         registry={registry}
         open={colorPaletteOpen}
         onClose={() => setColorPaletteOpen(false)}
+      /> : null}
+      {editingEnabled ? <ShnctlComments
+        registry={registry}
+        open={commentsOpen}
+        currentPageNumber={currentPageNumber}
+        targetAnnotationId={commentTargetId}
+        onClose={() => {
+          setCommentsOpen(false);
+          setCommentTargetId(null);
+        }}
+      /> : null}
+      {editingEnabled ? <ShnctlContextMenu
+        registry={registry}
+        container={viewerRootRef.current}
+        onOpenComments={(annotationId) => {
+          setCommentTargetId(annotationId);
+          setCommentsOpen(true);
+        }}
+        onOpenColorPalette={() => setColorPaletteOpen(true)}
+      /> : null}
+      <ShnctlPrintDialog
+        registry={registry}
+        open={printOpen}
+        currentPageNumber={currentPageNumber}
+        totalPages={totalPages}
+        onClose={() => setPrintOpen(false)}
       />
+      {editingEnabled ? <ShnctlProtectDialog
+        registry={registry}
+        open={protectOpen}
+        onClose={() => setProtectOpen(false)}
+        onProtected={() => setHasUnsavedChanges(true)}
+      /> : null}
       <BottomNavigationControl
         registry={registry}
         title={currentTitle}
@@ -994,4 +770,39 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+function ViewerBootstrap() {
+  const [resources, setResources] = useState<{ fileUrl?: string; wasmUrl: string }>();
+  const [error, setError] = useState<Error>();
+
+  useEffect(() => {
+    let cancelled = false;
+    const initialFileUrl = getInitialFileUrl();
+
+    Promise.all([
+      platform.prepareResourceUrl(PDFIUM_WASM_URL, 'application/wasm'),
+      initialFileUrl
+        ? platform.prepareResourceUrl(initialFileUrl, 'application/pdf')
+        : Promise.resolve(undefined),
+    ]).then(([wasmUrl, fileUrl]) => {
+      if (!cancelled) setResources({ wasmUrl, fileUrl });
+    }).catch((reason: unknown) => {
+      if (!cancelled) setError(reason instanceof Error ? reason : new Error(String(reason)));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error) {
+    return <div className="viewer-status viewer-status-error">Unable to load PDF resources: {error.message}</div>;
+  }
+
+  if (!resources) {
+    return <div className="viewer-status">Loading PDF resources...</div>;
+  }
+
+  return <App fileUrl={resources.fileUrl} wasmUrl={resources.wasmUrl} />;
+}
+
+createRoot(document.getElementById('root')!).render(<ViewerBootstrap />);

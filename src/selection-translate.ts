@@ -1,16 +1,8 @@
 import type { PluginRegistry } from '@embedpdf/core';
-import type {
-  CommandsCapability,
-  PDFViewerRef,
-  SelectionCapability,
-  SelectionMenuSchema,
-  UICapability,
-} from '@embedpdf/react-pdf-viewer';
+import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { EMPTY_CLEANUP } from './utils';
 
-const TRANSLATE_SELECTION_COMMAND_ID = 'shnctl.selection.translate';
-const TRANSLATE_SELECTION_ITEM_ID = 'shnctl-selection-translate-button';
-const TRANSLATE_SELECTION_ICON_ID = 'shnctl-translate';
+const TRANSLATE_SELECTION_EVENT = 'shnctl:translate-selection';
 const TRANSLATION_TARGET_LANGUAGE = 'zh';
 const FALLBACK_SOURCE_LANGUAGE = 'en';
 const MAX_TEXT_LENGTH = 4000;
@@ -111,25 +103,6 @@ async function translateSelectedText(text: string) {
   return translator.translate(text);
 }
 
-function registerTranslateIcon(container: PDFViewerRef['container']) {
-  container?.registerIcons({
-    [TRANSLATE_SELECTION_ICON_ID]: {
-      viewBox: '0 0 24 24',
-      strokeLinecap: 'round',
-      strokeLinejoin: 'round',
-      strokeWidth: 2,
-      paths: [
-        { d: 'm5 8 6 6', stroke: 'primary', fill: 'none' },
-        { d: 'm4 14 6-6 2-3', stroke: 'primary', fill: 'none' },
-        { d: 'M2 5h12', stroke: 'primary', fill: 'none' },
-        { d: 'M7 2h1', stroke: 'primary', fill: 'none' },
-        { d: 'm22 22-5-10-5 10', stroke: 'primary', fill: 'none' },
-        { d: 'M14 18h6', stroke: 'primary', fill: 'none' },
-      ],
-    },
-  });
-}
-
 function injectStyles() {
   const style = document.createElement('style');
   style.textContent = `
@@ -166,45 +139,6 @@ function injectStyles() {
   return () => style.remove();
 }
 
-function selectionMenuWithTranslate(menu: SelectionMenuSchema): SelectionMenuSchema {
-  const hasTranslate = (items: SelectionMenuSchema['items']): boolean =>
-    items.some((item) => {
-      if (item.id === TRANSLATE_SELECTION_ITEM_ID) {
-        return true;
-      }
-
-      return 'items' in item && Array.isArray(item.items) ? hasTranslate(item.items) : false;
-    });
-
-  if (hasTranslate(menu.items)) {
-    return menu;
-  }
-
-  return {
-    ...menu,
-    items: [
-      ...menu.items,
-      {
-        type: 'command-button',
-        id: TRANSLATE_SELECTION_ITEM_ID,
-        commandId: TRANSLATE_SELECTION_COMMAND_ID,
-        variant: 'icon',
-      },
-    ],
-  };
-}
-
-function installSelectionMenuItem(ui: UICapability) {
-  const currentMenus = ui.getSchema().selectionMenus ?? {};
-  const nextMenus = Object.fromEntries(
-    Object.entries(currentMenus).map(([id, menu]) => [id, selectionMenuWithTranslate(menu)]),
-  );
-
-  ui.mergeSchema({
-    selectionMenus: nextMenus,
-  });
-}
-
 function showPanel(panel: HTMLElement, anchorPoint: { x: number; y: number }, text: string, isError = false) {
   const gap = 10;
   panel.classList.toggle('is-error', isError);
@@ -217,17 +151,16 @@ function showPanel(panel: HTMLElement, anchorPoint: { x: number; y: number }, te
   panel.style.top = `${Math.min(Math.max(12, anchorPoint.y + gap), window.innerHeight - height - 12)}px`;
 }
 
-export function installSelectionTranslate(registry: PluginRegistry, container: PDFViewerRef['container']) {
-  const selection = registry.getPlugin('selection')?.provides?.() as SelectionCapability | undefined;
-  const commands = registry.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
-  const ui = registry.getPlugin('ui')?.provides?.() as UICapability | undefined;
+export function requestSelectionTranslation(documentId: string) {
+  window.dispatchEvent(new CustomEvent(TRANSLATE_SELECTION_EVENT, { detail: { documentId } }));
+}
 
-  if (!selection || !commands || !ui) {
+export function installSelectionTranslate(registry: PluginRegistry) {
+  const selection = registry.getPlugin('selection')?.provides?.() as SelectionCapability | undefined;
+
+  if (!selection) {
     return EMPTY_CLEANUP;
   }
-
-  registerTranslateIcon(container);
-  installSelectionMenuItem(ui);
 
   const panel = document.createElement('div');
   panel.className = 'shnctl-translate-panel';
@@ -242,31 +175,32 @@ export function installSelectionTranslate(registry: PluginRegistry, container: P
     panel.textContent = '';
     panel.classList.remove('is-error');
   };
-  const rememberPointerPosition = (event: PointerEvent) => {
+  const handlePointerDown = (event: PointerEvent) => {
     lastPointerPosition = { x: event.clientX, y: event.clientY };
+    if (!panel.hidden && !event.composedPath().includes(panel)) {
+      hidePanel();
+    }
   };
-  window.addEventListener('pointerdown', rememberPointerPosition, { capture: true, passive: true });
+  window.addEventListener('pointerdown', handlePointerDown, { capture: true, passive: true });
 
-  commands.registerCommand({
-    id: TRANSLATE_SELECTION_COMMAND_ID,
-    label: 'Translate',
-    icon: TRANSLATE_SELECTION_ICON_ID,
-    action: ({ documentId }) => {
-      const selectionScope = selection.forDocument(documentId);
+  const handleTranslateRequest = (event: Event) => {
+    const documentId = (event as CustomEvent<{ documentId?: string }>).detail?.documentId;
+    if (!documentId) return;
+    const selectionScope = selection.forDocument(documentId);
 
-      showPanel(panel, lastPointerPosition, 'Translating...');
-      selectionScope
-        .getSelectedText()
-        .toPromise()
-        .then((parts) => translateSelectedText(normalizeText(parts)))
-        .then((translated) => {
-          showPanel(panel, lastPointerPosition, translated);
-        })
-        .catch((error) => {
-          showPanel(panel, lastPointerPosition, error instanceof Error ? error.message : 'Translation failed.', true);
-        });
-    },
-  });
+    showPanel(panel, lastPointerPosition, 'Translating...');
+    selectionScope
+      .getSelectedText()
+      .toPromise()
+      .then((parts) => translateSelectedText(normalizeText(parts)))
+      .then((translated) => {
+        showPanel(panel, lastPointerPosition, translated);
+      })
+      .catch((error) => {
+        showPanel(panel, lastPointerPosition, error instanceof Error ? error.message : 'Translation failed.', true);
+      });
+  };
+  window.addEventListener(TRANSLATE_SELECTION_EVENT, handleTranslateRequest);
 
   const unsubscribeSelectionChange = selection.onSelectionChange((event) => {
     if (!event.selection) {
@@ -277,9 +211,9 @@ export function installSelectionTranslate(registry: PluginRegistry, container: P
   window.addEventListener('scroll', hidePanel, { capture: true, passive: true });
 
   return () => {
-    commands.unregisterCommand(TRANSLATE_SELECTION_COMMAND_ID);
+    window.removeEventListener(TRANSLATE_SELECTION_EVENT, handleTranslateRequest);
     unsubscribeSelectionChange();
-    window.removeEventListener('pointerdown', rememberPointerPosition, { capture: true });
+    window.removeEventListener('pointerdown', handlePointerDown, { capture: true });
     window.removeEventListener('scroll', hidePanel, { capture: true });
     cleanupStyles();
     panel.remove();

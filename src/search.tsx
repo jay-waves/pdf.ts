@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
   MatchFlag,
@@ -6,18 +6,16 @@ import {
 } from '@embedpdf/models';
 import {
   type SearchCapability,
-  type CommandsCapability,
-} from '@embedpdf/react-pdf-viewer';
+} from '@embedpdf/plugin-search';
 import {
   CaseSensitive,
   ChevronLeft,
   ChevronRight,
   Search,
   WholeWord,
+  X,
 } from 'lucide-react';
 import { getActiveDocumentId, type ScrollCapability } from './utils';
-
-const SHNCTL_SEARCH_COMMAND_ID = 'shnctl:toggle-search';
 
 type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 type SearchPanelState = Pick<
@@ -265,6 +263,12 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     searchScope.setFlags(nextFlags);
   };
 
+  const clearSearch = () => {
+    alignedSearchKeyRef.current = '';
+    setQuery('');
+    searchScope?.stopSearch();
+  };
+
   const flags = getSearchFlags(searchScope);
 
   return {
@@ -275,6 +279,7 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     canSearch: Boolean(searchScope),
     flags,
     runSearch,
+    clearSearch,
     moveResult,
     toggleFlag,
   };
@@ -296,6 +301,7 @@ export function ShnctlSearch({
     canSearch,
     flags,
     runSearch,
+    clearSearch,
     moveResult,
     toggleFlag,
   } = useSearchPanel(registry, open);
@@ -317,15 +323,37 @@ export function ShnctlSearch({
   }
 
   return (
-    <div data-epdf-i="shnctl-search-toolbar" className="shnctl-toolbar-secondary shnctl-search-bar" role="search" aria-label="PDF search">
-      <button type="button" className="shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" data-shnctl-tooltip="Previous result">
+    <div className="shnctl-toolbar-secondary shnctl-search-bar" role="search" aria-label="PDF search">
+      <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" data-shnctl-tooltip="Previous result">
         <ChevronLeft size={14} strokeWidth={2} />
       </button>
       <div className="shnctl-search-counter">
         {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
       </div>
-      <button type="button" className="shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" data-shnctl-tooltip="Next result">
+      <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" data-shnctl-tooltip="Next result">
         <ChevronRight size={14} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
+        onClick={() => toggleFlag(MatchFlag.MatchCase)}
+        disabled={!canSearch}
+        aria-label="Match case"
+        aria-pressed={flags.includes(MatchFlag.MatchCase)}
+        data-shnctl-tooltip="Match case"
+      >
+        <CaseSensitive size={16} strokeWidth={2} />
+      </button>
+      <button
+        type="button"
+        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
+        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
+        disabled={!canSearch}
+        aria-label="Match whole word"
+        aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
+        data-shnctl-tooltip="Match whole word"
+      >
+        <WholeWord size={16} strokeWidth={2} />
       </button>
       <form
         className="shnctl-search-form"
@@ -334,41 +362,34 @@ export function ShnctlSearch({
           runSearch();
         }}
       >
-        <input
-          ref={inputRef}
-          className="shnctl-search-input"
-          value={query}
-          type="search"
-          placeholder={canSearch ? 'Find in document' : 'Search is not ready'}
-          disabled={!canSearch}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-        />
-        <button type="submit" className="shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search" data-shnctl-tooltip="Search">
+        <div className="shnctl-search-input-wrap">
+          <input
+            ref={inputRef}
+            className="shnctl-search-input"
+            value={query}
+            type="search"
+            placeholder={canSearch ? 'Find in document' : 'Search is not ready'}
+            disabled={!canSearch}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+          {query || searchState.total > 0 || searchState.loading ? (
+            <button
+              type="button"
+              className="shnctl-action shnctl-search-clear"
+              aria-label="Clear search"
+              onClick={() => {
+                clearSearch();
+                inputRef.current?.focus();
+              }}
+            >
+              <X size={13} strokeWidth={2} />
+            </button>
+          ) : null}
+        </div>
+        <button type="submit" className="shnctl-action shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search" data-shnctl-tooltip="Search">
           <Search size={14} strokeWidth={2} />
         </button>
       </form>
-      <button
-        type="button"
-        className={`shnctl-search-toggle${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
-        onClick={() => toggleFlag(MatchFlag.MatchCase)}
-        disabled={!canSearch}
-        aria-label="Match case"
-        aria-pressed={flags.includes(MatchFlag.MatchCase)}
-        data-shnctl-tooltip="Match case"
-      >
-        <CaseSensitive size={14} strokeWidth={2} />
-      </button>
-      <button
-        type="button"
-        className={`shnctl-search-toggle${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
-        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
-        disabled={!canSearch}
-        aria-label="Match whole word"
-        aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
-        data-shnctl-tooltip="Match whole word"
-      >
-        <WholeWord size={14} strokeWidth={2} />
-      </button>
     </div>
   );
 }
@@ -392,52 +413,5 @@ export function installSearchKeyboardShortcut(onOpen: () => void) {
 
   return () => {
     window.removeEventListener('keydown', onKeyDown, { capture: true });
-  };
-}
-
-export function installPanelCommandRedirects(
-  registry: PluginRegistry,
-  searchOpenRef: MutableRefObject<boolean>,
-  onSearchOpenChange: (open: boolean) => void,
-) {
-  const commands = registry.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
-  const ui = registry.getPlugin('ui')?.provides?.() as
-    | {
-        forDocument(documentId: string): {
-          closeSidebarSlot(placement: 'left' | 'right', slot: string): void;
-        };
-      }
-    | undefined;
-
-  const closeBuiltInSidebars = (documentId: string) => {
-    const scope = ui?.forDocument(documentId);
-    scope?.closeSidebarSlot('right', 'main');
-    scope?.closeSidebarSlot('left', 'main');
-  };
-
-  if (commands) {
-    try {
-      commands.unregisterCommand(SHNCTL_SEARCH_COMMAND_ID);
-    } catch {
-      // The command may not be registered yet depending on plugin startup order.
-    }
-
-    commands.registerCommand({
-      id: SHNCTL_SEARCH_COMMAND_ID,
-      label: 'Search',
-      shortcuts: ['Ctrl+F', 'Meta+F'],
-      categories: ['tools'],
-      action: ({ documentId }) => {
-        closeBuiltInSidebars(documentId);
-        if (!searchOpenRef.current) {
-          onSearchOpenChange(true);
-        }
-      },
-      active: () => searchOpenRef.current,
-    });
-  }
-
-  return () => {
-    commands?.unregisterCommand(SHNCTL_SEARCH_COMMAND_ID);
   };
 }
