@@ -4,6 +4,7 @@ import type { PluginRegistry } from '@embedpdf/core';
 import {
   CornerDownLeft,
   CornerUpRight,
+  ListTree,
 } from 'lucide-react';
 import {
   PdfZoomMode,
@@ -667,7 +668,7 @@ export function BottomNavigationControl({
           disabled={!canGoPrevious}
           aria-label="Previous page"
         >
-          <CornerDownLeft size={20} strokeWidth={1.8} aria-hidden="true" />
+          <CornerDownLeft size={16} strokeWidth={1.8} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -676,7 +677,7 @@ export function BottomNavigationControl({
           disabled={!canGoNext}
           aria-label="Next page"
         >
-          <CornerUpRight size={20} strokeWidth={1.8} aria-hidden="true" />
+          <CornerUpRight size={16} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
       <div className="shnctl-bottom-nav-meta">
@@ -685,11 +686,13 @@ export function BottomNavigationControl({
             type="button"
             className="shnctl-bottom-nav-outline"
             title={outlineTitle}
+            aria-label="Open outline"
             onClick={() => {
               onReveal();
               onOpenOutline();
             }}
           >
+            <ListTree className="shnctl-bottom-nav-outline-icon" size={14} strokeWidth={1.8} aria-hidden="true" />
             <span className="shnctl-bottom-nav-title">{outlineTitle}</span>
           </button>
         ) : null}

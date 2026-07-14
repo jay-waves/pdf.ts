@@ -32,7 +32,6 @@ import {
   type OutlineCache,
 } from './outline';
 import {
-  ShnctlSearch,
   installPanelCommandRedirects,
   installSearchKeyboardShortcut,
 } from './search';
@@ -40,8 +39,12 @@ import {
   getStoredThemeIndex,
   VIEWER_THEMES,
   installThemeSwitcher,
-  setSearchOpenAttribute,
+  setViewerScrollStrategyAttribute,
 } from './theme';
+import { ShnctlToolbar } from './toolbar';
+import { ShnctlThumbnails } from './thumbnails';
+import { ShnctlSignatures } from './signatures';
+import { ShnctlColorPalette } from './color-palette';
 import { installReadingHistory, savePdfToOriginalFile } from './file-handle';
 import { installSelectionTranslate } from './selection-translate';
 
@@ -63,13 +66,56 @@ interface ViewportCapability {
   };
 }
 
+interface CommandsRegistryCapability {
+  registerCommand(command: {
+    id: string;
+    label?: string;
+    icon?: string;
+    categories?: string[];
+    action(context: { documentId: string; registry: PluginRegistry }): void;
+  }): void;
+  unregisterCommand(commandId: string): void;
+}
+
+interface UiSchemaCapability {
+  getSchema(): {
+    sidebars?: Record<string, unknown>;
+  };
+  forDocument(documentId: string): {
+    closeSidebarSlot?(placement: 'left' | 'right', slot: string): void;
+  };
+}
+
 const MAX_RENDER_DPR = 1.5;
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
-const COMMENT_PANEL_WIDTH = '30vw';
+const COMMENT_PANEL_WIDTH = '24vw';
 const TEXT_MARKUP_TOOL_IDS = ['highlight', 'underline', 'strikeout', 'squiggly'];
+const NATIVE_TOOLBAR_IDS = [
+  'main-toolbar',
+  'annotation-toolbar',
+  'shapes-toolbar',
+  'insert-toolbar',
+  'form-toolbar',
+  'redaction-toolbar',
+  'shnctl-page-toolbar',
+] as const;
+const DISABLED_INSERT_COMMAND_IDS = [
+  'insert:add-attachment',
+  'insert:add-image',
+  'insert:add-rubber-stamp',
+] as const;
+const DISABLED_NATIVE_SIDEBAR_IDS = [
+  'annotation-panel',
+  'rubber-stamp-panel',
+] as const;
+const ANNOTATION_STYLE_COMMAND_IDS = [
+  'annotation:toggle-annotation-style',
+  'panel:toggle-annotation-style',
+] as const;
+const PAINT_BUCKET_ICON_ID = 'paint-bucket';
 const PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, location.href).href;
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
@@ -81,10 +127,12 @@ const DISABLED_VIEWER_CATEGORIES = [
   'document-capture',
   'form',
   'fullscreen',
-  'insert',
+  'insert-attachment',
+  'insert-image',
+  'insert-link',
+  'insert-rubber-stamp',
   'panel-sidebar',
   'redaction',
-  'signature',
   'stamp',
 ];
 
@@ -155,6 +203,191 @@ function installCommentPanelWidth(registry: PluginRegistry) {
   }
 
   return EMPTY_CLEANUP;
+}
+
+function installNativeToolbarDisabler(registry: PluginRegistry) {
+  const ui = registry.getPlugin('ui')?.provides?.() as
+    | {
+        getSchema(): {
+          toolbars?: Record<string, unknown>;
+          sidebars?: Record<string, unknown>;
+        };
+        forDocument(documentId: string): {
+          closeToolbarSlot(placement: 'top', slot: 'main' | 'secondary'): void;
+          isToolbarOpen(placement: 'top', slot: 'main' | 'secondary'): boolean;
+        };
+        onToolbarChanged(listener: (event: { documentId: string; placement: string; slot: string }) => void): () => void;
+      }
+    | undefined;
+
+  if (!ui) {
+    return EMPTY_CLEANUP;
+  }
+
+  const toolbars = ui.getSchema().toolbars;
+  if (toolbars) {
+    for (const toolbarId of NATIVE_TOOLBAR_IDS) {
+      delete toolbars[toolbarId];
+    }
+  }
+  const sidebars = ui.getSchema().sidebars;
+  if (sidebars) {
+    for (const sidebarId of DISABLED_NATIVE_SIDEBAR_IDS) {
+      delete sidebars[sidebarId];
+    }
+  }
+
+  const closeNativeToolbar = (documentId = getActiveDocumentId(registry)) => {
+    if (!documentId) {
+      return;
+    }
+
+    const scope = ui.forDocument(documentId);
+    if (scope.isToolbarOpen('top', 'main')) {
+      scope.closeToolbarSlot('top', 'main');
+    }
+    if (scope.isToolbarOpen('top', 'secondary')) {
+      scope.closeToolbarSlot('top', 'secondary');
+    }
+  };
+
+  requestAnimationFrame(() => closeNativeToolbar());
+  const unsubscribe = ui.onToolbarChanged((event) => {
+    if (event.placement !== 'top' || (event.slot !== 'main' && event.slot !== 'secondary')) {
+      return;
+    }
+
+    requestAnimationFrame(() => closeNativeToolbar(event.documentId));
+  });
+
+  return unsubscribe;
+}
+
+function registerPaintBucketIcon(container: PDFViewerRef['container']) {
+  container?.registerIcons({
+    [PAINT_BUCKET_ICON_ID]: {
+      viewBox: '0 0 24 24',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      strokeWidth: 2,
+      paths: [
+        { d: 'M11 7 6 2', stroke: 'primary', fill: 'none' },
+        { d: 'M18.992 12H2.041', stroke: 'primary', fill: 'none' },
+        {
+          d: 'M21.145 18.38A3.34 3.34 0 0 1 20 16.5a3.3 3.3 0 0 1-1.145 1.88c-.575.46-.855 1.02-.855 1.595A2 2 0 0 0 20 22a2 2 0 0 0 2-2.025c0-.58-.285-1.13-.855-1.595',
+          stroke: 'primary',
+          fill: 'none',
+        },
+        {
+          d: 'm8.5 4.5 2.148-2.148a1.205 1.205 0 0 1 1.704 0l7.296 7.296a1.205 1.205 0 0 1 0 1.704l-7.592 7.592a3.615 3.615 0 0 1-5.112 0l-3.888-3.888a3.615 3.615 0 0 1 0-5.112L5.67 7.33',
+          stroke: 'primary',
+          fill: 'none',
+        },
+      ],
+    },
+  });
+}
+
+function installAnnotationStyleCommandRedirect(
+  registry: PluginRegistry,
+  container: PDFViewerRef['container'],
+  openColorPalette: () => void,
+) {
+  const commands = registry.getPlugin('commands')?.provides?.() as CommandsRegistryCapability | undefined;
+  const ui = registry.getPlugin('ui')?.provides?.() as UiSchemaCapability | undefined;
+
+  if (!commands || !ui) {
+    return EMPTY_CLEANUP;
+  }
+
+  registerPaintBucketIcon(container);
+  const sidebars = ui.getSchema().sidebars;
+  if (sidebars) {
+    delete sidebars['annotation-panel'];
+  }
+
+  for (const commandId of ANNOTATION_STYLE_COMMAND_IDS) {
+    try {
+      commands.unregisterCommand(commandId);
+    } catch {
+      // Optional command depending on the active snippet schema.
+    }
+
+    commands.registerCommand({
+      id: commandId,
+      label: 'Style',
+      icon: PAINT_BUCKET_ICON_ID,
+      categories: commandId.startsWith('panel:')
+        ? ['panel', 'panel-annotation-style']
+        : ['annotation', 'annotation-style'],
+      action: ({ documentId }) => {
+        const scope = ui.forDocument(documentId);
+        scope.closeSidebarSlot?.('left', 'main');
+        scope.closeSidebarSlot?.('right', 'main');
+        openColorPalette();
+      },
+    });
+  }
+
+  return () => {
+    for (const commandId of ANNOTATION_STYLE_COMMAND_IDS) {
+      commands.unregisterCommand(commandId);
+    }
+  };
+}
+
+function installSignatureOnlyInsertCommands(registry: PluginRegistry) {
+  const commands = registry.getPlugin('commands')?.provides?.() as
+    | {
+        unregisterCommand(commandId: string): void;
+      }
+    | undefined;
+
+  if (!commands) {
+    return EMPTY_CLEANUP;
+  }
+
+  for (const commandId of DISABLED_INSERT_COMMAND_IDS) {
+    try {
+      commands.unregisterCommand(commandId);
+    } catch {
+      // Some commands are optional depending on snippet configuration.
+    }
+  }
+
+  return EMPTY_CLEANUP;
+}
+
+function installScrollStrategyAttribute(registry: PluginRegistry) {
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  if (!scroll) {
+    return EMPTY_CLEANUP;
+  }
+
+  const sync = (strategy?: string) => {
+    if (strategy === 'horizontal' || strategy === 'vertical') {
+      setViewerScrollStrategyAttribute(strategy);
+      return;
+    }
+
+    const documentId = getActiveDocumentId(registry);
+    if (!documentId) {
+      setViewerScrollStrategyAttribute('vertical');
+      return;
+    }
+
+    try {
+      const state = registry.getStore().getState() as {
+        plugins?: { scroll?: { documents?: Record<string, { strategy?: 'vertical' | 'horizontal' }> } };
+      };
+      setViewerScrollStrategyAttribute(state.plugins?.scroll?.documents?.[documentId]?.strategy ?? 'vertical');
+    } catch {
+      setViewerScrollStrategyAttribute('vertical');
+    }
+  };
+
+  sync();
+  return scroll.onStateChange((state) => sync(state.strategy));
 }
 
 function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
@@ -309,18 +542,6 @@ function installBrowserZoomInterceptor(registry: PluginRegistry) {
   };
 }
 
-function installNativeContextMenuBlocker() {
-  const onContextMenu = (event: MouseEvent) => {
-    event.preventDefault();
-  };
-
-  window.addEventListener('contextmenu', onContextMenu, { capture: true });
-
-  return () => {
-    window.removeEventListener('contextmenu', onContextMenu, { capture: true });
-  };
-}
-
 function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   let activeDocumentId: string | null = null;
   let restorePan = false;
@@ -434,6 +655,9 @@ function App() {
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
+  const [signaturesOpen, setSignaturesOpen] = useState(false);
+  const [colorPaletteOpen, setColorPaletteOpen] = useState(false);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
     bookmarks: [],
@@ -453,6 +677,7 @@ function App() {
   const navigationHideTimerRef = useRef<number>(0);
   const navigationVisibleRef = useRef(false);
   const searchOpenRef = useRef(false);
+  const thumbnailsOpenRef = useRef(false);
 
   const renderDocumentTitle = () => {
     const title = `${hasUnsavedChangesRef.current ? '*' : ''}${cleanDocumentTitleRef.current}`;
@@ -501,12 +726,11 @@ function App() {
 
   useEffect(() => {
     searchOpenRef.current = searchOpen;
-    setSearchOpenAttribute(searchOpen);
-
-    return () => {
-      setSearchOpenAttribute(false);
-    };
   }, [searchOpen]);
+
+  useEffect(() => {
+    thumbnailsOpenRef.current = thumbnailsOpen;
+  }, [thumbnailsOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -617,7 +841,6 @@ function App() {
       | {
           forDocument(documentId: string): {
             closeSidebarSlot(placement: 'left' | 'right', slot: string): void;
-            setActiveToolbar(placement: 'top', slot: 'main' | 'secondary', toolbarId: string): void;
           };
         }
       | undefined;
@@ -626,10 +849,6 @@ function App() {
       const scope = ui.forDocument(documentId);
       scope.closeSidebarSlot('right', 'main');
       scope.closeSidebarSlot('left', 'main');
-
-      requestAnimationFrame(() => {
-        scope.setActiveToolbar('top', 'main', 'main-toolbar');
-      });
     }
 
     searchOpenRef.current = true;
@@ -656,6 +875,9 @@ function App() {
           setCurrentPageNumber(1);
           setTotalPages(0);
           setCurrentTitle('');
+          setThumbnailsOpen(false);
+          setSignaturesOpen(false);
+          setColorPaletteOpen(false);
           setHasUnsavedChanges(false);
           if (navigationVisibleRef.current) {
             navigationVisibleRef.current = false;
@@ -673,7 +895,10 @@ function App() {
             () => installBuiltInPageControlsHider(nextRegistry),
             () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
             () => installBrowserZoomInterceptor(nextRegistry),
-            installNativeContextMenuBlocker,
+            () => installNativeToolbarDisabler(nextRegistry),
+            () => installSignatureOnlyInsertCommands(nextRegistry),
+            () => installAnnotationStyleCommandRedirect(nextRegistry, viewerRef.current?.container ?? null, () => setColorPaletteOpen(true)),
+            () => installScrollStrategyAttribute(nextRegistry),
             () => installMiddleMousePanInterceptor(nextRegistry),
             () => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges),
             () => installTextMarkupToolReset(nextRegistry),
@@ -685,7 +910,13 @@ function App() {
                 setCurrentTitle(title);
                 setTotalPages(nextTotalPages);
               }),
-            () => installWhenIdle(() => installThemeSwitcher(nextRegistry, viewerRef.current?.container ?? null, themeIndexRef)),
+            () => installWhenIdle(() => installThemeSwitcher(
+              nextRegistry,
+              viewerRef.current?.container ?? null,
+              themeIndexRef,
+              () => setThumbnailsOpen((open) => !open),
+              () => thumbnailsOpenRef.current,
+            )),
             () => installWhenIdle(() => installPanelCommandRedirects(nextRegistry, searchOpenRef, handleSearchOpenChange)),
             () => installWhenIdle(() => installSearchKeyboardShortcut(() => handleOpenSearch(nextRegistry))),
             () => installWhenIdle(() => installSelectionTranslate(nextRegistry, viewerRef.current?.container ?? null)),
@@ -711,6 +942,19 @@ function App() {
           };
         }}
       />
+      <ShnctlToolbar
+        registry={registry}
+        container={viewerRef.current?.container ?? null}
+        searchOpen={searchOpen}
+        thumbnailsOpen={thumbnailsOpen}
+        signaturesOpen={signaturesOpen}
+        colorPaletteOpen={colorPaletteOpen}
+        themeIndexRef={themeIndexRef}
+        onSearchOpenChange={handleSearchOpenChange}
+        onToggleThumbnails={() => setThumbnailsOpen((open) => !open)}
+        onOpenSignatures={() => setSignaturesOpen((open) => !open)}
+        onToggleColorPalette={() => setColorPaletteOpen((open) => !open)}
+      />
       <ShnctlOutline
         registry={registry}
         open={outlineOpen}
@@ -719,7 +963,23 @@ function App() {
         onCacheChange={setOutlineCache}
         onClose={() => setOutlineOpen(false)}
       />
-      <ShnctlSearch registry={registry} open={searchOpen} />
+      <ShnctlThumbnails
+        registry={registry}
+        open={thumbnailsOpen}
+        totalPages={totalPages}
+        currentPageNumber={currentPageNumber}
+        onClose={() => setThumbnailsOpen(false)}
+      />
+      <ShnctlSignatures
+        registry={registry}
+        open={signaturesOpen}
+        onClose={() => setSignaturesOpen(false)}
+      />
+      <ShnctlColorPalette
+        registry={registry}
+        open={colorPaletteOpen}
+        onClose={() => setColorPaletteOpen(false)}
+      />
       <BottomNavigationControl
         registry={registry}
         title={currentTitle}
