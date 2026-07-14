@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
+import type { AnnotationCapability, TrackedAnnotation } from '@embedpdf/plugin-annotation';
 import { Check } from 'lucide-react';
 import { getActiveDocumentId } from './utils';
 
@@ -37,50 +38,21 @@ interface AnnotationToolLike {
   defaults?: Record<string, unknown>;
 }
 
-interface TrackedAnnotationLike {
-  object: {
-    id: string;
-    pageIndex: number;
-    type?: string;
-    strokeColor?: string;
-    color?: string;
-    fontColor?: string;
-    backgroundColor?: string;
-    opacity?: number;
-  };
-}
-
-interface AnnotationScopeLike {
-  getActiveTool(): AnnotationToolLike | null;
-  getSelectedAnnotations(): TrackedAnnotationLike[];
-  updateAnnotations(patches: Array<{ pageIndex: number; id: string; patch: Record<string, unknown> }>): void;
-  onActiveToolChange(listener: (tool: AnnotationToolLike | null) => void): () => void;
-  onStateChange?(listener: () => void): () => void;
-}
-
-interface AnnotationCapabilityLike {
-  getColorPresets?(): string[];
-  addColorPreset?(color: string): void;
-  getTool?(toolId: string): AnnotationToolLike | undefined;
-  setToolDefaults?(toolId: string, patch: Record<string, unknown>): void;
-  forDocument(documentId: string): AnnotationScopeLike;
-}
-
 function getAnnotationCapability(registry?: PluginRegistry) {
-  return registry?.getPlugin('annotation')?.provides?.() as AnnotationCapabilityLike | undefined;
+  return registry?.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
 }
 
 function normalizeColor(value: unknown) {
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
 }
 
-function getAvailableFields(defaults: Record<string, unknown>, selectedAnnotations: TrackedAnnotationLike[]) {
-  const selectedObject = selectedAnnotations[0]?.object ?? {};
+function getAvailableFields(defaults: Record<string, unknown>, selectedAnnotations: TrackedAnnotation[]) {
+  const selectedObject = (selectedAnnotations[0]?.object ?? {}) as unknown as Record<string, unknown>;
   const fields = COLOR_FIELDS.filter(({ key }) => key in defaults || key in selectedObject);
   return fields.length ? fields : COLOR_FIELDS.slice(0, 2);
 }
 
-function getInitialField(defaults: Record<string, unknown>, selectedAnnotations: TrackedAnnotationLike[]) {
+function getInitialField(defaults: Record<string, unknown>, selectedAnnotations: TrackedAnnotation[]) {
   const fields = getAvailableFields(defaults, selectedAnnotations);
   return fields.find(({ key }) => key === 'strokeColor')?.key ?? fields[0].key;
 }
@@ -126,7 +98,7 @@ export function ShnctlColorPalette({
   const annotation = useMemo(() => getAnnotationCapability(registry), [registry]);
   const [activeTool, setActiveTool] = useState<AnnotationToolLike | null>(null);
   const [defaults, setDefaults] = useState<Record<string, unknown>>({});
-  const [selectedAnnotations, setSelectedAnnotations] = useState<TrackedAnnotationLike[]>([]);
+  const [selectedAnnotations, setSelectedAnnotations] = useState<TrackedAnnotation[]>([]);
   const [selectedField, setSelectedField] = useState<ColorFieldKey>('strokeColor');
 
   useEffect(() => {
@@ -141,7 +113,7 @@ export function ShnctlColorPalette({
 
     const scope = annotation.forDocument(documentId);
     const sync = (nextTool = scope.getActiveTool()) => {
-      const tool = nextTool?.id ? annotation.getTool?.(nextTool.id) ?? nextTool : nextTool;
+      const tool = nextTool?.id ? annotation.getTool(nextTool.id) ?? nextTool : nextTool;
       const nextDefaults = tool?.defaults ?? {};
       const nextSelectedAnnotations = scope.getSelectedAnnotations();
 
@@ -158,16 +130,16 @@ export function ShnctlColorPalette({
 
     sync();
     const unsubscribeTool = scope.onActiveToolChange(sync);
-    const unsubscribeState = scope.onStateChange?.(() => sync());
+    const unsubscribeState = scope.onStateChange(() => sync());
 
     return () => {
       unsubscribeTool();
-      unsubscribeState?.();
+      unsubscribeState();
     };
   }, [annotation, open, registry]);
 
   const colors = useMemo(() => {
-    const presets = annotation?.getColorPresets?.() ?? [];
+    const presets = annotation?.getColorPresets() ?? [];
     const merged = [...presets, ...FALLBACK_COLORS]
       .map(normalizeColor)
       .filter((color): color is string => Boolean(color));
@@ -176,7 +148,7 @@ export function ShnctlColorPalette({
   }, [annotation, open]);
 
   const availableFields = getAvailableFields(defaults, selectedAnnotations);
-  const selectedObject = selectedAnnotations[0]?.object ?? {};
+  const selectedObject = (selectedAnnotations[0]?.object ?? {}) as unknown as Record<string, unknown>;
   const currentColor =
     normalizeColor(defaults[selectedField]) ??
     normalizeColor(selectedObject[selectedField]) ??
@@ -191,7 +163,7 @@ export function ShnctlColorPalette({
     }
 
     if (activeTool?.id) {
-      annotation.setToolDefaults?.(activeTool.id, patch);
+      annotation.setToolDefaults(activeTool.id, patch);
       setDefaults((currentDefaults) => ({ ...currentDefaults, ...patch }));
     }
 
@@ -214,7 +186,7 @@ export function ShnctlColorPalette({
 
     const patch = getColorPatch(activeTool?.id ?? null, selectedField, normalizedColor, defaults);
     applyPatch(patch);
-    annotation.addColorPreset?.(normalizedColor);
+    annotation.addColorPreset(normalizedColor);
   };
 
   const applyOpacity = (opacity: number) => {
@@ -237,7 +209,7 @@ export function ShnctlColorPalette({
             <button
               key={key}
               type="button"
-              className={`shnctl-color-target${selectedField === key ? ' is-active' : ''}`}
+              className={`shnctl-action shnctl-color-target${selectedField === key ? ' is-active' : ''}`}
               onClick={() => setSelectedField(key)}
             >
               {label}

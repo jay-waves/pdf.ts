@@ -3,8 +3,9 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const buildDir = resolve(repoRoot, 'release', 'extension');
-const stagingRoot = resolve(repoRoot, 'release', 'package');
+const chromeReleaseRoot = resolve(repoRoot, 'release', 'chrome');
+const buildDir = resolve(chromeReleaseRoot, 'extension');
+const stagingRoot = resolve(chromeReleaseRoot, 'package');
 const packageDirName = 'pdf-ts-chrome-extension';
 const stagingDir = resolve(stagingRoot, packageDirName);
 const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
@@ -12,7 +13,7 @@ const archiveName = `${packageDirName}-v${packageJson.version}.zip`;
 const archivePath = resolve(stagingRoot, archiveName);
 
 if (!existsSync(buildDir)) {
-  console.error('Build output not found. Run `pnpm build` first.');
+  console.error('Chrome build output not found. Run `pnpm build:chrome` first.');
   process.exit(1);
 }
 

@@ -1,9 +1,12 @@
 import type { PluginRegistry } from '@embedpdf/core';
+import type { ScrollCapability } from '@embedpdf/plugin-scroll';
+import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import {
   type PdfActionObject,
   type PdfDestinationObject,
   type PdfLinkTarget,
 } from '@embedpdf/models';
+import { platform } from '#platform';
 
 export const EMPTY_CLEANUP = () => {};
 
@@ -18,10 +21,7 @@ export const isPdfDocumentUrl = (value: string) => {
 };
 
 export function getInitialFileUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const file = params.get('file') ?? params.get('src');
-
-  return file && isPdfDocumentUrl(file) ? file : undefined;
+  return platform.getInitialDocumentUrl();
 }
 
 export function getActiveDocumentId(registry: PluginRegistry) {
@@ -53,7 +53,7 @@ export function getCurrentScrollAnchor(registry: PluginRegistry): ScrollAnchor |
   const pageMetric =
     metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === pageNumber) ??
     metrics.pageVisibilityMetrics[0];
-  const viewport = registry.getPlugin('viewport')?.provides?.() as { getViewportGap(): number } | undefined;
+  const viewport = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
 
   return {
     documentId,
@@ -67,7 +67,11 @@ export function getCurrentScrollAnchor(registry: PluginRegistry): ScrollAnchor |
   };
 }
 
-function restoreScrollAnchor(registry: PluginRegistry, anchor: ScrollAnchor) {
+export function restoreScrollAnchor(registry: PluginRegistry, anchor: ScrollAnchor | null) {
+  if (!anchor) {
+    return;
+  }
+
   if (getActiveDocumentId(registry) !== anchor.documentId) {
     return;
   }
@@ -78,24 +82,6 @@ function restoreScrollAnchor(registry: PluginRegistry, anchor: ScrollAnchor) {
     pageCoordinates: anchor.pageCoordinates,
     behavior: 'instant',
   });
-}
-
-export function restoreScrollAnchorAfterLayout(registry: PluginRegistry, anchor: ScrollAnchor | null, delay = 0) {
-  if (!anchor) {
-    return;
-  }
-
-  const restore = () => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => restoreScrollAnchor(registry, anchor));
-    });
-  };
-
-  if (delay > 0) {
-    return window.setTimeout(restore, delay);
-  }
-
-  restore();
 }
 
 export function getDestinationFromTarget(target?: PdfLinkTarget): PdfDestinationObject | undefined {
@@ -115,54 +101,4 @@ export function getDestinationFromTarget(target?: PdfLinkTarget): PdfDestination
   return undefined;
 }
 
-export interface ScrollPageChangeEvent {
-  documentId: string;
-  pageNumber: number;
-  totalPages: number;
-}
-
-export interface ScrollLayoutReadyEvent {
-  documentId: string;
-  isInitial: boolean;
-  pageNumber: number;
-  totalPages: number;
-}
-
-export interface ScrollDocumentState {
-  strategy?: 'vertical' | 'horizontal';
-}
-
-export interface ScrollScope {
-  getCurrentPage(): number;
-  getTotalPages(): number;
-  getMetrics(): {
-    pageVisibilityMetrics: Array<{
-      pageNumber: number;
-      original: {
-        pageX: number;
-        pageY: number;
-      };
-      scaled: {
-        scale: number;
-      };
-    }>;
-  };
-  scrollToPage(options: {
-    pageNumber: number;
-    pageCoordinates?: { x: number; y: number };
-    behavior?: 'instant' | 'smooth' | 'auto';
-  }): void;
-  scrollToNextPage(behavior?: 'instant' | 'smooth' | 'auto'): void;
-  scrollToPreviousPage(behavior?: 'instant' | 'smooth' | 'auto'): void;
-  setScrollStrategy(strategy: 'vertical' | 'horizontal'): void;
-}
-
-export interface ScrollCapability {
-  forDocument(documentId: string): ScrollScope;
-  getCurrentPage(): number;
-  getTotalPages(): number;
-  setScrollStrategy(strategy: 'vertical' | 'horizontal', documentId?: string): void;
-  onPageChange(listener: (event: ScrollPageChangeEvent) => void): () => void;
-  onLayoutReady(listener: (event: ScrollLayoutReadyEvent) => void): () => void;
-  onStateChange(listener: (state: ScrollDocumentState) => void): () => void;
-}
+export type { ScrollCapability } from '@embedpdf/plugin-scroll';

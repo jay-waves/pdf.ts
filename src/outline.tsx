@@ -12,8 +12,7 @@ import {
 } from '@embedpdf/models';
 import {
   type BookmarkCapability,
-  type UICapability,
-} from '@embedpdf/react-pdf-viewer';
+} from '@embedpdf/plugin-bookmark';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
@@ -55,28 +54,15 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, beha
 
   const scrollScope = scroll.forDocument(documentId);
   const currentPage = scrollScope.getCurrentPage();
-  const nextPage = currentPage + direction;
-
-  if (nextPage < 1 || nextPage > scrollScope.getTotalPages()) {
+  if ((direction < 0 && currentPage <= 1) || (direction > 0 && currentPage >= scrollScope.getTotalPages())) {
     return;
   }
 
-  const metrics = scrollScope.getMetrics();
-  const currentPageMetric =
-    metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === currentPage) ??
-    metrics.pageVisibilityMetrics[0];
-  const viewport = registry.getPlugin('viewport')?.provides?.() as { getViewportGap(): number } | undefined;
-
-  scrollScope.scrollToPage({
-    pageNumber: nextPage,
-    pageCoordinates: currentPageMetric
-      ? {
-          x: currentPageMetric.original.pageX,
-          y: currentPageMetric.original.pageY - (viewport?.getViewportGap() ?? 0) / currentPageMetric.scaled.scale,
-        }
-      : undefined,
-    behavior,
-  });
+  if (direction < 0) {
+    scrollScope.scrollToPreviousPage(behavior);
+  } else {
+    scrollScope.scrollToNextPage(behavior);
+  }
 }
 
 export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {
@@ -145,31 +131,6 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
   };
 }
 
-
-export function installBuiltInPageControlsHider(registry: PluginRegistry) {
-  const ui = registry.getPlugin('ui')?.provides?.() as UICapability | undefined;
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-
-  if (!ui || !scroll) {
-    return EMPTY_CLEANUP;
-  }
-
-  const hidePageControls = (documentId?: string | null) => {
-    if (!documentId) {
-      return;
-    }
-
-    ui.disableOverlay('page-controls', documentId);
-  };
-
-  hidePageControls(getActiveDocumentId(registry));
-
-  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
-    hidePageControls(event.documentId);
-  });
-
-  return unsubscribeLayoutReady;
-}
 
 function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
   const flattened: Array<{ title: string; pageNumber: number }> = [];
@@ -266,8 +227,13 @@ export function installCurrentTitleTracker(
   };
 }
 
-async function loadBookmarks(registry: PluginRegistry) {
-  const documentId = getActiveDocumentId(registry);
+function isCurrentLoadedDocument(registry: PluginRegistry, documentId: string) {
+  const state = registry.getStore().getState();
+  return state.core.activeDocumentId === documentId && Boolean(state.core.documents[documentId]?.document);
+}
+
+async function loadBookmarks(registry: PluginRegistry, requestedDocumentId?: string) {
+  const documentId = requestedDocumentId ?? getActiveDocumentId(registry);
   const bookmark = registry.getPlugin('bookmark')?.provides?.() as BookmarkCapability | undefined;
 
   if (!bookmark) {
@@ -275,17 +241,11 @@ async function loadBookmarks(registry: PluginRegistry) {
     return [];
   }
 
-  const task = documentId ? bookmark.forDocument(documentId).getBookmarks() : bookmark.getBookmarks();
-
-  try {
-    return (await task.toPromise()).bookmarks;
-  } catch (error) {
-    console.error('[shnctl] failed to load bookmarks', {
-      documentId,
-      error,
-    });
-    throw error;
+  if (!documentId || !isCurrentLoadedDocument(registry, documentId)) {
+    return [];
   }
+
+  return (await bookmark.forDocument(documentId).getBookmarks().toPromise()).bookmarks;
 }
 
 export function installOutlinePrefetch(
@@ -308,19 +268,26 @@ export function installOutlinePrefetch(
   let loadingDocumentId: string | null = null;
   let loadedDocumentId: string | null = null;
   let cancelled = false;
+  let fallbackTimer = 0;
 
   const loadForDocument = (documentId: string) => {
-    if (cancelled || loadingDocumentId === documentId || loadedDocumentId === documentId) {
+    if (
+      cancelled ||
+      !isCurrentLoadedDocument(registry, documentId) ||
+      loadingDocumentId === documentId ||
+      loadedDocumentId === documentId
+    ) {
       return;
     }
 
     loadingDocumentId = documentId;
     onLoaded({ status: 'loading', bookmarks: [] });
 
-    loadBookmarks(registry)
+    loadBookmarks(registry, documentId)
       .then(toOutlineCache)
       .then((cache) => {
-        if (cancelled) {
+        if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
+          loadingDocumentId = null;
           return;
         }
 
@@ -335,6 +302,9 @@ export function installOutlinePrefetch(
       })
       .catch((error) => {
         loadingDocumentId = null;
+        if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
+          return;
+        }
         console.error('[shnctl] outline prefetch failed after initial layout', {
           documentId,
           error,
@@ -355,11 +325,15 @@ export function installOutlinePrefetch(
 
   const documentId = getActiveDocumentId(registry);
   if (documentId) {
-    window.setTimeout(() => loadForDocument(documentId), 300);
+    fallbackTimer = window.setTimeout(() => {
+      fallbackTimer = 0;
+      loadForDocument(documentId);
+    }, 300);
   }
 
   return () => {
     cancelled = true;
+    if (fallbackTimer) window.clearTimeout(fallbackTimer);
     unsubscribeLayoutReady();
   };
 }
@@ -507,7 +481,7 @@ function BookmarkList({
           return (
             <li key={bookmarkKey} className="shnctl-item">
               <details className="shnctl-details" open={isCurrent || hasCurrentChild}>
-                <summary className="shnctl-bookmark shnctl-summary" data-current={isCurrent ? 'true' : undefined}>
+                <summary className="shnctl-action shnctl-bookmark shnctl-summary" data-current={isCurrent ? 'true' : undefined}>
                   <span className="shnctl-bookmark-title">{title}</span>
                   {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
                 </summary>
@@ -521,7 +495,7 @@ function BookmarkList({
           <li key={bookmarkKey} className="shnctl-item">
             <button
               type="button"
-              className="shnctl-bookmark"
+              className="shnctl-action shnctl-bookmark"
               data-current={isCurrent ? 'true' : undefined}
               style={{ marginLeft: `${level * 18}px`, width: `calc(100% - ${level * 18}px)` }}
               onClick={() => onSelect(bookmark)}
@@ -573,12 +547,7 @@ function scrollCurrentBookmarkIntoView(root: HTMLElement | null) {
     });
   };
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      scrollToCurrent();
-      window.setTimeout(scrollToCurrent, 80);
-    });
-  });
+  requestAnimationFrame(scrollToCurrent);
 }
 
 export function BottomNavigationControl({
@@ -663,7 +632,7 @@ export function BottomNavigationControl({
       <div className="shnctl-bottom-nav-actions">
         <button
           type="button"
-          className="shnctl-bottom-nav-button"
+          className="shnctl-action shnctl-bottom-nav-button"
           onClick={() => scrollByPage(-1)}
           disabled={!canGoPrevious}
           aria-label="Previous page"
@@ -672,7 +641,7 @@ export function BottomNavigationControl({
         </button>
         <button
           type="button"
-          className="shnctl-bottom-nav-button"
+          className="shnctl-action shnctl-bottom-nav-button"
           onClick={() => scrollByPage(1)}
           disabled={!canGoNext}
           aria-label="Next page"
@@ -684,7 +653,7 @@ export function BottomNavigationControl({
         {shouldShowOutlineTitle ? (
           <button
             type="button"
-            className="shnctl-bottom-nav-outline"
+            className="shnctl-action shnctl-bottom-nav-outline"
             title={outlineTitle}
             aria-label="Open outline"
             onClick={() => {
