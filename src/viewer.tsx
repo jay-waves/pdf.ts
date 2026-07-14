@@ -20,7 +20,6 @@ import { Scroller, ScrollPluginPackage, ScrollStrategy } from '@embedpdf/plugin-
 import { SearchLayer, SearchPluginPackage } from '@embedpdf/plugin-search/react';
 import { SelectionLayer, SelectionPluginPackage } from '@embedpdf/plugin-selection/react';
 import { SpreadMode, SpreadPluginPackage } from '@embedpdf/plugin-spread/react';
-import { ThumbnailPluginPackage } from '@embedpdf/plugin-thumbnail/react';
 import { TilingLayer, TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
 import { Viewport, ViewportPluginPackage } from '@embedpdf/plugin-viewport/react';
 import { ZoomMode, ZoomPluginPackage, type ZoomCapability } from '@embedpdf/plugin-zoom/react';
@@ -96,6 +95,14 @@ function installWhenIdle(install: () => () => void) {
 
     cleanup();
   };
+}
+
+function ActiveDocumentTracker({ documentId, onChange }: {
+  documentId: string | null;
+  onChange(documentId: string | null): void;
+}) {
+  useEffect(() => onChange(documentId), [documentId, onChange]);
+  return null;
 }
 
 function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (dirty: boolean) => void) {
@@ -344,6 +351,7 @@ function App({ fileUrl, wasmUrl }: AppProps) {
   });
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [registry, setRegistry] = useState<PluginRegistry>();
+  const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [thumbnailsOpen, setThumbnailsOpen] = useState(false);
@@ -498,12 +506,6 @@ function App({ fileUrl, wasmUrl }: AppProps) {
         createPluginRegistration(FormPluginPackage),
       ] : []),
       createPluginRegistration(SearchPluginPackage),
-      createPluginRegistration(ThumbnailPluginPackage, {
-        width: 150,
-        gap: 10,
-        buffer: 3,
-        labelHeight: 30,
-      }),
       createPluginRegistration(BookmarkPluginPackage),
       createPluginRegistration(PrintPluginPackage),
       ...(editingEnabled ? [
@@ -626,6 +628,7 @@ function App({ fileUrl, wasmUrl }: AppProps) {
         >
           {({ activeDocumentId }) => (
             <>
+              <ActiveDocumentTracker documentId={activeDocumentId} onChange={setToolbarDocumentId} />
               {activeDocumentId ? (
                 <DocumentContent documentId={activeDocumentId}>
                   {({ isLoading, isError, isLoaded }) => (
@@ -696,6 +699,7 @@ function App({ fileUrl, wasmUrl }: AppProps) {
       )}
       <ShnctlToolbar
         registry={registry}
+        activeDocumentId={toolbarDocumentId}
         searchOpen={searchOpen}
         thumbnailsOpen={thumbnailsOpen}
         colorPaletteOpen={colorPaletteOpen}

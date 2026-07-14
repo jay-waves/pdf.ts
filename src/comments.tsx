@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import { PdfAnnotationSubtype, PdfAnnotationSubtypeName, type PdfAnnotationObject } from '@embedpdf/models';
@@ -85,8 +85,8 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
-  const entries = useMemo(() => getEntries(registry), [registry, revision]);
-  const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, entry) => {
+  const entries = useMemo(() => open ? getEntries(registry) : [], [open, registry, revision]);
+  const pageGroups = useMemo(() => open ? entries.reduce<CommentPageGroup[]>((groups, entry) => {
     const lastGroup = groups.at(-1);
     if (lastGroup?.pageIndex === entry.pageIndex) {
       lastGroup.entries.push(entry);
@@ -94,15 +94,16 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
       groups.push({ pageIndex: entry.pageIndex, entries: [entry] });
     }
     return groups;
-  }, []), [entries]);
+  }, []) : [], [entries, open]);
 
   useEffect(() => {
+    if (!open) return;
     const capability = getAnnotationCapability(registry);
     if (!capability) return;
     return capability.annotation.onAnnotationEvent((event) => {
       if (event.documentId === capability.documentId) setRevision((value) => value + 1);
     });
-  }, [registry]);
+  }, [open, registry]);
 
   useEffect(() => {
     if (open) setRevision((value) => value + 1);
@@ -110,13 +111,13 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
 
   useEffect(() => {
     if (!open || !targetAnnotationId) return;
-    const target = getEntries(registry).find(({ annotation }) => annotation.id === targetAnnotationId);
+    const target = entries.find(({ annotation }) => annotation.id === targetAnnotationId);
     if (!target) return;
     setEditingId(target.annotation.id);
     setDraft(target.annotation.contents?.trim() ?? '');
-  }, [open, registry, targetAnnotationId]);
+  }, [entries, open, targetAnnotationId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       setEditingId(null);
       return;
@@ -134,14 +135,7 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
       const currentRect = current.getBoundingClientRect();
       root.scrollTo({ top: Math.max(0, root.scrollTop + currentRect.top - rootRect.top - 12), behavior: 'smooth' });
     };
-    let innerFrame = 0;
-    const frame = requestAnimationFrame(() => {
-      innerFrame = requestAnimationFrame(scrollToCurrentPage);
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      cancelAnimationFrame(innerFrame);
-    };
+    scrollToCurrentPage();
   }, [currentPageNumber, entries.length, open]);
 
   const saveComment = (entry: CommentEntry) => {
