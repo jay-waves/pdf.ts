@@ -134,6 +134,7 @@ function injectStyles() {
   const style = document.createElement('style');
   style.textContent = `
     .shnctl-translate-panel {
+      --shnctl-translate-scale: 0.8;
       position: fixed;
       z-index: 2147483647;
       max-width: min(380px, calc(100vw - 24px));
@@ -151,6 +152,8 @@ function injectStyles() {
       pointer-events: auto;
       user-select: text;
       -webkit-user-select: text;
+      transform: scale(var(--shnctl-translate-scale));
+      transform-origin: top left;
       backdrop-filter: blur(18px) saturate(150%);
       -webkit-backdrop-filter: blur(18px) saturate(150%);
     }

@@ -7,79 +7,23 @@ import {
 import {
   type SearchCapability,
   type CommandsCapability,
-  type ToolbarItem,
-  type UICapability,
 } from '@embedpdf/react-pdf-viewer';
-import { EMPTY_CLEANUP, getActiveDocumentId, type ScrollCapability } from './utils';
+import {
+  CaseSensitive,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  WholeWord,
+} from 'lucide-react';
+import { getActiveDocumentId, type ScrollCapability } from './utils';
 
-const SEARCH_PANEL_COMMAND_ID = 'panel:toggle-search';
 const SHNCTL_SEARCH_COMMAND_ID = 'shnctl:toggle-search';
-const SHNCTL_SEARCH_ICON_ID = 'shnctl-search';
-const SHNCTL_SEARCH_TAB_ID = 'shnctl-search-mode';
-const MODE_TAB_IDS = new Set([
-  'view-mode',
-  'shnctl-page-mode',
-  SHNCTL_SEARCH_TAB_ID,
-  'annotate-mode',
-  'shapes-mode',
-  'insert-mode',
-  'form-mode',
-  'redact-mode',
-]);
 
 type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 type SearchPanelState = Pick<
   ReturnType<SearchScope['getState']>,
   'results' | 'total' | 'activeResultIndex' | 'query' | 'loading' | 'active'
 >;
-
-function ChevronLeftIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m15 18-6-6 6-6" />
-    </svg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m9 18 6-6-6-6" />
-    </svg>
-  );
-}
-
-function CaseSensitiveIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16" />
-      <path d="M22 9v7" />
-      <path d="M3.304 13h6.392" />
-      <circle cx="18.5" cy="12.5" r="3.5" />
-    </svg>
-  );
-}
-
-function WholeWordIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="7" cy="12" r="3" />
-      <path d="M10 9v6" />
-      <circle cx="17" cy="12" r="3" />
-      <path d="M14 7v8" />
-      <path d="M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1" />
-    </svg>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m21 21-4.34-4.34" />
-      <circle cx="11" cy="11" r="8" />
-    </svg>
-  );
-}
 
 function getInitialSearchState(): SearchPanelState {
   return {
@@ -373,15 +317,15 @@ export function ShnctlSearch({
   }
 
   return (
-    <div data-epdf-i="shnctl-search-toolbar" className="shnctl-search-bar" role="search" aria-label="PDF search">
-      <button type="button" className="shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" title="Previous result">
-        <ChevronLeftIcon />
+    <div data-epdf-i="shnctl-search-toolbar" className="shnctl-toolbar-secondary shnctl-search-bar" role="search" aria-label="PDF search">
+      <button type="button" className="shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" data-shnctl-tooltip="Previous result">
+        <ChevronLeft size={14} strokeWidth={2} />
       </button>
       <div className="shnctl-search-counter">
         {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
       </div>
-      <button type="button" className="shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" title="Next result">
-        <ChevronRightIcon />
+      <button type="button" className="shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" data-shnctl-tooltip="Next result">
+        <ChevronRight size={14} strokeWidth={2} />
       </button>
       <form
         className="shnctl-search-form"
@@ -399,8 +343,8 @@ export function ShnctlSearch({
           disabled={!canSearch}
           onChange={(event) => setQuery(event.currentTarget.value)}
         />
-        <button type="submit" className="shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search" title="Search">
-          <SearchIcon />
+        <button type="submit" className="shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search" data-shnctl-tooltip="Search">
+          <Search size={14} strokeWidth={2} />
         </button>
       </form>
       <button
@@ -410,9 +354,9 @@ export function ShnctlSearch({
         disabled={!canSearch}
         aria-label="Match case"
         aria-pressed={flags.includes(MatchFlag.MatchCase)}
-        title="Match case"
+        data-shnctl-tooltip="Match case"
       >
-        <CaseSensitiveIcon />
+        <CaseSensitive size={14} strokeWidth={2} />
       </button>
       <button
         type="button"
@@ -421,9 +365,9 @@ export function ShnctlSearch({
         disabled={!canSearch}
         aria-label="Match whole word"
         aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
-        title="Match whole word"
+        data-shnctl-tooltip="Match whole word"
       >
-        <WholeWordIcon />
+        <WholeWord size={14} strokeWidth={2} />
       </button>
     </div>
   );
@@ -457,22 +401,18 @@ export function installPanelCommandRedirects(
   onSearchOpenChange: (open: boolean) => void,
 ) {
   const commands = registry.getPlugin('commands')?.provides?.() as CommandsCapability | undefined;
-  const ui = registry.getPlugin('ui')?.provides?.() as UICapability | undefined;
+  const ui = registry.getPlugin('ui')?.provides?.() as
+    | {
+        forDocument(documentId: string): {
+          closeSidebarSlot(placement: 'left' | 'right', slot: string): void;
+        };
+      }
+    | undefined;
 
   const closeBuiltInSidebars = (documentId: string) => {
     const scope = ui?.forDocument(documentId);
     scope?.closeSidebarSlot('right', 'main');
     scope?.closeSidebarSlot('left', 'main');
-  };
-
-  const refreshMainToolbar = (documentId?: string) => {
-    if (!ui || !documentId) {
-      return;
-    }
-
-    requestAnimationFrame(() => {
-      ui.forDocument(documentId).setActiveToolbar('top', 'main', 'main-toolbar');
-    });
   };
 
   if (commands) {
@@ -485,148 +425,19 @@ export function installPanelCommandRedirects(
     commands.registerCommand({
       id: SHNCTL_SEARCH_COMMAND_ID,
       label: 'Search',
-      icon: SHNCTL_SEARCH_ICON_ID,
       shortcuts: ['Ctrl+F', 'Meta+F'],
       categories: ['tools'],
       action: ({ documentId }) => {
         closeBuiltInSidebars(documentId);
-        if (searchOpenRef.current) {
-          refreshMainToolbar(documentId);
-          return;
+        if (!searchOpenRef.current) {
+          onSearchOpenChange(true);
         }
-
-        onSearchOpenChange(true);
-        refreshMainToolbar(documentId);
       },
       active: () => searchOpenRef.current,
     });
   }
 
-  const restoreToolbar = replaceToolbarSearchEntry(ui);
-  const unsubscribeToolbarChanged = ui?.onToolbarChanged((event) => {
-    if (
-      searchOpenRef.current &&
-      event.placement === 'top' &&
-      event.slot === 'secondary'
-    ) {
-      onSearchOpenChange(false);
-    }
-  });
-  const onModeTabClick = (event: MouseEvent) => {
-    if (!searchOpenRef.current) {
-      return;
-    }
-
-    const modeTab = event
-      .composedPath()
-      .find((item): item is Element => item instanceof Element && MODE_TAB_IDS.has(item.getAttribute('data-epdf-i') ?? ''));
-
-    if (!modeTab || modeTab.getAttribute('data-epdf-i') === SHNCTL_SEARCH_TAB_ID) {
-      return;
-    }
-
-    onSearchOpenChange(false);
-  };
-
-  document.addEventListener('click', onModeTabClick, { capture: true });
-
   return () => {
-    document.removeEventListener('click', onModeTabClick, { capture: true });
-    unsubscribeToolbarChanged?.();
-    restoreToolbar();
     commands?.unregisterCommand(SHNCTL_SEARCH_COMMAND_ID);
   };
-}
-
-function replaceToolbarSearchEntry(ui?: UICapability) {
-  if (!ui) {
-    return EMPTY_CLEANUP;
-  }
-
-  try {
-    const schema = ui.getSchema();
-    const toolbar = schema.toolbars?.['main-toolbar'];
-    if (!toolbar?.items) {
-      return EMPTY_CLEANUP;
-    }
-
-    const originalItems = structuredClone(toolbar.items);
-    const items = removeSearchToolbarItems(originalItems);
-    const modeTabs = findToolbarItem(items, 'mode-tabs');
-    const searchTab = {
-      id: SHNCTL_SEARCH_TAB_ID,
-      commandId: SHNCTL_SEARCH_COMMAND_ID,
-      variant: 'text' as const,
-      categories: ['mode', 'search'],
-    };
-
-    if (modeTabs?.type === 'tab-group') {
-      modeTabs.tabs.splice(Math.min(2, modeTabs.tabs.length), 0, searchTab);
-    } else {
-      items.push({
-        type: 'command-button',
-        id: SHNCTL_SEARCH_TAB_ID,
-        commandId: SHNCTL_SEARCH_COMMAND_ID,
-        variant: 'text',
-      });
-    }
-
-    ui.mergeSchema({
-      toolbars: {
-        'main-toolbar': {
-          ...toolbar,
-          items,
-        },
-      },
-    });
-
-    return () => {
-      ui.mergeSchema({
-        toolbars: {
-          'main-toolbar': {
-            ...toolbar,
-            items: originalItems,
-          },
-        },
-      });
-    };
-  } catch (error) {
-    console.warn('[shnctl] failed to customize search toolbar entry', error);
-    return EMPTY_CLEANUP;
-  }
-}
-
-function removeSearchToolbarItems(items: ToolbarItem[]): ToolbarItem[] {
-  return items
-    .filter((item) => !isSearchToolbarItem(item))
-    .map((item) => {
-      if (item.type === 'group') {
-        return { ...item, items: removeSearchToolbarItems(item.items) };
-      }
-      if (item.type === 'tab-group') {
-        return { ...item, tabs: item.tabs.filter((tab) => !isSearchToolbarItem(tab)) };
-      }
-      return item;
-    });
-}
-
-function isSearchToolbarItem(item: { id?: string; commandId?: string }) {
-  const id = item.id?.toLowerCase() ?? '';
-  const commandId = item.commandId?.toLowerCase() ?? '';
-  return id.includes('search') || commandId === SEARCH_PANEL_COMMAND_ID || commandId.includes('search');
-}
-
-function findToolbarItem(items: ToolbarItem[], id: string): ToolbarItem | undefined {
-  for (const item of items) {
-    if (item.id === id) {
-      return item;
-    }
-
-    const child = item.type === 'group' ? findToolbarItem(item.items, id) : undefined;
-    if (child) {
-      return child;
-    }
-  }
-
-  return undefined;
 }
