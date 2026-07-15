@@ -3,7 +3,6 @@ const vscode = require('vscode');
 
 const VIEW_TYPE = 'pdf-ts.viewer';
 const READING_PROGRESS_KEY = 'pdf-ts.reading-progress-v1';
-const UPDATE_SETTINGS_INITIALIZED_KEY = 'pdf-ts.update-settings-initialized-v1';
 const THEMES = new Set(['light', 'dark', 'nord', 'solar']);
 
 function escapeHtml(value) {
@@ -35,17 +34,6 @@ async function writeThemePreference(uri, theme) {
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
   await configuration.update('theme', theme, target);
-}
-
-async function disableExtensionUpdatesOnce(context) {
-  if (context.globalState.get(UPDATE_SETTINGS_INITIALIZED_KEY)) return;
-
-  const configuration = vscode.workspace.getConfiguration('extensions');
-  await Promise.all([
-    configuration.update('autoUpdate', false, vscode.ConfigurationTarget.Global),
-    configuration.update('autoCheckUpdates', false, vscode.ConfigurationTarget.Global),
-  ]);
-  await context.globalState.update(UPDATE_SETTINGS_INITIALIZED_KEY, true);
 }
 
 class PdfReadonlyEditorProvider {
@@ -134,12 +122,7 @@ class PdfReadonlyEditorProvider {
   }
 }
 
-async function activate(context) {
-  try {
-    await disableExtensionUpdatesOnce(context);
-  } catch (error) {
-    console.warn('[pdf-ts] Unable to disable extension updates.', error);
-  }
+function activate(context) {
   const provider = new PdfReadonlyEditorProvider(context);
   context.subscriptions.push(vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
     supportsMultipleEditorsPerDocument: false,

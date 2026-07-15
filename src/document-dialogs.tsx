@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PrintCapability } from '@embedpdf/plugin-print';
 import { PdfPermissionFlag } from '@embedpdf/models';
+import { Dialog, RadioGroup, RadioGroupItem } from './components';
 import { getActiveDocumentId } from './utils';
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -25,7 +25,7 @@ function validatePageRange(value: string, totalPages: number) {
   return compact;
 }
 
-export function ShnctlProtectDialog({ registry, open, onClose, onProtected }: {
+export function ProtectDialog({ registry, open, onClose, onProtected }: {
   registry?: PluginRegistry;
   open: boolean;
   onClose(): void;
@@ -79,34 +79,37 @@ export function ShnctlProtectDialog({ registry, open, onClose, onProtected }: {
     }
   };
 
-  return <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && !busy && onClose()}>
-    <Dialog.Portal>
-      <Dialog.Overlay className="shnctl-overlay" />
-      <Dialog.Content className="shnctl-popup" aria-describedby={undefined}>
-        <Dialog.Title className="shnctl-popup-title">Password protection</Dialog.Title>
-        <form className="shnctl-popup-form" onSubmit={submit}>
-          <label className="shnctl-popup-field">
-            <span>Password</span>
-            <input type="password" value={password} onChange={(event) => setPassword(event.currentTarget.value)} autoComplete="new-password" autoFocus />
-          </label>
-          <label className="shnctl-popup-field">
-            <span>Confirm password</span>
-            <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} autoComplete="new-password" />
-          </label>
-          {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
-          <div className="shnctl-popup-actions">
-            <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className="is-primary" disabled={busy}>{busy ? 'Protecting...' : 'Protect'}</button>
-          </div>
-        </form>
-      </Dialog.Content>
-    </Dialog.Portal>
-  </Dialog.Root>;
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      preventClose={busy}
+      title="Password protection"
+      titleClassName="shnctl-popup-title"
+      contentClassName="shnctl-popup"
+    >
+      <form className="shnctl-popup-form" onSubmit={submit}>
+        <label className="shnctl-popup-field">
+          <span>Password</span>
+          <input type="password" value={password} onChange={(event) => setPassword(event.currentTarget.value)} autoComplete="new-password" autoFocus />
+        </label>
+        <label className="shnctl-popup-field">
+          <span>Confirm password</span>
+          <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} autoComplete="new-password" />
+        </label>
+        {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
+        <div className="shnctl-popup-actions">
+          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="is-primary" disabled={busy}>{busy ? 'Protecting...' : 'Protect'}</button>
+        </div>
+      </form>
+    </Dialog>
+  );
 }
 
 type PrintMode = 'all' | 'current' | 'custom';
 
-export function ShnctlPrintDialog({ registry, open, currentPageNumber, totalPages, onClose }: {
+export function PrintDialog({ registry, open, currentPageNumber, totalPages, onClose }: {
   registry?: PluginRegistry;
   open: boolean;
   currentPageNumber: number;
@@ -157,28 +160,38 @@ export function ShnctlPrintDialog({ registry, open, currentPageNumber, totalPage
     }
   };
 
-  return <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && !busy && onClose()}>
-    <Dialog.Portal>
-      <Dialog.Overlay className="shnctl-overlay" />
-      <Dialog.Content className="shnctl-popup" aria-describedby={undefined}>
-        <Dialog.Title className="shnctl-popup-title">Print</Dialog.Title>
-        <form className="shnctl-popup-form" onSubmit={submit}>
-          <div className="shnctl-print-modes" role="radiogroup" aria-label="Pages to print">
-            <label><input type="radio" name="print-mode" checked={mode === 'all'} onChange={() => setMode('all')} /><span>All pages</span></label>
-            <label><input type="radio" name="print-mode" checked={mode === 'current'} onChange={() => setMode('current')} /><span>Current page</span><small>{currentPageNumber}</small></label>
-            <label><input type="radio" name="print-mode" checked={mode === 'custom'} onChange={() => setMode('custom')} /><span>Pages</span></label>
-          </div>
-          {mode === 'custom' ? <label className="shnctl-popup-field">
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      preventClose={busy}
+      title="Print"
+      titleClassName="shnctl-popup-title"
+      contentClassName="shnctl-popup"
+    >
+      <form className="shnctl-popup-form" onSubmit={submit}>
+        <RadioGroup<PrintMode>
+          className="shnctl-print-modes"
+          value={mode}
+          onValueChange={setMode}
+          label="Pages to print"
+        >
+          <RadioGroupItem value="all">All pages</RadioGroupItem>
+          <RadioGroupItem value="current" detail={currentPageNumber}>Current page</RadioGroupItem>
+          <RadioGroupItem value="custom">Pages</RadioGroupItem>
+        </RadioGroup>
+        {mode === 'custom' ? (
+          <label className="shnctl-popup-field">
             <span>Page range</span>
             <input value={pageRange} onChange={(event) => setPageRange(event.currentTarget.value)} placeholder="1,3,5-7" autoFocus />
-          </label> : null}
-          {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
-          <div className="shnctl-popup-actions">
-            <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-            <button type="submit" className="is-primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</button>
-          </div>
-        </form>
-      </Dialog.Content>
-    </Dialog.Portal>
-  </Dialog.Root>;
+          </label>
+        ) : null}
+        {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
+        <div className="shnctl-popup-actions">
+          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="is-primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</button>
+        </div>
+      </form>
+    </Dialog>
+  );
 }

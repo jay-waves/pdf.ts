@@ -5,13 +5,13 @@
 ## 构建
 
 ```bash
-# 保持原有 Chrome 扩展构建
+# Chrome 扩展
 pnpm build:chrome
 pnpm package:chrome
 
-# 构建只读的 VS Code 扩展，或直接生成可安装的 VSIX
+# VS Code 扩展
 pnpm build:vscode
 pnpm package:vscode
 ```
 
-<img src="./screenshot.png" width=300/>
+<img src="./assets/screenshot.png" width="300" alt="PDF.ts Viewer screenshot" />

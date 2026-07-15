@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { AnnotationCapability, TrackedAnnotation } from '@embedpdf/plugin-annotation';
 import { Check } from 'lucide-react';
+import { Dialog } from './components';
 import { getActiveDocumentId } from './utils';
 
 const FALLBACK_COLORS = [
@@ -86,7 +86,7 @@ function getToolLabel(tool: AnnotationToolLike | null) {
   return tool.name || tool.id.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (char) => char.toUpperCase());
 }
 
-export function ShnctlColorPalette({
+export function ColorPalette({
   registry,
   open,
   onClose,
@@ -211,12 +211,13 @@ export function ShnctlColorPalette({
               type="button"
               className={`shnctl-action shnctl-color-target${selectedField === key ? ' is-active' : ''}`}
               onClick={() => setSelectedField(key)}
+              aria-pressed={selectedField === key}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="shnctl-color-grid" role="list" aria-label="Color presets">
+        <div className="shnctl-color-grid" role="group" aria-label="Color presets">
           {colors.map((color) => (
             <button
               key={color}
@@ -225,6 +226,7 @@ export function ShnctlColorPalette({
               style={{ '--shnctl-swatch-color': color } as CSSProperties}
               onClick={() => applyColor(color)}
               aria-label={color}
+              aria-pressed={currentColor === color}
             >
               {currentColor === color ? <Check size={13} strokeWidth={2.2} /> : null}
             </button>
@@ -258,14 +260,13 @@ export function ShnctlColorPalette({
   })();
 
   return (
-    <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="shnctl-overlay" />
-        <Dialog.Content className="shnctl-panel shnctl-color-panel" aria-describedby={undefined}>
-          <Dialog.Title className="shnctl-visually-hidden">Annotation colors</Dialog.Title>
-          <div className="shnctl-content">{body}</div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Annotation colors"
+      contentClassName="shnctl-panel shnctl-color-panel"
+    >
+      <div className="shnctl-content">{body}</div>
+    </Dialog>
   );
 }

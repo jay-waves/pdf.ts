@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
   CornerDownLeft,
@@ -17,8 +16,10 @@ import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
   getDestinationFromTarget,
+  isEditableTarget,
   type ScrollCapability,
 } from './utils';
+import { Dialog } from './components';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
 
@@ -35,16 +36,7 @@ function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
   };
 }
 
-function isEditableKeyboardTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  const tagName = target.tagName.toLowerCase();
-  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
-}
-
-function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, behavior: 'instant' | 'smooth' | 'auto' = 'smooth') {
+function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1) {
   const documentId = getActiveDocumentId(registry);
   const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
 
@@ -59,9 +51,9 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, beha
   }
 
   if (direction < 0) {
-    scrollScope.scrollToPreviousPage(behavior);
+    scrollScope.scrollToPreviousPage('smooth');
   } else {
-    scrollScope.scrollToNextPage(behavior);
+    scrollScope.scrollToNextPage('smooth');
   }
 }
 
@@ -76,7 +68,7 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
       return;
     }
 
-    if (isEditableKeyboardTarget(event.target)) {
+    if (isEditableTarget(event.target)) {
       return;
     }
 
@@ -99,11 +91,12 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
   };
 
   const onSideButtonUp = (event: MouseEvent) => {
-    stopSideButtonEvent(event);
     if (event.button !== 3 && event.button !== 4) {
       return;
     }
 
+    event.preventDefault();
+    event.stopImmediatePropagation();
     navigate(event.button === 3 ? -1 : 1);
   };
 
@@ -237,8 +230,7 @@ async function loadBookmarks(registry: PluginRegistry, requestedDocumentId?: str
   const bookmark = registry.getPlugin('bookmark')?.provides?.() as BookmarkCapability | undefined;
 
   if (!bookmark) {
-    console.error('[shnctl] bookmark plugin is not available');
-    return [];
+    throw new Error('Bookmark plugin is not available.');
   }
 
   if (!documentId || !isCurrentLoadedDocument(registry, documentId)) {
@@ -268,7 +260,6 @@ export function installOutlinePrefetch(
   let loadingDocumentId: string | null = null;
   let loadedDocumentId: string | null = null;
   let cancelled = false;
-  let fallbackTimer = 0;
 
   const loadForDocument = (documentId: string) => {
     if (
@@ -305,7 +296,7 @@ export function installOutlinePrefetch(
         if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
           return;
         }
-        console.error('[shnctl] outline prefetch failed after initial layout', {
+        console.error('[pdf-ts] outline prefetch failed after initial layout', {
           documentId,
           error,
         });
@@ -324,16 +315,10 @@ export function installOutlinePrefetch(
   });
 
   const documentId = getActiveDocumentId(registry);
-  if (documentId) {
-    fallbackTimer = window.setTimeout(() => {
-      fallbackTimer = 0;
-      loadForDocument(documentId);
-    }, 300);
-  }
+  if (documentId) loadForDocument(documentId);
 
   return () => {
     cancelled = true;
-    if (fallbackTimer) window.clearTimeout(fallbackTimer);
     unsubscribeLayoutReady();
   };
 }
@@ -358,7 +343,7 @@ function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject)
   });
 }
 
-export function ShnctlOutline({
+export function Outline({
   registry,
   open,
   cache,
@@ -374,12 +359,18 @@ export function ShnctlOutline({
   onClose: () => void;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const retriedOnOpenRef = useRef(false);
 
   useEffect(() => {
-    if (!open || !registry || cache.status !== 'error') {
+    if (!open) {
+      retriedOnOpenRef.current = false;
+      return;
+    }
+    if (!registry || cache.status !== 'error' || retriedOnOpenRef.current) {
       return;
     }
 
+    retriedOnOpenRef.current = true;
     let cancelled = false;
     onCacheChange({ status: 'loading', bookmarks: [] });
 
@@ -393,7 +384,7 @@ export function ShnctlOutline({
       })
       .catch((error) => {
         if (!cancelled) {
-          console.error('[shnctl] outline retry failed when panel opened', {
+          console.error('[pdf-ts] outline retry failed when panel opened', {
             error,
           });
           onCacheChange({ status: 'error', bookmarks: [] });
@@ -441,15 +432,14 @@ export function ShnctlOutline({
   }, [cache.bookmarks, cache.status, currentTitle, registry]);
 
   return (
-    <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="shnctl-overlay" />
-        <Dialog.Content className="shnctl-panel" aria-describedby={undefined}>
-          <Dialog.Title className="shnctl-visually-hidden">PDF Outline</Dialog.Title>
-          <div className="shnctl-content" ref={contentRef}>{body}</div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="PDF Outline"
+      contentClassName="shnctl-panel"
+    >
+      <div className="shnctl-content shnctl-outline-content" ref={contentRef}>{body}</div>
+    </Dialog>
   );
 }
 
@@ -603,8 +593,8 @@ export function BottomNavigationControl({
   const handlePageSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const nextPageNumber = Number.parseInt(pageInput, 10);
-    if (!Number.isFinite(nextPageNumber)) {
+    const nextPageNumber = Number(pageInput);
+    if (!Number.isInteger(nextPageNumber)) {
       setPageInput(String(pageNumber || 1));
       return;
     }
@@ -669,11 +659,16 @@ export function BottomNavigationControl({
           <input
             className="shnctl-bottom-nav-page-input"
             value={pageInput}
+            type="text"
             inputMode="numeric"
-            pattern="[0-9]*"
+            enterKeyHint="go"
+            required
             aria-label="Current page"
             disabled={!canNavigate}
-            onChange={(event) => setPageInput(event.currentTarget.value)}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              if (/^\d*$/.test(value)) setPageInput(value);
+            }}
             onFocus={onReveal}
             onBlur={() => setPageInput(String(pageNumber || 1))}
           />

@@ -8,11 +8,13 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
-      "#platform": ["./src/platform.ts"]
+      "#platform": ["./src/platform/chrome.ts"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,

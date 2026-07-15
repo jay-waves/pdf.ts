@@ -1,27 +1,28 @@
 import type { ComponentType } from 'react';
+import { Tooltip } from './tooltip';
 
-export interface ShnctlIconButtonProps {
+export interface IconButtonProps {
   label: string;
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
-  className: string;
+  className?: string;
   active?: boolean;
   disabled?: boolean;
   iconSize?: number;
-  tooltip?: 'data' | 'title';
+  tooltip?: boolean;
   onClick(): void;
 }
 
-export function ShnctlIconButton({
+export function IconButton({
   label,
   icon: Icon,
-  className,
+  className = '',
   active,
   disabled,
   iconSize = 14,
-  tooltip = 'title',
+  tooltip = true,
   onClick,
-}: ShnctlIconButtonProps) {
-  return (
+}: IconButtonProps) {
+  const button = (
     <button
       type="button"
       className={`shnctl-action ${className}${active ? ' is-active' : ''}`}
@@ -29,10 +30,13 @@ export function ShnctlIconButton({
       disabled={disabled}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
-      data-shnctl-tooltip={tooltip === 'data' ? label : undefined}
-      title={tooltip === 'title' ? label : undefined}
+      title={!tooltip || disabled ? label : undefined}
     >
       <Icon size={iconSize} strokeWidth={2} />
     </button>
   );
+
+  return tooltip && !disabled
+    ? <Tooltip content={label}>{button}</Tooltip>
+    : button;
 }

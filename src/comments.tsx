@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import { PdfAnnotationSubtype, PdfAnnotationSubtypeName, type PdfAnnotationObject } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline, X } from 'lucide-react';
+import { Dialog, DialogClose } from './components';
 import { getActiveDocumentId, type ScrollCapability } from './utils';
 
 type CommentEntry = { annotation: PdfAnnotationObject; pageIndex: number };
@@ -74,7 +74,7 @@ function navigateToAnnotation(registry: PluginRegistry, entry: CommentEntry) {
   });
 }
 
-export function ShnctlComments({ registry, open, currentPageNumber, targetAnnotationId, onClose }: {
+export function Comments({ registry, open, currentPageNumber, targetAnnotationId, onClose }: {
   registry?: PluginRegistry;
   open: boolean;
   currentPageNumber: number;
@@ -86,7 +86,7 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
   const [draft, setDraft] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
   const entries = useMemo(() => open ? getEntries(registry) : [], [open, registry, revision]);
-  const pageGroups = useMemo(() => open ? entries.reduce<CommentPageGroup[]>((groups, entry) => {
+  const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, entry) => {
     const lastGroup = groups.at(-1);
     if (lastGroup?.pageIndex === entry.pageIndex) {
       lastGroup.entries.push(entry);
@@ -94,7 +94,7 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
       groups.push({ pageIndex: entry.pageIndex, entries: [entry] });
     }
     return groups;
-  }, []) : [], [entries, open]);
+  }, []), [entries]);
 
   useEffect(() => {
     if (!open) return;
@@ -104,10 +104,6 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
       if (event.documentId === capability.documentId) setRevision((value) => value + 1);
     });
   }, [open, registry]);
-
-  useEffect(() => {
-    if (open) setRevision((value) => value + 1);
-  }, [open]);
 
   useEffect(() => {
     if (!open || !targetAnnotationId) return;
@@ -147,11 +143,12 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="shnctl-overlay" />
-        <Dialog.Content className="shnctl-panel shnctl-comment-panel" aria-describedby={undefined}>
-          <Dialog.Title className="shnctl-visually-hidden">PDF Comments</Dialog.Title>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="PDF Comments"
+      contentClassName="shnctl-panel shnctl-comment-panel"
+    >
           <div className="shnctl-comment-header">
             <div className="shnctl-comment-title">
               <span className="shnctl-comment-title-icon"><MessageSquareMore size={16} strokeWidth={1.8} /></span>
@@ -162,11 +159,11 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
                 </span>
               </span>
             </div>
-            <Dialog.Close asChild>
+            <DialogClose asChild>
               <button type="button" className="shnctl-action shnctl-comment-close" aria-label="Close comments">
                 <X size={14} strokeWidth={2} />
               </button>
-            </Dialog.Close>
+            </DialogClose>
           </div>
           <div className="shnctl-content shnctl-comment-content" ref={contentRef}>
             {!registry ? <div className="shnctl-state">Loading comments...</div> : null}
@@ -203,8 +200,6 @@ export function ShnctlComments({ registry, open, currentPageNumber, targetAnnota
               </li>)}
             </ol> : null}
           </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </Dialog>
   );
 }
