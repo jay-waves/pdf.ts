@@ -17,6 +17,7 @@ import {
   getActiveDocumentId,
   getDestinationFromTarget,
   isEditableTarget,
+  scrollToPagePreservingViewport,
   type ScrollCapability,
 } from './utils';
 import { Dialog } from './components';
@@ -55,7 +56,7 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, page
     return;
   }
 
-  scrollScope.scrollToPage({ pageNumber: targetPage, behavior: 'smooth' });
+  scrollToPagePreservingViewport(registry, targetPage, 'smooth');
 }
 
 export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {
@@ -595,17 +596,8 @@ export function BottomNavigationControl({
       return;
     }
 
-    const documentId = getActiveDocumentId(registry);
-    const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-    if (!documentId || !scroll) {
-      return;
-    }
-
     const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
-    scroll.forDocument(documentId).scrollToPage({
-      pageNumber: clampedPageNumber,
-      behavior: 'instant',
-    });
+    scrollToPagePreservingViewport(registry, clampedPageNumber);
     setPageInput(String(clampedPageNumber));
   };
 

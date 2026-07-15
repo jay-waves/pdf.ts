@@ -1,19 +1,94 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import { PdfAnnotationSubtype, PdfAnnotationSubtypeName, type PdfAnnotationObject } from '@embedpdf/models';
+import {
+  PdfAnnotationSubtype,
+  PdfAnnotationSubtypeName,
+  type PdfAnnotationObject,
+  type PdfDocumentObject,
+  type PdfEngine,
+  type PdfPageObject,
+  type PdfTextRun,
+  type Rect,
+} from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
-import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline, X } from 'lucide-react';
-import { Dialog, DialogClose } from './components';
+import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
+import { Dialog } from './components';
 import { getActiveDocumentId, type ScrollCapability } from './utils';
 
 type CommentEntry = { annotation: PdfAnnotationObject; pageIndex: number };
 type CommentPageGroup = { pageIndex: number; entries: CommentEntry[] };
+type AnnotationSummaries = Record<string, string>;
+
+const SUMMARY_MAX_LENGTH = 160;
+const pageTextRunsCache = new WeakMap<PdfDocumentObject, Map<number, Promise<PdfTextRun[]>>>();
 
 const HIDDEN_ANNOTATION_TYPES = new Set([
   PdfAnnotationSubtype.LINK,
   PdfAnnotationSubtype.POPUP,
   PdfAnnotationSubtype.WIDGET,
 ]);
+
+const TEXT_MARKUP_TYPES = new Set([
+  PdfAnnotationSubtype.HIGHLIGHT,
+  PdfAnnotationSubtype.UNDERLINE,
+  PdfAnnotationSubtype.STRIKEOUT,
+  PdfAnnotationSubtype.SQUIGGLY,
+]);
+
+function getTextMarkupRects(annotation: PdfAnnotationObject): Rect[] {
+  switch (annotation.type) {
+    case PdfAnnotationSubtype.HIGHLIGHT:
+    case PdfAnnotationSubtype.UNDERLINE:
+    case PdfAnnotationSubtype.STRIKEOUT:
+    case PdfAnnotationSubtype.SQUIGGLY:
+      return annotation.segmentRects.length ? annotation.segmentRects : [annotation.rect];
+    default:
+      return [];
+  }
+}
+
+function rectsIntersect(left: Rect, right: Rect) {
+  return left.origin.x < right.origin.x + right.size.width &&
+    left.origin.x + left.size.width > right.origin.x &&
+    left.origin.y < right.origin.y + right.size.height &&
+    left.origin.y + left.size.height > right.origin.y;
+}
+
+function normalizeSummary(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > SUMMARY_MAX_LENGTH
+    ? `${normalized.slice(0, SUMMARY_MAX_LENGTH).trimEnd()}…`
+    : normalized;
+}
+
+function summarizeMarkup(annotation: PdfAnnotationObject, runs: PdfTextRun[]) {
+  const annotationRects = getTextMarkupRects(annotation);
+  const pieces = runs
+    .filter((run) => annotationRects.some((rect) => rectsIntersect(rect, run.rect)))
+    .map((run) => run.text.trim())
+    .filter((text, index, items) => Boolean(text) && items.indexOf(text) === index);
+  return normalizeSummary(pieces.join(' '));
+}
+
+function getPageTextRuns(
+  engine: PdfEngine<Blob>,
+  document: PdfDocumentObject,
+  page: PdfPageObject,
+) {
+  let cache = pageTextRunsCache.get(document);
+  if (!cache) {
+    cache = new Map();
+    pageTextRunsCache.set(document, cache);
+  }
+
+  let pending = cache.get(page.index);
+  if (!pending) {
+    pending = engine.getPageTextRuns(document, page).toPromise().then(({ runs }) => runs);
+    cache.set(page.index, pending);
+    pending.catch(() => cache?.delete(page.index));
+  }
+  return pending;
+}
 
 function getAnnotationCapability(registry: PluginRegistry | undefined) {
   const documentId = registry ? getActiveDocumentId(registry) : undefined;
@@ -74,17 +149,22 @@ function navigateToAnnotation(registry: PluginRegistry, entry: CommentEntry) {
   });
 }
 
-export function Comments({ registry, open, currentPageNumber, targetAnnotationId, onClose }: {
+export function Comments({ engine, registry, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew, onClose }: {
+  engine?: PdfEngine<Blob> | null;
   registry?: PluginRegistry;
   open: boolean;
   currentPageNumber: number;
   targetAnnotationId?: string | null;
+  targetAnnotationIsNew?: boolean;
   onClose(): void;
 }) {
   const [revision, setRevision] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [summaries, setSummaries] = useState<AnnotationSummaries>({});
   const contentRef = useRef<HTMLDivElement>(null);
+  const consumedTargetIdRef = useRef<string | null>(null);
+  const pendingCreationIdRef = useRef<string | null>(null);
   const entries = useMemo(() => open ? getEntries(registry) : [], [open, registry, revision]);
   const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, entry) => {
     const lastGroup = groups.at(-1);
@@ -106,39 +186,98 @@ export function Comments({ registry, open, currentPageNumber, targetAnnotationId
   }, [open, registry]);
 
   useEffect(() => {
-    if (!open || !targetAnnotationId) return;
+    if (!open || !engine || !registry) {
+      setSummaries({});
+      return;
+    }
+
+    const documentId = getActiveDocumentId(registry);
+    const document = documentId
+      ? registry.getStore().getState().core.documents[documentId]?.document
+      : null;
+    if (!document) return;
+
+    let cancelled = false;
+    const markupEntries = entries.filter(({ annotation }) => TEXT_MARKUP_TYPES.has(annotation.type));
+    const pageIndexes = [...new Set(markupEntries.map(({ pageIndex }) => pageIndex))];
+    Promise.all(pageIndexes.map(async (pageIndex) => {
+      const page = document.pages[pageIndex];
+      if (!page) return [] as Array<[string, string]>;
+      const runs = await getPageTextRuns(engine, document, page);
+      return markupEntries
+        .filter((entry) => entry.pageIndex === pageIndex)
+        .map(({ annotation }) => [annotation.id, summarizeMarkup(annotation, runs)] as [string, string]);
+    })).then((pageSummaries) => {
+      if (!cancelled) setSummaries(Object.fromEntries(pageSummaries.flat()));
+    }).catch(() => {
+      if (!cancelled) {
+        setSummaries(Object.fromEntries(markupEntries.map(({ annotation }) => [annotation.id, ''])));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, entries, open, registry]);
+
+  useEffect(() => {
+    if (!open) {
+      consumedTargetIdRef.current = null;
+      pendingCreationIdRef.current = null;
+      return;
+    }
+    if (!targetAnnotationId || consumedTargetIdRef.current === targetAnnotationId) return;
     const target = entries.find(({ annotation }) => annotation.id === targetAnnotationId);
     if (!target) return;
+    consumedTargetIdRef.current = targetAnnotationId;
+    pendingCreationIdRef.current = targetAnnotationIsNew ? targetAnnotationId : null;
     setEditingId(target.annotation.id);
     setDraft(target.annotation.contents?.trim() ?? '');
-  }, [entries, open, targetAnnotationId]);
+  }, [entries, open, targetAnnotationId, targetAnnotationIsNew]);
 
   useLayoutEffect(() => {
     if (!open) {
       setEditingId(null);
       return;
     }
-    const scrollToCurrentPage = () => {
+    const frame = requestAnimationFrame(() => {
       const root = contentRef.current;
       if (!root) return;
       const items = Array.from(root.querySelectorAll<HTMLElement>('[data-comment-page]'));
-      const current = items.find((item) => Number(item.dataset.commentPage) >= currentPageNumber) ?? items.at(-1);
+      const exact = items.find((item) => Number(item.dataset.commentPage) === currentPageNumber);
+      const current = exact
+        ?? items.find((item) => Number(item.dataset.commentPage) > currentPageNumber)
+        ?? items.at(-1);
       if (!current) {
         root.scrollTo({ top: 0, behavior: 'auto' });
         return;
       }
       const rootRect = root.getBoundingClientRect();
       const currentRect = current.getBoundingClientRect();
-      root.scrollTo({ top: Math.max(0, root.scrollTop + currentRect.top - rootRect.top - 12), behavior: 'smooth' });
-    };
-    scrollToCurrentPage();
+      root.scrollTo({ top: Math.max(0, root.scrollTop + currentRect.top - rootRect.top - 12), behavior: 'auto' });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [currentPageNumber, entries.length, open]);
 
   const saveComment = (entry: CommentEntry) => {
     const capability = getAnnotationCapability(registry);
     if (!capability) return;
+    const contents = draft.trim();
     capability.annotation.forDocument(capability.documentId)
-      .updateAnnotation(entry.pageIndex, entry.annotation.id, { contents: draft.trim() });
+      .updateAnnotation(entry.pageIndex, entry.annotation.id, { contents });
+    if (pendingCreationIdRef.current === entry.annotation.id) pendingCreationIdRef.current = null;
+    setEditingId(null);
+  };
+
+  const cancelComment = (entry: CommentEntry) => {
+    if (pendingCreationIdRef.current === entry.annotation.id) {
+      const capability = getAnnotationCapability(registry);
+      capability?.annotation.forDocument(capability.documentId).deleteAnnotations([{
+        pageIndex: entry.pageIndex,
+        id: entry.annotation.id,
+      }]);
+      pendingCreationIdRef.current = null;
+    }
     setEditingId(null);
   };
 
@@ -147,24 +286,8 @@ export function Comments({ registry, open, currentPageNumber, targetAnnotationId
       open={open}
       onClose={onClose}
       title="PDF Comments"
-      contentClassName="shnctl-panel shnctl-comment-panel"
+      contentClassName="shnctl-panel"
     >
-          <div className="shnctl-comment-header">
-            <div className="shnctl-comment-title">
-              <span className="shnctl-comment-title-icon"><MessageSquareMore size={16} strokeWidth={1.8} /></span>
-              <span>
-                <span className="shnctl-comment-heading">Comments</span>
-                <span className="shnctl-comment-summary">
-                  {entries.length ? `${entries.length} annotation${entries.length === 1 ? '' : 's'} · ${pageGroups.length} page${pageGroups.length === 1 ? '' : 's'}` : 'Annotations and notes'}
-                </span>
-              </span>
-            </div>
-            <DialogClose asChild>
-              <button type="button" className="shnctl-action shnctl-comment-close" aria-label="Close comments">
-                <X size={14} strokeWidth={2} />
-              </button>
-            </DialogClose>
-          </div>
           <div className="shnctl-content shnctl-comment-content" ref={contentRef}>
             {!registry ? <div className="shnctl-state">Loading comments...</div> : null}
             {registry && !entries.length ? <div className="shnctl-comment-empty">
@@ -184,7 +307,13 @@ export function Comments({ registry, open, currentPageNumber, targetAnnotationId
                     const Icon = getEntryIcon(annotation);
                     const label = getEntryLabel(annotation);
                     const contents = annotation.contents?.trim();
-                    const isEditing = editingId === annotation.id;
+                    const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
+                    const isEditing = isComment && editingId === annotation.id;
+                    const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
+                    const hasExtractedSummary = Object.hasOwn(summaries, annotation.id);
+                    const summary = contents || (isTextMarkup
+                      ? hasExtractedSummary ? summaries[annotation.id] || 'Text summary unavailable' : 'Loading text summary…'
+                      : 'No text content');
                     return <li key={annotation.id} className="shnctl-comment-item" data-editing={isEditing ? 'true' : undefined}>
                       <button type="button" className="shnctl-action shnctl-comment-target" onClick={() => registry && navigateToAnnotation(registry, entry)}>
                         <span className="shnctl-comment-icon"><Icon size={15} strokeWidth={2} /></span>
@@ -192,8 +321,10 @@ export function Comments({ registry, open, currentPageNumber, targetAnnotationId
                       </button>
                       {isEditing ? <form className="shnctl-comment-editor" onSubmit={(event) => { event.preventDefault(); saveComment(entry); }}>
                         <textarea value={draft} onChange={(event) => setDraft(event.currentTarget.value)} autoFocus aria-label={`Comment for ${label}`} />
-                        <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => setEditingId(null)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
-                      </form> : <button type="button" className="shnctl-comment-body" onClick={() => { setEditingId(annotation.id); setDraft(contents ?? ''); }}>{contents || 'Add a note'}</button>}
+                        <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => cancelComment(entry)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
+                      </form> : isComment
+                        ? <button type="button" className="shnctl-comment-body" onClick={() => { setEditingId(annotation.id); setDraft(contents ?? ''); }}>{contents || 'Empty comment'}</button>
+                        : <div className="shnctl-comment-body shnctl-comment-body-readonly">{summary}</div>}
                     </li>;
                   })}
                 </ol>

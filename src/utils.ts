@@ -1,11 +1,15 @@
 import type { PluginRegistry } from '@embedpdf/core';
-import { ScrollStrategy, type ScrollCapability } from '@embedpdf/plugin-scroll';
-import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import {
+  Rotation,
   type PdfActionObject,
   type PdfDestinationObject,
   type PdfLinkTarget,
+  type Position,
+  type Size,
 } from '@embedpdf/models';
+import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { ScrollStrategy, type ScrollCapability } from '@embedpdf/plugin-scroll';
+import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 export const EMPTY_CLEANUP = () => {};
 
 export function isEditableTarget(target: EventTarget | null) {
@@ -82,6 +86,83 @@ export function restoreScrollAnchor(registry: PluginRegistry, anchor: ScrollAnch
     pageNumber: anchor.pageNumber,
     pageCoordinates: anchor.pageCoordinates,
     behavior: 'instant',
+  });
+}
+
+function restorePagePosition(
+  position: Position,
+  pageSize: Size,
+  rotation: Rotation,
+  scale: number,
+): Position {
+  const x = position.x / scale;
+  const y = position.y / scale;
+
+  switch (rotation) {
+    case Rotation.Degree90: return { x: y, y: pageSize.height - x };
+    case Rotation.Degree180: return { x: pageSize.width - x, y: pageSize.height - y };
+    case Rotation.Degree270: return { x: pageSize.width - y, y: x };
+    default: return { x, y };
+  }
+}
+
+export function scrollToPagePreservingViewport(
+  registry: PluginRegistry,
+  pageNumber: number,
+  behavior: ScrollBehavior = 'instant',
+) {
+  const documentId = getActiveDocumentId(registry);
+  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const viewport = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
+  const rotate = registry.getPlugin('rotate')?.provides?.() as RotateCapability | undefined;
+  if (!documentId || !scroll) return;
+
+  const scrollScope = scroll.forDocument(documentId);
+  const targetPageNumber = Math.min(Math.max(1, pageNumber), scrollScope.getTotalPages());
+  const viewportScope = viewport?.forDocument(documentId);
+  const viewportMetrics = viewportScope?.getMetrics();
+  const currentPageNumber = viewportMetrics
+    ? scrollScope.getMetrics(viewportMetrics).currentPage
+    : scrollScope.getCurrentPage();
+  if (targetPageNumber === currentPageNumber && !scrollScope.getPageChangeState().isChanging) return;
+
+  const pages = scrollScope.getSpreadPagesWithRotatedSize().flat();
+  const currentPage = pages.find((page) => page.index === currentPageNumber - 1);
+  const targetPage = pages.find((page) => page.index === targetPageNumber - 1);
+  if (!currentPage || !targetPage || !viewportMetrics) {
+    scrollScope.scrollToPage({ pageNumber: targetPageNumber, behavior });
+    return;
+  }
+
+  const currentRect = scrollScope.getRectPositionForPage(currentPage.index, {
+    origin: { x: 0, y: 0 },
+    size: currentPage.size,
+  });
+  if (!currentRect) {
+    scrollScope.scrollToPage({ pageNumber: targetPageNumber, behavior });
+    return;
+  }
+
+  const scale = currentPage.rotatedSize.width
+    ? currentRect.size.width / currentPage.rotatedSize.width
+    : currentRect.size.height / currentPage.rotatedSize.height;
+  if (!Number.isFinite(scale) || scale <= 0) {
+    scrollScope.scrollToPage({ pageNumber: targetPageNumber, behavior });
+    return;
+  }
+
+  const viewportGap = viewport?.getViewportGap() ?? 0;
+  const documentRotation = rotate?.forDocument(documentId).getRotation() ?? Rotation.Degree0;
+  const targetRotation = (targetPage.rotation + documentRotation) % 4 as Rotation;
+  const pageCoordinates = restorePagePosition({
+    x: viewportMetrics.scrollLeft - currentRect.origin.x - viewportGap,
+    y: viewportMetrics.scrollTop - currentRect.origin.y - viewportGap,
+  }, targetPage.size, targetRotation, scale);
+
+  scrollScope.scrollToPage({
+    pageNumber: targetPageNumber,
+    pageCoordinates,
+    behavior,
   });
 }
 

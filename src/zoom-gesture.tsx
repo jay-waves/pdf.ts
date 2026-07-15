@@ -16,6 +16,14 @@ function normalizeWheelDelta(event: WheelEvent, pageHeight: number) {
   return Math.max(-WHEEL_DELTA_LIMIT_PX, Math.min(WHEEL_DELTA_LIMIT_PX, deltaInPixels));
 }
 
+function normalizePanDelta(delta: number, deltaMode: number, pageSize: number) {
+  return deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? delta * 16
+    : deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? delta * pageSize
+      : delta;
+}
+
 function NormalizedWheelZoom({ documentId, children }: { documentId: string; children: ReactNode }) {
   const { provides: zoomProvides } = useZoomCapability();
   const { provides: viewportProvides } = useViewportCapability();
@@ -119,7 +127,15 @@ function NormalizedWheelZoom({ documentId, children }: { documentId: string; chi
     };
 
     const handleWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey && !event.metaKey) return;
+      if (!event.ctrlKey && !event.metaKey) {
+        const strategy = document.documentElement.dataset.shnctlScrollStrategy;
+        if (strategy === 'vertical' && event.deltaX) {
+          container.scrollLeft += normalizePanDelta(event.deltaX, event.deltaMode, container.clientWidth);
+        } else if (strategy === 'horizontal' && event.deltaY) {
+          container.scrollTop += normalizePanDelta(event.deltaY, event.deltaMode, container.clientHeight);
+        }
+        return;
+      }
       event.preventDefault();
 
       if (!commitTimer) initializeGesture(event);

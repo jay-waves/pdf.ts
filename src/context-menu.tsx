@@ -17,6 +17,7 @@ import {
   Underline,
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from './components';
+import { createCommentAnnotation } from './comment-annotation';
 import { getActiveDocumentId } from './utils';
 
 type ContextMenuState = {
@@ -80,7 +81,7 @@ export function ContextMenu({
   container: HTMLElement | null;
   canEdit: boolean;
   canTranslate: boolean;
-  onOpenComments(annotationId: string): void;
+  onOpenComments(annotationId: string, isNew: boolean): void;
   onOpenColorPalette(): void;
   onTranslate(documentId: string, anchor: { x: number; y: number }): void;
 }) {
@@ -96,13 +97,18 @@ export function ContextMenu({
     if (!documentId) return;
     let annotationMenuFrame = 0;
 
+    const isViewerEvent = (event: Event) => event.composedPath().some((target) => (
+      target instanceof HTMLElement && target.classList.contains('viewer')
+    ));
+
     const preventContextMenu = (event: MouseEvent) => {
+      if (!isViewerEvent(event)) return;
       event.preventDefault();
       event.stopPropagation();
     };
 
     const openAnnotationMenu = (event: PointerEvent) => {
-      if (!annotation || event.button !== 0) return;
+      if (!annotation || event.button !== 0 || !isViewerEvent(event)) return;
       const anchor = { x: event.clientX + 12, y: event.clientY + 12 };
       if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
       annotationMenuFrame = requestAnimationFrame(() => {
@@ -194,14 +200,20 @@ export function ContextMenu({
   const selectedLink = selectedAnnotations.length === 1
     ? getExternalLink(selectedAnnotations[0]?.object)
     : null;
+  const commentTarget = selectedAnnotations[0]?.object;
   const annotationItems = [
     ...(selectedLink ? [{ label: 'Open link', icon: Link, action: () => {
       window.open(selectedLink, '_blank', 'noopener,noreferrer');
       setMenu(null);
     } }] : []),
-    { label: 'Add comment', icon: MessageSquareMore, action: () => {
-      const annotationId = selectedAnnotations[0]?.object.id;
-      if (annotationId) onOpenComments(annotationId);
+    { label: commentTarget?.type === PdfAnnotationSubtype.TEXT ? 'Open comment' : 'Add comment', icon: MessageSquareMore, action: () => {
+      if (annotation && commentTarget) {
+        const isNew = commentTarget.type !== PdfAnnotationSubtype.TEXT;
+        const commentId = isNew
+          ? createCommentAnnotation(annotation, documentId, commentTarget)
+          : commentTarget.id;
+        onOpenComments(commentId, isNew);
+      }
       setMenu(null);
     } },
     { label: 'Colors', icon: PaintBucket, action: () => { onOpenColorPalette(); setMenu(null); } },
