@@ -471,6 +471,7 @@ export function Toolbar({
       data-visible={pinned ? 'true' : undefined}
       onMouseEnter={showToolbar}
       onMouseLeave={scheduleToolbarHide}
+      onContextMenu={(event) => event.preventDefault()}
     >
       <div className="shnctl-toolbar-main" role="toolbar" aria-label="PDF toolbar">
         <div className="shnctl-toolbar-zone shnctl-toolbar-zone-left">

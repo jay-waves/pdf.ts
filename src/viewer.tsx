@@ -79,8 +79,8 @@ function configureBundledBmpEngine(engine: PdfEngine<Blob> | null) {
   if (!currentConverter || !internalEngine.options) return engine;
 
   currentConverter.destroy?.();
-  internalEngine.options.imageConverter = (getImageData) => (
-    browserImageDataToBlobConverter(getImageData, RENDER_IMAGE_TYPE)
+  internalEngine.options.imageConverter = (getImageData, imageType, quality) => (
+    browserImageDataToBlobConverter(getImageData, imageType ?? RENDER_IMAGE_TYPE, quality)
   );
   bmpConfiguredEngines.add(engine);
   return engine;
@@ -367,6 +367,7 @@ function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidePanel, setSidePanel] = useState<SidePanel | null>(null);
   const [commentTargetId, setCommentTargetId] = useState<string | null>(null);
+  const [commentTargetIsNew, setCommentTargetIsNew] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [protectOpen, setProtectOpen] = useState(false);
   const [translationRequest, setTranslationRequest] = useState<SelectionTranslationRequest | null>(null);
@@ -696,6 +697,7 @@ function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
         onToggleColorPalette={() => setSidePanel((current) => current === 'colors' ? null : 'colors')}
         onToggleComments={() => {
           setCommentTargetId(null);
+          setCommentTargetIsNew(false);
           setSidePanel((current) => current === 'comments' ? null : 'comments');
         }}
         onOpenPrint={() => {
@@ -721,13 +723,16 @@ function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
         onClose={() => setSidePanel(null)}
       /> : null}
       {editingEnabled ? <Comments
+        engine={engine}
         registry={registry}
         open={sidePanel === 'comments'}
         currentPageNumber={currentPageNumber}
         targetAnnotationId={commentTargetId}
+        targetAnnotationIsNew={commentTargetIsNew}
         onClose={() => {
           setSidePanel(null);
           setCommentTargetId(null);
+          setCommentTargetIsNew(false);
         }}
       /> : null}
       <ContextMenu
@@ -735,8 +740,9 @@ function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
         container={viewerRootRef.current}
         canEdit={editingEnabled}
         canTranslate={platform.capabilities.translation}
-        onOpenComments={(annotationId) => {
+        onOpenComments={(annotationId, isNew) => {
           setCommentTargetId(annotationId);
+          setCommentTargetIsNew(isNew);
           setSidePanel('comments');
         }}
         onOpenColorPalette={() => setSidePanel('colors')}

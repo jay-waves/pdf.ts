@@ -4,7 +4,7 @@ import { PdfErrorCode, type PdfErrorReason, type Task } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { Dialog } from './components';
-import { getActiveDocumentId, type ScrollCapability } from './utils';
+import { getActiveDocumentId, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
 
 const THUMBNAILS_PER_GROUP = 4;
 const THUMBNAIL_WIDTH = 150;
@@ -192,14 +192,6 @@ class ThumbnailRenderCache {
   }
 }
 
-function scrollToPage(registry: PluginRegistry, pageNumber: number) {
-  const documentId = getActiveDocumentId(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-  if (!documentId || !scroll) return;
-
-  scroll.forDocument(documentId).scrollToPage({ pageNumber, behavior: 'instant' });
-}
-
 function ThumbnailFlow({
   registry,
   documentId,
@@ -292,7 +284,7 @@ function ThumbnailFlow({
               data-current={pageNumber === currentPageNumber ? 'true' : undefined}
               aria-label={`Page ${pageNumber}`}
               onClick={() => {
-                scrollToPage(registry, pageNumber);
+                scrollToPagePreservingViewport(registry, pageNumber);
                 onClose();
               }}
             >

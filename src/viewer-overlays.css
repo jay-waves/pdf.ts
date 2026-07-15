@@ -199,78 +199,10 @@
   cursor: pointer;
 }
 
-.shnctl-comment-panel {
-  width: min(560px, calc(100vw - 42px));
-  height: min(620px, calc(100vh - 42px));
-  min-height: min(420px, calc(100vh - 42px));
-  border-radius: 9px;
-}
-
-.shnctl-comment-header {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 9px 7px 15px;
-  border-bottom: 1px solid var(--shnctl-border-default);
-  background: var(--shnctl-background-surface);
-}
-
-.shnctl-comment-title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-}
-
-.shnctl-comment-title-icon,
 .shnctl-comment-empty-icon {
   display: inline-grid;
   place-items: center;
   color: var(--shnctl-foreground-muted);
-}
-
-.shnctl-comment-title-icon {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 22px;
-}
-
-.shnctl-comment-heading {
-  display: block;
-  color: var(--shnctl-foreground-primary);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 16px;
-}
-
-.shnctl-comment-summary {
-  display: block;
-  overflow: hidden;
-  color: var(--shnctl-foreground-muted);
-  font-size: 9.5px;
-  line-height: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.shnctl-comment-close {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
-  padding: 0;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--shnctl-foreground-muted);
-}
-
-.shnctl-comment-close:hover,
-.shnctl-comment-close:focus-visible {
-  background: var(--shnctl-background-surface-alt);
-  color: var(--shnctl-foreground-primary);
-  outline: none;
 }
 
 .shnctl-comment-editor-actions button {
@@ -294,7 +226,7 @@
 }
 
 .shnctl-comment-content {
-  height: calc(100% - 48px);
+  height: 100%;
   padding: 0;
 }
 
@@ -432,17 +364,25 @@
   border-radius: 3px;
   background: transparent;
   color: var(--shnctl-foreground-secondary);
-  cursor: text;
+  cursor: default;
   line-height: 16px;
   overflow-wrap: anywhere;
   text-align: left;
   white-space: pre-wrap;
 }
 
-.shnctl-comment-body:hover,
-.shnctl-comment-body:focus-visible {
+button.shnctl-comment-body {
+  cursor: text;
+}
+
+button.shnctl-comment-body:hover,
+button.shnctl-comment-body:focus-visible {
   color: var(--shnctl-foreground-primary);
   outline: none;
+}
+
+.shnctl-comment-body-readonly {
+  color: var(--shnctl-foreground-muted);
 }
 
 .shnctl-comment-editor {
