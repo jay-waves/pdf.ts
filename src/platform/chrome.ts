@@ -46,7 +46,7 @@ export const platform: ViewerPlatform = {
     translation: true,
   },
   rendering: {
-    maxDpr: 1.5,
+    maxDpr: 1.75,
   },
   getInitialDocumentUrl: getDocumentUrl,
   getDocumentKey: getDocumentUrl,
