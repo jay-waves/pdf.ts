@@ -11,16 +11,17 @@ import {
   CaseSensitive,
   ChevronLeft,
   ChevronRight,
-  Search,
+  Search as SearchIcon,
   SpellCheck,
   X,
 } from 'lucide-react';
+import { Tooltip } from './components';
 import { getActiveDocumentId, type ScrollCapability } from './utils';
 
 type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 type SearchPanelState = Pick<
   ReturnType<SearchScope['getState']>,
-  'results' | 'total' | 'activeResultIndex' | 'query' | 'loading' | 'active'
+  'results' | 'total' | 'activeResultIndex' | 'query' | 'loading'
 >;
 
 function getInitialSearchState(): SearchPanelState {
@@ -30,7 +31,6 @@ function getInitialSearchState(): SearchPanelState {
     activeResultIndex: -1,
     query: '',
     loading: false,
-    active: false,
   };
 }
 
@@ -41,7 +41,6 @@ function toSearchPanelState(state: ReturnType<SearchScope['getState']>): SearchP
     activeResultIndex: state.activeResultIndex,
     query: state.query,
     loading: state.loading,
-    active: state.active,
   };
 }
 
@@ -56,16 +55,8 @@ function getActiveSearchScope(registry?: PluginRegistry): SearchScope | undefine
   return search.forDocument(documentId);
 }
 
-function getSearchFlags(searchScope?: ReturnType<typeof getActiveSearchScope>) {
-  if (!searchScope) {
-    return [];
-  }
-
-  try {
-    return searchScope.getFlags();
-  } catch {
-    return [];
-  }
+function getSearchFlags(searchScope?: SearchScope) {
+  return searchScope?.getFlags() ?? [];
 }
 
 function scrollToSearchResult(registry: PluginRegistry | undefined, result: SearchResult | undefined) {
@@ -98,11 +89,7 @@ function getCurrentPageIndex(registry: PluginRegistry | undefined) {
     return 0;
   }
 
-  try {
-    return Math.max(0, scroll.forDocument(documentId).getCurrentPage() - 1);
-  } catch {
-    return 0;
-  }
+  return Math.max(0, scroll.forDocument(documentId).getCurrentPage() - 1);
 }
 
 function getResultIndicesForPage(results: SearchResult[], pageIndex: number) {
@@ -170,13 +157,9 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
 
     searchScope.startSearch();
 
-    try {
-      const nextState = toSearchPanelState(searchScope.getState());
-      setSearchState(nextState);
-      setQuery(nextState.query);
-    } catch {
-      setSearchState(getInitialSearchState());
-    }
+    const nextState = toSearchPanelState(searchScope.getState());
+    setSearchState(nextState);
+    setQuery(nextState.query);
 
     const unsubscribe = searchScope.onStateChange((nextState) => {
       const panelState = toSearchPanelState(nextState);
@@ -184,7 +167,10 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
       setQuery(panelState.query);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      searchScope.stopSearch();
+    };
   }, [open, searchScope]);
 
   const runSearch = (nextQuery = query) => {
@@ -193,6 +179,10 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     }
 
     alignedSearchKeyRef.current = '';
+    if (!nextQuery.trim()) {
+      searchScope.stopSearch();
+      return;
+    }
     searchScope.searchAllPages(nextQuery);
   };
 
@@ -260,6 +250,7 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
 
     const flags = getSearchFlags(searchScope);
     const nextFlags = flags.includes(flag) ? flags.filter((item) => item !== flag) : [...flags, flag];
+    alignedSearchKeyRef.current = '';
     searchScope.setFlags(nextFlags);
   };
 
@@ -285,7 +276,7 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
   };
 }
 
-export function ShnctlSearch({
+export function Search({
   registry,
   open,
 }: {
@@ -312,10 +303,11 @@ export function ShnctlSearch({
       return;
     }
 
-    window.setTimeout(() => {
+    const frame = requestAnimationFrame(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
-    }, 0);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [canSearch, open]);
 
   if (!open) {
@@ -324,15 +316,19 @@ export function ShnctlSearch({
 
   return (
     <div className="shnctl-toolbar-secondary shnctl-search-bar" role="search" aria-label="PDF search">
-      <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result" data-shnctl-tooltip="Previous result">
-        <ChevronLeft size={16} strokeWidth={2} />
-      </button>
+      <Tooltip content="Previous result">
+        <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result">
+          <ChevronLeft size={16} strokeWidth={2} />
+        </button>
+      </Tooltip>
       <div className="shnctl-search-counter">
         {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
       </div>
-      <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result" data-shnctl-tooltip="Next result">
-        <ChevronRight size={16} strokeWidth={2} />
-      </button>
+      <Tooltip content="Next result">
+        <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result">
+          <ChevronRight size={16} strokeWidth={2} />
+        </button>
+      </Tooltip>
       <form
         className="shnctl-search-form"
         onSubmit={(event) => {
@@ -364,32 +360,36 @@ export function ShnctlSearch({
             </button>
           ) : null}
         </div>
-        <button type="submit" className="shnctl-action shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search" data-shnctl-tooltip="Search">
-          <Search size={15} strokeWidth={2} />
-        </button>
+        <Tooltip content="Search">
+          <button type="submit" className="shnctl-action shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search">
+            <SearchIcon size={15} strokeWidth={2} />
+          </button>
+        </Tooltip>
       </form>
-      <button
-        type="button"
-        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
-        onClick={() => toggleFlag(MatchFlag.MatchCase)}
-        disabled={!canSearch}
-        aria-label="Match case"
-        aria-pressed={flags.includes(MatchFlag.MatchCase)}
-        data-shnctl-tooltip="Match case"
-      >
-        <CaseSensitive className="shnctl-search-case-icon" strokeWidth={2} />
-      </button>
-      <button
-        type="button"
-        className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
-        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
-        disabled={!canSearch}
-        aria-label="Match whole word"
-        aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
-        data-shnctl-tooltip="Match whole word"
-      >
-        <SpellCheck size={16} strokeWidth={2} />
-      </button>
+      <Tooltip content="Match case">
+        <button
+          type="button"
+          className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
+          onClick={() => toggleFlag(MatchFlag.MatchCase)}
+          disabled={!canSearch}
+          aria-label="Match case"
+          aria-pressed={flags.includes(MatchFlag.MatchCase)}
+        >
+          <CaseSensitive className="shnctl-search-case-icon" strokeWidth={2} />
+        </button>
+      </Tooltip>
+      <Tooltip content="Match whole word">
+        <button
+          type="button"
+          className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
+          onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
+          disabled={!canSearch}
+          aria-label="Match whole word"
+          aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
+        >
+          <SpellCheck size={16} strokeWidth={2} />
+        </button>
+      </Tooltip>
     </div>
   );
 }

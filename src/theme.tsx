@@ -1,9 +1,13 @@
+import { platform } from '#platform';
+
 export const VIEWER_THEMES = [
-  { id: 'light', name: 'Light' },
-  { id: 'dark', name: 'Dark' },
-  { id: 'nord', name: 'Nord' },
-  { id: 'solar', name: 'Solar' },
+  'light',
+  'dark',
+  'nord',
+  'solar',
 ] as const;
+
+type ViewerTheme = (typeof VIEWER_THEMES)[number];
 
 const THEME_STORAGE_KEY = 'shnctl-viewer-theme-v1';
 const TOOLBAR_PIN_STORAGE_KEY = 'shnctl-toolbar-pinned-v1';
@@ -16,24 +20,23 @@ export function setStoredToolbarPinned(pinned: boolean) {
   platform.setPreference(TOOLBAR_PIN_STORAGE_KEY, pinned ? 'true' : 'false');
 }
 
-export function getStoredThemeIndex() {
+function getStoredTheme(): ViewerTheme {
   const storedThemeId = platform.getPreference(THEME_STORAGE_KEY);
-  const index = VIEWER_THEMES.findIndex((theme) => theme.id === storedThemeId);
-  return index >= 0 ? index : 0;
+  return VIEWER_THEMES.find((theme) => theme === storedThemeId) ?? VIEWER_THEMES[0];
 }
 
-function applyViewerTheme(themeIndex: number) {
-  const theme = VIEWER_THEMES[themeIndex] ?? VIEWER_THEMES[0];
-  document.documentElement.dataset.viewerTheme = theme.id;
-
-  platform.setPreference(THEME_STORAGE_KEY, theme.id);
+export function initializeViewerTheme() {
+  document.documentElement.dataset.viewerTheme = getStoredTheme();
 }
 
-export function applyViewerThemeByIndex(themeIndex: number) {
-  applyViewerTheme(themeIndex);
+export function cycleViewerTheme() {
+  const currentTheme = document.documentElement.dataset.viewerTheme;
+  const currentIndex = VIEWER_THEMES.findIndex((theme) => theme === currentTheme);
+  const theme = VIEWER_THEMES[(currentIndex + 1) % VIEWER_THEMES.length];
+  document.documentElement.dataset.viewerTheme = theme;
+  platform.setPreference(THEME_STORAGE_KEY, theme);
 }
 
 export function setViewerScrollStrategyAttribute(strategy: 'vertical' | 'horizontal') {
   document.documentElement.dataset.shnctlScrollStrategy = strategy;
 }
-import { platform } from '#platform';

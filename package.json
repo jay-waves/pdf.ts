@@ -1,20 +1,15 @@
 {
-  "name": "embedpdf-chrome-extension-wrapper",
+  "name": "pdf-ts",
   "private": true,
-  "version": "0.3.5",
+  "version": "0.3.6",
   "type": "module",
   "scripts": {
-    "sync:chrome-version": "node scripts/sync-chrome-version.mjs",
     "typecheck": "tsgo --noEmit",
-    "build": "pnpm build:chrome",
-    "build:chrome": "pnpm typecheck && pnpm sync:chrome-version && node scripts/build-chrome.mjs",
+    "dev": "node scripts/sync-chrome-version.mjs && vite build --watch",
+    "build:chrome": "pnpm typecheck && node scripts/sync-chrome-version.mjs && vite build",
     "build:vscode": "pnpm typecheck && node scripts/build-vscode.mjs",
-    "dev": "pnpm dev:chrome",
-    "dev:chrome": "pnpm sync:chrome-version && vite build --watch",
-    "package": "pnpm package:chrome",
     "package:chrome": "pnpm build:chrome && node scripts/package-chrome.mjs",
-    "package:vscode": "pnpm build:vscode && node scripts/package-vscode.mjs",
-    "release:prepare": "pnpm package:chrome"
+    "package:vscode": "pnpm build:vscode && node scripts/package-vscode.mjs"
   },
   "dependencies": {
     "@embedpdf/core": "2.14.4",
@@ -39,9 +34,9 @@
     "@embedpdf/plugin-tiling": "2.14.4",
     "@embedpdf/plugin-viewport": "2.14.4",
     "@embedpdf/plugin-zoom": "2.14.4",
-    "@radix-ui/react-dialog": "^1.1.15",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^1.16.0",
+    "radix-ui": "^1.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

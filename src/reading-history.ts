@@ -5,8 +5,8 @@ import { platform } from '#platform';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
+  getDocumentScrollStrategy,
   restoreScrollAnchor,
-  runWhenIdle,
   type ScrollCapability,
 } from './utils';
 
@@ -26,22 +26,20 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
 
   const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
   let historyReady = false;
+  let disposed = false;
   let pendingWriteId = 0;
-  let cancelPendingIdleWrite: (() => void) | null = null;
-
-  const getScrollStrategy = (documentId: string) => {
-    const state = registry.getStore().getState() as {
-      plugins?: { scroll?: { documents?: Record<string, { strategy?: unknown }> } };
-    };
-    return state.plugins?.scroll?.documents?.[documentId]?.strategy;
-  };
+  let finalWrite: Promise<void> | null = null;
+  const initialDocumentId = getActiveDocumentId(registry);
+  let lastScrollStrategy = initialDocumentId
+    ? getDocumentScrollStrategy(registry, initialDocumentId)
+    : undefined;
 
   const getProgress = (documentId: string) => {
-    const strategy = getScrollStrategy(documentId);
+    const strategy = getDocumentScrollStrategy(registry, documentId);
     const spreadMode = spread?.forDocument(documentId).getSpreadMode();
     return {
       pageNumber: scroll.forDocument(documentId).getCurrentPage(),
-      scrollStrategy: isScrollStrategy(strategy) ? strategy : undefined,
+      scrollStrategy: strategy,
       spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
       updatedAt: new Date().toISOString(),
     };
@@ -58,21 +56,18 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
   const scheduleHistoryWrite = () => {
     if (!historyReady) return;
     if (pendingWriteId) window.clearTimeout(pendingWriteId);
-    cancelPendingIdleWrite?.();
-    cancelPendingIdleWrite = null;
     pendingWriteId = window.setTimeout(() => {
       pendingWriteId = 0;
-      cancelPendingIdleWrite = runWhenIdle(() => {
-        cancelPendingIdleWrite = null;
-        flushPendingWrite().catch((error) => console.warn('[shnctl] failed to write reading history', error));
-      });
+      flushPendingWrite().catch((error) => console.warn('[pdf-ts] failed to write reading history', error));
     }, 300);
   };
 
   const unsubscribePageChange = scroll.onPageChange(scheduleHistoryWrite);
   const unsubscribeSpreadChange = spread?.onSpreadChange(scheduleHistoryWrite);
   const unsubscribeScrollStateChange = scroll.onStateChange((state) => {
-    if (isScrollStrategy(state.strategy)) scheduleHistoryWrite();
+    if (!isScrollStrategy(state.strategy) || state.strategy === lastScrollStrategy) return;
+    lastScrollStrategy = state.strategy;
+    scheduleHistoryWrite();
   });
 
   let layoutReadyHandled = false;
@@ -85,6 +80,7 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
 
     platform.readReadingProgress(documentKey)
       .then((saved) => {
+        if (disposed) return;
         if (saved) {
           if (isSpreadMode(saved.spreadMode)) spread?.forDocument(event.documentId).setSpreadMode(saved.spreadMode);
           if (isScrollStrategy(saved.scrollStrategy)) scroll.setScrollStrategy(saved.scrollStrategy, event.documentId);
@@ -93,8 +89,9 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
         historyReady = true;
       })
       .catch((error) => {
+        if (disposed) return;
         historyReady = true;
-        console.warn('[shnctl] failed to read reading history', error);
+        console.warn('[pdf-ts] failed to read reading history', error);
       });
   };
   unsubscribeLayoutReady = scroll.onLayoutReady(handleLayoutReady);
@@ -108,8 +105,6 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
       window.clearTimeout(pendingWriteId);
       pendingWriteId = 0;
     }
-    cancelPendingIdleWrite?.();
-    cancelPendingIdleWrite = null;
     if (!historyReady) return Promise.resolve();
     const documentId = getActiveDocumentId(registry);
     return documentId
@@ -118,14 +113,18 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
   };
 
   const onClose = () => {
-    flushFinalHistoryWrite().catch((error) => console.warn('[shnctl] failed to write final reading history', error));
+    if (finalWrite) return;
+    finalWrite = flushFinalHistoryWrite()
+      .catch((error) => console.warn('[pdf-ts] failed to write final reading history', error))
+      .finally(() => {
+        finalWrite = null;
+      });
   };
-  window.addEventListener('beforeunload', onClose);
   window.addEventListener('pagehide', onClose);
 
   return () => {
     onClose();
-    window.removeEventListener('beforeunload', onClose);
+    disposed = true;
     window.removeEventListener('pagehide', onClose);
     unsubscribePageChange();
     unsubscribeSpreadChange?.();

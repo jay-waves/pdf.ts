@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
 import type { PluginRegistry } from '@embedpdf/core';
 import { PdfErrorCode, type PdfErrorReason, type Task } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { Dialog } from './components';
 import { getActiveDocumentId, type ScrollCapability } from './utils';
 
 const THUMBNAILS_PER_GROUP = 4;
@@ -281,6 +281,7 @@ function ThumbnailFlow({
       <div className="shnctl-thumbnail-grid">
         {metas.map((meta, pageIndex) => {
           const pageNumber = pageIndex + 1;
+          const thumbnailUrl = cache.getUrl(pageIndex);
 
           return (
             <button
@@ -296,9 +297,10 @@ function ThumbnailFlow({
               }}
             >
               <span className="shnctl-thumbnail-frame" style={{ height: Math.min(meta.height, 220) }}>
-                {cache.getUrl(pageIndex) ? (
+                {thumbnailUrl ? (
                   <img
-                    src={cache.getUrl(pageIndex)}
+                    src={thumbnailUrl}
+                    alt=""
                     draggable={false}
                     style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                   />
@@ -313,7 +315,7 @@ function ThumbnailFlow({
   );
 }
 
-export function ShnctlThumbnails({
+export function Thumbnails({
   registry,
   open,
   totalPages,
@@ -330,26 +332,25 @@ export function ShnctlThumbnails({
   const pageCount = getTotalPages(registry, documentId, totalPages);
 
   return (
-    <Dialog.Root open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="shnctl-overlay" />
-        <Dialog.Content className="shnctl-panel shnctl-thumbnail-panel" aria-describedby={undefined}>
-          <Dialog.Title className="shnctl-visually-hidden">PDF Thumbnails</Dialog.Title>
-          <div className="shnctl-content shnctl-thumbnail-content">
-            {registry && documentId && pageCount > 0 ? (
-              <ThumbnailFlow
-                registry={registry}
-                documentId={documentId}
-                pageCount={pageCount}
-                currentPageNumber={currentPageNumber}
-                onClose={onClose}
-              />
-            ) : (
-              <div className="shnctl-state">No pages available.</div>
-            )}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="PDF Thumbnails"
+      contentClassName="shnctl-panel shnctl-thumbnail-panel"
+    >
+      <div className="shnctl-content shnctl-thumbnail-content">
+        {registry && documentId && pageCount > 0 ? (
+          <ThumbnailFlow
+            registry={registry}
+            documentId={documentId}
+            pageCount={pageCount}
+            currentPageNumber={currentPageNumber}
+            onClose={onClose}
+          />
+        ) : (
+          <div className="shnctl-state">No pages available.</div>
+        )}
+      </div>
+    </Dialog>
   );
 }

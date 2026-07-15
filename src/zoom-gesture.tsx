@@ -154,7 +154,7 @@ function NormalizedWheelZoom({ documentId, children }: { documentId: string; chi
   );
 }
 
-export function ShnctlZoomGesture({ documentId, children }: { documentId: string; children: ReactNode }) {
+export function ZoomGesture({ documentId, children }: { documentId: string; children: ReactNode }) {
   return (
     <ZoomGestureWrapper documentId={documentId} enableWheel={false}>
       <NormalizedWheelZoom documentId={documentId}>{children}</NormalizedWheelZoom>

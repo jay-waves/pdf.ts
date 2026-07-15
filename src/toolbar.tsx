@@ -30,7 +30,7 @@ import {
   Printer,
   Redo2,
   RotateCw,
-  Search,
+  Search as SearchIcon,
   ShieldCheck,
   Square,
   StickyNote,
@@ -42,33 +42,36 @@ import {
 import {
   getActiveDocumentId,
   getCurrentScrollAnchor,
+  getDocumentScrollStrategy,
+  isEditableTarget,
   restoreScrollAnchor,
   type ScrollCapability,
 } from './utils';
 import {
-  applyViewerThemeByIndex,
+  cycleViewerTheme,
   getStoredToolbarPinned,
   setStoredToolbarPinned,
-  VIEWER_THEMES,
 } from './theme';
-import { ShnctlSearch } from './search';
-import { ShnctlIconButton } from './tool-button';
+import { Search } from './search';
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  IconButton,
+  Select,
+} from './components';
 import { documentEditingEnabled } from '#platform';
 
 type ToolbarMode = 'view' | 'page' | 'search' | 'draw';
-type SpreadModeValue = SpreadMode;
-type ScrollStrategyValue = ScrollStrategy;
-
+type PersistentToolbarMode = Exclude<ToolbarMode, 'search'>;
 const TOOLBAR_HIDE_DELAY_MS = 420;
 
-interface ShnctlToolbarProps {
+interface ToolbarProps {
   registry?: PluginRegistry;
   activeDocumentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
   colorPaletteOpen: boolean;
   commentsOpen: boolean;
-  themeIndexRef: React.MutableRefObject<number>;
   onSearchOpenChange(open: boolean): void;
   onToggleThumbnails(): void;
   onToggleColorPalette(): void;
@@ -85,12 +88,6 @@ interface ToolbarButtonProps {
   onClick(): void;
 }
 
-interface ToolbarTooltip {
-  label: string;
-  left: number;
-  top: number;
-}
-
 const MODE_ITEMS: Array<{
   id: ToolbarMode;
   label: string;
@@ -98,7 +95,7 @@ const MODE_ITEMS: Array<{
 }> = [
   { id: 'view', label: 'VIEW', icon: Eye },
   { id: 'page', label: 'PAGE', icon: StickyNote },
-  { id: 'search', label: 'SEARCH', icon: Search },
+  { id: 'search', label: 'SEARCH', icon: SearchIcon },
   ...(documentEditingEnabled ? [{ id: 'draw' as const, label: 'DRAW', icon: PencilRuler }] : []),
 ];
 
@@ -123,16 +120,17 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
   { label: '150%', value: 1.5 },
   { label: '200%', value: 2 },
 ];
+const ZOOM_SELECT_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
+const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), value]));
 
 function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: ToolbarButtonProps) {
   return (
-    <ShnctlIconButton
+    <IconButton
       className="shnctl-toolbar-button"
       label={label}
       icon={Icon}
       active={active}
       disabled={disabled}
-      tooltip="data"
       onClick={onClick}
     />
   );
@@ -153,8 +151,8 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [panMode, setPanMode] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [spreadMode, setSpreadMode] = useState<SpreadModeValue>(SpreadMode.None);
-  const [scrollStrategy, setScrollStrategy] = useState<ScrollStrategyValue>(ScrollStrategy.Vertical);
+  const [spreadMode, setSpreadMode] = useState(SpreadMode.None);
+  const [scrollStrategy, setScrollStrategy] = useState(ScrollStrategy.Vertical);
 
   useEffect(() => {
     const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom', activeDocumentId);
@@ -164,7 +162,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
 
     const zoomScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     const syncZoom = (state = zoomScope.getState()) => {
-      setZoomPercent(Math.round((state.currentZoomLevel || 1) * 100));
+      setZoomPercent(Math.round((state.currentZoomLevel ?? 1) * 100));
       setZoomLevel(state.zoomLevel);
     };
 
@@ -211,14 +209,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
       return;
     }
 
-    try {
-      const state = registry.getStore().getState() as {
-        plugins?: { scroll?: { documents?: Record<string, { strategy?: ScrollStrategyValue }> } };
-      };
-      setScrollStrategy(state.plugins?.scroll?.documents?.[activeDocumentId]?.strategy ?? ScrollStrategy.Vertical);
-    } catch {
-      setScrollStrategy(ScrollStrategy.Vertical);
-    }
+    setScrollStrategy(getDocumentScrollStrategy(registry, activeDocumentId));
 
     return scroll.onStateChange((state) => setScrollStrategy(state.strategy ?? ScrollStrategy.Vertical));
   }, [activeDocumentId, registry]);
@@ -241,33 +232,29 @@ function switchLayoutPreservingAnchor(registry: PluginRegistry | undefined, upda
   restoreScrollAnchor(registry, anchor);
 }
 
-export function ShnctlToolbar({
+export function Toolbar({
   registry,
   activeDocumentId,
   searchOpen,
   thumbnailsOpen,
   colorPaletteOpen,
   commentsOpen,
-  themeIndexRef,
   onSearchOpenChange,
   onToggleThumbnails,
   onToggleColorPalette,
   onToggleComments,
   onOpenPrint,
   onOpenProtect,
-}: ShnctlToolbarProps) {
+}: ToolbarProps) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [documentMenuOpen, setDocumentMenuOpen] = useState(false);
-  const [selectedMode, setSelectedMode] = useState<ToolbarMode>('view');
+  const [selectedMode, setSelectedMode] = useState<PersistentToolbarMode>('view');
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
-  const [tooltip, setTooltip] = useState<ToolbarTooltip | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
-  const tooltipTimerRef = useRef<number | undefined>(undefined);
   const { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
-  const availableModeItems = documentEditingEnabled ? MODE_ITEMS : MODE_ITEMS.filter(({ id }) => id !== 'draw');
   const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
-  const activeModeItem = availableModeItems.find(({ id }) => id === mode) ?? availableModeItems[0];
+  const activeModeItem = MODE_ITEMS.find(({ id }) => id === mode) ?? MODE_ITEMS[0];
   const canUseRegistry = Boolean(registry && activeDocumentId);
 
   const clearToolbarHideTimer = () => {
@@ -277,39 +264,6 @@ export function ShnctlToolbar({
     }
   };
 
-  const clearTooltipTimer = () => {
-    if (tooltipTimerRef.current !== undefined) {
-      window.clearTimeout(tooltipTimerRef.current);
-      tooltipTimerRef.current = undefined;
-    }
-  };
-
-  const hideTooltip = () => {
-    clearTooltipTimer();
-    setTooltip(null);
-  };
-
-  const scheduleTooltip = (target: EventTarget | null) => {
-    const element = target instanceof Element
-      ? target.closest<HTMLElement>('.shnctl-toolbar-button[data-shnctl-tooltip], .shnctl-toolbar-tab[data-shnctl-tooltip]')
-      : null;
-    const label = element?.dataset.shnctlTooltip;
-
-    hideTooltip();
-    if (!element || !label || element.matches(':disabled')) {
-      return;
-    }
-
-    tooltipTimerRef.current = window.setTimeout(() => {
-      const rect = element.getBoundingClientRect();
-      setTooltip({
-        label,
-        left: rect.left + rect.width / 2,
-        top: rect.bottom + 12,
-      });
-    }, 520);
-  };
-
   const showToolbar = () => {
     clearToolbarHideTimer();
     toolbarRef.current?.setAttribute('data-visible', 'true');
@@ -317,13 +271,13 @@ export function ShnctlToolbar({
 
   const hideToolbar = () => {
     clearToolbarHideTimer();
-    if (!pinned && !toolbarRef.current?.matches(':hover, :focus-within')) {
+    if (!pinned && !modeMenuOpen && !documentMenuOpen && !toolbarRef.current?.matches(':hover, :focus-within')) {
       toolbarRef.current?.removeAttribute('data-visible');
     }
   };
 
   const scheduleToolbarHide = () => {
-    if (pinned) {
+    if (pinned || modeMenuOpen || documentMenuOpen) {
       return;
     }
 
@@ -341,7 +295,6 @@ export function ShnctlToolbar({
   const setMode = (nextMode: ToolbarMode) => {
     setModeMenuOpen(false);
     setDocumentMenuOpen(false);
-    setSelectedMode(nextMode);
 
     const annotation = documentEditingEnabled ? getDocumentScope<AnnotationCapability>(registry, 'annotation') : null;
     if (documentEditingEnabled && nextMode !== 'draw') {
@@ -353,6 +306,7 @@ export function ShnctlToolbar({
       return;
     }
 
+    setSelectedMode(nextMode);
     closeSearch();
   };
 
@@ -371,12 +325,7 @@ export function ShnctlToolbar({
   };
 
   const cycleTheme = () => {
-    if (!registry) {
-      return;
-    }
-
-    themeIndexRef.current = (themeIndexRef.current + 1) % VIEWER_THEMES.length;
-    applyViewerThemeByIndex(themeIndexRef.current);
+    cycleViewerTheme();
   };
 
   const togglePinned = () => {
@@ -416,7 +365,7 @@ export function ShnctlToolbar({
     setSelectedMode('draw');
   };
 
-  const setSpread = (nextSpreadMode: SpreadModeValue) => {
+  const setSpread = (nextSpreadMode: SpreadMode) => {
     const spread = registry?.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
     if (!spread) {
       return;
@@ -425,7 +374,7 @@ export function ShnctlToolbar({
     switchLayoutPreservingAnchor(registry, () => spread.setSpreadMode(nextSpreadMode));
   };
 
-  const setScroll = (nextStrategy: ScrollStrategyValue) => {
+  const setScroll = (nextStrategy: ScrollStrategy) => {
     const scroll = registry?.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
     if (!scroll) {
       return;
@@ -440,35 +389,21 @@ export function ShnctlToolbar({
   };
 
   const printDocument = () => {
-    setDocumentMenuOpen(false);
     closeSearch();
     onOpenPrint();
   };
 
   const openSecurityDialog = () => {
-    setDocumentMenuOpen(false);
     closeSearch();
     onOpenProtect();
   };
 
   const exportDocument = () => {
-    setDocumentMenuOpen(false);
-    const exportCapability = registry?.getPlugin('export')?.provides?.() as ExportCapability | undefined;
-    if (!exportCapability) {
-      return;
-    }
-
-    const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    if (documentId) {
-      exportCapability.forDocument(documentId).download();
-    } else {
-      exportCapability.download();
-    }
+    const scopeInfo = getDocumentScope<ExportCapability>(registry, 'export');
+    scopeInfo?.capability.forDocument(scopeInfo.documentId).download();
   };
 
   const toggleThumbnailsPanel = () => {
-    setDocumentMenuOpen(false);
-    setModeMenuOpen(false);
     closeSearch();
     onToggleThumbnails();
   };
@@ -495,13 +430,7 @@ export function ShnctlToolbar({
         return;
       }
 
-      const target = event.target;
-      if (target instanceof HTMLElement) {
-        const tagName = target.tagName.toLowerCase();
-        if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable) {
-          return;
-        }
-      }
+      if (isEditableTarget(event.target)) return;
 
       const key = event.key.toLowerCase();
       const direction = key === 'y' || (key === 'z' && event.shiftKey) ? 'redo' : key === 'z' ? 'undo' : null;
@@ -531,9 +460,8 @@ export function ShnctlToolbar({
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
       clearToolbarHideTimer();
-      clearTooltipTimer();
     };
-  }, [pinned]);
+  }, [pinned, modeMenuOpen, documentMenuOpen]);
 
   return (
     <div
@@ -542,105 +470,88 @@ export function ShnctlToolbar({
       data-pinned={pinned ? 'true' : undefined}
       data-visible={pinned ? 'true' : undefined}
       onMouseEnter={showToolbar}
-      onMouseLeave={() => {
-        hideTooltip();
-        scheduleToolbarHide();
-      }}
-      onPointerOver={(event) => scheduleTooltip(event.target)}
-      onPointerOut={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (nextTarget instanceof Node && toolbarRef.current?.contains(nextTarget)) {
-          return;
-        }
-        hideTooltip();
-      }}
-      onFocus={(event) => scheduleTooltip(event.target)}
-      onBlur={hideTooltip}
+      onMouseLeave={scheduleToolbarHide}
     >
       <div className="shnctl-toolbar-main" role="toolbar" aria-label="PDF toolbar">
         <div className="shnctl-toolbar-zone shnctl-toolbar-zone-left">
           <div className="shnctl-toolbar-group">
-            <button
-              type="button"
-              className="shnctl-action shnctl-toolbar-button shnctl-document-menu-button"
-              onClick={() => {
-                setModeMenuOpen(false);
-                setDocumentMenuOpen((open) => !open);
+            <DropdownMenu
+              open={documentMenuOpen}
+              onOpenChange={(open) => {
+                setDocumentMenuOpen(open);
+                if (open) setModeMenuOpen(false);
               }}
-              aria-label="Document menu"
-              aria-haspopup="menu"
-              aria-expanded={documentMenuOpen}
+              className="shnctl-toolbar-menu"
+              trigger={(
+                <button type="button" className="shnctl-action shnctl-toolbar-button" aria-label="Document menu">
+                  <Menu size={14} strokeWidth={2} />
+                </button>
+              )}
             >
-              <Menu size={14} strokeWidth={2} />
-            </button>
-            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleTheme} disabled={!registry} />
+              <DropdownMenuItem className={thumbnailsOpen ? 'is-active' : undefined} onSelect={toggleThumbnailsPanel} disabled={!canUseRegistry}>
+                <BookImage size={14} strokeWidth={2} />
+                <span>Thumbnails</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={printDocument} disabled={!canUseRegistry}>
+                <Printer size={14} strokeWidth={2} />
+                <span>Print</span>
+              </DropdownMenuItem>
+              {documentEditingEnabled ? <DropdownMenuItem onSelect={openSecurityDialog} disabled={!canUseRegistry}>
+                <ShieldCheck size={14} strokeWidth={2} />
+                <span>Security</span>
+              </DropdownMenuItem> : null}
+              {documentEditingEnabled ? <DropdownMenuItem
+                className={commentsOpen ? 'is-active' : undefined}
+                onSelect={() => {
+                  closeSearch();
+                  onToggleComments();
+                }}
+                disabled={!canUseRegistry}
+              >
+                <MessageSquareMore size={14} strokeWidth={2} />
+                <span>Comments</span>
+              </DropdownMenuItem> : null}
+              {documentEditingEnabled ? <DropdownMenuItem onSelect={exportDocument} disabled={!canUseRegistry}>
+                <Download size={14} strokeWidth={2} />
+                <span>Export</span>
+              </DropdownMenuItem> : null}
+            </DropdownMenu>
+            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleTheme} />
             <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
             <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
-            {documentMenuOpen ? (
-              <div className="shnctl-toolbar-menu shnctl-document-menu" role="menu" onMouseLeave={() => setDocumentMenuOpen(false)}>
-                <button type="button" role="menuitem" className={thumbnailsOpen ? 'is-active' : ''} onClick={toggleThumbnailsPanel} disabled={!canUseRegistry}>
-                  <BookImage size={14} strokeWidth={2} />
-                  <span>Thumbnails</span>
-                </button>
-                <button type="button" role="menuitem" onClick={printDocument}>
-                  <Printer size={14} strokeWidth={2} />
-                  <span>Print</span>
-                </button>
-                {documentEditingEnabled ? <button type="button" role="menuitem" onClick={openSecurityDialog} disabled={!canUseRegistry}>
-                  <ShieldCheck size={14} strokeWidth={2} />
-                  <span>Security</span>
-                </button> : null}
-                {documentEditingEnabled ? <button
-                  type="button"
-                  role="menuitem"
-                  className={commentsOpen ? 'is-active' : ''}
-                  onClick={() => {
-                    setDocumentMenuOpen(false);
-                    closeSearch();
-                    onToggleComments();
-                  }}
-                  disabled={!canUseRegistry}
-                >
-                  <MessageSquareMore size={14} strokeWidth={2} />
-                  <span>Comments</span>
-                </button> : null}
-                {documentEditingEnabled ? <button type="button" role="menuitem" onClick={() => void exportDocument()} disabled={!canUseRegistry}>
-                  <Download size={14} strokeWidth={2} />
-                  <span>Export</span>
-                </button> : null}
-              </div>
-            ) : null}
           </div>
         </div>
 
         <div className="shnctl-toolbar-zone shnctl-toolbar-zone-center">
           <div className="shnctl-toolbar-group shnctl-toolbar-modes">
-            <button
-              type="button"
-              className="shnctl-toolbar-mode-select"
-              onClick={() => setModeMenuOpen((open) => !open)}
-              aria-haspopup="menu"
-              aria-expanded={modeMenuOpen}
+            <DropdownMenu
+              open={modeMenuOpen}
+              onOpenChange={(open) => {
+                setModeMenuOpen(open);
+                if (open) setDocumentMenuOpen(false);
+              }}
+              align="end"
+              trigger={(
+                <button type="button" className="shnctl-toolbar-mode-select">
+                  <activeModeItem.icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
+                  <span>{activeModeItem.label}</span>
+                </button>
+              )}
             >
-              <activeModeItem.icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
-              <span>{activeModeItem.label}</span>
-            </button>
-            {modeMenuOpen ? (
-              <div className="shnctl-toolbar-menu" role="menu" onMouseLeave={() => setModeMenuOpen(false)}>
-                {availableModeItems.map(({ id, label, icon: Icon }) => (
-                  <button key={id} type="button" role="menuitem" className={mode === id ? 'is-active' : ''} onClick={() => setMode(id)}>
+                {MODE_ITEMS.map(({ id, label, icon: Icon }) => (
+                <DropdownMenuItem key={id} className={mode === id ? 'is-active' : undefined} onSelect={() => setMode(id)}>
                     <Icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
                     <span>{label}</span>
-                  </button>
+                </DropdownMenuItem>
                 ))}
-              </div>
-            ) : null}
-            {availableModeItems.map(({ id, label, icon: Icon }) => (
+            </DropdownMenu>
+            {MODE_ITEMS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 className={`shnctl-toolbar-tab${mode === id ? ' is-active' : ''}`}
                 onClick={() => setMode(id)}
+                aria-pressed={mode === id}
               >
                 <Icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
                 <span>{label}</span>
@@ -655,20 +566,18 @@ export function ShnctlToolbar({
         <div className="shnctl-toolbar-secondary" role="toolbar" aria-label="Page toolbar">
           <div className="shnctl-toolbar-group">
             <ToolbarButton label="Zoom out" icon={Minus} onClick={() => zoomByButton(-1)} disabled={!canUseRegistry} />
-            <select
+            <Select
               className="shnctl-toolbar-zoom-select"
               value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}
-              onChange={(event) => {
-                const option = ZOOM_OPTIONS.find((item) => String(item.value) === event.currentTarget.value);
-                requestZoom(option?.value ?? Number(event.currentTarget.value));
+              displayValue={`${zoomPercent}%`}
+              options={ZOOM_SELECT_OPTIONS}
+              onValueChange={(value) => {
+                const level = ZOOM_LEVELS.get(value);
+                if (level !== undefined) requestZoom(level);
               }}
-              aria-label="Zoom"
-            >
-              <option value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}>{zoomPercent}%</option>
-              {ZOOM_OPTIONS.map((item) => (
-                <option key={String(item.value)} value={String(item.value)}>{item.label}</option>
-              ))}
-            </select>
+              label="Zoom"
+              disabled={!canUseRegistry}
+            />
             <ToolbarButton label="Zoom in" icon={Plus} onClick={() => zoomByButton(1)} disabled={!canUseRegistry} />
           </div>
           <div className="shnctl-toolbar-divider" />
@@ -681,7 +590,7 @@ export function ShnctlToolbar({
         </div>
       ) : null}
 
-      {mode === 'search' ? <ShnctlSearch registry={registry} open /> : null}
+      {mode === 'search' ? <Search registry={registry} open /> : null}
 
       {documentEditingEnabled && mode === 'draw' ? (
         <div className="shnctl-toolbar-secondary" role="toolbar" aria-label="Draw toolbar">
@@ -694,15 +603,6 @@ export function ShnctlToolbar({
             <ToolbarButton label="Undo" icon={Undo2} onClick={() => runAnnotationHistory('undo')} disabled={!canUseRegistry} />
             <ToolbarButton label="Redo" icon={Redo2} onClick={() => runAnnotationHistory('redo')} disabled={!canUseRegistry} />
           </div>
-        </div>
-      ) : null}
-      {tooltip ? (
-        <div
-          className="shnctl-toolbar-floating-tooltip"
-          style={{ left: tooltip.left, top: tooltip.top }}
-          role="tooltip"
-        >
-          {tooltip.label}
         </div>
       ) : null}
     </div>

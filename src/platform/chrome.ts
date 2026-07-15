@@ -1,4 +1,4 @@
-import { get, set } from 'idb-keyval';
+import { get, set, update } from 'idb-keyval';
 import type { ReadingProgress, ViewerPlatform } from './types';
 
 export const documentEditingEnabled = true;
@@ -67,8 +67,9 @@ export const platform: ViewerPlatform = {
     return (await readHistoryStore())[documentKey];
   },
   async writeReadingProgress(documentKey, progress) {
-    const store = await readHistoryStore();
-    store[documentKey] = progress;
-    await set(READING_HISTORY_KEY, store);
+    await update<ReadingHistoryStore>(READING_HISTORY_KEY, (store) => ({
+      ...store,
+      [documentKey]: progress,
+    }));
   },
 };

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import { PdfActionType, PdfAnnotationSubtype, type PdfAnnotationObject, type Rect } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
@@ -16,20 +16,13 @@ import {
   Trash2,
   Underline,
 } from 'lucide-react';
-import { requestSelectionTranslation } from './selection-translate';
-import { ShnctlIconButton } from './tool-button';
+import { FloatingPopover, IconButton } from './components';
 import { getActiveDocumentId } from './utils';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
   x: number;
   y: number;
-};
-
-type ContextMenuTooltip = {
-  label: string;
-  left: number;
-  top: number;
 };
 
 function getExternalLink(annotation: PdfAnnotationObject | undefined) {
@@ -68,53 +61,25 @@ function getMenuAnchor(
   const viewportGap = viewport.getViewportGap();
 
   return {
-    x: viewportRect.left + metrics.clientLeft + positionedRect.origin.x + viewportGap - metrics.scrollLeft + positionedRect.size.width + 8,
+    x: viewportRect.left + metrics.clientLeft + positionedRect.origin.x + viewportGap - metrics.scrollLeft + positionedRect.size.width * 0.65,
     y: viewportRect.top + metrics.clientTop + positionedRect.origin.y + viewportGap - metrics.scrollTop + positionedRect.size.height + 8,
   };
 }
 
-export function ShnctlContextMenu({
+export function ContextMenu({
   registry,
   container,
   onOpenComments,
   onOpenColorPalette,
+  onTranslate,
 }: {
   registry?: PluginRegistry;
   container: HTMLElement | null;
   onOpenComments(annotationId: string): void;
   onOpenColorPalette(): void;
+  onTranslate(documentId: string, anchor: { x: number; y: number }): void;
 }) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
-  const [tooltip, setTooltip] = useState<ContextMenuTooltip | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const tooltipTimerRef = useRef<number | undefined>(undefined);
-
-  const hideTooltip = () => {
-    if (tooltipTimerRef.current !== undefined) {
-      window.clearTimeout(tooltipTimerRef.current);
-      tooltipTimerRef.current = undefined;
-    }
-    setTooltip(null);
-  };
-
-  const scheduleTooltip = (target: EventTarget | null) => {
-    const element = target instanceof Element
-      ? target.closest<HTMLElement>('.shnctl-context-menu-button[data-shnctl-tooltip]')
-      : null;
-    const label = element?.dataset.shnctlTooltip;
-
-    hideTooltip();
-    if (!element || !label) return;
-
-    tooltipTimerRef.current = window.setTimeout(() => {
-      const rect = element.getBoundingClientRect();
-      setTooltip({
-        label,
-        left: rect.left + rect.width / 2,
-        top: rect.bottom + 12,
-      });
-    }, 520);
-  };
 
   useEffect(() => {
     if (!registry || !container) return;
@@ -122,6 +87,7 @@ export function ShnctlContextMenu({
     const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
     const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
     if (!documentId) return;
+    let annotationMenuFrame = 0;
 
     const preventContextMenu = (event: MouseEvent) => {
       event.preventDefault();
@@ -131,7 +97,9 @@ export function ShnctlContextMenu({
     const openAnnotationMenu = (event: PointerEvent) => {
       if (event.button !== 0) return;
       const anchor = { x: event.clientX + 12, y: event.clientY + 12 };
-      requestAnimationFrame(() => {
+      if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
+      annotationMenuFrame = requestAnimationFrame(() => {
+        annotationMenuFrame = 0;
         const selected = annotation?.forDocument(documentId).getSelectedAnnotations() ?? [];
         if (!selected[0]) return;
         setMenu({ kind: 'annotation', ...anchor });
@@ -150,6 +118,7 @@ export function ShnctlContextMenu({
     container.addEventListener('contextmenu', preventContextMenu, { capture: true });
     container.addEventListener('pointerup', openAnnotationMenu, { capture: true });
     return () => {
+      if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
       unsubscribePlacement?.();
       container.removeEventListener('contextmenu', preventContextMenu, { capture: true });
       container.removeEventListener('pointerup', openAnnotationMenu, { capture: true });
@@ -159,47 +128,15 @@ export function ShnctlContextMenu({
   useEffect(() => {
     if (!menu) return;
 
-    const closeOnPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenu(null);
-    };
-    const closeOnKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenu(null);
-    };
-    const close = () => {
-      hideTooltip();
-      setMenu(null);
-    };
+    const close = () => setMenu(null);
 
-    window.addEventListener('pointerdown', closeOnPointerDown, { capture: true });
-    window.addEventListener('keydown', closeOnKeyDown, { capture: true });
     window.addEventListener('resize', close);
     window.addEventListener('scroll', close, { capture: true, passive: true });
     return () => {
-      window.removeEventListener('pointerdown', closeOnPointerDown, { capture: true });
-      window.removeEventListener('keydown', closeOnKeyDown, { capture: true });
       window.removeEventListener('resize', close);
       window.removeEventListener('scroll', close, { capture: true });
     };
   }, [menu]);
-
-  useLayoutEffect(() => {
-    const element = menuRef.current;
-    if (!menu || !element) return;
-
-    const gap = 8;
-    const rect = element.getBoundingClientRect();
-    const x = Math.min(Math.max(gap, menu.x), Math.max(gap, window.innerWidth - rect.width - gap));
-    const y = Math.min(Math.max(gap, menu.y), Math.max(gap, window.innerHeight - rect.height - gap));
-    if (x !== menu.x || y !== menu.y) {
-      setMenu({ ...menu, x, y });
-    }
-  }, [menu]);
-
-  useEffect(() => () => {
-    if (tooltipTimerRef.current !== undefined) {
-      window.clearTimeout(tooltipTimerRef.current);
-    }
-  }, []);
 
   if (!menu || !registry) return null;
 
@@ -237,7 +174,7 @@ export function ShnctlContextMenu({
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
     { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    { label: 'Translate', icon: Languages, action: () => { requestSelectionTranslation(documentId); setMenu(null); } },
+    { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
   ];
 
   const selectedAnnotations = annotation?.forDocument(documentId).getSelectedAnnotations() ?? [];
@@ -266,48 +203,24 @@ export function ShnctlContextMenu({
 
   const items = menu.kind === 'selection' ? selectionItems : annotationItems;
   return (
-    <div
-      ref={menuRef}
+    <FloatingPopover
+      onClose={() => setMenu(null)}
+      anchor={menu}
       className="shnctl-context-menu"
-      role="menu"
-      aria-label={menu.kind === 'selection' ? 'Text selection actions' : 'Annotation actions'}
-      style={{ left: menu.x, top: menu.y }}
-      onPointerOver={(event) => scheduleTooltip(event.target)}
-      onPointerOut={(event) => {
-        const next = event.relatedTarget instanceof Element
-          ? event.relatedTarget.closest('.shnctl-context-menu-button')
-          : null;
-        const current = event.target instanceof Element
-          ? event.target.closest('.shnctl-context-menu-button')
-          : null;
-        if (next !== current) hideTooltip();
-      }}
-      onFocus={(event) => scheduleTooltip(event.target)}
-      onBlur={hideTooltip}
+      role="toolbar"
+      label={menu.kind === 'selection' ? 'Text selection actions' : 'Annotation actions'}
+      align={menu.kind === 'selection' ? 'center' : 'start'}
     >
       {items.map(({ label, icon, action }) => (
-        <ShnctlIconButton
+        <IconButton
           key={label}
           className="shnctl-context-menu-button"
           label={label}
           icon={icon}
           iconSize={13}
-          tooltip="data"
-          onClick={() => {
-            hideTooltip();
-            action();
-          }}
+          onClick={action}
         />
       ))}
-      {tooltip ? (
-        <div
-          className="shnctl-toolbar-floating-tooltip shnctl-context-menu-tooltip"
-          style={{ left: tooltip.left, top: tooltip.top }}
-          role="tooltip"
-        >
-          {tooltip.label}
-        </div>
-      ) : null}
-    </div>
+    </FloatingPopover>
   );
 }

@@ -1,31 +1,19 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import type { ExportCapability } from '@embedpdf/plugin-export';
 import type React from 'react';
-import { get, set } from 'idb-keyval';
+import { get, update } from 'idb-keyval';
+import { getFileNameFromUrl } from './utils';
 
 const FILE_HANDLES_KEY = 'embedpdf-file-handles-v1';
 
 interface StoredFileHandleEntry {
-  fileUrl: string;
-  name: string;
   handle: FileSystemFileHandle;
-  permissionMode: 'read' | 'readwrite';
-  updatedAt: string;
 }
 
 type StoredFileHandleStore = Record<string, StoredFileHandleEntry>;
 
-function getFileName(fileUrl: string) {
-  try {
-    return decodeURIComponent(new URL(fileUrl).pathname.split('/').pop() || 'document.pdf');
-  } catch {
-    return 'document.pdf';
-  }
-}
-
-export async function verifyPermission(handle: FileSystemHandle, readWrite = true) {
-  const options: FileSystemHandlePermissionDescriptor = readWrite ? { mode: 'readwrite' } : { mode: 'read' };
-
+async function verifyPermission(handle: FileSystemHandle) {
+  const options: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' };
   return (await handle.queryPermission(options)) === 'granted' || (await handle.requestPermission(options)) === 'granted';
 }
 
@@ -34,19 +22,14 @@ async function readStoredFileHandles() {
   return store && typeof store === 'object' ? store : {};
 }
 
-async function writeStoredFileHandle(fileUrl: string, handle: FileSystemFileHandle, readWrite = true) {
-  const store = await readStoredFileHandles();
-  store[fileUrl] = {
-    fileUrl,
-    name: handle.name,
-    handle,
-    permissionMode: readWrite ? 'readwrite' : 'read',
-    updatedAt: new Date().toISOString(),
-  };
-  await set(FILE_HANDLES_KEY, store);
+async function writeStoredFileHandle(fileUrl: string, handle: FileSystemFileHandle) {
+  await update<StoredFileHandleStore>(FILE_HANDLES_KEY, (store) => ({
+    ...(store && typeof store === 'object' ? store : {}),
+    [fileUrl]: { handle },
+  }));
 }
 
-async function getStoredFileHandle(fileUrl: string, readWrite = true) {
+async function getStoredFileHandle(fileUrl: string) {
   const store = await readStoredFileHandles();
   const entry = store[fileUrl];
 
@@ -54,23 +37,22 @@ async function getStoredFileHandle(fileUrl: string, readWrite = true) {
     return null;
   }
 
-  return (await verifyPermission(entry.handle, readWrite)) ? entry.handle : null;
+  return (await verifyPermission(entry.handle)) ? entry.handle : null;
 }
 
-export async function initFileHandle(
+async function initFileHandle(
   fileUrl: string | undefined,
   fileHandleRef: React.MutableRefObject<FileSystemFileHandle | null>,
-  readWrite = true,
 ) {
   if (!fileUrl?.startsWith('file://')) {
     return null;
   }
 
-  if (fileHandleRef.current && (await verifyPermission(fileHandleRef.current, readWrite))) {
+  if (fileHandleRef.current && (await verifyPermission(fileHandleRef.current))) {
     return fileHandleRef.current;
   }
 
-  const storedHandle = await getStoredFileHandle(fileUrl, readWrite);
+  const storedHandle = await getStoredFileHandle(fileUrl);
   if (storedHandle) {
     fileHandleRef.current = storedHandle;
     return storedHandle;
@@ -78,18 +60,18 @@ export async function initFileHandle(
 
   const pickedHandle = await window.showSaveFilePicker({
     id: 'pdf-file',
-    suggestedName: getFileName(fileUrl),
+    suggestedName: getFileNameFromUrl(fileUrl) ?? 'document.pdf',
     startIn: 'documents',
     types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
     excludeAcceptAllOption: true,
   });
 
-  if (!(await verifyPermission(pickedHandle, readWrite))) {
+  if (!(await verifyPermission(pickedHandle))) {
     return null;
   }
 
   fileHandleRef.current = pickedHandle;
-  await writeStoredFileHandle(fileUrl, pickedHandle, readWrite);
+  await writeStoredFileHandle(fileUrl, pickedHandle);
   return pickedHandle;
 }
 
@@ -108,7 +90,7 @@ export async function savePdfToOriginalFile(
     return false;
   }
 
-  const fileHandle = await initFileHandle(fileUrl, fileHandleRef, true);
+  const fileHandle = await initFileHandle(fileUrl, fileHandleRef);
   if (!fileHandle) {
     return false;
   }

@@ -142,7 +142,6 @@ input {
 
 
 /* Shared component primitives */
-/* Shared component primitives */
 .shnctl-action,
 .shnctl-toolbar-tab,
 .shnctl-toolbar-mode-select,
@@ -215,7 +214,7 @@ input {
 }
 
 .shnctl-comment-item:last-child,
-.shnctl-print-modes label:last-child {
+.shnctl-radio-item:last-child {
   border-bottom: 0;
 }
 
@@ -224,7 +223,7 @@ input {
   border-color: var(--shnctl-accent-primary);
 }
 
-.shnctl-print-modes label:has(input:checked),
+.shnctl-radio-item:has(.shnctl-radio-control[data-state="checked"]),
 .shnctl-context-menu-button:active {
   background: var(--shnctl-interactive-selected);
 }
