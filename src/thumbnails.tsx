@@ -197,7 +197,7 @@ function scrollToPage(registry: PluginRegistry, pageNumber: number) {
   const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
   if (!documentId || !scroll) return;
 
-  scroll.forDocument(documentId).scrollToPage({ pageNumber, behavior: 'smooth' });
+  scroll.forDocument(documentId).scrollToPage({ pageNumber, behavior: 'instant' });
 }
 
 function ThumbnailFlow({

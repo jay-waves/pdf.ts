@@ -52,29 +52,34 @@ function getMenuAnchor(
   const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
   const viewport = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
   const positionedRect = scroll?.forDocument(documentId).getRectPositionForPage(pageIndex, rect);
-  if (!positionedRect || !viewport) return null;
+  const scrollerElement = container.querySelector<HTMLElement>('.pdf-scroller');
+  if (!positionedRect || !viewport || !scrollerElement) return null;
 
-  const viewportScope = viewport.forDocument(documentId);
-  const viewportElement = container.querySelector<HTMLElement>('.viewer');
-  const viewportRect = (viewportElement ?? container).getBoundingClientRect();
-  const metrics = viewportScope.getMetrics();
+  // The scroll plugin returns coordinates relative to the PDF content. Use the
+  // actual centered scroller as the viewport-space origin so wide VS Code
+  // webviews do not introduce an unaccounted horizontal offset.
+  const scrollerRect = scrollerElement.getBoundingClientRect();
   const viewportGap = viewport.getViewportGap();
 
   return {
-    x: viewportRect.left + metrics.clientLeft + positionedRect.origin.x + viewportGap - metrics.scrollLeft + positionedRect.size.width * 0.65,
-    y: viewportRect.top + metrics.clientTop + positionedRect.origin.y + viewportGap - metrics.scrollTop + positionedRect.size.height + 8,
+    x: scrollerRect.left + positionedRect.origin.x + viewportGap + positionedRect.size.width * 0.65,
+    y: scrollerRect.top + positionedRect.origin.y + viewportGap + positionedRect.size.height + 8,
   };
 }
 
 export function ContextMenu({
   registry,
   container,
+  canEdit,
+  canTranslate,
   onOpenComments,
   onOpenColorPalette,
   onTranslate,
 }: {
   registry?: PluginRegistry;
   container: HTMLElement | null;
+  canEdit: boolean;
+  canTranslate: boolean;
   onOpenComments(annotationId: string): void;
   onOpenColorPalette(): void;
   onTranslate(documentId: string, anchor: { x: number; y: number }): void;
@@ -85,7 +90,9 @@ export function ContextMenu({
     if (!registry || !container) return;
     const documentId = getActiveDocumentId(registry);
     const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
-    const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+    const annotation = canEdit
+      ? registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined
+      : undefined;
     if (!documentId) return;
     let annotationMenuFrame = 0;
 
@@ -95,7 +102,7 @@ export function ContextMenu({
     };
 
     const openAnnotationMenu = (event: PointerEvent) => {
-      if (event.button !== 0) return;
+      if (!annotation || event.button !== 0) return;
       const anchor = { x: event.clientX + 12, y: event.clientY + 12 };
       if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
       annotationMenuFrame = requestAnimationFrame(() => {
@@ -123,7 +130,7 @@ export function ContextMenu({
       container.removeEventListener('contextmenu', preventContextMenu, { capture: true });
       container.removeEventListener('pointerup', openAnnotationMenu, { capture: true });
     };
-  }, [container, registry]);
+  }, [canEdit, container, registry]);
 
   useEffect(() => {
     if (!menu) return;
@@ -144,7 +151,9 @@ export function ContextMenu({
   if (!documentId) return null;
 
   const selection = registry.getPlugin('selection')?.provides?.() as SelectionCapability | undefined;
-  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+  const annotation = canEdit
+    ? registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined
+    : undefined;
 
   const addTextMarkup = (
     type: PdfAnnotationSubtype.HIGHLIGHT | PdfAnnotationSubtype.UNDERLINE | PdfAnnotationSubtype.STRIKEOUT,
@@ -171,10 +180,14 @@ export function ContextMenu({
 
   const selectionItems = [
     { label: 'Copy', icon: Copy, action: () => { selection?.forDocument(documentId).copyToClipboard(); setMenu(null); } },
-    { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
-    { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
-    { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
+    ...(canEdit ? [
+      { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
+      { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
+      { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
+    ] : []),
+    ...(canTranslate ? [
+      { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
+    ] : []),
   ];
 
   const selectedAnnotations = annotation?.forDocument(documentId).getSelectedAnnotations() ?? [];
@@ -201,7 +214,8 @@ export function ContextMenu({
     } },
   ];
 
-  const items = menu.kind === 'selection' ? selectionItems : annotationItems;
+  const items = menu.kind === 'selection' ? selectionItems : canEdit ? annotationItems : [];
+  if (!items.length) return null;
   return (
     <FloatingPopover
       onClose={() => setMenu(null)}

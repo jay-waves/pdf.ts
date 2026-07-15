@@ -73,7 +73,7 @@ function scrollToSearchResult(registry: PluginRegistry | undefined, result: Sear
 
   scroll.forDocument(documentId).scrollToPage({
     pageNumber: result.pageIndex + 1,
-    behavior: 'smooth',
+    behavior: 'instant',
   });
 }
 

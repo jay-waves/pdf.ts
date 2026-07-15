@@ -70,7 +70,7 @@ function navigateToAnnotation(registry: PluginRegistry, entry: CommentEntry) {
   scroll.forDocument(capability.documentId).scrollToPage({
     pageNumber: entry.pageIndex + 1,
     pageCoordinates: { x: entry.annotation.rect.origin.x, y: entry.annotation.rect.origin.y },
-    behavior: 'smooth',
+    behavior: 'instant',
   });
 }
 
