@@ -22,6 +22,7 @@ import {
 import { Dialog } from './components';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
+const SIDE_BUTTON_LONG_PRESS_MS = 450;
 
 export type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 export type OutlineCache = {
@@ -36,7 +37,7 @@ function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
   };
 }
 
-function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1) {
+function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, pageCount = 1) {
   const documentId = getActiveDocumentId(registry);
   const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
 
@@ -46,20 +47,22 @@ function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1) {
 
   const scrollScope = scroll.forDocument(documentId);
   const currentPage = scrollScope.getCurrentPage();
-  if ((direction < 0 && currentPage <= 1) || (direction > 0 && currentPage >= scrollScope.getTotalPages())) {
+  const targetPage = Math.min(
+    Math.max(1, currentPage + direction * pageCount),
+    scrollScope.getTotalPages(),
+  );
+  if (targetPage === currentPage) {
     return;
   }
 
-  if (direction < 0) {
-    scrollScope.scrollToPreviousPage('smooth');
-  } else {
-    scrollScope.scrollToNextPage('smooth');
-  }
+  scrollScope.scrollToPage({ pageNumber: targetPage, behavior: 'smooth' });
 }
 
 export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {
-  const navigate = (direction: -1 | 1) => {
-    requestPageNavigation(registry, direction);
+  let sideButtonPress: { button: 3 | 4; startedAt: number } | null = null;
+
+  const navigate = (direction: -1 | 1, pageCount = 1) => {
+    requestPageNavigation(registry, direction, pageCount);
     onNavigate();
   };
 
@@ -90,6 +93,12 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
     event.stopImmediatePropagation();
   };
 
+  const onSideButtonDown = (event: MouseEvent) => {
+    stopSideButtonEvent(event);
+    if (event.button !== 3 && event.button !== 4) return;
+    sideButtonPress = { button: event.button, startedAt: performance.now() };
+  };
+
   const onSideButtonUp = (event: MouseEvent) => {
     if (event.button !== 3 && event.button !== 4) {
       return;
@@ -97,7 +106,11 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    navigate(event.button === 3 ? -1 : 1);
+    const duration = sideButtonPress?.button === event.button
+      ? performance.now() - sideButtonPress.startedAt
+      : 0;
+    sideButtonPress = null;
+    navigate(event.button === 3 ? -1 : 1, duration >= SIDE_BUTTON_LONG_PRESS_MS ? 2 : 1);
   };
 
   const onPointerMove = (event: PointerEvent) => {
@@ -109,18 +122,24 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
     event.stopImmediatePropagation();
   };
 
+  const clearSideButtonPress = () => {
+    sideButtonPress = null;
+  };
+
   window.addEventListener('keydown', onKeyDown, { capture: true });
-  window.addEventListener('mousedown', stopSideButtonEvent, { capture: true });
+  window.addEventListener('mousedown', onSideButtonDown, { capture: true });
   window.addEventListener('mouseup', onSideButtonUp, { capture: true });
   window.addEventListener('pointermove', onPointerMove, { capture: true });
   window.addEventListener('auxclick', stopSideButtonEvent, { capture: true });
+  window.addEventListener('blur', clearSideButtonPress);
 
   return () => {
     window.removeEventListener('keydown', onKeyDown, { capture: true });
-    window.removeEventListener('mousedown', stopSideButtonEvent, { capture: true });
+    window.removeEventListener('mousedown', onSideButtonDown, { capture: true });
     window.removeEventListener('mouseup', onSideButtonUp, { capture: true });
     window.removeEventListener('pointermove', onPointerMove, { capture: true });
     window.removeEventListener('auxclick', stopSideButtonEvent, { capture: true });
+    window.removeEventListener('blur', clearSideButtonPress);
   };
 }
 
@@ -339,7 +358,7 @@ function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject)
   scroll.forDocument(documentId).scrollToPage({
     pageNumber: destination.pageIndex + 1,
     pageCoordinates: xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : undefined,
-    behavior: 'smooth',
+    behavior: 'instant',
   });
 }
 
@@ -585,7 +604,7 @@ export function BottomNavigationControl({
     const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
     scroll.forDocument(documentId).scrollToPage({
       pageNumber: clampedPageNumber,
-      behavior: 'smooth',
+      behavior: 'instant',
     });
     setPageInput(String(clampedPageNumber));
   };

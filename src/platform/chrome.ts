@@ -45,6 +45,9 @@ export const platform: ViewerPlatform = {
   capabilities: {
     translation: true,
   },
+  rendering: {
+    maxDpr: 1.5,
+  },
   getInitialDocumentUrl: getDocumentUrl,
   getDocumentKey: getDocumentUrl,
   getPdfiumWasmUrl: (bundledUrl) => bundledUrl,

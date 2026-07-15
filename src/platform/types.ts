@@ -9,6 +9,9 @@ export interface ViewerPlatform {
   readonly capabilities: {
     readonly translation: boolean;
   };
+  readonly rendering: {
+    readonly maxDpr: number;
+  };
   getInitialDocumentUrl(): string | undefined;
   getDocumentKey(): string | undefined;
   getPdfiumWasmUrl(bundledUrl: string): string;

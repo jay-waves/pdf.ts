@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
+import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
 import { usePdfiumEngine } from '@embedpdf/engines/react';
-import { Rotation } from '@embedpdf/models';
+import { Rotation, type PdfEngine } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { AnnotationLayer, AnnotationPluginPackage, LockModeType, type AnnotationCapability } from '@embedpdf/plugin-annotation/react';
 import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
@@ -58,7 +59,6 @@ import { SelectionTranslate, type SelectionTranslationRequest } from './selectio
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { documentEditingEnabled, platform } from '#platform';
 
-const MAX_RENDER_DPR = 1.5;
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
@@ -68,6 +68,23 @@ const PDFIUM_WASM_URL = platform.getPdfiumWasmUrl(new URL(pdfiumWasmUrl, import.
 // usePdfiumEngine tracks fontFallback by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
 const PDFIUM_FONT_FALLBACK = { fonts: {} };
+const bmpConfiguredEngines = new WeakSet<object>();
+
+function configureBundledBmpEngine(engine: PdfEngine<Blob> | null) {
+  if (!engine || bmpConfiguredEngines.has(engine)) return engine;
+  const internalEngine = engine as PdfEngine<Blob> & {
+    options?: { imageConverter: ImageDataConverter<Blob> };
+  };
+  const currentConverter = internalEngine.options?.imageConverter;
+  if (!currentConverter || !internalEngine.options) return engine;
+
+  currentConverter.destroy?.();
+  internalEngine.options.imageConverter = (getImageData) => (
+    browserImageDataToBlobConverter(getImageData, RENDER_IMAGE_TYPE)
+  );
+  bmpConfiguredEngines.add(engine);
+  return engine;
+}
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {
   event.preventDefault();
@@ -79,6 +96,14 @@ function ActiveDocumentTracker({ documentId, onChange }: {
   onChange(documentId: string | null): void;
 }) {
   useEffect(() => onChange(documentId), [documentId, onChange]);
+  return null;
+}
+
+function ResourceConsumedNotifier({ url, onConsumed }: {
+  url?: string;
+  onConsumed(url?: string): void;
+}) {
+  useEffect(() => onConsumed(url), [onConsumed, url]);
   return null;
 }
 
@@ -128,7 +153,7 @@ function installScrollStrategyAttribute(registry: PluginRegistry) {
   return scroll.onStateChange((state) => sync(state.strategy));
 }
 
-function installRenderDprCap(maxDpr = MAX_RENDER_DPR) {
+function installRenderDprCap(maxDpr: number) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
   const originalDpr = window.devicePixelRatio || 1;
   let nativeDescriptor: PropertyDescriptor | undefined = descriptor;
@@ -320,18 +345,21 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
 interface AppProps {
   fileUrl?: string;
   wasmUrl: string;
+  onResourceConsumed(url?: string): void;
 }
 
 type SidePanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
 
-function App({ fileUrl, wasmUrl }: AppProps) {
+function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
   const documentKey = platform.getDocumentKey();
   const editingEnabled = documentEditingEnabled;
-  const { engine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
+  const { engine: workerEngine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
     wasmUrl,
     worker: true,
+    encoderPoolSize: 0, // Bundled BMP conversion uses no encoder workers.
     fontFallback: PDFIUM_FONT_FALLBACK,
   });
+  const engine = configureBundledBmpEngine(workerEngine);
   const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const saveInProgressRef = useRef(false);
   const [registry, setRegistry] = useState<PluginRegistry>();
@@ -466,6 +494,7 @@ function App({ fileUrl, wasmUrl }: AppProps) {
       createPluginRegistration(ScrollPluginPackage, {
         defaultStrategy: ScrollStrategy.Vertical,
         defaultPageGap: 10,
+        defaultBufferSize: 2,
       }),
       createPluginRegistration(RenderPluginPackage, {
         defaultImageType: RENDER_IMAGE_TYPE,
@@ -481,7 +510,9 @@ function App({ fileUrl, wasmUrl }: AppProps) {
       createPluginRegistration(RotatePluginPackage, { defaultRotation: Rotation.Degree0 }),
       createPluginRegistration(InteractionManagerPluginPackage),
       createPluginRegistration(PanPluginPackage, { defaultMode: 'mobile' }),
-      createPluginRegistration(SelectionPluginPackage),
+      createPluginRegistration(SelectionPluginPackage, {
+        maxCachedGeometries: 8,
+      }),
       ...(editingEnabled ? [
         createPluginRegistration(HistoryPluginPackage),
         createPluginRegistration(AnnotationPluginPackage, {
@@ -585,47 +616,52 @@ function App({ fileUrl, wasmUrl }: AppProps) {
                       {isLoading && <div className="viewer-status">Loading document...</div>}
                       {isError && <div className="viewer-status viewer-status-error">Unable to load PDF.</div>}
                       {isLoaded && (
-                        <GlobalPointerProvider documentId={activeDocumentId}>
-                          <Viewport
-                            documentId={activeDocumentId}
-                            className="viewer"
-                            onDragStart={(event) => event.preventDefault()}
-                          >
-                            <ZoomGesture documentId={activeDocumentId}>
-                              <Scroller
-                                documentId={activeDocumentId}
-                                renderPage={({ pageIndex, width, height }) => (
-                                  <Rotate documentId={activeDocumentId} pageIndex={pageIndex}>
-                                    <PagePointerProvider
-                                      documentId={activeDocumentId}
-                                      pageIndex={pageIndex}
-                                      style={{ position: 'relative', width, height, backgroundColor: '#fff' }}
-                                    >
-                                      <RenderLayer
+                        <>
+                          <ResourceConsumedNotifier url={wasmUrl} onConsumed={onResourceConsumed} />
+                          <ResourceConsumedNotifier url={fileUrl} onConsumed={onResourceConsumed} />
+                          <GlobalPointerProvider documentId={activeDocumentId}>
+                            <Viewport
+                              documentId={activeDocumentId}
+                              className="viewer"
+                              onDragStart={(event) => event.preventDefault()}
+                            >
+                              <ZoomGesture documentId={activeDocumentId}>
+                                <Scroller
+                                  documentId={activeDocumentId}
+                                  className="pdf-scroller"
+                                  renderPage={({ pageIndex, width, height }) => (
+                                    <Rotate documentId={activeDocumentId} pageIndex={pageIndex}>
+                                      <PagePointerProvider
                                         documentId={activeDocumentId}
                                         pageIndex={pageIndex}
-                                        scale={0.5}
-                                        className="shnctl-page-render-image"
-                                        draggable={false}
-                                        style={{ pointerEvents: 'none' }}
-                                      />
-                                      <TilingLayer
-                                        documentId={activeDocumentId}
-                                        pageIndex={pageIndex}
-                                        className="shnctl-page-tiling-layer"
-                                      />
-                                      <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                      <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                      {editingEnabled ? (
-                                        <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                      ) : null}
-                                    </PagePointerProvider>
-                                  </Rotate>
-                                )}
-                              />
-                            </ZoomGesture>
-                          </Viewport>
-                        </GlobalPointerProvider>
+                                        style={{ position: 'relative', width, height, backgroundColor: '#fff' }}
+                                      >
+                                        <RenderLayer
+                                          documentId={activeDocumentId}
+                                          pageIndex={pageIndex}
+                                          scale={0.5}
+                                          className="shnctl-page-render-image"
+                                          draggable={false}
+                                          style={{ pointerEvents: 'none' }}
+                                        />
+                                        <TilingLayer
+                                          documentId={activeDocumentId}
+                                          pageIndex={pageIndex}
+                                          className="shnctl-page-tiling-layer"
+                                        />
+                                        <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                        <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                        {editingEnabled ? (
+                                          <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                        ) : null}
+                                      </PagePointerProvider>
+                                    </Rotate>
+                                  )}
+                                />
+                              </ZoomGesture>
+                            </Viewport>
+                          </GlobalPointerProvider>
+                        </>
                       )}
                     </>
                   )}
@@ -694,9 +730,11 @@ function App({ fileUrl, wasmUrl }: AppProps) {
           setCommentTargetId(null);
         }}
       /> : null}
-      {editingEnabled ? <ContextMenu
+      <ContextMenu
         registry={registry}
         container={viewerRootRef.current}
+        canEdit={editingEnabled}
+        canTranslate={platform.capabilities.translation}
         onOpenComments={(annotationId) => {
           setCommentTargetId(annotationId);
           setSidePanel('comments');
@@ -705,7 +743,7 @@ function App({ fileUrl, wasmUrl }: AppProps) {
         onTranslate={(documentId, anchor) => {
           setTranslationRequest({ id: ++translationRequestIdRef.current, documentId, anchor });
         }}
-      /> : null}
+      />
       {platform.capabilities.translation && translationRequest ? (
         <SelectionTranslate
           key={translationRequest.id}
@@ -747,14 +785,22 @@ function App({ fileUrl, wasmUrl }: AppProps) {
 function ViewerBootstrap() {
   const [resources, setResources] = useState<{ fileUrl?: string; wasmUrl: string }>();
   const [error, setError] = useState<Error>();
+  const preparedBlobUrlsRef = useRef(new Set<string>());
 
-  useEffect(() => installRenderDprCap(), []);
+  const releasePreparedUrl = useCallback((url?: string) => {
+    if (!url?.startsWith('blob:') || !preparedBlobUrlsRef.current.delete(url)) return;
+    URL.revokeObjectURL(url);
+  }, []);
+
+  useEffect(() => installRenderDprCap(platform.rendering.maxDpr), []);
 
   useEffect(() => {
     let cancelled = false;
-    const preparedUrls: string[] = [];
+    const trackPreparedUrl = (url?: string) => {
+      if (url?.startsWith('blob:')) preparedBlobUrlsRef.current.add(url);
+    };
     const releasePreparedUrls = () => {
-      preparedUrls.filter((url) => url.startsWith('blob:')).forEach(URL.revokeObjectURL);
+      for (const url of [...preparedBlobUrlsRef.current]) releasePreparedUrl(url);
     };
     const initialFileUrl = platform.getInitialDocumentUrl();
 
@@ -764,8 +810,8 @@ function ViewerBootstrap() {
         ? platform.prepareResourceUrl(initialFileUrl, 'application/pdf')
         : Promise.resolve(undefined),
     ]).then(([wasmUrl, fileUrl]) => {
-      preparedUrls.push(wasmUrl);
-      if (fileUrl) preparedUrls.push(fileUrl);
+      trackPreparedUrl(wasmUrl);
+      trackPreparedUrl(fileUrl);
       if (cancelled) {
         releasePreparedUrls();
       } else {
@@ -779,7 +825,7 @@ function ViewerBootstrap() {
       cancelled = true;
       releasePreparedUrls();
     };
-  }, []);
+  }, [releasePreparedUrl]);
 
   if (error) {
     return <div className="viewer-status viewer-status-error">Unable to load PDF resources: {error.message}</div>;
@@ -789,7 +835,13 @@ function ViewerBootstrap() {
     return <div className="viewer-status">Loading PDF resources...</div>;
   }
 
-  return <App fileUrl={resources.fileUrl} wasmUrl={resources.wasmUrl} />;
+  return (
+    <App
+      fileUrl={resources.fileUrl}
+      wasmUrl={resources.wasmUrl}
+      onResourceConsumed={releasePreparedUrl}
+    />
+  );
 }
 
 createRoot(document.getElementById('root')!).render(

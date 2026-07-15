@@ -55,6 +55,9 @@ export const platform: ViewerPlatform = {
   capabilities: {
     translation: false,
   },
+  rendering: {
+    maxDpr: 1.3,
+  },
   getInitialDocumentUrl: () => readMeta('pdf-document-url'),
   getDocumentKey: () => readMeta('pdf-document-key'),
   getPdfiumWasmUrl: (bundledUrl) => readMeta('pdfium-wasm-url') ?? bundledUrl,
