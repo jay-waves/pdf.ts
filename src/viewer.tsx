@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
@@ -54,17 +54,18 @@ import { PrintDialog, ProtectDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
 import { TooltipProvider } from './components';
 import { ZoomGesture } from './zoom-gesture';
-import { savePdfToOriginalFile } from './file-handle';
+import { savePdf } from './pdf-save';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
-import { documentEditingEnabled, documentSelectionEnabled, platform } from '#platform';
+import { documentEditingEnabled, platform } from '#platform';
+import type { ManagedResource, ViewerResources } from './platform/types';
 
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 1200;
-const PDFIUM_WASM_URL = platform.getPdfiumWasmUrl(new URL(pdfiumWasmUrl, import.meta.url).href);
+const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 // usePdfiumEngine tracks fontFallback by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
 const PDFIUM_FONT_FALLBACK = { fonts: {} };
@@ -99,11 +100,11 @@ function ActiveDocumentTracker({ documentId, onChange }: {
   return null;
 }
 
-function ResourceConsumedNotifier({ url, onConsumed }: {
-  url?: string;
-  onConsumed(url?: string): void;
+function ResourceConsumedNotifier({ resource, onConsumed }: {
+  resource?: ManagedResource;
+  onConsumed(resource?: ManagedResource): void;
 }) {
-  useEffect(() => onConsumed(url), [onConsumed, url]);
+  useEffect(() => onConsumed(resource), [onConsumed, resource]);
   return null;
 }
 
@@ -115,7 +116,10 @@ function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (
   }
 
   return annotation.onAnnotationEvent((event) => {
-    if (event.type !== 'loaded' && event.committed) {
+    // Each edit emits an uncommitted event immediately and another event after
+    // PDFium catches up. Mark it dirty at the first event so a quick close/save
+    // cannot slip through the asynchronous commit window.
+    if (event.type !== 'loaded' && !event.committed) {
       onDirtyChange(true);
     }
   });
@@ -344,24 +348,33 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
 
 interface AppProps {
   fileUrl?: string;
+  sourceUrl?: string;
   documentKey?: string;
   documentName?: string;
-  wasmUrl: string;
-  onResourceConsumed(url?: string): void;
+  wasmResource: ManagedResource;
+  documentResource?: ManagedResource;
+  onResourceConsumed(resource?: ManagedResource): void;
 }
 
 type SidePanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
 
-function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }: AppProps) {
+function App({
+  fileUrl,
+  sourceUrl,
+  documentKey,
+  documentName,
+  wasmResource,
+  documentResource,
+  onResourceConsumed,
+}: AppProps) {
   const editingEnabled = documentEditingEnabled;
   const { engine: workerEngine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
-    wasmUrl,
+    wasmUrl: wasmResource.url,
     worker: true,
     encoderPoolSize: 0, // Bundled BMP conversion uses no encoder workers.
     fontFallback: PDFIUM_FONT_FALLBACK,
   });
   const engine = configureBundledBmpEngine(workerEngine);
-  const fileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const saveInProgressRef = useRef(false);
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
@@ -386,6 +399,7 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
   const currentPageNumberRef = useRef(1);
   const titleTrackerRefreshRef = useRef<(() => void) | null>(null);
   const hasUnsavedChangesRef = useRef(false);
+  const documentChangeVersionRef = useRef(0);
   const cleanDocumentTitleRef = useRef(document.title);
   const navigationHideTimerRef = useRef<number>(0);
   const navigationVisibleRef = useRef(false);
@@ -397,6 +411,7 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
   };
 
   const setHasUnsavedChanges = (dirty: boolean) => {
+    if (dirty) documentChangeVersionRef.current++;
     hasUnsavedChangesRef.current = dirty;
     if (dirty) {
       window.addEventListener('beforeunload', handleBeforeUnload);
@@ -447,14 +462,19 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
         event.preventDefault();
         if (saveInProgressRef.current) return;
 
+        const changeVersionAtSaveStart = documentChangeVersionRef.current;
         saveInProgressRef.current = true;
-        savePdfToOriginalFile(registry, fileHandleRef, fileUrl)
+        savePdf(registry, { sourceUrl, fileName: documentName })
           .then((saved) => {
             if (!saved) {
               return;
             }
 
-            setHasUnsavedChanges(false);
+            // A new edit may have landed while PDF serialization or disk I/O
+            // was in progress. Keep the dirty marker in that case.
+            if (documentChangeVersionRef.current === changeVersionAtSaveStart) {
+              setHasUnsavedChanges(false);
+            }
           })
           .catch((error) => {
             if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -468,7 +488,7 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editingEnabled, fileUrl, registry]);
+  }, [documentName, editingEnabled, registry, sourceUrl]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -597,7 +617,7 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
                 setTotalPages(nextTotalPages);
               }),
               () => installSearchKeyboardShortcut(() => setSearchOpen(true)),
-              () => installOutlinePrefetch(nextRegistry, setOutlineCache, fileUrl),
+              () => installOutlinePrefetch(nextRegistry, setOutlineCache, documentKey),
             ];
 
             const cleanupPlugins = installAll(installers);
@@ -619,8 +639,8 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
                       {isError && <div className="viewer-status viewer-status-error">Unable to load PDF.</div>}
                       {isLoaded && (
                         <>
-                          <ResourceConsumedNotifier url={wasmUrl} onConsumed={onResourceConsumed} />
-                          <ResourceConsumedNotifier url={fileUrl} onConsumed={onResourceConsumed} />
+                          <ResourceConsumedNotifier resource={wasmResource} onConsumed={onResourceConsumed} />
+                          <ResourceConsumedNotifier resource={documentResource} onConsumed={onResourceConsumed} />
                           <GlobalPointerProvider documentId={activeDocumentId}>
                             <Viewport
                               documentId={activeDocumentId}
@@ -740,7 +760,7 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
         registry={registry}
         container={viewerRootRef.current}
         canEdit={editingEnabled}
-        canTranslate={platform.capabilities.translation}
+        canTranslate={Boolean(platform.translate)}
         onOpenComments={(annotationId, isNew) => {
           setCommentTargetId(annotationId);
           setCommentTargetIsNew(isNew);
@@ -751,7 +771,7 @@ function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }
           setTranslationRequest({ id: ++translationRequestIdRef.current, documentId, anchor });
         }}
       />
-      {platform.capabilities.translation && translationRequest ? (
+      {platform.translate && translationRequest ? (
         <SelectionTranslate
           key={translationRequest.id}
           registry={registry}
@@ -842,48 +862,31 @@ function WebDocumentPicker({ onSelect }: { onSelect(file: File): void }) {
 }
 
 function ViewerBootstrap() {
-  const [resources, setResources] = useState<{
-    fileUrl?: string;
-    documentKey?: string;
-    documentName?: string;
-    wasmUrl: string;
-  }>();
+  const [resources, setResources] = useState<ViewerResources>();
   const [error, setError] = useState<Error>();
-  const preparedBlobUrlsRef = useRef(new Set<string>());
+  const managedResourcesRef = useRef(new Set<ManagedResource>());
 
-  const releasePreparedUrl = useCallback((url?: string) => {
-    if (!url?.startsWith('blob:') || !preparedBlobUrlsRef.current.delete(url)) return;
-    URL.revokeObjectURL(url);
-  }, []);
+  const trackResource = (resource?: ManagedResource) => {
+    if (resource) managedResourcesRef.current.add(resource);
+  };
+
+  const releaseResource = (resource?: ManagedResource) => {
+    if (!resource || !managedResourcesRef.current.delete(resource)) return;
+    resource.release();
+  };
 
   useEffect(() => installRenderDprCap(platform.rendering.maxDpr), []);
 
   useEffect(() => {
     let cancelled = false;
-    const trackPreparedUrl = (url?: string) => {
-      if (url?.startsWith('blob:')) preparedBlobUrlsRef.current.add(url);
-    };
-    const releasePreparedUrls = () => {
-      for (const url of [...preparedBlobUrlsRef.current]) releasePreparedUrl(url);
-    };
-    const initialFileUrl = platform.getInitialDocumentUrl();
-
-    Promise.all([
-      platform.prepareResourceUrl(PDFIUM_WASM_URL, 'application/wasm'),
-      initialFileUrl
-        ? platform.prepareResourceUrl(initialFileUrl, 'application/pdf')
-        : Promise.resolve(undefined),
-    ]).then(([wasmUrl, fileUrl]) => {
-      trackPreparedUrl(wasmUrl);
-      trackPreparedUrl(fileUrl);
+    platform.loadViewerResources(BUNDLED_PDFIUM_WASM_URL).then((loaded) => {
+      trackResource(loaded.wasm);
+      trackResource(loaded.document?.resource);
       if (cancelled) {
-        releasePreparedUrls();
+        releaseResource(loaded.wasm);
+        releaseResource(loaded.document?.resource);
       } else {
-        setResources({
-          wasmUrl,
-          fileUrl,
-          documentKey: platform.getDocumentKey(),
-        });
+        setResources(loaded);
       }
     }).catch((reason: unknown) => {
       if (!cancelled) setError(reason instanceof Error ? reason : new Error(String(reason)));
@@ -891,9 +894,13 @@ function ViewerBootstrap() {
 
     return () => {
       cancelled = true;
-      releasePreparedUrls();
     };
-  }, [releasePreparedUrl]);
+  }, []);
+
+  useEffect(() => () => {
+    for (const resource of managedResourcesRef.current) resource.release();
+    managedResourcesRef.current.clear();
+  }, []);
 
   if (error) {
     return <div className="viewer-status viewer-status-error">Unable to load PDF resources: {error.message}</div>;
@@ -903,27 +910,24 @@ function ViewerBootstrap() {
     return <div className="viewer-status">Loading PDF resources...</div>;
   }
 
-  if (documentSelectionEnabled && !resources.fileUrl) {
+  if (platform.openLocalDocument && !resources.document) {
     return <WebDocumentPicker onSelect={(file) => {
-      const fileUrl = URL.createObjectURL(file);
-      preparedBlobUrlsRef.current.add(fileUrl);
-      setResources({
-        ...resources,
-        fileUrl,
-        documentKey: `local:${file.name}:${file.size}:${file.lastModified}`,
-        documentName: file.name,
-      });
+      const document = platform.openLocalDocument!(file);
+      trackResource(document.resource);
+      setResources({ ...resources, document });
     }} />;
   }
 
   return (
     <App
-      key={resources.fileUrl}
-      fileUrl={resources.fileUrl}
-      documentKey={resources.documentKey}
-      documentName={resources.documentName}
-      wasmUrl={resources.wasmUrl}
-      onResourceConsumed={releasePreparedUrl}
+      key={resources.document?.resource.url}
+      fileUrl={resources.document?.resource.url}
+      sourceUrl={resources.document?.sourceUrl}
+      documentKey={resources.document?.key}
+      documentName={resources.document?.name}
+      wasmResource={resources.wasm}
+      documentResource={resources.document?.resource}
+      onResourceConsumed={releaseResource}
     />
   );
 }

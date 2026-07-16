@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PDF Viewer",
   "description": "Open local PDF files with PDF Viewer.",
-  "version": "0.3.7",
+  "version": "0.4.2",
   "minimum_chrome_version": "120",
   "icons": {
     "16": "icon-16.png",

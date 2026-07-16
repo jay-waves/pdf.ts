@@ -62,6 +62,19 @@ class PdfReadonlyEditorProvider {
         return;
       }
 
+      if (message?.type === 'openExternal') {
+        try {
+          const url = new URL(message.url);
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+            throw new Error('Only HTTP(S) links can be opened externally.');
+          }
+          await vscode.env.openExternal(vscode.Uri.parse(url.href));
+        } catch (error) {
+          console.warn('[pdf-ts] Unable to open external link.', error);
+        }
+        return;
+      }
+
       const requestId = Number(message?.requestId);
       if (!Number.isInteger(requestId) || message?.documentKey !== document.uri.toString()) return;
 
