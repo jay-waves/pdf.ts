@@ -19,6 +19,7 @@ if (vite.status !== 0) process.exit(vite.status ?? 1);
 
 cpSync(resolve(repoRoot, 'vscode', 'extension.cjs'), resolve(extensionDir, 'extension.cjs'));
 cpSync(resolve(repoRoot, 'assets', 'brand', 'icon-128.png'), resolve(extensionDir, 'icon.png'));
+cpSync(resolve(repoRoot, 'vscode', 'README.md'), resolve(extensionDir, 'README.md'));
 const extensionPackage = JSON.parse(readFileSync(resolve(repoRoot, 'vscode', 'package.json'), 'utf8'));
 extensionPackage.version = rootPackage.version;
 extensionPackage.icon = 'icon.png';
