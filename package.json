@@ -2,14 +2,17 @@
   "name": "pdf-ts",
   "private": true,
   "version": "0.3.7",
+  "packageManager": "pnpm@11.7.0",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "node scripts/sync-chrome-version.mjs && vite build --watch",
     "build:chrome": "pnpm typecheck && node scripts/sync-chrome-version.mjs && vite build",
+    "build:web": "pnpm typecheck && VIEWER_PLATFORM=web vite build",
+    "deploy:web": "bash scripts/deploy-web.sh",
     "build:vscode": "pnpm typecheck && node scripts/build-vscode.mjs",
-    "package:chrome": "pnpm build:chrome && node scripts/package-chrome.mjs",
-    "package:vscode": "pnpm build:vscode && node scripts/package-vscode.mjs"
+    "package:chrome": "pnpm build:chrome && bash scripts/package-chrome.sh",
+    "package:vscode": "pnpm build:vscode && bash scripts/package-vscode.sh"
   },
   "dependencies": {
     "@embedpdf/core": "2.14.4",
@@ -45,6 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^5.0.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.8.0",
     "vite": "^7.0.0"
   }

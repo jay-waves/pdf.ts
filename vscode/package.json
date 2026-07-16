@@ -5,6 +5,16 @@
   "version": "0.0.0",
   "publisher": "jay-waves",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jay-waves/pdf.ts.git"
+  },
+  "files": [
+    "extension.cjs",
+    "icon.png",
+    "README.md",
+    "media/**"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },

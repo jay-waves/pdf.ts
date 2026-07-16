@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
   PdfAnnotationSubtype,
-  PdfAnnotationSubtypeName,
   type PdfAnnotationObject,
   type PdfDocumentObject,
   type PdfEngine,
@@ -119,7 +118,7 @@ function getEntryLabel(annotation: PdfAnnotationObject) {
     case PdfAnnotationSubtype.FREETEXT: return 'Text';
     case PdfAnnotationSubtype.STAMP: return 'Stamp';
     case PdfAnnotationSubtype.INK: return 'Drawing';
-    default: return PdfAnnotationSubtypeName[annotation.type] || 'Annotation';
+    default: return 'Annotation';
   }
 }
 

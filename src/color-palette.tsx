@@ -79,11 +79,16 @@ function normalizeOpacity(value: unknown) {
 }
 
 function getToolLabel(tool: AnnotationToolLike | null) {
+  const labels: Record<string, string> = {
+    highlight: 'Highlight', underline: 'Underline', strikeout: 'Strikeout', squiggly: 'Squiggly',
+    ink: 'Ink', inkHighlighter: 'Highlighter', square: 'Rectangle', circle: 'Circle',
+    line: 'Line', lineArrow: 'Arrow', polyline: 'Polyline', textComment: 'Comment', freeText: 'Text',
+  };
   if (!tool) {
     return 'Selected annotation';
   }
 
-  return tool.name || tool.id.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (char) => char.toUpperCase());
+  return labels[tool.id] ?? tool.name ?? 'Annotation tool';
 }
 
 export function ColorPalette({

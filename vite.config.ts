@@ -3,16 +3,26 @@ import { cpSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-const isVsCode = process.env.VIEWER_PLATFORM === 'vscode';
+const viewerPlatform = process.env.VIEWER_PLATFORM ?? 'chrome';
+const isVsCode = viewerPlatform === 'vscode';
+const isWeb = viewerPlatform === 'web';
+const outputDir = isVsCode
+  ? 'release/vscode/extension/media'
+  : isWeb
+    ? 'release/web'
+    : 'release/chrome/extension';
 
 export default defineConfig({
   base: './',
-  publicDir: isVsCode ? false : 'chrome',
+  publicDir: isVsCode || isWeb ? false : 'chrome',
   resolve: {
     alias: [
       {
         find: '#platform',
-        replacement: resolve(__dirname, isVsCode ? 'src/platform/vscode.ts' : 'src/platform/chrome.ts'),
+        replacement: resolve(
+          __dirname,
+          isVsCode ? 'src/platform/vscode.ts' : isWeb ? 'src/platform/web.ts' : 'src/platform/chrome.ts',
+        ),
       },
       ...(isVsCode ? [
         '@embedpdf/plugin-annotation/react',
@@ -28,12 +38,12 @@ export default defineConfig({
   plugins: [
     react(),
     ...(!isVsCode ? [{
-      name: 'chrome-brand-assets',
+      name: 'viewer-brand-assets',
       writeBundle() {
-        const outputDir = resolve(__dirname, 'release/chrome/extension');
+        const resolvedOutputDir = resolve(__dirname, outputDir);
         const brandDir = resolve(__dirname, 'assets/brand');
-        cpSync(resolve(brandDir, 'logo.svg'), resolve(outputDir, 'logo.svg'));
-        cpSync(resolve(brandDir, 'icon-128.png'), resolve(outputDir, 'icon-128.png'));
+        cpSync(resolve(brandDir, 'logo.svg'), resolve(resolvedOutputDir, 'logo.svg'));
+        cpSync(resolve(brandDir, 'icon-128.png'), resolve(resolvedOutputDir, 'icon-128.png'));
       },
     }] : []),
     ...(isVsCode ? [{
@@ -44,15 +54,15 @@ export default defineConfig({
     }] : []),
   ],
   build: {
-    outDir: resolve(__dirname, isVsCode ? 'release/vscode/extension/media' : 'release/chrome/extension'),
+    outDir: resolve(__dirname, outputDir),
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
       input: {
-        viewer: resolve(__dirname, 'viewer.html'),
+        [isWeb ? 'index' : 'viewer']: resolve(__dirname, isWeb ? 'index.html' : 'viewer.html'),
       },
       output: {
-        entryFileNames: 'assets/[name].js',
+        entryFileNames: isWeb ? 'assets/[name]-[hash].js' : 'assets/[name].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
       },

@@ -1,15 +1,18 @@
 # pdf.ts Extension
 
-美观的 PDF 插件，基于 EmbedPDF。同时支持 VSCode 以及 Chrome 浏览器。
+A polished PDF viewer powered by EmbedPDF, available for the web, VS Code, and Chrome.
 
-## 构建
+## Build
 
 ```bash
-# Chrome 扩展
+# Static web app (output: release/web)
+pnpm build:web
+
+# Chrome extension
 pnpm build:chrome
 pnpm package:chrome
 
-# VS Code 扩展
+# VS Code extension
 pnpm build:vscode
 pnpm package:vscode
 ```

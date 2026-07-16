@@ -84,7 +84,7 @@ async function getTranslator(sourceLanguage: string, targetLanguage: string) {
     translatorPromise = (async () => {
       const availability = await Translator.availability({ sourceLanguage, targetLanguage });
       if (availability === 'unavailable') {
-        throw new Error(`Translation is not available for ${sourceLanguage} to ${targetLanguage}.`);
+        throw new Error(`Translation is not available from ${sourceLanguage} to ${targetLanguage}.`);
       }
       return Translator.create({ sourceLanguage, targetLanguage });
     })();

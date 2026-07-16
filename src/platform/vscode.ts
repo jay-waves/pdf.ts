@@ -1,6 +1,7 @@
 import type { ReadingProgress, ViewerPlatform } from './types';
 
 export const documentEditingEnabled = false;
+export const documentSelectionEnabled = false;
 
 interface VsCodeApi {
   postMessage(message: unknown): void;

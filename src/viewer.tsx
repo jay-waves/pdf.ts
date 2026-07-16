@@ -57,7 +57,7 @@ import { ZoomGesture } from './zoom-gesture';
 import { savePdfToOriginalFile } from './file-handle';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
-import { documentEditingEnabled, platform } from '#platform';
+import { documentEditingEnabled, documentSelectionEnabled, platform } from '#platform';
 
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
@@ -344,14 +344,15 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
 
 interface AppProps {
   fileUrl?: string;
+  documentKey?: string;
+  documentName?: string;
   wasmUrl: string;
   onResourceConsumed(url?: string): void;
 }
 
 type SidePanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
 
-function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
-  const documentKey = platform.getDocumentKey();
+function App({ fileUrl, documentKey, documentName, wasmUrl, onResourceConsumed }: AppProps) {
   const editingEnabled = documentEditingEnabled;
   const { engine: workerEngine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
     wasmUrl,
@@ -537,9 +538,9 @@ function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
   );
 
   useEffect(() => {
-    cleanDocumentTitleRef.current = fileUrl ? getFileNameFromUrl(fileUrl) ?? 'PDF' : 'PDF';
+    cleanDocumentTitleRef.current = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) ?? 'PDF' : 'PDF');
     renderDocumentTitle();
-  }, [fileUrl]);
+  }, [documentName, fileUrl]);
 
   useEffect(() => {
     return () => {
@@ -788,8 +789,65 @@ function App({ fileUrl, wasmUrl, onResourceConsumed }: AppProps) {
   );
 }
 
+function WebDocumentPicker({ onSelect }: { onSelect(file: File): void }) {
+  const [dragging, setDragging] = useState(false);
+  const [selectionError, setSelectionError] = useState('');
+
+  const selectFile = (file?: File) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setSelectionError('Please select a PDF file.');
+      return;
+    }
+    setSelectionError('');
+    onSelect(file);
+  };
+
+  return (
+    <main className="web-welcome">
+      <section
+        className={`web-welcome-card${dragging ? ' is-dragging' : ''}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={(event) => {
+          if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
+            setDragging(false);
+          }
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          selectFile(event.dataTransfer.files[0]);
+        }}
+      >
+        <img className="web-welcome-logo" src="./logo.svg" alt="" />
+        <h1>PDF.ts Web Viewer</h1>
+        <label className="web-file-button">
+          Choose a PDF file
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(event) => selectFile(event.target.files?.[0])}
+          />
+        </label>
+        <span className="web-drop-hint">or drop a PDF here</span>
+        {selectionError ? <p className="web-selection-error" role="alert">{selectionError}</p> : null}
+        <small>Local files are processed only in this browser tab and are never uploaded.</small>
+      </section>
+    </main>
+  );
+}
+
 function ViewerBootstrap() {
-  const [resources, setResources] = useState<{ fileUrl?: string; wasmUrl: string }>();
+  const [resources, setResources] = useState<{
+    fileUrl?: string;
+    documentKey?: string;
+    documentName?: string;
+    wasmUrl: string;
+  }>();
   const [error, setError] = useState<Error>();
   const preparedBlobUrlsRef = useRef(new Set<string>());
 
@@ -821,7 +879,11 @@ function ViewerBootstrap() {
       if (cancelled) {
         releasePreparedUrls();
       } else {
-        setResources({ wasmUrl, fileUrl });
+        setResources({
+          wasmUrl,
+          fileUrl,
+          documentKey: platform.getDocumentKey(),
+        });
       }
     }).catch((reason: unknown) => {
       if (!cancelled) setError(reason instanceof Error ? reason : new Error(String(reason)));
@@ -841,9 +903,25 @@ function ViewerBootstrap() {
     return <div className="viewer-status">Loading PDF resources...</div>;
   }
 
+  if (documentSelectionEnabled && !resources.fileUrl) {
+    return <WebDocumentPicker onSelect={(file) => {
+      const fileUrl = URL.createObjectURL(file);
+      preparedBlobUrlsRef.current.add(fileUrl);
+      setResources({
+        ...resources,
+        fileUrl,
+        documentKey: `local:${file.name}:${file.size}:${file.lastModified}`,
+        documentName: file.name,
+      });
+    }} />;
+  }
+
   return (
     <App
+      key={resources.fileUrl}
       fileUrl={resources.fileUrl}
+      documentKey={resources.documentKey}
+      documentName={resources.documentName}
       wasmUrl={resources.wasmUrl}
       onResourceConsumed={releasePreparedUrl}
     />
