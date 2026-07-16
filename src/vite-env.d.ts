@@ -16,6 +16,13 @@ type FilePickerAcceptType = {
 };
 
 interface Window {
+  showOpenFilePicker(options?: {
+    id?: string;
+    startIn?: WellKnownDirectory | FileSystemHandle;
+    types?: FilePickerAcceptType[];
+    excludeAcceptAllOption?: boolean;
+    multiple?: boolean;
+  }): Promise<FileSystemFileHandle[]>;
   showSaveFilePicker(options?: {
     id?: string;
     suggestedName?: string;

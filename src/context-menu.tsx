@@ -7,6 +7,7 @@ import type { ScrollCapability } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import {
   Copy,
+  ExternalLink,
   Highlighter,
   Languages,
   Link,
@@ -19,12 +20,32 @@ import {
 import { FloatingPopover, IconButton } from './components';
 import { createCommentAnnotation } from './comment-annotation';
 import { getActiveDocumentId } from './utils';
+import { platform } from '#platform';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
   x: number;
   y: number;
 };
+
+function parseExternalUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSelectedExternalUrl(text: string) {
+  const value = text.trim();
+  if (!value || /\s|@/.test(value)) return null;
+  if (/^https?:\/\//i.test(value)) return parseExternalUrl(value);
+  if (/^(?:www\.)?(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i.test(value)) {
+    return parseExternalUrl(`https://${value}`);
+  }
+  return null;
+}
 
 function getExternalLink(annotation: PdfAnnotationObject | undefined) {
   if (
@@ -35,12 +56,7 @@ function getExternalLink(annotation: PdfAnnotationObject | undefined) {
     return null;
   }
 
-  try {
-    const url = new URL(annotation.target.action.uri);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
-  } catch {
-    return null;
-  }
+  return parseExternalUrl(annotation.target.action.uri);
 }
 
 function getMenuAnchor(
@@ -194,6 +210,19 @@ export function ContextMenu({
     ...(canTranslate ? [
       { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
     ] : []),
+    { label: 'Search', icon: ExternalLink, action: () => {
+      const selectedText = selection?.forDocument(documentId).getSelectedText();
+      setMenu(null);
+      selectedText?.toPromise()
+        .then((parts) => parts.join(' ').replace(/\s+/g, ' ').trim())
+        .then((query) => {
+          if (!query) return;
+          platform.openExternal(
+            getSelectedExternalUrl(query) ?? `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+          );
+        })
+        .catch((error) => console.error('[pdf-ts] failed to search selected text', error));
+    } },
   ];
 
   const selectedAnnotations = annotation?.forDocument(documentId).getSelectedAnnotations() ?? [];
@@ -203,7 +232,7 @@ export function ContextMenu({
   const commentTarget = selectedAnnotations[0]?.object;
   const annotationItems = [
     ...(selectedLink ? [{ label: 'Open link', icon: Link, action: () => {
-      window.open(selectedLink, '_blank', 'noopener,noreferrer');
+      platform.openExternal(selectedLink);
       setMenu(null);
     } }] : []),
     { label: commentTarget?.type === PdfAnnotationSubtype.TEXT ? 'Open comment' : 'Add comment', icon: MessageSquareMore, action: () => {

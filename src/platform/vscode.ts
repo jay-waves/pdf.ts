@@ -1,7 +1,6 @@
-import type { ReadingProgress, ViewerPlatform } from './types';
+import type { ManagedResource, ReadingProgress, ViewerPlatform } from './types';
 
 export const documentEditingEnabled = false;
-export const documentSelectionEnabled = false;
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -40,6 +39,24 @@ function readMeta(name: string) {
   return document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content || undefined;
 }
 
+async function fetchResource(url: string, contentType: string): Promise<ManagedResource> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Unable to load ${contentType}: HTTP ${response.status}`);
+  }
+
+  const objectUrl = URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: contentType }));
+  let released = false;
+  return {
+    url: objectUrl,
+    release() {
+      if (released) return;
+      released = true;
+      URL.revokeObjectURL(objectUrl);
+    },
+  };
+}
+
 const configuredTheme = readMeta('pdf-ts-theme');
 if (configuredTheme) preferences.set(THEME_STORAGE_KEY, configuredTheme);
 
@@ -53,23 +70,24 @@ function request(type: 'readReadingProgress' | 'writeReadingProgress', documentK
 }
 
 export const platform: ViewerPlatform = {
-  capabilities: {
-    translation: false,
-  },
   rendering: {
     maxDpr: 1.3,
   },
-  getInitialDocumentUrl: () => readMeta('pdf-document-url'),
-  getDocumentKey: () => readMeta('pdf-document-key'),
-  getPdfiumWasmUrl: (bundledUrl) => readMeta('pdfium-wasm-url') ?? bundledUrl,
-  async prepareResourceUrl(url, contentType) {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Unable to load ${contentType}: HTTP ${response.status}`);
-    }
-
-    const bytes = await response.arrayBuffer();
-    return URL.createObjectURL(new Blob([bytes], { type: contentType }));
+  async loadViewerResources(bundledWasmUrl) {
+    const documentUrl = readMeta('pdf-document-url');
+    const documentKey = readMeta('pdf-document-key');
+    const wasmUrl = readMeta('pdfium-wasm-url') ?? bundledWasmUrl;
+    const [wasm, documentResource] = await Promise.all([
+      fetchResource(wasmUrl, 'application/wasm'),
+      documentUrl ? fetchResource(documentUrl, 'application/pdf') : Promise.resolve(undefined),
+    ]);
+    return {
+      wasm,
+      document: documentResource ? { resource: documentResource, key: documentKey } : undefined,
+    };
+  },
+  openExternal(url) {
+    vscode.postMessage({ type: 'openExternal', url });
   },
   getPreference: (key) => preferences.get(key) ?? null,
   setPreference(key, value) {
@@ -77,6 +95,9 @@ export const platform: ViewerPlatform = {
     if (key === THEME_STORAGE_KEY) {
       vscode.postMessage({ type: 'writeThemePreference', value });
     }
+  },
+  async preparePdfSave() {
+    return null;
   },
   readReadingProgress(documentKey) {
     return request('readReadingProgress', documentKey);

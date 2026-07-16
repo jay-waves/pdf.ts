@@ -1,11 +1,78 @@
 import { get, set, update } from 'idb-keyval';
-import type { ReadingProgress, ViewerPlatform } from './types';
+import { getFileNameFromUrl } from '../utils';
+import type { ManagedResource, ReadingProgress, SavePdfOptions, ViewerPlatform } from './types';
+import { translateText } from './chrome-translation';
 
 export const documentEditingEnabled = true;
-export const documentSelectionEnabled = false;
 
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
+// v1 could contain handles returned by showSaveFilePicker, which may point to
+// a copy rather than the source PDF. Do not silently reuse those handles.
+const FILE_HANDLES_KEY = 'embedpdf-file-handles-v2';
 type ReadingHistoryStore = Record<string, ReadingProgress>;
+type FileHandleStore = Record<string, { handle: FileSystemFileHandle }>;
+let activeFile: { sourceUrl: string; handle: FileSystemFileHandle } | null = null;
+
+async function verifyWritePermission(handle: FileSystemFileHandle) {
+  const options: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' };
+  return (await handle.queryPermission(options)) === 'granted' ||
+    (await handle.requestPermission(options)) === 'granted';
+}
+
+async function getWritableFileHandle({ sourceUrl, fileName }: SavePdfOptions) {
+  if (!sourceUrl?.startsWith('file://')) return null;
+
+  if (activeFile?.sourceUrl === sourceUrl && await verifyWritePermission(activeFile.handle)) {
+    return activeFile.handle;
+  }
+
+  const store = await get<FileHandleStore>(FILE_HANDLES_KEY);
+  const storedHandle = store?.[sourceUrl]?.handle;
+  if (storedHandle && await verifyWritePermission(storedHandle)) {
+    activeFile = { sourceUrl, handle: storedHandle };
+    return storedHandle;
+  }
+
+  const [pickedHandle] = await window.showOpenFilePicker({
+    id: 'pdf-file',
+    startIn: 'documents',
+    types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+    excludeAcceptAllOption: true,
+    multiple: false,
+  });
+  const expectedName = fileName ?? getFileNameFromUrl(sourceUrl);
+  if (expectedName && pickedHandle.name !== expectedName) {
+    throw new DOMException(`Please select the original PDF (${expectedName}).`, 'InvalidStateError');
+  }
+  if (!(await verifyWritePermission(pickedHandle))) return null;
+
+  activeFile = { sourceUrl, handle: pickedHandle };
+  return pickedHandle;
+}
+
+async function preparePdfFileSave(options: SavePdfOptions) {
+  const handle = await getWritableFileHandle(options);
+  if (!handle || !options.sourceUrl) return null;
+
+  return {
+    async save(data: ArrayBuffer) {
+      const writable = await handle.createWritable();
+      await writable.write(new Blob([data], { type: 'application/pdf' }));
+      await writable.close();
+
+      const writtenFile = await handle.getFile();
+      if (writtenFile.size !== data.byteLength) {
+        throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
+      }
+
+      await update<FileHandleStore>(FILE_HANDLES_KEY, (store) => ({
+        ...(store && typeof store === 'object' ? store : {}),
+        [options.sourceUrl!]: { handle },
+      }));
+      return true;
+    },
+  };
+}
 
 function getDocumentUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -18,6 +85,10 @@ function getDocumentUrl() {
   } catch {
     return undefined;
   }
+}
+
+function persistentResource(url: string): ManagedResource {
+  return { url, release() {} };
 }
 
 function readLegacyHistoryStore() {
@@ -43,16 +114,25 @@ async function readHistoryStore() {
 }
 
 export const platform: ViewerPlatform = {
-  capabilities: {
-    translation: true,
-  },
   rendering: {
     maxDpr: 1.75,
   },
-  getInitialDocumentUrl: getDocumentUrl,
-  getDocumentKey: getDocumentUrl,
-  getPdfiumWasmUrl: (bundledUrl) => bundledUrl,
-  prepareResourceUrl: async (url) => url,
+  async loadViewerResources(bundledWasmUrl) {
+    const documentUrl = getDocumentUrl();
+    return {
+      wasm: persistentResource(bundledWasmUrl),
+      document: documentUrl ? {
+        resource: persistentResource(documentUrl),
+        sourceUrl: documentUrl,
+        key: documentUrl,
+        name: getFileNameFromUrl(documentUrl),
+      } : undefined,
+    };
+  },
+  openExternal(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  },
+  translate: translateText,
   getPreference(key) {
     try {
       return window.localStorage.getItem(key);
@@ -67,6 +147,7 @@ export const platform: ViewerPlatform = {
       // Preferences remain effective for the current React state.
     }
   },
+  preparePdfSave: preparePdfFileSave,
   async readReadingProgress(documentKey) {
     return (await readHistoryStore())[documentKey];
   },
