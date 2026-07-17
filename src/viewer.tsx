@@ -125,6 +125,15 @@ function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (
   });
 }
 
+function installAnnotationUriNavigation(registry: PluginRegistry) {
+  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+  if (!annotation) return EMPTY_CLEANUP;
+
+  return annotation.onNavigate((event) => {
+    if (event.result.outcome === 'uri') platform.openExternal(event.result.uri);
+  });
+}
+
 function installAll(installers: Array<() => () => void>) {
   const cleanups: Array<() => void> = [];
   const cleanup = () => {
@@ -236,6 +245,7 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   let activeDocumentId: string | null = null;
   let restorePan = false;
   let restoreTimer = 0;
+  let pendingRestore: { documentId: string; shouldRestorePan: boolean } | null = null;
   let suppressMiddleMouseUntil = 0;
 
   const getPanScope = () => {
@@ -271,39 +281,55 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
       return;
     }
 
-    if (restoreTimer) {
+    let inheritedRestorePan = false;
+    if (restoreTimer && pendingRestore) {
       window.clearTimeout(restoreTimer);
       restoreTimer = 0;
+      if (pendingRestore.documentId === panScope.documentId) {
+        inheritedRestorePan = pendingRestore.shouldRestorePan;
+      } else if (pendingRestore.shouldRestorePan) {
+        const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
+        pan?.forDocument(pendingRestore.documentId).disablePan();
+      }
+      pendingRestore = null;
     }
     if (!isPointerEvent) {
       event.preventDefault();
     }
     activeDocumentId = panScope.documentId;
-    restorePan = !panScope.scope.isPanMode();
+    // A quick second press can arrive before the previous delayed restore. In
+    // that case isPanMode() still reflects our temporary mode, so carry the
+    // original mode across presses instead of treating PAN as user-selected.
+    restorePan = inheritedRestorePan || !panScope.scope.isPanMode();
     panScope.scope.enablePan();
   };
 
-  const finishMiddleMousePan = (event: MouseEvent | PointerEvent) => {
-    if (event.button !== 1 || !activeDocumentId) {
+  const finishMiddleMousePan = (event?: MouseEvent | PointerEvent | Event) => {
+    if (!activeDocumentId || (event instanceof MouseEvent && event.type !== 'pointercancel' && event.button !== 1)) {
       return;
     }
 
-    event.preventDefault();
+    if (event?.cancelable) event.preventDefault();
     suppressMiddleMouseUntil = performance.now() + 180;
-    const documentId = activeDocumentId;
-    const shouldRestorePan = restorePan;
+    pendingRestore = { documentId: activeDocumentId, shouldRestorePan: restorePan };
     activeDocumentId = null;
     restorePan = false;
 
     restoreTimer = window.setTimeout(() => {
       restoreTimer = 0;
-      if (!shouldRestorePan) {
+      const restore = pendingRestore;
+      pendingRestore = null;
+      if (!restore?.shouldRestorePan) {
         return;
       }
 
       const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
-      pan?.forDocument(documentId).disablePan();
+      pan?.forDocument(restore.documentId).disablePan();
     }, 120);
+  };
+
+  const finishIfMiddleButtonWasLost = (event: PointerEvent) => {
+    if (activeDocumentId && (event.buttons & 4) === 0) finishMiddleMousePan(event);
   };
 
   const stopBrowserMiddleMouse = (event: MouseEvent | PointerEvent) => {
@@ -328,6 +354,9 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   window.addEventListener('mousedown', startMiddleMousePan, { capture: true });
   window.addEventListener('pointerup', finishMiddleMousePan);
   window.addEventListener('mouseup', finishMiddleMousePan);
+  window.addEventListener('pointercancel', finishMiddleMousePan);
+  window.addEventListener('pointermove', finishIfMiddleButtonWasLost);
+  window.addEventListener('blur', finishMiddleMousePan);
   window.addEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
   window.addEventListener('pointermove', suppressTailEvent, { capture: true });
   window.addEventListener('pointerup', suppressTailEvent, { capture: true });
@@ -339,6 +368,9 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
     window.removeEventListener('mousedown', startMiddleMousePan, { capture: true });
     window.removeEventListener('pointerup', finishMiddleMousePan);
     window.removeEventListener('mouseup', finishMiddleMousePan);
+    window.removeEventListener('pointercancel', finishMiddleMousePan);
+    window.removeEventListener('pointermove', finishIfMiddleButtonWasLost);
+    window.removeEventListener('blur', finishMiddleMousePan);
     window.removeEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
     window.removeEventListener('pointermove', suppressTailEvent, { capture: true });
     window.removeEventListener('pointerup', suppressTailEvent, { capture: true });
@@ -535,16 +567,27 @@ function App({
       createPluginRegistration(SelectionPluginPackage, {
         maxCachedGeometries: 8,
       }),
-      ...(editingEnabled ? [
-        createPluginRegistration(HistoryPluginPackage),
-        createPluginRegistration(AnnotationPluginPackage, {
-          locked: { type: LockModeType.Include, categories: ['form'] },
-          deactivateToolAfterCreate: true,
-          tools: ['square', 'lineArrow', 'ink'].map((id) => ({
+      createPluginRegistration(AnnotationPluginPackage, editingEnabled ? {
+        locked: { type: LockModeType.Include, categories: ['form', 'link'] },
+        autoOpenLinks: false,
+        deactivateToolAfterCreate: true,
+        tools: [
+          ...['square', 'lineArrow', 'ink'].map((id) => ({
             id,
             defaults: { strokeWidth: 2 },
           })),
-        }),
+          // Link annotations must be non-interactive for EmbedPDF's locked
+          // renderer to route clicks to their URI/destination targets.
+          { id: 'link', categories: ['link'] },
+        ],
+      } : {
+        // The VS Code viewer is read-only, but its annotation layer is still
+        // needed to expose clickable PDF link annotations.
+        locked: { type: LockModeType.All },
+        autoOpenLinks: false,
+      }),
+      ...(editingEnabled ? [
+        createPluginRegistration(HistoryPluginPackage),
         createPluginRegistration(FormPluginPackage),
       ] : []),
       createPluginRegistration(SearchPluginPackage),
@@ -608,6 +651,7 @@ function App({
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
               () => installMiddleMousePanInterceptor(nextRegistry),
+              () => installAnnotationUriNavigation(nextRegistry),
               ...(editingEnabled ? [() => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges)] : []),
               () => installPlatformReadingHistory(nextRegistry, documentKey),
               () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
@@ -673,9 +717,7 @@ function App({
                                         />
                                         <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                                         <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                        {editingEnabled ? (
-                                          <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                        ) : null}
+                                        <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                                       </PagePointerProvider>
                                     </Rotate>
                                   )}

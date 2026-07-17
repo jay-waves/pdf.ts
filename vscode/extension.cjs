@@ -18,6 +18,36 @@ function getParentUri(uri) {
   return uri.with({ path: slash >= 0 ? uri.path.slice(0, slash + 1) : '/' });
 }
 
+function resolveDocumentLink(documentUri, value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('The PDF link target is empty.');
+  }
+
+  const target = value.trim();
+  if (/^[a-z][a-z\d+.-]*:/i.test(target)) return vscode.Uri.parse(target);
+
+  const match = /^([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/.exec(target);
+  if (!match) throw new Error('The PDF link target is invalid.');
+
+  let relativePath;
+  try {
+    relativePath = decodeURIComponent(match[1]).replaceAll('\\', '/');
+  } catch {
+    throw new Error('The PDF link path contains invalid escaping.');
+  }
+
+  const resolved = !relativePath
+    ? documentUri
+    : relativePath.startsWith('/')
+      ? documentUri.with({ path: relativePath })
+      : vscode.Uri.joinPath(getParentUri(documentUri), relativePath);
+
+  return resolved.with({
+    query: match[2] ?? '',
+    fragment: match[3] ?? '',
+  });
+}
+
 function nonce() {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   return Array.from({ length: 32 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
@@ -64,13 +94,18 @@ class PdfReadonlyEditorProvider {
 
       if (message?.type === 'openExternal') {
         try {
-          const url = new URL(message.url);
-          if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            throw new Error('Only HTTP(S) links can be opened externally.');
+          const target = resolveDocumentLink(document.uri, message.url);
+          if (target.scheme === 'http' || target.scheme === 'https') {
+            await vscode.env.openExternal(target);
+          } else if (target.scheme === document.uri.scheme || target.scheme === 'file') {
+            const command = target.path.toLowerCase().endsWith('.pdf') ? 'vscode.openWith' : 'vscode.open';
+            const args = command === 'vscode.openWith' ? [target, VIEW_TYPE] : [target];
+            await vscode.commands.executeCommand(command, ...args);
+          } else {
+            throw new Error(`Unsupported PDF link scheme: ${target.scheme}`);
           }
-          await vscode.env.openExternal(vscode.Uri.parse(url.href));
         } catch (error) {
-          console.warn('[pdf-ts] Unable to open external link.', error);
+          console.warn('[pdf-ts] Unable to open PDF link.', error);
         }
         return;
       }

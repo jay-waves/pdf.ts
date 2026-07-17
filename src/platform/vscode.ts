@@ -71,7 +71,7 @@ function request(type: 'readReadingProgress' | 'writeReadingProgress', documentK
 
 export const platform: ViewerPlatform = {
   rendering: {
-    maxDpr: 1.3,
+    maxDpr: 1.75,
   },
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = readMeta('pdf-document-url');

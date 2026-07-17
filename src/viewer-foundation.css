@@ -402,6 +402,10 @@ input {
   width: 100%;
   height: 100%;
   overflow: auto;
+  /* Zoom/layout changes already preserve their own viewport anchor. Browser
+     scroll anchoring can instead lock onto a recycled virtual page and move
+     the viewport a second time during a large scale change. */
+  overflow-anchor: none;
   background: var(--shnctl-background-app);
 }
 
