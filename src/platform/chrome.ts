@@ -12,6 +12,7 @@ const FILE_HANDLES_KEY = 'embedpdf-file-handles-v2';
 type ReadingHistoryStore = Record<string, ReadingProgress>;
 type FileHandleStore = Record<string, { handle: FileSystemFileHandle }>;
 let activeFile: { sourceUrl: string; handle: FileSystemFileHandle } | null = null;
+let activeDocumentUrl: string | undefined;
 
 async function verifyWritePermission(handle: FileSystemFileHandle) {
   const options: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' };
@@ -119,6 +120,7 @@ export const platform: ViewerPlatform = {
   },
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = getDocumentUrl();
+    activeDocumentUrl = documentUrl;
     return {
       wasm: persistentResource(bundledWasmUrl),
       document: documentUrl ? {
@@ -130,7 +132,16 @@ export const platform: ViewerPlatform = {
     };
   },
   openExternal(url) {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    try {
+      const target = new URL(url, activeDocumentUrl ?? window.location.href);
+      const tabs = (globalThis as typeof globalThis & {
+        chrome?: { tabs?: { create(options: { url: string }): unknown } };
+      }).chrome?.tabs;
+      if (tabs) void tabs.create({ url: target.href });
+      else window.open(target.href, '_blank', 'noopener,noreferrer');
+    } catch {
+      // Ignore malformed targets embedded in a PDF.
+    }
   },
   translate: translateText,
   getPreference(key) {

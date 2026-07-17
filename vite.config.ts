@@ -25,7 +25,6 @@ export default defineConfig({
         ),
       },
       ...(isVsCode ? [
-        '@embedpdf/plugin-annotation/react',
         '@embedpdf/plugin-form/react',
         '@embedpdf/plugin-history/react',
         '@embedpdf/plugin-export/react',

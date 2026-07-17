@@ -5,6 +5,11 @@ import { ZoomGestureWrapper, useZoomCapability } from '@embedpdf/plugin-zoom/rea
 const WHEEL_COMMIT_DELAY_MS = 150;
 const WHEEL_DELTA_LIMIT_PX = 50;
 const WHEEL_SENSITIVITY = 0.0012;
+const CROSS_AXIS_WHEEL_SPEED = 0.35;
+const MIN_ZOOM_LEVEL = 0.2;
+const MAX_ZOOM_LEVEL = 60;
+const MIN_COMMIT_SCALE_STEP = 0.8;
+const MAX_COMMIT_SCALE_STEP = 1.25;
 
 function normalizeWheelDelta(event: WheelEvent, pageHeight: number) {
   const deltaInPixels = event.deltaMode === WheelEvent.DOM_DELTA_LINE
@@ -109,18 +114,43 @@ function NormalizedWheelZoom({ documentId, children }: { documentId: string; chi
       accumulatedScale = 1;
     };
 
+    const requestZoomInSteps = (targetZoom: number, anchor: { vx: number; vy: number }) => {
+      let currentZoom = zoomScope.getState().currentZoomLevel;
+
+      // Large one-shot scale changes make the virtualized scroller discard and
+      // recreate its visible range before its scroll anchor has settled. Apply
+      // the same target synchronously in bounded steps: the stores see each
+      // intermediate layout, while the browser still paints only the final one.
+      for (let step = 0; step < 64 && Math.abs(targetZoom - currentZoom) > 0.0005; step += 1) {
+        const nextZoom = targetZoom < currentZoom
+          ? Math.max(targetZoom, currentZoom * MIN_COMMIT_SCALE_STEP)
+          : Math.min(targetZoom, currentZoom * MAX_COMMIT_SCALE_STEP);
+
+        zoomScope.requestZoomBy(nextZoom - currentZoom, anchor);
+        const appliedZoom = zoomScope.getState().currentZoomLevel;
+        if (Math.abs(appliedZoom - currentZoom) < 0.0005) break;
+        currentZoom = appliedZoom;
+      }
+    };
+
     const commitZoom = () => {
-      const { finalWidth, translateX } = calculateTransform(accumulatedScale);
+      const { finalWidth, translateX, translateY } = calculateTransform(accumulatedScale);
       const scaleDifference = 1 - accumulatedScale;
       const anchorX = finalWidth <= layoutWidth
         ? layoutCenterX
         : Math.abs(scaleDifference) > 0.001
           ? initialLeft + translateX / scaleDifference
           : pointerContainerX;
+      // calculateTransform constrains the preview at the beginning and end of
+      // the document. Use the anchor represented by that constrained preview;
+      // keeping the raw pointer Y would make the committed layout jump pages.
+      const anchorY = Math.abs(scaleDifference) > 0.001
+        ? initialTop + translateY / scaleDifference
+        : pointerContainerY;
 
-      zoomScope.requestZoomBy((accumulatedScale - 1) * initialZoom, {
+      requestZoomInSteps(initialZoom * accumulatedScale, {
         vx: anchorX,
-        vy: pointerContainerY,
+        vy: anchorY,
       });
       resetTransform();
       initialZoom = 0;
@@ -130,9 +160,9 @@ function NormalizedWheelZoom({ documentId, children }: { documentId: string; chi
       if (!event.ctrlKey && !event.metaKey) {
         const strategy = document.documentElement.dataset.shnctlScrollStrategy;
         if (strategy === 'vertical' && event.deltaX) {
-          container.scrollLeft += normalizePanDelta(event.deltaX, event.deltaMode, container.clientWidth);
+          container.scrollLeft += normalizePanDelta(event.deltaX, event.deltaMode, container.clientWidth) * CROSS_AXIS_WHEEL_SPEED;
         } else if (strategy === 'horizontal' && event.deltaY) {
-          container.scrollTop += normalizePanDelta(event.deltaY, event.deltaMode, container.clientHeight);
+          container.scrollTop += normalizePanDelta(event.deltaY, event.deltaMode, container.clientHeight) * CROSS_AXIS_WHEEL_SPEED;
         }
         return;
       }
@@ -143,7 +173,13 @@ function NormalizedWheelZoom({ documentId, children }: { documentId: string; chi
 
       const delta = normalizeWheelDelta(event, container.clientHeight);
       accumulatedScale *= Math.exp(-delta * WHEEL_SENSITIVITY);
-      accumulatedScale = Math.max(0.1, Math.min(10, accumulatedScale));
+      // Keep the temporary transform within the same absolute range used by
+      // the zoom plugin. Otherwise a long zoom-out gesture can preview below
+      // 20%, then snap to the plugin's 20% minimum when it is committed.
+      accumulatedScale = Math.max(
+        MIN_ZOOM_LEVEL / initialZoom,
+        Math.min(MAX_ZOOM_LEVEL / initialZoom, accumulatedScale),
+      );
 
       const { translateX, translateY } = calculateTransform(accumulatedScale);
       element.style.transformOrigin = '0 0';
