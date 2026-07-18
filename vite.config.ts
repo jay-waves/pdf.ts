@@ -21,7 +21,7 @@ export default defineConfig({
         find: '#platform',
         replacement: resolve(
           __dirname,
-          isVsCode ? 'src/platform/vscode.ts' : isWeb ? 'src/platform/web.ts' : 'src/platform/chrome.ts',
+          isVsCode ? 'apps/platform/vscode.ts' : isWeb ? 'apps/platform/web.ts' : 'apps/platform/chrome.ts',
         ),
       },
       ...(isVsCode ? [
@@ -30,7 +30,7 @@ export default defineConfig({
         '@embedpdf/plugin-export/react',
       ].map((find) => ({
         find,
-        replacement: resolve(__dirname, 'src/platform/vscode-editing-stubs.tsx'),
+        replacement: resolve(__dirname, 'apps/platform/vscode-editing-stubs.tsx'),
       })) : []),
     ],
   },
@@ -42,7 +42,9 @@ export default defineConfig({
         const resolvedOutputDir = resolve(__dirname, outputDir);
         const brandDir = resolve(__dirname, 'assets/brand');
         cpSync(resolve(brandDir, 'logo.svg'), resolve(resolvedOutputDir, 'logo.svg'));
-        cpSync(resolve(brandDir, 'icon-128.png'), resolve(resolvedOutputDir, 'icon-128.png'));
+        for (const size of [16, 32, 48, 128]) {
+          cpSync(resolve(brandDir, `icon-${size}.png`), resolve(resolvedOutputDir, `icon-${size}.png`));
+        }
       },
     }] : []),
     ...(isVsCode ? [{
