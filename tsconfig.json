@@ -14,12 +14,12 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "paths": {
-      "#platform": ["./src/platform/chrome.ts"]
+      "#platform": ["./apps/platform/chrome.ts"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "viewer.html"]
+  "include": ["apps", "viewer.html"]
 }

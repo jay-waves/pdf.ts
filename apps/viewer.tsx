@@ -410,6 +410,7 @@ function App({
   const saveInProgressRef = useRef(false);
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
+  const [toolbarInset, setToolbarInset] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidePanel, setSidePanel] = useState<SidePanel | null>(null);
   const [commentTargetId, setCommentTargetId] = useState<string | null>(null);
@@ -614,7 +615,7 @@ function App({
   }, []);
 
   return (
-    <main ref={viewerRootRef} className="app-shell">
+    <main ref={viewerRootRef} className="app-shell" style={{ paddingTop: toolbarInset }}>
       {engine ? (
         <EmbedPDF
           engine={engine}
@@ -771,6 +772,7 @@ function App({
           setSidePanel(null);
           setProtectOpen(true);
         }}
+        onPinnedInsetChange={setToolbarInset}
       />
       <Outline
         registry={registry}

@@ -78,6 +78,7 @@ interface ToolbarProps {
   onToggleComments(): void;
   onOpenPrint(): void;
   onOpenProtect(): void;
+  onPinnedInsetChange(inset: number): void;
 }
 
 interface ToolbarButtonProps {
@@ -245,6 +246,7 @@ export function Toolbar({
   onToggleComments,
   onOpenPrint,
   onOpenProtect,
+  onPinnedInsetChange,
 }: ToolbarProps) {
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [documentMenuOpen, setDocumentMenuOpen] = useState(false);
@@ -256,6 +258,22 @@ export function Toolbar({
   const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
   const activeModeItem = MODE_ITEMS.find(({ id }) => id === mode) ?? MODE_ITEMS[0];
   const canUseRegistry = Boolean(registry && activeDocumentId);
+
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    if (!toolbar) return;
+
+    const updateInset = () => {
+      onPinnedInsetChange(pinned ? toolbar.getBoundingClientRect().height : 0);
+    };
+
+    updateInset();
+    if (!pinned) return;
+
+    const observer = new ResizeObserver(updateInset);
+    observer.observe(toolbar);
+    return () => observer.disconnect();
+  }, [onPinnedInsetChange, pinned]);
 
   const clearToolbarHideTimer = () => {
     if (toolbarHideTimerRef.current !== undefined) {
