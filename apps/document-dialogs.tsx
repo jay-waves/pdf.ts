@@ -4,7 +4,7 @@ import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manage
 import type { PrintCapability } from '@embedpdf/plugin-print';
 import { PdfPermissionFlag } from '@embedpdf/models';
 import { Dialog, RadioGroup, RadioGroupItem } from './components';
-import { getActiveDocumentId } from './utils';
+import { getDocumentCapability } from './utils';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -55,9 +55,8 @@ export function ProtectDialog({ registry, open, onClose, onProtected }: {
       return;
     }
 
-    const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    const documents = registry?.getPlugin('document-manager')?.provides?.() as DocumentManagerCapability | undefined;
-    if (!documentId || !documents) {
+    const scoped = getDocumentCapability<DocumentManagerCapability>(registry, 'document-manager');
+    if (!scoped) {
       setError('Document protection is not available.');
       return;
     }
@@ -65,7 +64,7 @@ export function ProtectDialog({ registry, open, onClose, onProtected }: {
     setBusy(true);
     setError('');
     try {
-      await documents.setDocumentEncryption(documentId, {
+      await scoped.capability.setDocumentEncryption(scoped.documentId, {
         userPassword: password,
         ownerPassword: password,
         allowedFlags: PdfPermissionFlag.AllowAll,
@@ -131,9 +130,8 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    const print = registry?.getPlugin('print')?.provides?.() as PrintCapability | undefined;
-    if (!documentId || !print) {
+    const scoped = getDocumentCapability<PrintCapability>(registry, 'print');
+    if (!scoped) {
       setError('Printing is not available.');
       return;
     }
@@ -151,7 +149,9 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
     setBusy(true);
     setError('');
     try {
-      await print.forDocument(documentId).print({ pageRange: selectedRange, includeAnnotations: true }).toPromise();
+      await scoped.capability.forDocument(scoped.documentId)
+        .print({ pageRange: selectedRange, includeAnnotations: true })
+        .toPromise();
       onClose();
     } catch (nextError) {
       setError(getErrorMessage(nextError, 'Failed to prepare the document for printing.'));

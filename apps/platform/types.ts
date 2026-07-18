@@ -16,7 +16,7 @@ export interface PdfSaveTarget {
 
 export interface ManagedResource {
   readonly url: string;
-  release(): void;
+  release?(): void;
 }
 
 export interface PlatformDocument {
@@ -32,9 +32,6 @@ export interface ViewerResources {
 }
 
 export interface ViewerPlatform {
-  readonly rendering: {
-    readonly maxDpr: number;
-  };
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file: File): PlatformDocument;
   openExternal(url: string): void;

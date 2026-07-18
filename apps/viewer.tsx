@@ -30,6 +30,7 @@ import {
   getActiveDocumentId,
   getDocumentScrollStrategy,
   getFileNameFromUrl,
+  getPluginCapability,
   type ScrollCapability,
 } from './utils';
 import {
@@ -64,6 +65,7 @@ const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
+const MAX_RENDER_DPR = 1.75;
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 1200;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 // usePdfiumEngine tracks fontFallback by reference. Keep it module-stable so
@@ -109,7 +111,7 @@ function ResourceConsumedNotifier({ resource, onConsumed }: {
 }
 
 function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (dirty: boolean) => void) {
-  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+  const annotation = getPluginCapability<AnnotationCapability>(registry, 'annotation');
 
   if (!annotation) {
     return EMPTY_CLEANUP;
@@ -126,7 +128,7 @@ function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (
 }
 
 function installAnnotationUriNavigation(registry: PluginRegistry) {
-  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+  const annotation = getPluginCapability<AnnotationCapability>(registry, 'annotation');
   if (!annotation) return EMPTY_CLEANUP;
 
   return annotation.onNavigate((event) => {
@@ -151,7 +153,7 @@ function installAll(installers: Array<() => () => void>) {
 }
 
 function installScrollStrategyAttribute(registry: PluginRegistry) {
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) {
     return EMPTY_CLEANUP;
   }
@@ -219,7 +221,7 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
     event.stopPropagation();
 
     const documentId = getActiveDocumentId(registry);
-    const zoom = registry.getPlugin('zoom')?.provides?.() as ZoomCapability | undefined;
+    const zoom = getPluginCapability<ZoomCapability>(registry, 'zoom');
     if (!documentId || !zoom) {
       return;
     }
@@ -246,11 +248,10 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   let restorePan = false;
   let restoreTimer = 0;
   let pendingRestore: { documentId: string; shouldRestorePan: boolean } | null = null;
-  let suppressMiddleMouseUntil = 0;
 
   const getPanScope = () => {
     const documentId = getActiveDocumentId(registry);
-    const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
+    const pan = getPluginCapability<PanCapability>(registry, 'pan');
 
     if (!documentId || !pan) {
       return null;
@@ -262,17 +263,14 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
     };
   };
 
-  const startMiddleMousePan = (event: MouseEvent | PointerEvent) => {
+  const startMiddleMousePan = (event: PointerEvent) => {
     if (event.button !== 1) {
       return;
     }
 
-    const isPointerEvent = event instanceof PointerEvent;
+    event.preventDefault();
 
     if (activeDocumentId) {
-      if (!isPointerEvent) {
-        event.preventDefault();
-      }
       return;
     }
 
@@ -288,13 +286,10 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
       if (pendingRestore.documentId === panScope.documentId) {
         inheritedRestorePan = pendingRestore.shouldRestorePan;
       } else if (pendingRestore.shouldRestorePan) {
-        const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
+        const pan = getPluginCapability<PanCapability>(registry, 'pan');
         pan?.forDocument(pendingRestore.documentId).disablePan();
       }
       pendingRestore = null;
-    }
-    if (!isPointerEvent) {
-      event.preventDefault();
     }
     activeDocumentId = panScope.documentId;
     // A quick second press can arrive before the previous delayed restore. In
@@ -304,13 +299,12 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
     panScope.scope.enablePan();
   };
 
-  const finishMiddleMousePan = (event?: MouseEvent | PointerEvent | Event) => {
-    if (!activeDocumentId || (event instanceof MouseEvent && event.type !== 'pointercancel' && event.button !== 1)) {
+  const finishMiddleMousePan = (event?: PointerEvent | Event) => {
+    if (!activeDocumentId || (event instanceof PointerEvent && event.type !== 'pointercancel' && event.button !== 1)) {
       return;
     }
 
     if (event?.cancelable) event.preventDefault();
-    suppressMiddleMouseUntil = performance.now() + 180;
     pendingRestore = { documentId: activeDocumentId, shouldRestorePan: restorePan };
     activeDocumentId = null;
     restorePan = false;
@@ -323,7 +317,7 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
         return;
       }
 
-      const pan = registry.getPlugin('pan')?.provides?.() as PanCapability | undefined;
+      const pan = getPluginCapability<PanCapability>(registry, 'pan');
       pan?.forDocument(restore.documentId).disablePan();
     }, 120);
   };
@@ -332,7 +326,7 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
     if (activeDocumentId && (event.buttons & 4) === 0) finishMiddleMousePan(event);
   };
 
-  const stopBrowserMiddleMouse = (event: MouseEvent | PointerEvent) => {
+  const stopBrowserMiddleMouse = (event: MouseEvent) => {
     if (event.button !== 1) {
       return;
     }
@@ -341,40 +335,21 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
     event.stopPropagation();
   };
 
-  const suppressTailEvent = (event: MouseEvent | PointerEvent) => {
-    if (event.button !== 1 || performance.now() > suppressMiddleMouseUntil) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
   window.addEventListener('pointerdown', startMiddleMousePan, { capture: true });
-  window.addEventListener('mousedown', startMiddleMousePan, { capture: true });
   window.addEventListener('pointerup', finishMiddleMousePan);
-  window.addEventListener('mouseup', finishMiddleMousePan);
   window.addEventListener('pointercancel', finishMiddleMousePan);
   window.addEventListener('pointermove', finishIfMiddleButtonWasLost);
   window.addEventListener('blur', finishMiddleMousePan);
   window.addEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
-  window.addEventListener('pointermove', suppressTailEvent, { capture: true });
-  window.addEventListener('pointerup', suppressTailEvent, { capture: true });
-  window.addEventListener('click', suppressTailEvent, { capture: true });
 
   return () => {
     if (restoreTimer) window.clearTimeout(restoreTimer);
     window.removeEventListener('pointerdown', startMiddleMousePan, { capture: true });
-    window.removeEventListener('mousedown', startMiddleMousePan, { capture: true });
     window.removeEventListener('pointerup', finishMiddleMousePan);
-    window.removeEventListener('mouseup', finishMiddleMousePan);
     window.removeEventListener('pointercancel', finishMiddleMousePan);
     window.removeEventListener('pointermove', finishIfMiddleButtonWasLost);
     window.removeEventListener('blur', finishMiddleMousePan);
     window.removeEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
-    window.removeEventListener('pointermove', suppressTailEvent, { capture: true });
-    window.removeEventListener('pointerup', suppressTailEvent, { capture: true });
-    window.removeEventListener('click', suppressTailEvent, { capture: true });
   };
 }
 
@@ -388,7 +363,66 @@ interface AppProps {
   onResourceConsumed(resource?: ManagedResource): void;
 }
 
-type SidePanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
+type CommentTarget = { annotationId: string; isNew: boolean };
+type SidePanel =
+  | { type: 'outline' | 'thumbnails' | 'colors' }
+  | { type: 'comments'; target: CommentTarget | null }
+  | null;
+type ActiveDialog = 'print' | 'protect' | null;
+type DocumentViewState = { pageNumber: number; totalPages: number; title: string };
+
+const INITIAL_DOCUMENT_VIEW: DocumentViewState = { pageNumber: 1, totalPages: 0, title: '' };
+
+function createViewerPlugins(fileUrl?: string) {
+  return [
+    createPluginRegistration(DocumentManagerPluginPackage, {
+      initialDocuments: fileUrl ? [{ url: fileUrl }] : [],
+    }),
+    createPluginRegistration(ViewportPluginPackage, { viewportGap: 10 }),
+    createPluginRegistration(ScrollPluginPackage, {
+      defaultStrategy: ScrollStrategy.Vertical,
+      defaultPageGap: 10,
+      defaultBufferSize: 2,
+    }),
+    createPluginRegistration(RenderPluginPackage, { defaultImageType: RENDER_IMAGE_TYPE }),
+    createPluginRegistration(TilingPluginPackage, {
+      defaultImageType: RENDER_IMAGE_TYPE,
+      tileSize: TILING_TILE_SIZE,
+      overlapPx: TILING_OVERLAP_PX,
+      extraRings: TILING_EXTRA_RINGS,
+    }),
+    createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitPage }),
+    createPluginRegistration(SpreadPluginPackage, { defaultSpreadMode: SpreadMode.None }),
+    createPluginRegistration(RotatePluginPackage, { defaultRotation: Rotation.Degree0 }),
+    createPluginRegistration(InteractionManagerPluginPackage),
+    createPluginRegistration(PanPluginPackage, { defaultMode: 'mobile' }),
+    createPluginRegistration(SelectionPluginPackage, { maxCachedGeometries: 8 }),
+    createPluginRegistration(AnnotationPluginPackage, documentEditingEnabled ? {
+      locked: { type: LockModeType.Include, categories: ['form', 'link'] },
+      autoOpenLinks: false,
+      deactivateToolAfterCreate: true,
+      tools: [
+        ...['square', 'lineArrow', 'ink'].map((id) => ({ id, defaults: { strokeWidth: 2 } })),
+        // Locked link annotations remain interactive for URI and destination navigation.
+        { id: 'link', categories: ['link'] },
+      ],
+    } : {
+      // The read-only viewer still needs annotations for clickable PDF links.
+      locked: { type: LockModeType.All },
+      autoOpenLinks: false,
+    }),
+    ...(documentEditingEnabled ? [
+      createPluginRegistration(HistoryPluginPackage),
+      createPluginRegistration(FormPluginPackage),
+    ] : []),
+    createPluginRegistration(SearchPluginPackage),
+    createPluginRegistration(BookmarkPluginPackage),
+    createPluginRegistration(PrintPluginPackage),
+    ...(documentEditingEnabled ? [
+      createPluginRegistration(ExportPluginPackage, { defaultFileName: 'document.pdf' }),
+    ] : []),
+  ];
+}
 
 function App({
   fileUrl,
@@ -399,7 +433,6 @@ function App({
   documentResource,
   onResourceConsumed,
 }: AppProps) {
-  const editingEnabled = documentEditingEnabled;
   const { engine: workerEngine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
     wasmUrl: wasmResource.url,
     worker: true,
@@ -412,40 +445,34 @@ function App({
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
   const [toolbarInset, setToolbarInset] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [sidePanel, setSidePanel] = useState<SidePanel | null>(null);
-  const [commentTargetId, setCommentTargetId] = useState<string | null>(null);
-  const [commentTargetIsNew, setCommentTargetIsNew] = useState(false);
-  const [printOpen, setPrintOpen] = useState(false);
-  const [protectOpen, setProtectOpen] = useState(false);
+  const [sidePanel, setSidePanel] = useState<SidePanel>(null);
+  const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
   const [translationRequest, setTranslationRequest] = useState<SelectionTranslationRequest | null>(null);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
     bookmarks: [],
   });
-  const [currentPageNumber, setCurrentPageNumber] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const [currentTitle, setCurrentTitle] = useState('');
+  const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
   const [navigationVisible, setNavigationVisible] = useState(false);
+  const { pageNumber: currentPageNumber, totalPages, title: currentTitle } = documentView;
+  const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const registryCleanupRef = useRef<(() => void) | null>(null);
   const outlineCacheRef = useRef(outlineCache);
   const currentPageNumberRef = useRef(1);
   const titleTrackerRefreshRef = useRef<(() => void) | null>(null);
-  const hasUnsavedChangesRef = useRef(false);
-  const documentChangeVersionRef = useRef(0);
+  const changeTrackerRef = useRef({ dirty: false, version: 0 });
   const cleanDocumentTitleRef = useRef(document.title);
   const navigationHideTimerRef = useRef<number>(0);
   const navigationVisibleRef = useRef(false);
-  const translationRequestIdRef = useRef(0);
 
   const renderDocumentTitle = () => {
-    const title = `${hasUnsavedChangesRef.current ? '*' : ''}${cleanDocumentTitleRef.current}`;
-    document.title = title;
+    document.title = `${changeTrackerRef.current.dirty ? '*' : ''}${cleanDocumentTitleRef.current}`;
   };
 
   const setHasUnsavedChanges = (dirty: boolean) => {
-    if (dirty) documentChangeVersionRef.current++;
-    hasUnsavedChangesRef.current = dirty;
+    if (dirty) changeTrackerRef.current.version++;
+    changeTrackerRef.current.dirty = dirty;
     if (dirty) {
       window.addEventListener('beforeunload', handleBeforeUnload);
     } else {
@@ -488,14 +515,14 @@ function App({
   }, []);
 
   useEffect(() => {
-    if (!editingEnabled) return;
+    if (!documentEditingEnabled) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
         if (saveInProgressRef.current) return;
 
-        const changeVersionAtSaveStart = documentChangeVersionRef.current;
+        const changeVersionAtSaveStart = changeTrackerRef.current.version;
         saveInProgressRef.current = true;
         savePdf(registry, { sourceUrl, fileName: documentName })
           .then((saved) => {
@@ -505,7 +532,7 @@ function App({
 
             // A new edit may have landed while PDF serialization or disk I/O
             // was in progress. Keep the dirty marker in that case.
-            if (documentChangeVersionRef.current === changeVersionAtSaveStart) {
+            if (changeTrackerRef.current.version === changeVersionAtSaveStart) {
               setHasUnsavedChanges(false);
             }
           })
@@ -521,7 +548,7 @@ function App({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [documentName, editingEnabled, registry, sourceUrl]);
+  }, [documentName, registry, sourceUrl]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -540,69 +567,10 @@ function App({
     };
   }, []);
 
-  const plugins = useMemo(
-    () => [
-      createPluginRegistration(DocumentManagerPluginPackage, {
-        initialDocuments: fileUrl ? [{ url: fileUrl }] : [],
-      }),
-      createPluginRegistration(ViewportPluginPackage, { viewportGap: 10 }),
-      createPluginRegistration(ScrollPluginPackage, {
-        defaultStrategy: ScrollStrategy.Vertical,
-        defaultPageGap: 10,
-        defaultBufferSize: 2,
-      }),
-      createPluginRegistration(RenderPluginPackage, {
-        defaultImageType: RENDER_IMAGE_TYPE,
-      }),
-      createPluginRegistration(TilingPluginPackage, {
-        defaultImageType: RENDER_IMAGE_TYPE,
-        tileSize: TILING_TILE_SIZE,
-        overlapPx: TILING_OVERLAP_PX,
-        extraRings: TILING_EXTRA_RINGS,
-      }),
-      createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitPage }),
-      createPluginRegistration(SpreadPluginPackage, { defaultSpreadMode: SpreadMode.None }),
-      createPluginRegistration(RotatePluginPackage, { defaultRotation: Rotation.Degree0 }),
-      createPluginRegistration(InteractionManagerPluginPackage),
-      createPluginRegistration(PanPluginPackage, { defaultMode: 'mobile' }),
-      createPluginRegistration(SelectionPluginPackage, {
-        maxCachedGeometries: 8,
-      }),
-      createPluginRegistration(AnnotationPluginPackage, editingEnabled ? {
-        locked: { type: LockModeType.Include, categories: ['form', 'link'] },
-        autoOpenLinks: false,
-        deactivateToolAfterCreate: true,
-        tools: [
-          ...['square', 'lineArrow', 'ink'].map((id) => ({
-            id,
-            defaults: { strokeWidth: 2 },
-          })),
-          // Link annotations must be non-interactive for EmbedPDF's locked
-          // renderer to route clicks to their URI/destination targets.
-          { id: 'link', categories: ['link'] },
-        ],
-      } : {
-        // The VS Code viewer is read-only, but its annotation layer is still
-        // needed to expose clickable PDF link annotations.
-        locked: { type: LockModeType.All },
-        autoOpenLinks: false,
-      }),
-      ...(editingEnabled ? [
-        createPluginRegistration(HistoryPluginPackage),
-        createPluginRegistration(FormPluginPackage),
-      ] : []),
-      createPluginRegistration(SearchPluginPackage),
-      createPluginRegistration(BookmarkPluginPackage),
-      createPluginRegistration(PrintPluginPackage),
-      ...(editingEnabled ? [
-        createPluginRegistration(ExportPluginPackage, { defaultFileName: 'document.pdf' }),
-      ] : []),
-    ],
-    [editingEnabled, fileUrl],
-  );
+  const plugins = useMemo(() => createViewerPlugins(fileUrl), [fileUrl]);
 
   useEffect(() => {
-    cleanDocumentTitleRef.current = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) ?? 'PDF' : 'PDF');
+    cleanDocumentTitleRef.current = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined) ?? 'PDF';
     renderDocumentTitle();
   }, [documentName, fileUrl]);
 
@@ -626,13 +594,9 @@ function App({
 
             setRegistry(nextRegistry);
             setOutlineCache({ status: 'idle', bookmarks: [] });
-            setCurrentPageNumber(1);
-            setTotalPages(0);
-            setCurrentTitle('');
+            setDocumentView(INITIAL_DOCUMENT_VIEW);
             setSidePanel(null);
-            setCommentTargetId(null);
-            setPrintOpen(false);
-            setProtectOpen(false);
+            setActiveDialog(null);
             setTranslationRequest(null);
             setHasUnsavedChanges(false);
             if (navigationVisibleRef.current) {
@@ -642,24 +606,23 @@ function App({
 
             const refreshCurrentTitle = () => {
               const pageNumber = currentPageNumberRef.current;
-              setCurrentTitle(getCurrentBookmarkTitle(outlineCacheRef.current.bookmarks, pageNumber));
+              const title = getCurrentBookmarkTitle(outlineCacheRef.current.bookmarks, pageNumber);
+              setDocumentView((current) => current.title === title ? current : { ...current, title });
             };
 
             titleTrackerRefreshRef.current = refreshCurrentTitle;
 
-            const installers: Array<() => () => void> = [
+            const installers = [
               () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
               () => installMiddleMousePanInterceptor(nextRegistry),
               () => installAnnotationUriNavigation(nextRegistry),
-              ...(editingEnabled ? [() => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges)] : []),
+              ...(documentEditingEnabled ? [() => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges)] : []),
               () => installPlatformReadingHistory(nextRegistry, documentKey),
               () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
-                setCurrentPageNumber(pageNumber);
-                setCurrentTitle(title);
-                setTotalPages(nextTotalPages);
+                setDocumentView({ pageNumber, title, totalPages: nextTotalPages });
               }),
               () => installSearchKeyboardShortcut(() => setSearchOpen(true)),
               () => installOutlinePrefetch(nextRegistry, setOutlineCache, documentKey),
@@ -736,7 +699,7 @@ function App({
               )}
               <Thumbnails
                 registry={registry}
-                open={sidePanel === 'thumbnails'}
+                open={sidePanel?.type === 'thumbnails'}
                 totalPages={totalPages}
                 currentPageNumber={currentPageNumber}
                 onClose={() => setSidePanel(null)}
@@ -753,71 +716,68 @@ function App({
         registry={registry}
         activeDocumentId={toolbarDocumentId}
         searchOpen={searchOpen}
-        thumbnailsOpen={sidePanel === 'thumbnails'}
-        colorPaletteOpen={sidePanel === 'colors'}
-        commentsOpen={sidePanel === 'comments'}
+        thumbnailsOpen={sidePanel?.type === 'thumbnails'}
+        colorPaletteOpen={sidePanel?.type === 'colors'}
+        commentsOpen={sidePanel?.type === 'comments'}
         onSearchOpenChange={setSearchOpen}
-        onToggleThumbnails={() => setSidePanel((current) => current === 'thumbnails' ? null : 'thumbnails')}
-        onToggleColorPalette={() => setSidePanel((current) => current === 'colors' ? null : 'colors')}
-        onToggleComments={() => {
-          setCommentTargetId(null);
-          setCommentTargetIsNew(false);
-          setSidePanel((current) => current === 'comments' ? null : 'comments');
-        }}
+        onToggleThumbnails={() => setSidePanel((current) => (
+          current?.type === 'thumbnails' ? null : { type: 'thumbnails' }
+        ))}
+        onToggleColorPalette={() => setSidePanel((current) => (
+          current?.type === 'colors' ? null : { type: 'colors' }
+        ))}
+        onToggleComments={() => setSidePanel((current) => (
+          current?.type === 'comments' ? null : { type: 'comments', target: null }
+        ))}
         onOpenPrint={() => {
           setSidePanel(null);
-          setPrintOpen(true);
+          setActiveDialog('print');
         }}
         onOpenProtect={() => {
           setSidePanel(null);
-          setProtectOpen(true);
+          setActiveDialog('protect');
         }}
         onPinnedInsetChange={setToolbarInset}
       />
       <Outline
         registry={registry}
-        open={sidePanel === 'outline'}
+        open={sidePanel?.type === 'outline'}
         cache={outlineCache}
         currentTitle={currentTitle}
         onCacheChange={setOutlineCache}
         onClose={() => setSidePanel(null)}
       />
-      {editingEnabled ? <ColorPalette
+      {documentEditingEnabled ? <ColorPalette
         registry={registry}
-        open={sidePanel === 'colors'}
+        open={sidePanel?.type === 'colors'}
         onClose={() => setSidePanel(null)}
       /> : null}
-      {editingEnabled ? <Comments
+      {documentEditingEnabled ? <Comments
         engine={engine}
         registry={registry}
-        open={sidePanel === 'comments'}
+        open={sidePanel?.type === 'comments'}
         currentPageNumber={currentPageNumber}
-        targetAnnotationId={commentTargetId}
-        targetAnnotationIsNew={commentTargetIsNew}
-        onClose={() => {
-          setSidePanel(null);
-          setCommentTargetId(null);
-          setCommentTargetIsNew(false);
-        }}
+        targetAnnotationId={commentTarget?.annotationId}
+        targetAnnotationIsNew={commentTarget?.isNew}
+        onClose={() => setSidePanel(null)}
       /> : null}
       <ContextMenu
         registry={registry}
         container={viewerRootRef.current}
-        canEdit={editingEnabled}
+        canEdit={documentEditingEnabled}
         canTranslate={Boolean(platform.translate)}
-        onOpenComments={(annotationId, isNew) => {
-          setCommentTargetId(annotationId);
-          setCommentTargetIsNew(isNew);
-          setSidePanel('comments');
-        }}
-        onOpenColorPalette={() => setSidePanel('colors')}
-        onTranslate={(documentId, anchor) => {
-          setTranslationRequest({ id: ++translationRequestIdRef.current, documentId, anchor });
-        }}
+        onOpenComments={(annotationId, isNew) => setSidePanel({
+          type: 'comments',
+          target: { annotationId, isNew },
+        })}
+        onOpenColorPalette={() => setSidePanel({ type: 'colors' })}
+        onTranslate={(documentId, anchor) => setTranslationRequest({
+          documentId,
+          anchor,
+        })}
       />
       {platform.translate && translationRequest ? (
         <SelectionTranslate
-          key={translationRequest.id}
           registry={registry}
           request={translationRequest}
           onClose={() => setTranslationRequest(null)}
@@ -825,15 +785,15 @@ function App({
       ) : null}
       <PrintDialog
         registry={registry}
-        open={printOpen}
+        open={activeDialog === 'print'}
         currentPageNumber={currentPageNumber}
         totalPages={totalPages}
-        onClose={() => setPrintOpen(false)}
+        onClose={() => setActiveDialog(null)}
       />
-      {editingEnabled ? <ProtectDialog
+      {documentEditingEnabled ? <ProtectDialog
         registry={registry}
-        open={protectOpen}
-        onClose={() => setProtectOpen(false)}
+        open={activeDialog === 'protect'}
+        onClose={() => setActiveDialog(null)}
         onProtected={() => setHasUnsavedChanges(true)}
       /> : null}
       <BottomNavigationControl
@@ -846,7 +806,7 @@ function App({
         onReveal={revealNavigation}
         onOpenOutline={() => {
           setSearchOpen(false);
-          setSidePanel('outline');
+          setSidePanel({ type: 'outline' });
         }}
       />
     </main>
@@ -916,10 +876,10 @@ function ViewerBootstrap() {
 
   const releaseResource = (resource?: ManagedResource) => {
     if (!resource || !managedResourcesRef.current.delete(resource)) return;
-    resource.release();
+    resource.release?.();
   };
 
-  useEffect(() => installRenderDprCap(platform.rendering.maxDpr), []);
+  useEffect(() => installRenderDprCap(MAX_RENDER_DPR), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -942,7 +902,7 @@ function ViewerBootstrap() {
   }, []);
 
   useEffect(() => () => {
-    for (const resource of managedResourcesRef.current) resource.release();
+    for (const resource of managedResourcesRef.current) resource.release?.();
     managedResourcesRef.current.clear();
   }, []);
 
@@ -955,8 +915,9 @@ function ViewerBootstrap() {
   }
 
   if (platform.openLocalDocument && !resources.document) {
+    const openLocalDocument = platform.openLocalDocument;
     return <WebDocumentPicker onSelect={(file) => {
-      const document = platform.openLocalDocument!(file);
+      const document = openLocalDocument(file);
       trackResource(document.resource);
       setResources({ ...resources, document });
     }} />;

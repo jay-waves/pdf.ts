@@ -153,7 +153,6 @@ function NormalizedWheelZoom({ documentId, children }: { documentId: string; chi
         vy: anchorY,
       });
       resetTransform();
-      initialZoom = 0;
     };
 
     const handleWheel = (event: WheelEvent) => {

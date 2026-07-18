@@ -6,6 +6,7 @@ import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
   getDocumentScrollStrategy,
+  getPluginCapability,
   restoreScrollAnchor,
   type ScrollCapability,
 } from './utils';
@@ -18,13 +19,17 @@ function isSpreadMode(value: unknown): value is SpreadMode {
   return value === SpreadMode.None || value === SpreadMode.Odd || value === SpreadMode.Even;
 }
 
+function isValidPageNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
 export function installReadingHistory(registry: PluginRegistry, documentKey?: string) {
   if (!documentKey) return EMPTY_CLEANUP;
 
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) return EMPTY_CLEANUP;
 
-  const spread = registry.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
+  const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
   let historyReady = false;
   let disposed = false;
   let pendingWriteId = 0;
@@ -57,7 +62,6 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
     if (!historyReady) return;
     if (pendingWriteId) window.clearTimeout(pendingWriteId);
     pendingWriteId = window.setTimeout(() => {
-      pendingWriteId = 0;
       flushPendingWrite().catch((error) => console.warn('[pdf-ts] failed to write reading history', error));
     }, 300);
   };
@@ -81,7 +85,7 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
     platform.readReadingProgress(documentKey)
       .then((saved) => {
         if (disposed) return;
-        if (saved) {
+        if (saved && isValidPageNumber(saved.pageNumber)) {
           if (isSpreadMode(saved.spreadMode)) spread?.forDocument(event.documentId).setSpreadMode(saved.spreadMode);
           if (isScrollStrategy(saved.scrollStrategy)) scroll.setScrollStrategy(saved.scrollStrategy, event.documentId);
           restoreScrollAnchor(registry, { documentId: event.documentId, pageNumber: saved.pageNumber });
@@ -103,13 +107,8 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
   const flushFinalHistoryWrite = () => {
     if (pendingWriteId) {
       window.clearTimeout(pendingWriteId);
-      pendingWriteId = 0;
     }
-    if (!historyReady) return Promise.resolve();
-    const documentId = getActiveDocumentId(registry);
-    return documentId
-      ? platform.writeReadingProgress(documentKey, getProgress(documentId))
-      : Promise.resolve();
+    return historyReady ? flushPendingWrite() : Promise.resolve();
   };
 
   const onClose = () => {

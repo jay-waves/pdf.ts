@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { Tooltip } from './components';
-import { getActiveDocumentId, type ScrollCapability } from './utils';
+import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
 
 type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 type SearchPanelState = Pick<
@@ -46,7 +46,7 @@ function toSearchPanelState(state: ReturnType<SearchScope['getState']>): SearchP
 
 function getActiveSearchScope(registry?: PluginRegistry): SearchScope | undefined {
   const documentId = registry ? getActiveDocumentId(registry) : undefined;
-  const search = registry?.getPlugin('search')?.provides?.() as SearchCapability | undefined;
+  const search = getPluginCapability<SearchCapability>(registry, 'search');
 
   if (!documentId || !search) {
     return undefined;
@@ -64,7 +64,7 @@ function scrollToSearchResult(registry: PluginRegistry | undefined, result: Sear
     return;
   }
 
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   const documentId = getActiveDocumentId(registry);
 
   if (!scroll || !documentId) {
@@ -82,7 +82,7 @@ function getCurrentPageIndex(registry: PluginRegistry | undefined) {
     return 0;
   }
 
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   const documentId = getActiveDocumentId(registry);
 
   if (!scroll || !documentId) {
@@ -143,9 +143,9 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     }
 
     setCurrentPageIndex(getCurrentPageIndex(registry));
-    const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+    const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
 
-    return scroll?.onPageChange?.(({ pageNumber }) => {
+    return scroll?.onPageChange(({ pageNumber }) => {
       setCurrentPageIndex(Math.max(0, pageNumber - 1));
     });
   }, [open, registry]);
@@ -173,17 +173,17 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     };
   }, [open, searchScope]);
 
-  const runSearch = (nextQuery = query) => {
+  const runSearch = () => {
     if (!searchScope) {
       return;
     }
 
     alignedSearchKeyRef.current = '';
-    if (!nextQuery.trim()) {
+    if (!query.trim()) {
       searchScope.stopSearch();
       return;
     }
-    searchScope.searchAllPages(nextQuery);
+    searchScope.searchAllPages(query);
   };
 
   useEffect(() => {
@@ -266,7 +266,6 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     query,
     setQuery,
     searchState,
-    activeIndex: searchState.activeResultIndex,
     canSearch: Boolean(searchScope),
     flags,
     runSearch,
@@ -288,7 +287,6 @@ export function Search({
     query,
     setQuery,
     searchState,
-    activeIndex,
     canSearch,
     flags,
     runSearch,
@@ -322,7 +320,7 @@ export function Search({
         </button>
       </Tooltip>
       <div className="shnctl-search-counter">
-        {searchState.loading ? 'Searching...' : `${activeIndex >= 0 ? activeIndex + 1 : 0} / ${searchState.total}`}
+        {searchState.loading ? 'Searching...' : `${searchState.activeResultIndex >= 0 ? searchState.activeResultIndex + 1 : 0} / ${searchState.total}`}
       </div>
       <Tooltip content="Next result">
         <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result">

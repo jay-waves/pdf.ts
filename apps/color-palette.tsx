@@ -3,7 +3,7 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { AnnotationCapability, TrackedAnnotation } from '@embedpdf/plugin-annotation';
 import { Check } from 'lucide-react';
 import { Dialog } from './components';
-import { getActiveDocumentId } from './utils';
+import { getActiveDocumentId, getPluginCapability } from './utils';
 
 const FALLBACK_COLORS = [
   '#facc15',
@@ -38,8 +38,10 @@ interface AnnotationToolLike {
   defaults?: Record<string, unknown>;
 }
 
-function getAnnotationCapability(registry?: PluginRegistry) {
-  return registry?.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+interface PaletteSnapshot {
+  activeTool: AnnotationToolLike | null;
+  defaults: Record<string, unknown>;
+  selectedAnnotations: TrackedAnnotation[];
 }
 
 function normalizeColor(value: unknown) {
@@ -100,11 +102,17 @@ export function ColorPalette({
   open: boolean;
   onClose: () => void;
 }) {
-  const annotation = useMemo(() => getAnnotationCapability(registry), [registry]);
-  const [activeTool, setActiveTool] = useState<AnnotationToolLike | null>(null);
-  const [defaults, setDefaults] = useState<Record<string, unknown>>({});
-  const [selectedAnnotations, setSelectedAnnotations] = useState<TrackedAnnotation[]>([]);
+  const annotation = useMemo(
+    () => getPluginCapability<AnnotationCapability>(registry, 'annotation'),
+    [registry],
+  );
+  const [snapshot, setSnapshot] = useState<PaletteSnapshot>({
+    activeTool: null,
+    defaults: {},
+    selectedAnnotations: [],
+  });
   const [selectedField, setSelectedField] = useState<ColorFieldKey>('strokeColor');
+  const { activeTool, defaults, selectedAnnotations } = snapshot;
 
   useEffect(() => {
     if (!open || !registry || !annotation) {
@@ -122,9 +130,11 @@ export function ColorPalette({
       const nextDefaults = tool?.defaults ?? {};
       const nextSelectedAnnotations = scope.getSelectedAnnotations();
 
-      setActiveTool(tool);
-      setDefaults(nextDefaults);
-      setSelectedAnnotations(nextSelectedAnnotations);
+      setSnapshot({
+        activeTool: tool,
+        defaults: nextDefaults,
+        selectedAnnotations: nextSelectedAnnotations,
+      });
       setSelectedField((currentField) => {
         const availableFields = getAvailableFields(nextDefaults, nextSelectedAnnotations);
         return availableFields.some(({ key }) => key === currentField)
@@ -169,7 +179,10 @@ export function ColorPalette({
 
     if (activeTool?.id) {
       annotation.setToolDefaults(activeTool.id, patch);
-      setDefaults((currentDefaults) => ({ ...currentDefaults, ...patch }));
+      setSnapshot((current) => ({
+        ...current,
+        defaults: { ...current.defaults, ...patch },
+      }));
     }
 
     if (selectedAnnotations.length) {
@@ -198,12 +211,9 @@ export function ColorPalette({
     applyPatch({ opacity: Math.min(1, Math.max(0, opacity)) });
   };
 
-  const body = (() => {
-    if (!annotation) {
-      return <div className="shnctl-state">Color tools are not ready.</div>;
-    }
-
-    return (
+  const body = !annotation
+    ? <div className="shnctl-state">Color tools are not ready.</div>
+    : (
       <div className="shnctl-color-content">
         <div className="shnctl-color-meta">
           <span>{getToolLabel(activeTool)}</span>
@@ -262,7 +272,6 @@ export function ColorPalette({
         </label>
       </div>
     );
-  })();
 
   return (
     <Dialog

@@ -1,7 +1,7 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import type { ExportCapability } from '@embedpdf/plugin-export';
-import { getActiveDocumentId } from './utils';
+import { getActiveDocumentId, getPluginCapability } from './utils';
 import { platform } from '#platform';
 
 async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCapability['forDocument']>) {
@@ -22,7 +22,7 @@ export async function savePdf(
   if (!registry) return false;
 
   const documentId = getActiveDocumentId(registry);
-  const exportPlugin = registry.getPlugin('export')?.provides?.() as ExportCapability | undefined;
+  const exportPlugin = getPluginCapability<ExportCapability>(registry, 'export');
   if (!documentId || !exportPlugin) return false;
 
   // Chrome must acquire its writable handle while the Ctrl+S user activation
@@ -30,7 +30,7 @@ export async function savePdf(
   const target = await platform.preparePdfSave(options);
   if (!target) return false;
 
-  const annotation = registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
+  const annotation = getPluginCapability<AnnotationCapability>(registry, 'annotation');
   if (annotation) {
     await commitPendingAnnotations(annotation.forDocument(documentId));
   }

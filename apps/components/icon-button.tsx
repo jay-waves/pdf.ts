@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import { Tooltip } from './tooltip';
 
-export interface IconButtonProps {
+interface IconButtonProps {
   label: string;
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
   className?: string;

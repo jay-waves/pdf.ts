@@ -42,7 +42,9 @@ import {
 import {
   getActiveDocumentId,
   getCurrentScrollAnchor,
+  getDocumentCapability,
   getDocumentScrollStrategy,
+  getPluginCapability,
   isEditableTarget,
   restoreScrollAnchor,
   type ScrollCapability,
@@ -137,16 +139,6 @@ function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: Toolbar
   );
 }
 
-function getDocumentScope<T>(
-  registry: PluginRegistry | undefined,
-  pluginId: string,
-  documentId: string | null | undefined = registry ? getActiveDocumentId(registry) : undefined,
-): { documentId: string; capability: T } | null {
-  const capability = registry?.getPlugin(pluginId)?.provides?.() as T | undefined;
-
-  return documentId && capability ? { documentId, capability } : null;
-}
-
 function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?: string | null) {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
@@ -156,7 +148,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   const [scrollStrategy, setScrollStrategy] = useState(ScrollStrategy.Vertical);
 
   useEffect(() => {
-    const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom', activeDocumentId);
+    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom', activeDocumentId);
     if (!scopeInfo) {
       return;
     }
@@ -172,7 +164,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const scopeInfo = getDocumentScope<PanCapability>(registry, 'pan', activeDocumentId);
+    const scopeInfo = getDocumentCapability<PanCapability>(registry, 'pan', activeDocumentId);
     if (!scopeInfo) {
       return;
     }
@@ -183,7 +175,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const scopeInfo = getDocumentScope<AnnotationCapability>(registry, 'annotation', activeDocumentId);
+    const scopeInfo = getDocumentCapability<AnnotationCapability>(registry, 'annotation', activeDocumentId);
     if (!scopeInfo) {
       return;
     }
@@ -194,7 +186,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const spread = registry?.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
+    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
     if (!spread || !activeDocumentId) {
       return;
     }
@@ -205,7 +197,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const scroll = registry?.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+    const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
     if (!registry || !scroll || !activeDocumentId) {
       return;
     }
@@ -248,8 +240,7 @@ export function Toolbar({
   onOpenProtect,
   onPinnedInsetChange,
 }: ToolbarProps) {
-  const [modeMenuOpen, setModeMenuOpen] = useState(false);
-  const [documentMenuOpen, setDocumentMenuOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<'document' | 'mode' | null>(null);
   const [selectedMode, setSelectedMode] = useState<PersistentToolbarMode>('view');
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -289,13 +280,13 @@ export function Toolbar({
 
   const hideToolbar = () => {
     clearToolbarHideTimer();
-    if (!pinned && !modeMenuOpen && !documentMenuOpen && !toolbarRef.current?.matches(':hover, :focus-within')) {
+    if (!pinned && !openMenu && !toolbarRef.current?.matches(':hover, :focus-within')) {
       toolbarRef.current?.removeAttribute('data-visible');
     }
   };
 
   const scheduleToolbarHide = () => {
-    if (pinned || modeMenuOpen || documentMenuOpen) {
+    if (pinned || openMenu) {
       return;
     }
 
@@ -311,10 +302,9 @@ export function Toolbar({
 
   const closeSearch = () => onSearchOpenChange(false);
   const setMode = (nextMode: ToolbarMode) => {
-    setModeMenuOpen(false);
-    setDocumentMenuOpen(false);
+    setOpenMenu(null);
 
-    const annotation = documentEditingEnabled ? getDocumentScope<AnnotationCapability>(registry, 'annotation') : null;
+    const annotation = documentEditingEnabled ? getDocumentCapability<AnnotationCapability>(registry, 'annotation') : null;
     if (documentEditingEnabled && nextMode !== 'draw') {
       annotation?.capability.forDocument(annotation.documentId).setActiveTool(null);
     }
@@ -329,7 +319,7 @@ export function Toolbar({
   };
 
   const togglePan = () => {
-    const scopeInfo = getDocumentScope<PanCapability>(registry, 'pan');
+    const scopeInfo = getDocumentCapability<PanCapability>(registry, 'pan');
     if (!scopeInfo) {
       return;
     }
@@ -342,10 +332,6 @@ export function Toolbar({
     }
   };
 
-  const cycleTheme = () => {
-    cycleViewerTheme();
-  };
-
   const togglePinned = () => {
     const nextPinned = !pinned;
     setPinned(nextPinned);
@@ -353,12 +339,12 @@ export function Toolbar({
   };
 
   const requestZoom = (level: ZoomLevel) => {
-    const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom');
+    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom');
     scopeInfo?.capability.forDocument(scopeInfo.documentId).requestZoom(level);
   };
 
   const zoomByButton = (direction: 1 | -1) => {
-    const scopeInfo = getDocumentScope<ZoomCapability>(registry, 'zoom');
+    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom');
     if (!scopeInfo) {
       return;
     }
@@ -373,7 +359,7 @@ export function Toolbar({
 
   const selectDrawTool = (toolId: string) => {
     closeSearch();
-    const scopeInfo = getDocumentScope<AnnotationCapability>(registry, 'annotation');
+    const scopeInfo = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
     if (!scopeInfo) {
       return;
     }
@@ -384,7 +370,7 @@ export function Toolbar({
   };
 
   const setSpread = (nextSpreadMode: SpreadMode) => {
-    const spread = registry?.getPlugin('spread')?.provides?.() as SpreadCapability | undefined;
+    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
     if (!spread) {
       return;
     }
@@ -393,7 +379,7 @@ export function Toolbar({
   };
 
   const setScroll = (nextStrategy: ScrollStrategy) => {
-    const scroll = registry?.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+    const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
     if (!scroll) {
       return;
     }
@@ -402,7 +388,7 @@ export function Toolbar({
   };
 
   const rotateForward = () => {
-    const rotate = registry?.getPlugin('rotate')?.provides?.() as RotateCapability | undefined;
+    const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
     rotate?.rotateForward();
   };
 
@@ -417,7 +403,7 @@ export function Toolbar({
   };
 
   const exportDocument = () => {
-    const scopeInfo = getDocumentScope<ExportCapability>(registry, 'export');
+    const scopeInfo = getDocumentCapability<ExportCapability>(registry, 'export');
     scopeInfo?.capability.forDocument(scopeInfo.documentId).download();
   };
 
@@ -427,7 +413,7 @@ export function Toolbar({
   };
 
   const runAnnotationHistory = (direction: 'undo' | 'redo') => {
-    const scopeInfo = getDocumentScope<HistoryCapability>(registry, 'history');
+    const scopeInfo = getDocumentCapability<HistoryCapability>(registry, 'history');
     if (!scopeInfo) {
       return;
     }
@@ -479,7 +465,7 @@ export function Toolbar({
       window.removeEventListener('pointermove', onPointerMove);
       clearToolbarHideTimer();
     };
-  }, [pinned, modeMenuOpen, documentMenuOpen]);
+  }, [openMenu, pinned]);
 
   return (
     <div
@@ -495,11 +481,10 @@ export function Toolbar({
         <div className="shnctl-toolbar-zone shnctl-toolbar-zone-left">
           <div className="shnctl-toolbar-group">
             <DropdownMenu
-              open={documentMenuOpen}
-              onOpenChange={(open) => {
-                setDocumentMenuOpen(open);
-                if (open) setModeMenuOpen(false);
-              }}
+              open={openMenu === 'document'}
+              onOpenChange={(open) => setOpenMenu((current) => (
+                open ? 'document' : current === 'document' ? null : current
+              ))}
               className="shnctl-toolbar-menu"
               trigger={(
                 <button type="button" className="shnctl-action shnctl-toolbar-button" aria-label="Document menu">
@@ -535,7 +520,7 @@ export function Toolbar({
                 <span>Export</span>
               </DropdownMenuItem> : null}
             </DropdownMenu>
-            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleTheme} />
+            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
             <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
             <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
           </div>
@@ -544,11 +529,10 @@ export function Toolbar({
         <div className="shnctl-toolbar-zone shnctl-toolbar-zone-center">
           <div className="shnctl-toolbar-group shnctl-toolbar-modes">
             <DropdownMenu
-              open={modeMenuOpen}
-              onOpenChange={(open) => {
-                setModeMenuOpen(open);
-                if (open) setDocumentMenuOpen(false);
-              }}
+              open={openMenu === 'mode'}
+              onOpenChange={(open) => setOpenMenu((current) => (
+                open ? 'mode' : current === 'mode' ? null : current
+              ))}
               align="end"
               trigger={(
                 <button type="button" className="shnctl-toolbar-mode-select">

@@ -12,11 +12,11 @@ import {
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
 import { Dialog } from './components';
-import { getActiveDocumentId, type ScrollCapability } from './utils';
+import { getActiveDocumentId, getDocumentCapability, getPluginCapability, type ScrollCapability } from './utils';
 
-type CommentEntry = { annotation: PdfAnnotationObject; pageIndex: number };
-type CommentPageGroup = { pageIndex: number; entries: CommentEntry[] };
+type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
 type AnnotationSummaries = Record<string, string>;
+type EditingComment = { annotationId: string; draft: string };
 
 const SUMMARY_MAX_LENGTH = 160;
 const pageTextRunsCache = new WeakMap<PdfDocumentObject, Map<number, Promise<PdfTextRun[]>>>();
@@ -89,23 +89,17 @@ function getPageTextRuns(
   return pending;
 }
 
-function getAnnotationCapability(registry: PluginRegistry | undefined) {
-  const documentId = registry ? getActiveDocumentId(registry) : undefined;
-  const annotation = registry?.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined;
-  return documentId && annotation ? { documentId, annotation } : null;
-}
+function getEntries(registry: PluginRegistry | undefined) {
+  const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+  if (!scoped) return [];
 
-function getEntries(registry: PluginRegistry | undefined): CommentEntry[] {
-  const capability = getAnnotationCapability(registry);
-  if (!capability) return [];
-
-  return capability.annotation.forDocument(capability.documentId).getAnnotations()
-    .map(({ object }) => ({ annotation: object, pageIndex: object.pageIndex }))
-    .filter(({ annotation }) => !HIDDEN_ANNOTATION_TYPES.has(annotation.type))
+  return scoped.capability.forDocument(scoped.documentId).getAnnotations()
+    .map(({ object }) => object)
+    .filter((annotation) => !HIDDEN_ANNOTATION_TYPES.has(annotation.type))
     .sort((left, right) => left.pageIndex - right.pageIndex ||
-      left.annotation.rect.origin.y - right.annotation.rect.origin.y ||
-      left.annotation.rect.origin.x - right.annotation.rect.origin.x ||
-      left.annotation.id.localeCompare(right.annotation.id));
+      left.rect.origin.y - right.rect.origin.y ||
+      left.rect.origin.x - right.rect.origin.x ||
+      left.id.localeCompare(right.id));
 }
 
 function getEntryLabel(annotation: PdfAnnotationObject) {
@@ -135,17 +129,25 @@ function getEntryIcon(annotation: PdfAnnotationObject) {
   }
 }
 
-function navigateToAnnotation(registry: PluginRegistry, entry: CommentEntry) {
-  const capability = getAnnotationCapability(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-  if (!capability || !scroll) return;
+function navigateToAnnotation(registry: PluginRegistry, annotation: PdfAnnotationObject) {
+  const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
+  if (!scoped || !scroll) return;
 
-  capability.annotation.forDocument(capability.documentId).selectAnnotation(entry.pageIndex, entry.annotation.id);
-  scroll.forDocument(capability.documentId).scrollToPage({
-    pageNumber: entry.pageIndex + 1,
-    pageCoordinates: { x: entry.annotation.rect.origin.x, y: entry.annotation.rect.origin.y },
+  scoped.capability.forDocument(scoped.documentId).selectAnnotation(annotation.pageIndex, annotation.id);
+  scroll.forDocument(scoped.documentId).scrollToPage({
+    pageNumber: annotation.pageIndex + 1,
+    pageCoordinates: annotation.rect.origin,
     behavior: 'instant',
   });
+}
+
+function deleteAnnotation(registry: PluginRegistry | undefined, pageIndex: number, annotationId: string) {
+  const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+  scoped?.capability.forDocument(scoped.documentId).deleteAnnotations([{
+    pageIndex,
+    id: annotationId,
+  }]);
 }
 
 export function Comments({ engine, registry, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew, onClose }: {
@@ -158,29 +160,28 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   onClose(): void;
 }) {
   const [revision, setRevision] = useState(0);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
+  const [editingComment, setEditingComment] = useState<EditingComment | null>(null);
   const [summaries, setSummaries] = useState<AnnotationSummaries>({});
   const contentRef = useRef<HTMLDivElement>(null);
   const consumedTargetIdRef = useRef<string | null>(null);
-  const pendingCreationIdRef = useRef<string | null>(null);
+  const pendingCreationRef = useRef<{ annotationId: string; pageIndex: number } | null>(null);
   const entries = useMemo(() => open ? getEntries(registry) : [], [open, registry, revision]);
-  const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, entry) => {
+  const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, annotation) => {
     const lastGroup = groups.at(-1);
-    if (lastGroup?.pageIndex === entry.pageIndex) {
-      lastGroup.entries.push(entry);
+    if (lastGroup?.pageIndex === annotation.pageIndex) {
+      lastGroup.entries.push(annotation);
     } else {
-      groups.push({ pageIndex: entry.pageIndex, entries: [entry] });
+      groups.push({ pageIndex: annotation.pageIndex, entries: [annotation] });
     }
     return groups;
   }, []), [entries]);
 
   useEffect(() => {
     if (!open) return;
-    const capability = getAnnotationCapability(registry);
-    if (!capability) return;
-    return capability.annotation.onAnnotationEvent((event) => {
-      if (event.documentId === capability.documentId) setRevision((value) => value + 1);
+    const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+    if (!scoped) return;
+    return scoped.capability.onAnnotationEvent((event) => {
+      if (event.documentId === scoped.documentId) setRevision((value) => value + 1);
     });
   }, [open, registry]);
 
@@ -197,20 +198,20 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
     if (!document) return;
 
     let cancelled = false;
-    const markupEntries = entries.filter(({ annotation }) => TEXT_MARKUP_TYPES.has(annotation.type));
-    const pageIndexes = [...new Set(markupEntries.map(({ pageIndex }) => pageIndex))];
+    const markupEntries = entries.filter((annotation) => TEXT_MARKUP_TYPES.has(annotation.type));
+    const pageIndexes = [...new Set(markupEntries.map((annotation) => annotation.pageIndex))];
     Promise.all(pageIndexes.map(async (pageIndex) => {
       const page = document.pages[pageIndex];
       if (!page) return [] as Array<[string, string]>;
       const runs = await getPageTextRuns(engine, document, page);
       return markupEntries
-        .filter((entry) => entry.pageIndex === pageIndex)
-        .map(({ annotation }) => [annotation.id, summarizeMarkup(annotation, runs)] as [string, string]);
+        .filter((annotation) => annotation.pageIndex === pageIndex)
+        .map((annotation) => [annotation.id, summarizeMarkup(annotation, runs)] as [string, string]);
     })).then((pageSummaries) => {
       if (!cancelled) setSummaries(Object.fromEntries(pageSummaries.flat()));
     }).catch(() => {
       if (!cancelled) {
-        setSummaries(Object.fromEntries(markupEntries.map(({ annotation }) => [annotation.id, ''])));
+        setSummaries(Object.fromEntries(markupEntries.map((annotation) => [annotation.id, ''])));
       }
     });
 
@@ -221,22 +222,30 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
 
   useEffect(() => {
     if (!open) {
+      const pendingCreation = pendingCreationRef.current;
+      if (pendingCreation) {
+        deleteAnnotation(registry, pendingCreation.pageIndex, pendingCreation.annotationId);
+      }
       consumedTargetIdRef.current = null;
-      pendingCreationIdRef.current = null;
+      pendingCreationRef.current = null;
       return;
     }
     if (!targetAnnotationId || consumedTargetIdRef.current === targetAnnotationId) return;
-    const target = entries.find(({ annotation }) => annotation.id === targetAnnotationId);
+    const target = entries.find((annotation) => annotation.id === targetAnnotationId);
     if (!target) return;
     consumedTargetIdRef.current = targetAnnotationId;
-    pendingCreationIdRef.current = targetAnnotationIsNew ? targetAnnotationId : null;
-    setEditingId(target.annotation.id);
-    setDraft(target.annotation.contents?.trim() ?? '');
+    pendingCreationRef.current = targetAnnotationIsNew
+      ? { annotationId: targetAnnotationId, pageIndex: target.pageIndex }
+      : null;
+    setEditingComment({
+      annotationId: target.id,
+      draft: target.contents?.trim() ?? '',
+    });
   }, [entries, open, targetAnnotationId, targetAnnotationIsNew]);
 
   useLayoutEffect(() => {
     if (!open) {
-      setEditingId(null);
+      setEditingComment(null);
       return;
     }
     const frame = requestAnimationFrame(() => {
@@ -258,26 +267,22 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
     return () => cancelAnimationFrame(frame);
   }, [currentPageNumber, entries.length, open]);
 
-  const saveComment = (entry: CommentEntry) => {
-    const capability = getAnnotationCapability(registry);
-    if (!capability) return;
-    const contents = draft.trim();
-    capability.annotation.forDocument(capability.documentId)
-      .updateAnnotation(entry.pageIndex, entry.annotation.id, { contents });
-    if (pendingCreationIdRef.current === entry.annotation.id) pendingCreationIdRef.current = null;
-    setEditingId(null);
+  const saveComment = (annotation: PdfAnnotationObject) => {
+    const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+    if (!scoped) return;
+    const contents = editingComment?.draft.trim() ?? '';
+    scoped.capability.forDocument(scoped.documentId)
+      .updateAnnotation(annotation.pageIndex, annotation.id, { contents });
+    if (pendingCreationRef.current?.annotationId === annotation.id) pendingCreationRef.current = null;
+    setEditingComment(null);
   };
 
-  const cancelComment = (entry: CommentEntry) => {
-    if (pendingCreationIdRef.current === entry.annotation.id) {
-      const capability = getAnnotationCapability(registry);
-      capability?.annotation.forDocument(capability.documentId).deleteAnnotations([{
-        pageIndex: entry.pageIndex,
-        id: entry.annotation.id,
-      }]);
-      pendingCreationIdRef.current = null;
+  const cancelComment = (annotation: PdfAnnotationObject) => {
+    if (pendingCreationRef.current?.annotationId === annotation.id) {
+      deleteAnnotation(registry, annotation.pageIndex, annotation.id);
+      pendingCreationRef.current = null;
     }
-    setEditingId(null);
+    setEditingComment(null);
   };
 
   return (
@@ -298,31 +303,47 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
               {pageGroups.map((group) => <li key={group.pageIndex} className="shnctl-comment-page-group" data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
                 <div className="shnctl-comment-page-header">
                   <span>Page {group.pageIndex + 1}</span>
-                  <span className="shnctl-comment-page-count">{group.entries.length}</span>
                 </div>
                 <ol className="shnctl-comment-page-entries">
-                  {group.entries.map((entry) => {
-                    const { annotation } = entry;
+                  {group.entries.map((annotation) => {
                     const Icon = getEntryIcon(annotation);
                     const label = getEntryLabel(annotation);
                     const contents = annotation.contents?.trim();
                     const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
-                    const isEditing = isComment && editingId === annotation.id;
+                    const isEditing = isComment && editingComment?.annotationId === annotation.id;
                     const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
                     const hasExtractedSummary = Object.hasOwn(summaries, annotation.id);
                     const summary = contents || (isTextMarkup
                       ? hasExtractedSummary ? summaries[annotation.id] || 'Text summary unavailable' : 'Loading text summary…'
                       : 'No text content');
                     return <li key={annotation.id} className="shnctl-comment-item" data-editing={isEditing ? 'true' : undefined}>
-                      <button type="button" className="shnctl-action shnctl-comment-target" onClick={() => registry && navigateToAnnotation(registry, entry)}>
+                      {!isEditing ? <button
+                        type="button"
+                        className="shnctl-comment-card-target"
+                        onClick={() => registry && navigateToAnnotation(registry, annotation)}
+                        aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
+                      /> : null}
+                      <div className="shnctl-comment-heading">
                         <span className="shnctl-comment-icon"><Icon size={15} strokeWidth={2} /></span>
                         <span className="shnctl-comment-meta"><span className="shnctl-comment-type">{label}</span></span>
-                      </button>
-                      {isEditing ? <form className="shnctl-comment-editor" onSubmit={(event) => { event.preventDefault(); saveComment(entry); }}>
-                        <textarea value={draft} onChange={(event) => setDraft(event.currentTarget.value)} autoFocus aria-label={`Comment for ${label}`} />
-                        <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => cancelComment(entry)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
+                      </div>
+                      {isEditing ? <form className="shnctl-comment-editor" onSubmit={(event) => { event.preventDefault(); saveComment(annotation); }}>
+                        <textarea
+                          value={editingComment.draft}
+                          onChange={(event) => setEditingComment({
+                            annotationId: annotation.id,
+                            draft: event.currentTarget.value,
+                          })}
+                          autoFocus
+                          aria-label={`Comment for ${label}`}
+                        />
+                        <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => cancelComment(annotation)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
                       </form> : isComment
-                        ? <button type="button" className="shnctl-comment-body" onClick={() => { setEditingId(annotation.id); setDraft(contents ?? ''); }}>{contents || 'Empty comment'}</button>
+                        ? <button
+                            type="button"
+                            className="shnctl-comment-body"
+                            onClick={() => setEditingComment({ annotationId: annotation.id, draft: contents ?? '' })}
+                          >{contents || 'Empty comment'}</button>
                         : <div className="shnctl-comment-body shnctl-comment-body-readonly">{summary}</div>}
                     </li>;
                   })}
