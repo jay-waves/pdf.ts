@@ -3,6 +3,7 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from './components';
 import { platform } from '#platform';
+import { getPluginCapability } from './utils';
 
 const MAX_TEXT_LENGTH = 4000;
 
@@ -12,7 +13,6 @@ interface TranslationResult {
 }
 
 export interface SelectionTranslationRequest {
-  id: number;
   documentId: string;
   anchor: { x: number; y: number };
 }
@@ -37,15 +37,14 @@ export function SelectionTranslate({
   const [result, setResult] = useState<TranslationResult | null>(null);
 
   useEffect(() => {
-    const selection = registry?.getPlugin('selection')?.provides?.() as SelectionCapability | undefined;
-    if (!selection) return;
+    setResult(null);
+    const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
+    const translate = platform.translate;
+    if (!selection || !translate) return;
 
     let cancelled = false;
     selection.forDocument(request.documentId).getSelectedText().toPromise()
-      .then((parts) => {
-        if (!platform.translate) throw new Error('Translation is not available.');
-        return platform.translate(normalizeText(parts));
-      })
+      .then((parts) => translate(normalizeText(parts)))
       .then((text) => {
         if (!cancelled) setResult({ text, status: 'success' });
       })

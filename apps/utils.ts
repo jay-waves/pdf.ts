@@ -10,6 +10,7 @@ import {
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { ScrollStrategy, type ScrollCapability } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability } from '@embedpdf/plugin-viewport';
+
 export const EMPTY_CLEANUP = () => {};
 
 export function isEditableTarget(target: EventTarget | null) {
@@ -19,6 +20,19 @@ export function isEditableTarget(target: EventTarget | null) {
 
 export function getActiveDocumentId(registry: PluginRegistry) {
   return registry.getStore().getState().core.activeDocumentId;
+}
+
+export function getPluginCapability<T>(registry: PluginRegistry | undefined, pluginId: string) {
+  return registry?.getPlugin(pluginId)?.provides?.() as T | undefined;
+}
+
+export function getDocumentCapability<T>(
+  registry: PluginRegistry | undefined,
+  pluginId: string,
+  documentId = registry ? getActiveDocumentId(registry) : undefined,
+) {
+  const capability = getPluginCapability<T>(registry, pluginId);
+  return documentId && capability ? { documentId, capability } : null;
 }
 
 export function getFileNameFromUrl(value: string) {
@@ -38,7 +52,7 @@ export function getDocumentScrollStrategy(registry: PluginRegistry, documentId: 
   return strategy === ScrollStrategy.Horizontal ? strategy : ScrollStrategy.Vertical;
 }
 
-export interface ScrollAnchor {
+interface ScrollAnchor {
   documentId: string;
   pageNumber: number;
   pageCoordinates?: { x: number; y: number };
@@ -46,7 +60,7 @@ export interface ScrollAnchor {
 
 export function getCurrentScrollAnchor(registry: PluginRegistry): ScrollAnchor | null {
   const documentId = getActiveDocumentId(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
 
   if (!documentId || !scroll) {
     return null;
@@ -58,7 +72,7 @@ export function getCurrentScrollAnchor(registry: PluginRegistry): ScrollAnchor |
   const pageMetric =
     metrics.pageVisibilityMetrics.find((metric) => metric.pageNumber === pageNumber) ??
     metrics.pageVisibilityMetrics[0];
-  const viewport = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
+  const viewport = getPluginCapability<ViewportCapability>(registry, 'viewport');
 
   return {
     documentId,
@@ -81,7 +95,7 @@ export function restoreScrollAnchor(registry: PluginRegistry, anchor: ScrollAnch
     return;
   }
 
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   scroll?.forDocument(anchor.documentId).scrollToPage({
     pageNumber: anchor.pageNumber,
     pageCoordinates: anchor.pageCoordinates,
@@ -112,9 +126,9 @@ export function scrollToPagePreservingViewport(
   behavior: ScrollBehavior = 'instant',
 ) {
   const documentId = getActiveDocumentId(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-  const viewport = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
-  const rotate = registry.getPlugin('rotate')?.provides?.() as RotateCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
+  const viewport = getPluginCapability<ViewportCapability>(registry, 'viewport');
+  const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
   if (!documentId || !scroll) return;
 
   const scrollScope = scroll.forDocument(documentId);

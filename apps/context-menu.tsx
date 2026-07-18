@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from './components';
 import { createCommentAnnotation } from './comment-annotation';
-import { getActiveDocumentId } from './utils';
+import { getActiveDocumentId, getPluginCapability } from './utils';
 import { platform } from '#platform';
 
 type ContextMenuState = {
@@ -66,8 +66,8 @@ function getMenuAnchor(
   pageIndex: number,
   rect: Rect,
 ) {
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
-  const viewport = registry.getPlugin('viewport')?.provides?.() as ViewportCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
+  const viewport = getPluginCapability<ViewportCapability>(registry, 'viewport');
   const positionedRect = scroll?.forDocument(documentId).getRectPositionForPage(pageIndex, rect);
   const scrollerElement = container.querySelector<HTMLElement>('.pdf-scroller');
   if (!positionedRect || !viewport || !scrollerElement) return null;
@@ -108,7 +108,7 @@ export function ContextMenu({
     const documentId = getActiveDocumentId(registry);
     const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
     const annotation = canEdit
-      ? registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined
+      ? getPluginCapability<AnnotationCapability>(registry, 'annotation')
       : undefined;
     if (!documentId) return;
     let annotationMenuFrame = 0;
@@ -129,7 +129,7 @@ export function ContextMenu({
       if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
       annotationMenuFrame = requestAnimationFrame(() => {
         annotationMenuFrame = 0;
-        const selected = annotation?.forDocument(documentId).getSelectedAnnotations() ?? [];
+        const selected = annotation.forDocument(documentId).getSelectedAnnotations();
         if (!selected[0]) return;
         setMenu({ kind: 'annotation', ...anchor });
       });
@@ -172,9 +172,9 @@ export function ContextMenu({
   const documentId = getActiveDocumentId(registry);
   if (!documentId) return null;
 
-  const selection = registry.getPlugin('selection')?.provides?.() as SelectionCapability | undefined;
+  const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
   const annotation = canEdit
-    ? registry.getPlugin('annotation')?.provides?.() as AnnotationCapability | undefined
+    ? getPluginCapability<AnnotationCapability>(registry, 'annotation')
     : undefined;
 
   const addTextMarkup = (
@@ -227,7 +227,7 @@ export function ContextMenu({
 
   const selectedAnnotations = annotation?.forDocument(documentId).getSelectedAnnotations() ?? [];
   const selectedLink = selectedAnnotations.length === 1
-    ? getExternalLink(selectedAnnotations[0]?.object)
+    ? getExternalLink(selectedAnnotations[0].object)
     : null;
   const commentTarget = selectedAnnotations[0]?.object;
   const annotationItems = [

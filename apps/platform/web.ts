@@ -1,39 +1,17 @@
-import { get, update } from 'idb-keyval';
-import type { ManagedResource, ReadingProgress, ViewerPlatform } from './types';
+import {
+  getPreference,
+  readReadingHistoryStore,
+  setPreference,
+  writeReadingProgress,
+} from './browser-storage';
+import { blobResource } from './resources';
+import type { ViewerPlatform } from './types';
 
 export const documentEditingEnabled = true;
 
-const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
-type ReadingHistoryStore = Record<string, ReadingProgress>;
-
-async function readHistoryStore() {
-  const stored = await get<ReadingHistoryStore>(READING_HISTORY_KEY);
-  return stored && typeof stored === 'object' ? stored : {};
-}
-
-function persistentResource(url: string): ManagedResource {
-  return { url, release() {} };
-}
-
-function blobResource(blob: Blob): ManagedResource {
-  const url = URL.createObjectURL(blob);
-  let released = false;
-  return {
-    url,
-    release() {
-      if (released) return;
-      released = true;
-      URL.revokeObjectURL(url);
-    },
-  };
-}
-
 export const platform: ViewerPlatform = {
-  rendering: {
-    maxDpr: 1.75,
-  },
   async loadViewerResources(bundledWasmUrl) {
-    return { wasm: persistentResource(bundledWasmUrl) };
+    return { wasm: { url: bundledWasmUrl } };
   },
   openLocalDocument(file) {
     return {
@@ -43,22 +21,16 @@ export const platform: ViewerPlatform = {
     };
   },
   openExternal(url) {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  },
-  getPreference(key) {
     try {
-      return window.localStorage.getItem(key);
+      const target = new URL(url, window.location.href);
+      if (target.protocol !== 'http:' && target.protocol !== 'https:') return;
+      window.open(target.href, '_blank', 'noopener,noreferrer');
     } catch {
-      return null;
+      // Ignore malformed or unsafe targets embedded in a PDF.
     }
   },
-  setPreference(key, value) {
-    try {
-      window.localStorage.setItem(key, value);
-    } catch {
-      // Preferences remain effective for the current React state.
-    }
-  },
+  getPreference,
+  setPreference,
   async preparePdfSave({ fileName }) {
     return {
       async save(data) {
@@ -66,19 +38,17 @@ export const platform: ViewerPlatform = {
         const anchor = document.createElement('a');
         anchor.href = url;
         anchor.download = fileName ?? 'document.pdf';
+        anchor.hidden = true;
+        document.body.append(anchor);
         anchor.click();
-        URL.revokeObjectURL(url);
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
         return true;
       },
     };
   },
   async readReadingProgress(documentKey) {
-    return (await readHistoryStore())[documentKey];
+    return (await readReadingHistoryStore())?.[documentKey];
   },
-  async writeReadingProgress(documentKey, progress) {
-    await update<ReadingHistoryStore>(READING_HISTORY_KEY, (store) => ({
-      ...(store && typeof store === 'object' ? store : {}),
-      [documentKey]: progress,
-    }));
-  },
+  writeReadingProgress,
 };

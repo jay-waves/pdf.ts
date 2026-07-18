@@ -1,4 +1,5 @@
-import type { ManagedResource, ReadingProgress, ViewerPlatform } from './types';
+import { blobResource } from './resources';
+import type { ReadingProgress, ViewerPlatform } from './types';
 
 export const documentEditingEnabled = false;
 
@@ -39,22 +40,13 @@ function readMeta(name: string) {
   return document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content || undefined;
 }
 
-async function fetchResource(url: string, contentType: string): Promise<ManagedResource> {
+async function fetchResource(url: string, contentType: string) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Unable to load ${contentType}: HTTP ${response.status}`);
   }
 
-  const objectUrl = URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: contentType }));
-  let released = false;
-  return {
-    url: objectUrl,
-    release() {
-      if (released) return;
-      released = true;
-      URL.revokeObjectURL(objectUrl);
-    },
-  };
+  return blobResource(new Blob([await response.arrayBuffer()], { type: contentType }));
 }
 
 const configuredTheme = readMeta('pdf-ts-theme');
@@ -62,28 +54,32 @@ if (configuredTheme) preferences.set(THEME_STORAGE_KEY, configuredTheme);
 
 function request(type: 'readReadingProgress' | 'writeReadingProgress', documentKey: string, progress?: ReadingProgress) {
   const requestId = nextRequestId++;
-  const result = new Promise<ReadingProgress | undefined>((resolve, reject) => {
+  return new Promise<ReadingProgress | undefined>((resolve, reject) => {
     pending.set(requestId, { resolve, reject });
+    vscode.postMessage({ type, requestId, documentKey, progress });
   });
-  vscode.postMessage({ type, requestId, documentKey, progress });
-  return result;
 }
 
 export const platform: ViewerPlatform = {
-  rendering: {
-    maxDpr: 1.75,
-  },
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = readMeta('pdf-document-url');
     const documentKey = readMeta('pdf-document-key');
     const wasmUrl = readMeta('pdfium-wasm-url') ?? bundledWasmUrl;
-    const [wasm, documentResource] = await Promise.all([
+    const [wasmResult, documentResult] = await Promise.allSettled([
       fetchResource(wasmUrl, 'application/wasm'),
       documentUrl ? fetchResource(documentUrl, 'application/pdf') : Promise.resolve(undefined),
     ]);
+
+    if (wasmResult.status === 'rejected' || documentResult.status === 'rejected') {
+      if (wasmResult.status === 'fulfilled') wasmResult.value.release?.();
+      if (documentResult.status === 'fulfilled') documentResult.value?.release?.();
+      if (wasmResult.status === 'rejected') throw wasmResult.reason;
+      if (documentResult.status === 'rejected') throw documentResult.reason;
+    }
+
     return {
-      wasm,
-      document: documentResource ? { resource: documentResource, key: documentKey } : undefined,
+      wasm: wasmResult.value,
+      document: documentResult.value ? { resource: documentResult.value, key: documentKey } : undefined,
     };
   },
   openExternal(url) {

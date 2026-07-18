@@ -13,7 +13,7 @@ interface ChromeTranslatorConstructor {
 }
 
 interface ChromeLanguageDetector {
-  detect(text: string): Promise<Array<{ detectedLanguage: string; confidence: number }>>;
+  detect(text: string): Promise<Array<{ detectedLanguage: string }>>;
 }
 
 interface ChromeLanguageDetectorConstructor {

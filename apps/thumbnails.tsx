@@ -4,7 +4,7 @@ import { PdfErrorCode, type PdfErrorReason, type Task } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { Dialog } from './components';
-import { getActiveDocumentId, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
+import { getActiveDocumentId, getPluginCapability, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
 
 const THUMBNAILS_PER_GROUP = 4;
 const THUMBNAIL_WIDTH = 150;
@@ -13,7 +13,7 @@ const THUMBNAIL_CACHE_LIMIT = 32;
 const THUMBNAIL_RENDER_CONCURRENCY = 2;
 
 type DocumentPage = { index?: number; size: { width: number; height: number }; rotation?: number };
-type ThumbnailMeta = { pageIndex: number; width: number; height: number };
+type ThumbnailMeta = { height: number };
 type ThumbnailCacheEntry = {
   state: 'queued' | 'rendering' | 'ready';
   lastUsed: number;
@@ -24,7 +24,7 @@ type ThumbnailCacheEntry = {
 function getTotalPages(registry: PluginRegistry | undefined, documentId: string | null, fallback: number) {
   if (fallback > 0) return fallback;
 
-  const scroll = registry?.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   return documentId && scroll ? scroll.forDocument(documentId).getTotalPages() : 0;
 }
 
@@ -45,7 +45,7 @@ function getDocumentInfo(registry: PluginRegistry, documentId: string) {
   };
 }
 
-function getThumbnailMeta(pageIndex: number, page: DocumentPage | undefined, documentRotation: number): ThumbnailMeta {
+function getThumbnailMeta(page: DocumentPage | undefined, documentRotation: number): ThumbnailMeta {
   const rotated = (((page?.rotation ?? 0) + documentRotation) % 2) === 1;
   const pageWidth = rotated ? page?.size.height : page?.size.width;
   const pageHeight = rotated ? page?.size.width : page?.size.height;
@@ -54,8 +54,6 @@ function getThumbnailMeta(pageIndex: number, page: DocumentPage | undefined, doc
     : Math.round(THUMBNAIL_WIDTH * Math.SQRT2);
 
   return {
-    pageIndex,
-    width: THUMBNAIL_WIDTH,
     height,
   };
 }
@@ -126,7 +124,7 @@ class ThumbnailRenderCache {
       const page = this.pages[pageIndex];
       if (!entry || entry.state !== 'queued' || !this.visiblePages.has(pageIndex) || !page) continue;
 
-      const render = this.registry.getPlugin('render')?.provides?.() as RenderCapability | undefined;
+      const render = getPluginCapability<RenderCapability>(this.registry, 'render');
       if (!render) {
         this.entries.delete(pageIndex);
         continue;
@@ -217,7 +215,7 @@ function ThumbnailFlow({
   const [, setRotationRevision] = useState(0);
   const { pages, rotation: documentRotation } = getDocumentInfo(registry, documentId);
   const metas = useMemo(
-    () => Array.from({ length: pageCount }, (_, pageIndex) => getThumbnailMeta(pageIndex, pages[pageIndex], documentRotation)),
+    () => Array.from({ length: pageCount }, (_, pageIndex) => getThumbnailMeta(pages[pageIndex], documentRotation)),
     [documentRotation, pageCount, pages],
   );
   const [, setCacheRevision] = useState(0);
@@ -229,7 +227,7 @@ function ThumbnailFlow({
   useEffect(() => () => cache.dispose(), [cache]);
   useEffect(() => cache.setVisiblePages(visiblePages), [cache, visiblePages]);
   useEffect(() => {
-    const rotate = registry.getPlugin('rotate')?.provides?.() as RotateCapability | undefined;
+    const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
     return rotate?.forDocument(documentId).onRotateChange(() => setRotationRevision((value) => value + 1));
   }, [documentId, registry]);
 

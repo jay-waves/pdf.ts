@@ -7,7 +7,6 @@ export function createCommentAnnotation(
   annotation: AnnotationCapability,
   documentId: string,
   target: PdfAnnotationObject,
-  contents = '',
 ) {
   const id = crypto.randomUUID();
   const targetRight = target.rect.origin.x + target.rect.size.width;
@@ -24,7 +23,7 @@ export function createCommentAnnotation(
       },
       size: { width: COMMENT_ICON_SIZE, height: COMMENT_ICON_SIZE },
     },
-    contents,
+    contents: '',
     name: PdfAnnotationName.Comment,
     strokeColor: '#FFCD45',
     opacity: 1,

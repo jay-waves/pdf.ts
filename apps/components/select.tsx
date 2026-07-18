@@ -1,7 +1,7 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { Select as RadixSelect } from 'radix-ui';
 
-export interface SelectOption {
+interface SelectOption {
   label: string;
   value: string;
 }

@@ -1,6 +1,6 @@
 import { platform } from '#platform';
 
-export const VIEWER_THEMES = [
+const VIEWER_THEMES = [
   'light',
   'dark',
   'nord',

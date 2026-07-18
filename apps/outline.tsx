@@ -16,6 +16,7 @@ import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
   getDestinationFromTarget,
+  getPluginCapability,
   isEditableTarget,
   scrollToPagePreservingViewport,
   type ScrollCapability,
@@ -25,7 +26,7 @@ import { Dialog } from './components';
 const outlinePrefetchCache = new Map<string, OutlineCache>();
 const SIDE_BUTTON_LONG_PRESS_MS = 450;
 
-export type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
+type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 export type OutlineCache = {
   status: OutlineStatus;
   bookmarks: PdfBookmarkObject[];
@@ -40,7 +41,7 @@ function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
 
 function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, pageCount = 1) {
   const documentId = getActiveDocumentId(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
 
   if (!documentId || !scroll) {
     return;
@@ -144,7 +145,6 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
   };
 }
 
-
 function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
   const flattened: Array<{ title: string; pageNumber: number }> = [];
 
@@ -203,7 +203,7 @@ export function installCurrentTitleTracker(
   getBookmarks: () => PdfBookmarkObject[],
   onChange: (value: { pageNumber: number; title: string; totalPages: number }) => void,
 ) {
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) {
     return EMPTY_CLEANUP;
   }
@@ -247,7 +247,7 @@ function isCurrentLoadedDocument(registry: PluginRegistry, documentId: string) {
 
 async function loadBookmarks(registry: PluginRegistry, requestedDocumentId?: string) {
   const documentId = requestedDocumentId ?? getActiveDocumentId(registry);
-  const bookmark = registry.getPlugin('bookmark')?.provides?.() as BookmarkCapability | undefined;
+  const bookmark = getPluginCapability<BookmarkCapability>(registry, 'bookmark');
 
   if (!bookmark) {
     throw new Error('Bookmark plugin is not available.');
@@ -265,7 +265,7 @@ export function installOutlinePrefetch(
   onLoaded: (cache: OutlineCache) => void,
   cacheKey?: string,
 ) {
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) {
     onLoaded({ status: 'error', bookmarks: [] });
     return EMPTY_CLEANUP;
@@ -320,9 +320,7 @@ export function installOutlinePrefetch(
           documentId,
           error,
         });
-        if (!cancelled) {
-          onLoaded({ status: 'error', bookmarks: [] });
-        }
+        onLoaded({ status: 'error', bookmarks: [] });
       });
   };
 
@@ -350,7 +348,7 @@ function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject)
   }
 
   const documentId = getActiveDocumentId(registry);
-  const scroll = registry.getPlugin('scroll')?.provides?.() as ScrollCapability | undefined;
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!documentId || !scroll) {
     return;
   }
@@ -489,9 +487,15 @@ function BookmarkList({
 
         if (children.length && level === 0) {
           return (
-            <li key={bookmarkKey} className="shnctl-item">
-              <details className="shnctl-details" open={isCurrent || hasCurrentChild}>
-                <summary className="shnctl-action shnctl-bookmark shnctl-summary" data-current={isCurrent ? 'true' : undefined}>
+            <li key={bookmarkKey}>
+              <details open={isCurrent || hasCurrentChild}>
+                <summary
+                  className="shnctl-action shnctl-bookmark shnctl-summary"
+                  data-current={isCurrent ? 'true' : undefined}
+                  onClick={() => {
+                    if (destination) onSelect(bookmark);
+                  }}
+                >
                   <span className="shnctl-bookmark-title">{title}</span>
                   {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
                 </summary>
@@ -502,7 +506,7 @@ function BookmarkList({
         }
 
         return (
-          <li key={bookmarkKey} className="shnctl-item">
+          <li key={bookmarkKey}>
             <button
               type="button"
               className="shnctl-action shnctl-bookmark"
