@@ -492,7 +492,14 @@ function BookmarkList({
                 <summary
                   className="shnctl-action shnctl-bookmark shnctl-summary"
                   data-current={isCurrent ? 'true' : undefined}
-                  onClick={() => {
+                  onClick={(event) => {
+                    const details = event.currentTarget.parentElement;
+
+                    if (!(details instanceof HTMLDetailsElement) || !details.open) {
+                      return;
+                    }
+
+                    event.preventDefault();
                     if (destination) onSelect(bookmark);
                   }}
                 >

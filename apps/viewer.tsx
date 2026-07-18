@@ -268,8 +268,6 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
       return;
     }
 
-    event.preventDefault();
-
     if (activeDocumentId) {
       return;
     }
@@ -335,7 +333,16 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
     event.stopPropagation();
   };
 
+  const preventBrowserMiddleMouseDefault = (event: MouseEvent) => {
+    if (event.button === 1) event.preventDefault();
+  };
+
   window.addEventListener('pointerdown', startMiddleMousePan, { capture: true });
+  // PanPlugin starts dragging from the compatibility `mousedown` event. Do
+  // not cancel `pointerdown`, because doing so suppresses that mouse event.
+  // Cancel `mousedown` instead to prevent the browser's auto-scroll action
+  // while still allowing the event to reach the plugin.
+  window.addEventListener('mousedown', preventBrowserMiddleMouseDefault, { capture: true });
   window.addEventListener('pointerup', finishMiddleMousePan);
   window.addEventListener('pointercancel', finishMiddleMousePan);
   window.addEventListener('pointermove', finishIfMiddleButtonWasLost);
@@ -345,6 +352,7 @@ function installMiddleMousePanInterceptor(registry: PluginRegistry) {
   return () => {
     if (restoreTimer) window.clearTimeout(restoreTimer);
     window.removeEventListener('pointerdown', startMiddleMousePan, { capture: true });
+    window.removeEventListener('mousedown', preventBrowserMiddleMouseDefault, { capture: true });
     window.removeEventListener('pointerup', finishMiddleMousePan);
     window.removeEventListener('pointercancel', finishMiddleMousePan);
     window.removeEventListener('pointermove', finishIfMiddleButtonWasLost);
@@ -717,12 +725,17 @@ function App({
         activeDocumentId={toolbarDocumentId}
         searchOpen={searchOpen}
         thumbnailsOpen={sidePanel?.type === 'thumbnails'}
+        outlineOpen={sidePanel?.type === 'outline'}
         colorPaletteOpen={sidePanel?.type === 'colors'}
         commentsOpen={sidePanel?.type === 'comments'}
         onSearchOpenChange={setSearchOpen}
         onToggleThumbnails={() => setSidePanel((current) => (
           current?.type === 'thumbnails' ? null : { type: 'thumbnails' }
         ))}
+        onOpenOutline={() => {
+          setSearchOpen(false);
+          setSidePanel({ type: 'outline' });
+        }}
         onToggleColorPalette={() => setSidePanel((current) => (
           current?.type === 'colors' ? null : { type: 'colors' }
         ))}

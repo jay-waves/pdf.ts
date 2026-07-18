@@ -17,6 +17,7 @@ import {
   Hand,
   Highlighter,
   LineSquiggle,
+  ListTree,
   Eye,
   Menu,
   MessageSquareMore,
@@ -72,10 +73,12 @@ interface ToolbarProps {
   activeDocumentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
+  outlineOpen: boolean;
   colorPaletteOpen: boolean;
   commentsOpen: boolean;
   onSearchOpenChange(open: boolean): void;
   onToggleThumbnails(): void;
+  onOpenOutline(): void;
   onToggleColorPalette(): void;
   onToggleComments(): void;
   onOpenPrint(): void;
@@ -230,10 +233,12 @@ export function Toolbar({
   activeDocumentId,
   searchOpen,
   thumbnailsOpen,
+  outlineOpen,
   colorPaletteOpen,
   commentsOpen,
   onSearchOpenChange,
   onToggleThumbnails,
+  onOpenOutline,
   onToggleColorPalette,
   onToggleComments,
   onOpenPrint,
@@ -496,14 +501,10 @@ export function Toolbar({
                 <BookImage size={14} strokeWidth={2} />
                 <span>Thumbnails</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={printDocument} disabled={!canUseRegistry}>
-                <Printer size={14} strokeWidth={2} />
-                <span>Print</span>
+              <DropdownMenuItem className={outlineOpen ? 'is-active' : undefined} onSelect={onOpenOutline} disabled={!canUseRegistry}>
+                <ListTree size={14} strokeWidth={2} />
+                <span>Contents</span>
               </DropdownMenuItem>
-              {documentEditingEnabled ? <DropdownMenuItem onSelect={openSecurityDialog} disabled={!canUseRegistry}>
-                <ShieldCheck size={14} strokeWidth={2} />
-                <span>Security</span>
-              </DropdownMenuItem> : null}
               {documentEditingEnabled ? <DropdownMenuItem
                 className={commentsOpen ? 'is-active' : undefined}
                 onSelect={() => {
@@ -514,6 +515,14 @@ export function Toolbar({
               >
                 <MessageSquareMore size={14} strokeWidth={2} />
                 <span>Comments</span>
+              </DropdownMenuItem> : null}
+              <DropdownMenuItem onSelect={printDocument} disabled={!canUseRegistry}>
+                <Printer size={14} strokeWidth={2} />
+                <span>Print</span>
+              </DropdownMenuItem>
+              {documentEditingEnabled ? <DropdownMenuItem onSelect={openSecurityDialog} disabled={!canUseRegistry}>
+                <ShieldCheck size={14} strokeWidth={2} />
+                <span>Security</span>
               </DropdownMenuItem> : null}
               {documentEditingEnabled ? <DropdownMenuItem onSelect={exportDocument} disabled={!canUseRegistry}>
                 <Download size={14} strokeWidth={2} />
