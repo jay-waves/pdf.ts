@@ -3,11 +3,11 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from './components';
 import { platform } from '#platform';
-import { getPluginCapability } from './utils';
+import { getPluginCapability, normalizePdfText } from './utils';
 
 const MAX_TEXT_LENGTH = 4000;
 
-interface TranslationResult {
+interface TranslationState {
   text: string;
   status: 'success' | 'error';
 }
@@ -18,8 +18,7 @@ export interface SelectionTranslationRequest {
 }
 
 function normalizeText(parts: string[]) {
-  return parts
-    .join(' ')
+  return normalizePdfText(parts.join(' '))
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_TEXT_LENGTH);
@@ -34,7 +33,7 @@ export function SelectionTranslate({
   request: SelectionTranslationRequest;
   onClose(): void;
 }) {
-  const [result, setResult] = useState<TranslationResult | null>(null);
+  const [result, setResult] = useState<TranslationState | null>(null);
 
   useEffect(() => {
     setResult(null);
@@ -45,8 +44,14 @@ export function SelectionTranslate({
     let cancelled = false;
     selection.forDocument(request.documentId).getSelectedText().toPromise()
       .then((parts) => translate(normalizeText(parts)))
-      .then((text) => {
-        if (!cancelled) setResult({ text, status: 'success' });
+      .then((translation) => {
+        if (cancelled) return;
+        if (translation.type === 'external') {
+          platform.openExternal(translation.url);
+          onClose();
+          return;
+        }
+        setResult({ text: translation.text, status: 'success' });
       })
       .catch((error) => {
         if (cancelled) return;
