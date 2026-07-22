@@ -1,4 +1,5 @@
 import { blobResource } from './resources';
+import { translateExternally } from './external-translation';
 import type { ReadingProgress, ViewerPlatform } from './types';
 
 export const documentEditingEnabled = false;
@@ -85,6 +86,7 @@ export const platform: ViewerPlatform = {
   openExternal(url) {
     vscode.postMessage({ type: 'openExternal', url });
   },
+  translate: translateExternally,
   getPreference: (key) => preferences.get(key) ?? null,
   setPreference(key, value) {
     preferences.set(key, value);

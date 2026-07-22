@@ -1,0 +1,14 @@
+diff --git a/dist/lib/pdfium/web/worker-engine.js b/dist/lib/pdfium/web/worker-engine.js
+index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..26700c3b01ffcd1201fb9fa498cae52fb5105cb6 100644
+--- a/dist/lib/pdfium/web/worker-engine.js
++++ b/dist/lib/pdfium/web/worker-engine.js
+@@ -86,7 +86,8 @@ const _RemoteExecutor = class _RemoteExecutor {
+       () => {
+         this.pendingRequests.set(id, task);
+         this.logger.debug(LOG_SOURCE$1, LOG_CATEGORY$1, `Sending ${method} request:`, id);
+-        this.worker.postMessage(request);
++        const content = method === "openDocumentBuffer" ? args[0]?.content : void 0;
++        this.worker.postMessage(request, content instanceof ArrayBuffer ? [content] : []);
+       },
+       (error) => {
+         this.logger.error(
