@@ -21,6 +21,12 @@ interface ChromeLanguageDetectorConstructor {
   create(): Promise<ChromeLanguageDetector>;
 }
 
+function googleTranslateUrl(text: string, sourceLanguage: string) {
+  const targetLanguage = sourceLanguage.toLowerCase().startsWith('zh') ? 'en' : 'zh-CN';
+  const query = new URLSearchParams({ sl: 'auto', tl: targetLanguage, text, op: 'translate' });
+  return `https://translate.google.com/?${query}`;
+}
+
 async function detectSourceLanguage(text: string) {
   const LanguageDetector = (
     globalThis as typeof globalThis & { LanguageDetector?: ChromeLanguageDetectorConstructor }
@@ -72,7 +78,13 @@ async function getTranslator(sourceLanguage: string, targetLanguage: string) {
 
 export async function translateText(text: string) {
   const sourceLanguage = await detectSourceLanguage(text);
-  const targetLanguage = sourceLanguage.toLowerCase().startsWith('zh') ? 'en' : TRANSLATION_TARGET_LANGUAGE;
-  const translator = await getTranslator(sourceLanguage, targetLanguage);
-  return translator.translate(text);
+  if (!sourceLanguage.toLowerCase().startsWith('en')) {
+    return { type: 'external' as const, url: googleTranslateUrl(text, sourceLanguage) };
+  }
+
+  const translator = await getTranslator(sourceLanguage, TRANSLATION_TARGET_LANGUAGE);
+  return {
+    type: 'inline' as const,
+    text: await translator.translate(text),
+  };
 }

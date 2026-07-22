@@ -13,7 +13,7 @@ import { ExportPluginPackage } from '@embedpdf/plugin-export/react';
 import { FormPluginPackage } from '@embedpdf/plugin-form/react';
 import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
 import { GlobalPointerProvider, InteractionManagerPluginPackage, PagePointerProvider } from '@embedpdf/plugin-interaction-manager/react';
-import { PanPluginPackage, type PanCapability } from '@embedpdf/plugin-pan/react';
+import { PanPluginPackage } from '@embedpdf/plugin-pan/react';
 import { PrintPluginPackage } from '@embedpdf/plugin-print/react';
 import { RenderLayer, RenderPluginPackage } from '@embedpdf/plugin-render/react';
 import { Rotate, RotatePluginPackage } from '@embedpdf/plugin-rotate/react';
@@ -54,7 +54,7 @@ import { Comments } from './comments';
 import { PrintDialog, ProtectDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
 import { TooltipProvider } from './components';
-import { ZoomGesture } from './zoom-gesture';
+import { ViewportInput } from './viewport-input';
 import { savePdf } from './pdf-save';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
@@ -240,124 +240,6 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
 
   return () => {
     window.removeEventListener('keydown', onKeyDown, { capture: true });
-  };
-}
-
-function installMiddleMousePanInterceptor(registry: PluginRegistry) {
-  let activeDocumentId: string | null = null;
-  let restorePan = false;
-  let restoreTimer = 0;
-  let pendingRestore: { documentId: string; shouldRestorePan: boolean } | null = null;
-
-  const getPanScope = () => {
-    const documentId = getActiveDocumentId(registry);
-    const pan = getPluginCapability<PanCapability>(registry, 'pan');
-
-    if (!documentId || !pan) {
-      return null;
-    }
-
-    return {
-      documentId,
-      scope: pan.forDocument(documentId),
-    };
-  };
-
-  const startMiddleMousePan = (event: PointerEvent) => {
-    if (event.button !== 1) {
-      return;
-    }
-
-    if (activeDocumentId) {
-      return;
-    }
-
-    const panScope = getPanScope();
-    if (!panScope) {
-      return;
-    }
-
-    let inheritedRestorePan = false;
-    if (restoreTimer && pendingRestore) {
-      window.clearTimeout(restoreTimer);
-      restoreTimer = 0;
-      if (pendingRestore.documentId === panScope.documentId) {
-        inheritedRestorePan = pendingRestore.shouldRestorePan;
-      } else if (pendingRestore.shouldRestorePan) {
-        const pan = getPluginCapability<PanCapability>(registry, 'pan');
-        pan?.forDocument(pendingRestore.documentId).disablePan();
-      }
-      pendingRestore = null;
-    }
-    activeDocumentId = panScope.documentId;
-    // A quick second press can arrive before the previous delayed restore. In
-    // that case isPanMode() still reflects our temporary mode, so carry the
-    // original mode across presses instead of treating PAN as user-selected.
-    restorePan = inheritedRestorePan || !panScope.scope.isPanMode();
-    panScope.scope.enablePan();
-  };
-
-  const finishMiddleMousePan = (event?: PointerEvent | Event) => {
-    if (!activeDocumentId || (event instanceof PointerEvent && event.type !== 'pointercancel' && event.button !== 1)) {
-      return;
-    }
-
-    if (event?.cancelable) event.preventDefault();
-    pendingRestore = { documentId: activeDocumentId, shouldRestorePan: restorePan };
-    activeDocumentId = null;
-    restorePan = false;
-
-    restoreTimer = window.setTimeout(() => {
-      restoreTimer = 0;
-      const restore = pendingRestore;
-      pendingRestore = null;
-      if (!restore?.shouldRestorePan) {
-        return;
-      }
-
-      const pan = getPluginCapability<PanCapability>(registry, 'pan');
-      pan?.forDocument(restore.documentId).disablePan();
-    }, 120);
-  };
-
-  const finishIfMiddleButtonWasLost = (event: PointerEvent) => {
-    if (activeDocumentId && (event.buttons & 4) === 0) finishMiddleMousePan(event);
-  };
-
-  const stopBrowserMiddleMouse = (event: MouseEvent) => {
-    if (event.button !== 1) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
-  const preventBrowserMiddleMouseDefault = (event: MouseEvent) => {
-    if (event.button === 1) event.preventDefault();
-  };
-
-  window.addEventListener('pointerdown', startMiddleMousePan, { capture: true });
-  // PanPlugin starts dragging from the compatibility `mousedown` event. Do
-  // not cancel `pointerdown`, because doing so suppresses that mouse event.
-  // Cancel `mousedown` instead to prevent the browser's auto-scroll action
-  // while still allowing the event to reach the plugin.
-  window.addEventListener('mousedown', preventBrowserMiddleMouseDefault, { capture: true });
-  window.addEventListener('pointerup', finishMiddleMousePan);
-  window.addEventListener('pointercancel', finishMiddleMousePan);
-  window.addEventListener('pointermove', finishIfMiddleButtonWasLost);
-  window.addEventListener('blur', finishMiddleMousePan);
-  window.addEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
-
-  return () => {
-    if (restoreTimer) window.clearTimeout(restoreTimer);
-    window.removeEventListener('pointerdown', startMiddleMousePan, { capture: true });
-    window.removeEventListener('mousedown', preventBrowserMiddleMouseDefault, { capture: true });
-    window.removeEventListener('pointerup', finishMiddleMousePan);
-    window.removeEventListener('pointercancel', finishMiddleMousePan);
-    window.removeEventListener('pointermove', finishIfMiddleButtonWasLost);
-    window.removeEventListener('blur', finishMiddleMousePan);
-    window.removeEventListener('auxclick', stopBrowserMiddleMouse, { capture: true });
   };
 }
 
@@ -624,7 +506,6 @@ function App({
               () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
-              () => installMiddleMousePanInterceptor(nextRegistry),
               () => installAnnotationUriNavigation(nextRegistry),
               ...(documentEditingEnabled ? [() => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges)] : []),
               () => installPlatformReadingHistory(nextRegistry, documentKey),
@@ -663,7 +544,7 @@ function App({
                               className="viewer"
                               onDragStart={(event) => event.preventDefault()}
                             >
-                              <ZoomGesture documentId={activeDocumentId}>
+                              <ViewportInput documentId={activeDocumentId}>
                                 <Scroller
                                   documentId={activeDocumentId}
                                   className="pdf-scroller"
@@ -694,7 +575,7 @@ function App({
                                     </Rotate>
                                   )}
                                 />
-                              </ZoomGesture>
+                              </ViewportInput>
                             </Viewport>
                           </GlobalPointerProvider>
                         </>
@@ -775,6 +656,7 @@ function App({
         onClose={() => setSidePanel(null)}
       /> : null}
       <ContextMenu
+        engine={engine}
         registry={registry}
         container={viewerRootRef.current}
         canEdit={documentEditingEnabled}

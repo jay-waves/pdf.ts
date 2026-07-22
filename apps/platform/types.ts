@@ -31,11 +31,15 @@ export interface ViewerResources {
   readonly document?: PlatformDocument;
 }
 
+export type PlatformTranslationResult =
+  | { type: 'inline'; text: string }
+  | { type: 'external'; url: string };
+
 export interface ViewerPlatform {
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file: File): PlatformDocument;
   openExternal(url: string): void;
-  translate?(text: string): Promise<string>;
+  translate?(text: string): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;
   preparePdfSave(options: SavePdfOptions): Promise<PdfSaveTarget | null>;

@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import { PdfActionType, PdfAnnotationSubtype, type PdfAnnotationObject, type Rect } from '@embedpdf/models';
+import {
+  PdfActionType,
+  PdfAnnotationSubtype,
+  type PdfAnnotationObject,
+  type PdfDocumentObject,
+  type PdfEngine,
+  type PdfHighlightAnnoObject,
+  type PdfSquigglyAnnoObject,
+  type PdfSquareAnnoObject,
+  type PdfStrikeOutAnnoObject,
+  type PdfUnderlineAnnoObject,
+  type Rect,
+} from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
+import type { RenderCapability } from '@embedpdf/plugin-render';
+import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { SelectionPlugin, type SelectionCapability } from '@embedpdf/plugin-selection';
 import type { ScrollCapability } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability } from '@embedpdf/plugin-viewport';
@@ -9,6 +23,7 @@ import {
   Copy,
   ExternalLink,
   Highlighter,
+  Image as ImageIcon,
   Languages,
   Link,
   MessageSquareMore,
@@ -19,7 +34,7 @@ import {
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from './components';
 import { createCommentAnnotation } from './comment-annotation';
-import { getActiveDocumentId, getPluginCapability } from './utils';
+import { getActiveDocumentId, getPluginCapability, normalizePdfText } from './utils';
 import { platform } from '#platform';
 
 type ContextMenuState = {
@@ -27,6 +42,25 @@ type ContextMenuState = {
   x: number;
   y: number;
 };
+
+type PdfTextMarkupAnnoObject = PdfHighlightAnnoObject | PdfUnderlineAnnoObject |
+  PdfStrikeOutAnnoObject | PdfSquigglyAnnoObject;
+type PdfCaptureAnnoObject = PdfTextMarkupAnnoObject | PdfSquareAnnoObject;
+
+const CAPTURE_PADDING = 3;
+const CAPTURE_SCALE = 4;
+const MAX_CAPTURE_PIXELS = 16_000_000;
+
+function isTextMarkupAnnotation(annotation: PdfAnnotationObject | undefined): annotation is PdfTextMarkupAnnoObject {
+  return annotation?.type === PdfAnnotationSubtype.HIGHLIGHT ||
+    annotation?.type === PdfAnnotationSubtype.UNDERLINE ||
+    annotation?.type === PdfAnnotationSubtype.STRIKEOUT ||
+    annotation?.type === PdfAnnotationSubtype.SQUIGGLY;
+}
+
+function isCaptureAnnotation(annotation: PdfAnnotationObject | undefined): annotation is PdfCaptureAnnoObject {
+  return isTextMarkupAnnotation(annotation) || annotation?.type === PdfAnnotationSubtype.SQUARE;
+}
 
 function parseExternalUrl(value: string) {
   try {
@@ -59,6 +93,139 @@ function getExternalLink(annotation: PdfAnnotationObject | undefined) {
   return parseExternalUrl(annotation.target.action.uri);
 }
 
+function rectsIntersect(left: Rect, right: Rect) {
+  return left.origin.x < right.origin.x + right.size.width &&
+    left.origin.x + left.size.width > right.origin.x &&
+    left.origin.y < right.origin.y + right.size.height &&
+    left.origin.y + left.size.height > right.origin.y;
+}
+
+function getPersistedTextSlice(annotation: PdfAnnotationObject) {
+  const slice = annotation.custom?.pdfTs?.textSlice;
+  return Number.isInteger(slice?.charIndex) && slice.charIndex >= 0 &&
+    Number.isInteger(slice?.charCount) && slice.charCount > 0
+    ? { pageIndex: annotation.pageIndex, charIndex: slice.charIndex, charCount: slice.charCount }
+    : null;
+}
+
+async function getTextMarkupText(
+  engine: PdfEngine<Blob>,
+  document: PdfDocumentObject,
+  annotation: PdfTextMarkupAnnoObject,
+) {
+  const page = document.pages[annotation.pageIndex];
+  if (!page) return '';
+
+  const persistedSlice = getPersistedTextSlice(annotation);
+  if (persistedSlice) {
+    return (await engine.getTextSlices(document, [persistedSlice]).toPromise()).join('\n');
+  }
+
+  const highlightRects = annotation.segmentRects.length
+    ? annotation.segmentRects
+    : [annotation.rect];
+  const geometry = await engine.getPageGeometry(document, page).toPromise();
+  const characterIndexes = geometry.runs.flatMap((run) => run.glyphs.flatMap((glyph, index) => {
+    const glyphRect: Rect = {
+      origin: { x: glyph.x, y: glyph.y },
+      size: { width: glyph.width, height: glyph.height },
+    };
+    return highlightRects.some((rect) => rectsIntersect(rect, glyphRect))
+      ? [run.charStart + index]
+      : [];
+  }));
+  const firstCharacter = characterIndexes[0];
+  const lastCharacter = characterIndexes.at(-1);
+  if (firstCharacter === undefined || lastCharacter === undefined) return '';
+
+  const parts = await engine.getTextSlices(document, [{
+    pageIndex: annotation.pageIndex,
+    charIndex: firstCharacter,
+    charCount: lastCharacter - firstCharacter + 1,
+  }]).toPromise();
+  return parts.join('\n');
+}
+
+async function copyText(value: string) {
+  value = normalizePdfText(value);
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    return;
+  } catch {
+    // The legacy path also works in webviews where the async clipboard API is unavailable.
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) throw new Error('Clipboard copy was rejected');
+}
+
+function getCaptureRect(annotation: PdfCaptureAnnoObject, pageSize: { width: number; height: number }) {
+  const rects = isTextMarkupAnnotation(annotation) && annotation.segmentRects.length
+    ? annotation.segmentRects
+    : [annotation.rect];
+  const left = Math.max(0, Math.min(...rects.map((rect) => rect.origin.x)) - CAPTURE_PADDING);
+  const top = Math.max(0, Math.min(...rects.map((rect) => rect.origin.y)) - CAPTURE_PADDING);
+  const right = Math.min(
+    pageSize.width,
+    Math.max(...rects.map((rect) => rect.origin.x + rect.size.width)) + CAPTURE_PADDING,
+  );
+  const bottom = Math.min(
+    pageSize.height,
+    Math.max(...rects.map((rect) => rect.origin.y + rect.size.height)) + CAPTURE_PADDING,
+  );
+  return {
+    origin: { x: left, y: top },
+    size: { width: right - left, height: bottom - top },
+  };
+}
+
+function copyAnnotationImage(
+  registry: PluginRegistry,
+  documentId: string,
+  document: PdfDocumentObject,
+  annotation: PdfCaptureAnnoObject,
+) {
+  const render = getPluginCapability<RenderCapability>(registry, 'render');
+  const page = document.pages[annotation.pageIndex];
+  if (!render || !page || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    return Promise.reject(new Error('Image clipboard is unavailable'));
+  }
+
+  const rect = getCaptureRect(annotation, page.size);
+  if (rect.size.width <= 0 || rect.size.height <= 0) {
+    return Promise.reject(new Error('Annotation has no visible area'));
+  }
+
+  const scaleFactor = Math.min(
+    CAPTURE_SCALE,
+    Math.sqrt(MAX_CAPTURE_PIXELS / (rect.size.width * rect.size.height)),
+  );
+  const rotation = getPluginCapability<RotateCapability>(registry, 'rotate')
+    ?.forDocument(documentId).getRotation() ?? 0;
+  const image = render.forDocument(documentId).renderPageRect({
+    pageIndex: annotation.pageIndex,
+    rect,
+    options: {
+      scaleFactor,
+      dpr: 1,
+      rotation: ((page.rotation ?? 0) + rotation) % 4,
+      imageType: 'image/png',
+      withAnnotations: false,
+      withForms: true,
+    },
+  }).toPromise();
+
+  return navigator.clipboard.write([new ClipboardItem({ 'image/png': image })]);
+}
+
 function getMenuAnchor(
   registry: PluginRegistry,
   container: HTMLElement,
@@ -85,6 +252,7 @@ function getMenuAnchor(
 }
 
 export function ContextMenu({
+  engine,
   registry,
   container,
   canEdit,
@@ -93,6 +261,7 @@ export function ContextMenu({
   onOpenColorPalette,
   onTranslate,
 }: {
+  engine?: PdfEngine<Blob> | null;
   registry?: PluginRegistry;
   container: HTMLElement | null;
   canEdit: boolean;
@@ -185,7 +354,9 @@ export function ContextMenu({
     if (!selectionScope || !annotationScope) return;
 
     const strokeColor = type === PdfAnnotationSubtype.HIGHLIGHT ? '#facc15' : '#ef4444';
+    const slices = selectionScope.getState().slices;
     for (const formatted of selectionScope.getFormattedSelection()) {
+      const slice = slices[formatted.pageIndex];
       annotationScope.createAnnotation(formatted.pageIndex, {
         id: crypto.randomUUID(),
         type,
@@ -194,6 +365,10 @@ export function ContextMenu({
         segmentRects: formatted.segmentRects,
         strokeColor,
         opacity: 1,
+        custom: slice ? { pdfTs: { textSlice: {
+          charIndex: slice.start,
+          charCount: slice.count,
+        } } } : undefined,
       });
     }
     selectionScope.clear();
@@ -201,7 +376,13 @@ export function ContextMenu({
   };
 
   const selectionItems = [
-    { label: 'Copy', icon: Copy, action: () => { selection?.forDocument(documentId).copyToClipboard(); setMenu(null); } },
+    { label: 'Copy', icon: Copy, action: () => {
+      const selectedText = selection?.forDocument(documentId).getSelectedText();
+      setMenu(null);
+      selectedText?.toPromise()
+        .then((parts) => copyText(parts.join('\n')))
+        .catch((error) => console.error('[pdf-ts] failed to copy selected text', error));
+    } },
     ...(canEdit ? [
       { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
       { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
@@ -214,7 +395,7 @@ export function ContextMenu({
       const selectedText = selection?.forDocument(documentId).getSelectedText();
       setMenu(null);
       selectedText?.toPromise()
-        .then((parts) => parts.join(' ').replace(/\s+/g, ' ').trim())
+        .then((parts) => normalizePdfText(parts.join(' ')).replace(/\s+/g, ' ').trim())
         .then((query) => {
           if (!query) return;
           platform.openExternal(
@@ -230,7 +411,28 @@ export function ContextMenu({
     ? getExternalLink(selectedAnnotations[0].object)
     : null;
   const commentTarget = selectedAnnotations[0]?.object;
+  const selectedTextMarkup = selectedAnnotations.length === 1 && isTextMarkupAnnotation(commentTarget)
+    ? commentTarget
+    : null;
+  const selectedCaptureAnnotation = selectedAnnotations.length === 1 && isCaptureAnnotation(commentTarget)
+    ? commentTarget
+    : null;
   const annotationItems = [
+    ...(selectedTextMarkup && engine ? [{ label: 'Copy', icon: Copy, action: () => {
+      const document = registry.getStore().getState().core.documents[documentId]?.document;
+      setMenu(null);
+      if (!document) return;
+      getTextMarkupText(engine, document, selectedTextMarkup)
+        .then(copyText)
+        .catch((error) => console.error('[pdf-ts] failed to copy text markup', error));
+    } }] : []),
+    ...(selectedCaptureAnnotation ? [{ label: 'Copy image', icon: ImageIcon, action: () => {
+      const document = registry.getStore().getState().core.documents[documentId]?.document;
+      setMenu(null);
+      if (!document) return;
+      copyAnnotationImage(registry, documentId, document, selectedCaptureAnnotation)
+        .catch((error) => console.error('[pdf-ts] failed to copy annotation image', error));
+    } }] : []),
     ...(selectedLink ? [{ label: 'Open link', icon: Link, action: () => {
       platform.openExternal(selectedLink);
       setMenu(null);
