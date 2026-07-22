@@ -244,6 +244,7 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
 }
 
 interface AppProps {
+  engine: PdfEngine<Blob>;
   fileUrl?: string;
   sourceUrl?: string;
   documentKey?: string;
@@ -315,6 +316,7 @@ function createViewerPlugins(fileUrl?: string) {
 }
 
 function App({
+  engine,
   fileUrl,
   sourceUrl,
   documentKey,
@@ -323,13 +325,6 @@ function App({
   documentResource,
   onResourceConsumed,
 }: AppProps) {
-  const { engine: workerEngine, isLoading: engineLoading, error: engineError } = usePdfiumEngine({
-    wasmUrl: wasmResource.url,
-    worker: true,
-    encoderPoolSize: 0, // Bundled BMP conversion uses no encoder workers.
-    fontFallback: PDFIUM_FONT_FALLBACK,
-  });
-  const engine = configureBundledBmpEngine(workerEngine);
   const saveInProgressRef = useRef(false);
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
@@ -474,8 +469,7 @@ function App({
 
   return (
     <main ref={viewerRootRef} className="app-shell" style={{ paddingTop: toolbarInset }}>
-      {engine ? (
-        <EmbedPDF
+      <EmbedPDF
           engine={engine}
           plugins={plugins}
           onInitialized={async (nextRegistry) => {
@@ -596,11 +590,6 @@ function App({
             </>
           )}
         </EmbedPDF>
-      ) : (
-        <div className="viewer-status viewer-status-error">
-          {engineError ? `Unable to initialize PDF engine: ${engineError.message}` : engineLoading ? 'Loading PDF engine...' : 'PDF engine unavailable.'}
-        </div>
-      )}
       <Toolbar
         registry={registry}
         activeDocumentId={toolbarDocumentId}
@@ -809,6 +798,35 @@ function ViewerBootstrap() {
     return <div className="viewer-status">Loading PDF resources...</div>;
   }
 
+  return (
+    <ReadyViewer
+      resources={resources}
+      setResources={setResources}
+      trackResource={trackResource}
+      releaseResource={releaseResource}
+    />
+  );
+}
+
+function ReadyViewer({
+  resources,
+  setResources,
+  trackResource,
+  releaseResource,
+}: {
+  resources: ViewerResources;
+  setResources(resources: ViewerResources): void;
+  trackResource(resource?: ManagedResource): void;
+  releaseResource(resource?: ManagedResource): void;
+}) {
+  const { engine: workerEngine, isLoading, error } = usePdfiumEngine({
+    wasmUrl: resources.wasm.url,
+    worker: true,
+    encoderPoolSize: 0,
+    fontFallback: PDFIUM_FONT_FALLBACK,
+  });
+  const engine = configureBundledBmpEngine(workerEngine);
+
   if (platform.openLocalDocument && !resources.document) {
     const openLocalDocument = platform.openLocalDocument;
     return <WebDocumentPicker onSelect={(file) => {
@@ -818,9 +836,18 @@ function ViewerBootstrap() {
     }} />;
   }
 
+  if (!engine) {
+    return (
+      <div className={`viewer-status${error ? ' viewer-status-error' : ''}`}>
+        {error ? `Unable to initialize PDF engine: ${error.message}` : isLoading ? 'Loading PDF engine...' : 'PDF engine unavailable.'}
+      </div>
+    );
+  }
+
   return (
     <App
       key={resources.document?.resource.url}
+      engine={engine}
       fileUrl={resources.document?.resource.url}
       sourceUrl={resources.document?.sourceUrl}
       documentKey={resources.document?.key}

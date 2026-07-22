@@ -5,6 +5,7 @@ import {
   writeReadingProgress,
 } from './browser-storage';
 import { blobResource } from './resources';
+import { translateExternally } from './external-translation';
 import type { ViewerPlatform } from './types';
 
 export const documentEditingEnabled = true;
@@ -29,6 +30,7 @@ export const platform: ViewerPlatform = {
       // Ignore malformed or unsafe targets embedded in a PDF.
     }
   },
+  translate: translateExternally,
   getPreference,
   setPreference,
   async preparePdfSave({ fileName }) {
