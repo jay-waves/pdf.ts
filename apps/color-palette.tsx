@@ -1,96 +1,45 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import type { AnnotationCapability, TrackedAnnotation } from '@embedpdf/plugin-annotation';
+import { PdfBlendMode } from '@embedpdf/models';
+import type { TrackedAnnotation } from '@embedpdf/plugin-annotation';
 import { Check } from 'lucide-react';
+import {
+  DEFAULT_ANNOTATION_COLORS,
+  HIGHLIGHT_STYLES,
+  TRANSPARENT_ANNOTATION_COLOR,
+  getAnnotationCapability,
+  getAnnotationColorFields,
+  getAnnotationColorPatch,
+  getAnnotationScope,
+  getAnnotationToolLabel,
+  getCommonAnnotationTool,
+  normalizeAnnotationColor,
+  normalizeAnnotationOpacity,
+  type AnnotationColorFieldKey,
+  type AnnotationToolLike,
+} from './annotations';
 import { Dialog } from './components';
-import { getActiveDocumentId, getPluginCapability } from './utils';
-
-const FALLBACK_COLORS = [
-  '#facc15',
-  '#fb923c',
-  '#f87171',
-  '#f472b6',
-  '#a78bfa',
-  '#60a5fa',
-  '#22d3ee',
-  '#34d399',
-  '#4ade80',
-  '#94a3b8',
-  '#111827',
-  '#ffffff',
-];
-
-const COLOR_FIELDS = [
-  { key: 'strokeColor', label: 'Stroke' },
-  { key: 'color', label: 'Fill' },
-  { key: 'fontColor', label: 'Text' },
-  { key: 'backgroundColor', label: 'Background' },
-] as const;
-
-const MARKUP_TOOL_IDS = new Set(['highlight', 'underline', 'strikeout', 'squiggly']);
-const STROKE_AND_FILL_TOOL_IDS = new Set(['ink', 'inkHighlighter', 'square', 'circle', 'line', 'polyline']);
-
-type ColorFieldKey = (typeof COLOR_FIELDS)[number]['key'];
-
-interface AnnotationToolLike {
-  id: string;
-  name?: string;
-  defaults?: Record<string, unknown>;
-}
 
 interface PaletteSnapshot {
   activeTool: AnnotationToolLike | null;
+  contextTool: AnnotationToolLike | null;
   defaults: Record<string, unknown>;
   selectedAnnotations: TrackedAnnotation[];
 }
 
-function normalizeColor(value: unknown) {
-  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
-}
+const EMPTY_SNAPSHOT: PaletteSnapshot = {
+  activeTool: null,
+  contextTool: null,
+  defaults: {},
+  selectedAnnotations: [],
+};
 
-function getAvailableFields(defaults: Record<string, unknown>, selectedAnnotations: TrackedAnnotation[]) {
-  const selectedObject = (selectedAnnotations[0]?.object ?? {}) as unknown as Record<string, unknown>;
-  const fields = COLOR_FIELDS.filter(({ key }) => key in defaults || key in selectedObject);
-  return fields.length ? fields : COLOR_FIELDS.slice(0, 2);
-}
-
-function getInitialField(defaults: Record<string, unknown>, selectedAnnotations: TrackedAnnotation[]) {
-  const fields = getAvailableFields(defaults, selectedAnnotations);
-  return fields.find(({ key }) => key === 'strokeColor')?.key ?? fields[0].key;
-}
-
-function getColorPatch(toolId: string | null, field: ColorFieldKey, color: string, defaults: Record<string, unknown>) {
-  const patch: Record<string, unknown> = { [field]: color };
-
-  if (
-    field === 'strokeColor' &&
-    'color' in defaults &&
-    toolId &&
-    (MARKUP_TOOL_IDS.has(toolId) || STROKE_AND_FILL_TOOL_IDS.has(toolId))
-  ) {
-    patch.color = color;
-  }
-
-  return patch;
-}
-
-function normalizeOpacity(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.min(1, Math.max(0, value))
-    : null;
-}
-
-function getToolLabel(tool: AnnotationToolLike | null) {
-  const labels: Record<string, string> = {
-    highlight: 'Highlight', underline: 'Underline', strikeout: 'Strikeout', squiggly: 'Squiggly',
-    ink: 'Ink', inkHighlighter: 'Highlighter', square: 'Rectangle', circle: 'Circle',
-    line: 'Line', lineArrow: 'Arrow', polyline: 'Polyline', textComment: 'Comment', freeText: 'Text',
-  };
-  if (!tool) {
-    return 'Selected annotation';
-  }
-
-  return labels[tool.id] ?? tool.name ?? 'Annotation tool';
+function getAnnotationValues(
+  defaults: Record<string, unknown>,
+  selectedAnnotations: TrackedAnnotation[],
+) {
+  const selected = (selectedAnnotations[0]?.object ?? {}) as unknown as Record<string, unknown>;
+  return { ...selected, ...defaults };
 }
 
 export function ColorPalette({
@@ -100,85 +49,80 @@ export function ColorPalette({
 }: {
   registry?: PluginRegistry;
   open: boolean;
-  onClose: () => void;
+  onClose(): void;
 }) {
-  const annotation = useMemo(
-    () => getPluginCapability<AnnotationCapability>(registry, 'annotation'),
-    [registry],
-  );
-  const [snapshot, setSnapshot] = useState<PaletteSnapshot>({
-    activeTool: null,
-    defaults: {},
-    selectedAnnotations: [],
-  });
-  const [selectedField, setSelectedField] = useState<ColorFieldKey>('strokeColor');
-  const { activeTool, defaults, selectedAnnotations } = snapshot;
+  const capability = useMemo(() => getAnnotationCapability(registry), [registry]);
+  const [snapshot, setSnapshot] = useState<PaletteSnapshot>(EMPTY_SNAPSHOT);
+  const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('strokeColor');
+  const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;
 
   useEffect(() => {
-    if (!open || !registry || !annotation) {
+    const scoped = open ? getAnnotationScope(registry) : null;
+    if (!scoped) {
+      setSnapshot(EMPTY_SNAPSHOT);
       return;
     }
 
-    const documentId = getActiveDocumentId(registry);
-    if (!documentId) {
-      return;
-    }
-
-    const scope = annotation.forDocument(documentId);
-    const sync = (nextTool = scope.getActiveTool()) => {
-      const tool = nextTool?.id ? annotation.getTool(nextTool.id) ?? nextTool : nextTool;
-      const nextDefaults = tool?.defaults ?? {};
-      const nextSelectedAnnotations = scope.getSelectedAnnotations();
+    const sync = () => {
+      const active = scoped.scope.getActiveTool();
+      const resolvedActive = active?.id ? scoped.capability.getTool(active.id) ?? active : null;
+      const selected = scoped.scope.getSelectedAnnotations();
+      const context = resolvedActive ?? getCommonAnnotationTool(scoped.capability, selected);
+      const nextDefaults = resolvedActive?.defaults ?? {};
+      const fields = getAnnotationColorFields(
+        context?.id ?? null,
+        getAnnotationValues(nextDefaults, selected),
+      );
 
       setSnapshot({
-        activeTool: tool,
+        activeTool: resolvedActive,
+        contextTool: context,
         defaults: nextDefaults,
-        selectedAnnotations: nextSelectedAnnotations,
+        selectedAnnotations: selected,
       });
-      setSelectedField((currentField) => {
-        const availableFields = getAvailableFields(nextDefaults, nextSelectedAnnotations);
-        return availableFields.some(({ key }) => key === currentField)
-          ? currentField
-          : getInitialField(nextDefaults, nextSelectedAnnotations);
-      });
+      setSelectedField((current) => (
+        fields.some(({ key }) => key === current) ? current : fields[0].key
+      ));
     };
 
     sync();
-    const unsubscribeTool = scope.onActiveToolChange(sync);
-    const unsubscribeState = scope.onStateChange(() => sync());
-
+    const unsubscribeTool = scoped.scope.onActiveToolChange(sync);
+    const unsubscribeState = scoped.scope.onStateChange(sync);
     return () => {
       unsubscribeTool();
       unsubscribeState();
     };
-  }, [annotation, open, registry]);
+  }, [open, registry]);
 
   const colors = useMemo(() => {
-    const presets = annotation?.getColorPresets() ?? [];
-    const merged = [...presets, ...FALLBACK_COLORS]
-      .map(normalizeColor)
-      .filter((color): color is string => Boolean(color));
+    const presets = capability?.getColorPresets() ?? [];
+    return Array.from(new Set([
+      TRANSPARENT_ANNOTATION_COLOR,
+      ...presets,
+      ...DEFAULT_ANNOTATION_COLORS,
+    ].map(normalizeAnnotationColor).filter((color): color is string => Boolean(color))));
+  }, [capability, open]);
 
-    return Array.from(new Set(merged));
-  }, [annotation, open]);
-
-  const availableFields = getAvailableFields(defaults, selectedAnnotations);
-  const selectedObject = (selectedAnnotations[0]?.object ?? {}) as unknown as Record<string, unknown>;
+  const toolId = contextTool?.id ?? null;
+  const values = getAnnotationValues(defaults, selectedAnnotations);
+  const colorFields = getAnnotationColorFields(toolId, values);
   const currentColor =
-    normalizeColor(defaults[selectedField]) ??
-    normalizeColor(selectedObject[selectedField]) ??
-    colors[0] ??
-    FALLBACK_COLORS[0];
-  const currentOpacity = normalizeOpacity(defaults.opacity) ?? normalizeOpacity(selectedObject.opacity) ?? 1;
+    normalizeAnnotationColor(values[selectedField]) ??
+    DEFAULT_ANNOTATION_COLORS[0];
+  const customInputColor = currentColor === TRANSPARENT_ANNOTATION_COLOR
+    ? DEFAULT_ANNOTATION_COLORS[0]
+    : currentColor;
+  const currentOpacity = normalizeAnnotationOpacity(values.opacity) ?? 1;
+  const currentHighlightStyle = typeof values.blendMode === 'number'
+    ? values.blendMode
+    : PdfBlendMode.Multiply;
 
   const applyPatch = (patch: Record<string, unknown>) => {
-    const documentId = registry ? getActiveDocumentId(registry) : undefined;
-    if (!annotation || !documentId) {
-      return;
-    }
+    const scoped = getAnnotationScope(registry);
+    if (!scoped) return;
 
     if (activeTool?.id) {
-      annotation.setToolDefaults(activeTool.id, patch);
+      scoped.capability.setToolDefaults(activeTool.id, patch);
       setSnapshot((current) => ({
         ...current,
         defaults: { ...current.defaults, ...patch },
@@ -186,77 +130,88 @@ export function ColorPalette({
     }
 
     if (selectedAnnotations.length) {
-      annotation.forDocument(documentId).updateAnnotations(
-        selectedAnnotations.map(({ object }) => ({
-          pageIndex: object.pageIndex,
-          id: object.id,
-          patch,
-        })),
-      );
+      scoped.scope.updateAnnotations(selectedAnnotations.map(({ object }) => ({
+        pageIndex: object.pageIndex,
+        id: object.id,
+        patch,
+      })));
     }
   };
 
-  const applyColor = (color: string) => {
-    const normalizedColor = normalizeColor(color);
-    if (!normalizedColor || !annotation) {
-      return;
-    }
+  const applyColor = (value: string) => {
+    const color = normalizeAnnotationColor(value);
+    if (!color || !capability) return;
 
-    const patch = getColorPatch(activeTool?.id ?? null, selectedField, normalizedColor, defaults);
-    applyPatch(patch);
-    annotation.addColorPreset(normalizedColor);
+    applyPatch(getAnnotationColorPatch(toolId, selectedField, color));
+    if (color !== TRANSPARENT_ANNOTATION_COLOR) capability.addColorPreset(color);
   };
 
-  const applyOpacity = (opacity: number) => {
-    applyPatch({ opacity: Math.min(1, Math.max(0, opacity)) });
-  };
-
-  const body = !annotation
+  const body = !capability
     ? <div className="shnctl-state">Color tools are not ready.</div>
-    : (
-      <div className="shnctl-color-content">
+    : <div className="shnctl-color-content">
         <div className="shnctl-color-meta">
-          <span>{getToolLabel(activeTool)}</span>
+          <span>{getAnnotationToolLabel(contextTool)}</span>
           {selectedAnnotations.length ? <span>{selectedAnnotations.length} selected</span> : null}
         </div>
-        <div className="shnctl-color-targets" role="group" aria-label="Color target">
-          {availableFields.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              className={`shnctl-action shnctl-color-target${selectedField === key ? ' is-active' : ''}`}
-              onClick={() => setSelectedField(key)}
-              aria-pressed={selectedField === key}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+
+        {toolId === 'highlight' ? <div
+          className="shnctl-color-targets"
+          role="group"
+          aria-label="Highlight style"
+        >
+          {HIGHLIGHT_STYLES.map(({ label, value }) => <button
+            key={value}
+            type="button"
+            className={`shnctl-action shnctl-color-target${currentHighlightStyle === value ? ' is-active' : ''}`}
+            onClick={() => applyPatch({ blendMode: value })}
+            aria-pressed={currentHighlightStyle === value}
+          >
+            {label}
+          </button>)}
+        </div> : null}
+
+        {colorFields.length > 1 ? <div
+          className="shnctl-color-targets"
+          role="group"
+          aria-label="Color target"
+        >
+          {colorFields.map(({ key, label }) => <button
+            key={key}
+            type="button"
+            className={`shnctl-action shnctl-color-target${selectedField === key ? ' is-active' : ''}`}
+            onClick={() => setSelectedField(key)}
+            aria-pressed={selectedField === key}
+          >
+            {label}
+          </button>)}
+        </div> : null}
+
         <div className="shnctl-color-grid" role="group" aria-label="Color presets">
-          {colors.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={`shnctl-color-swatch${currentColor === color ? ' is-active' : ''}`}
-              style={{ '--shnctl-swatch-color': color } as CSSProperties}
-              onClick={() => applyColor(color)}
-              aria-label={color}
-              aria-pressed={currentColor === color}
-            >
-              {currentColor === color ? <Check size={13} strokeWidth={2.2} /> : null}
-            </button>
-          ))}
+          {colors.map((color) => <button
+            key={color}
+            type="button"
+            className={`shnctl-color-swatch${currentColor === color ? ' is-active' : ''}`}
+            style={{ '--shnctl-swatch-color': color } as CSSProperties}
+            data-transparent={color === TRANSPARENT_ANNOTATION_COLOR ? 'true' : undefined}
+            onClick={() => applyColor(color)}
+            aria-label={color === TRANSPARENT_ANNOTATION_COLOR ? 'Transparent' : color}
+            aria-pressed={currentColor === color}
+          >
+            {currentColor === color ? <Check size={13} strokeWidth={2.2} /> : null}
+          </button>)}
         </div>
+
         <label className="shnctl-color-custom">
           <span>Custom</span>
           <input
             className="shnctl-color-input"
             type="color"
-            value={currentColor}
+            value={customInputColor}
             onChange={(event) => applyColor(event.currentTarget.value)}
           />
           <span className="shnctl-color-value">{currentColor}</span>
         </label>
+
         <label className="shnctl-color-opacity">
           <span>Opacity</span>
           <input
@@ -266,12 +221,13 @@ export function ColorPalette({
             max="100"
             step="1"
             value={Math.round(currentOpacity * 100)}
-            onChange={(event) => applyOpacity(Number(event.currentTarget.value) / 100)}
+            onChange={(event) => applyPatch({
+              opacity: Number(event.currentTarget.value) / 100,
+            })}
           />
           <span className="shnctl-color-value">{Math.round(currentOpacity * 100)}%</span>
         </label>
-      </div>
-    );
+      </div>;
 
   return (
     <Dialog
