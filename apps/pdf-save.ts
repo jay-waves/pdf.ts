@@ -1,8 +1,8 @@
 import type { PluginRegistry } from '@embedpdf/core';
+import type { PdfEngine } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
-import type { ExportCapability } from '@embedpdf/plugin-export';
 import { getAnnotationScope } from './annotations';
-import { getActiveDocumentId, getPluginCapability } from './utils';
+import { getActiveDocumentId } from './utils';
 import { platform } from '#platform';
 
 async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCapability['forDocument']>) {
@@ -17,14 +17,17 @@ async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCa
 }
 
 export async function savePdf(
+  engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
   options: { sourceUrl?: string; fileName?: string },
 ) {
   if (!registry) return false;
 
   const documentId = getActiveDocumentId(registry);
-  const exportPlugin = getPluginCapability<ExportCapability>(registry, 'export');
-  if (!documentId || !exportPlugin) return false;
+  const document = documentId
+    ? registry.getStore().getState().core.documents[documentId]?.document
+    : undefined;
+  if (!documentId || !document) return false;
 
   // Chrome must acquire its writable handle while the Ctrl+S user activation
   // is still live. Web returns a download target here without prompting.
@@ -34,6 +37,6 @@ export async function savePdf(
   const annotation = getAnnotationScope(registry, documentId);
   if (annotation) await commitPendingAnnotations(annotation.scope);
 
-  const data = await exportPlugin.forDocument(documentId).saveAsCopy().toPromise();
+  const data = await engine.saveAsCopy(document).toPromise();
   return data ? target.save(data) : false;
 }

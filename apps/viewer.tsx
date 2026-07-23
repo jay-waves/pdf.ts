@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
@@ -9,11 +9,9 @@ import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
 import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
-import { ExportPluginPackage } from '@embedpdf/plugin-export/react';
 import { FormPluginPackage } from '@embedpdf/plugin-form/react';
 import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
 import { GlobalPointerProvider, InteractionManagerPluginPackage, PagePointerProvider } from '@embedpdf/plugin-interaction-manager/react';
-import { PanPluginPackage } from '@embedpdf/plugin-pan/react';
 import { PrintPluginPackage } from '@embedpdf/plugin-print/react';
 import { RenderLayer, RenderPluginPackage } from '@embedpdf/plugin-render/react';
 import { Rotate, RotatePluginPackage } from '@embedpdf/plugin-rotate/react';
@@ -266,7 +264,6 @@ function createViewerPlugins(fileUrl?: string) {
     createPluginRegistration(SpreadPluginPackage, { defaultSpreadMode: SpreadMode.None }),
     createPluginRegistration(RotatePluginPackage, { defaultRotation: Rotation.Degree0 }),
     createPluginRegistration(InteractionManagerPluginPackage),
-    createPluginRegistration(PanPluginPackage, { defaultMode: 'mobile' }),
     createPluginRegistration(SelectionPluginPackage, { maxCachedGeometries: 8 }),
     createPluginRegistration(
       AnnotationPluginPackage,
@@ -279,9 +276,6 @@ function createViewerPlugins(fileUrl?: string) {
     createPluginRegistration(SearchPluginPackage),
     createPluginRegistration(BookmarkPluginPackage),
     createPluginRegistration(PrintPluginPackage),
-    ...(documentEditingEnabled ? [
-      createPluginRegistration(ExportPluginPackage, { defaultFileName: 'document.pdf' }),
-    ] : []),
   ];
 }
 
@@ -299,6 +293,7 @@ function App({
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
   const [toolbarInset, setToolbarInset] = useState(0);
+  const [panMode, setPanMode] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidePanel, setSidePanel] = useState<SidePanel>(null);
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
@@ -369,41 +364,43 @@ function App({
     initializeViewerTheme();
   }, []);
 
+  const saveDocument = useCallback(() => {
+    if (saveInProgressRef.current) return;
+
+    const changeVersionAtSaveStart = changeTrackerRef.current.version;
+    saveInProgressRef.current = true;
+    savePdf(engine, registry, { sourceUrl, fileName: documentName })
+      .then((saved) => {
+        if (!saved) return;
+
+        // A new edit may have landed while PDF serialization or disk I/O
+        // was in progress. Keep the dirty marker in that case.
+        if (changeTrackerRef.current.version === changeVersionAtSaveStart) {
+          setHasUnsavedChanges(false);
+        }
+      })
+      .catch((error) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('[pdf-ts] failed to save PDF', error);
+        }
+      })
+      .finally(() => {
+        saveInProgressRef.current = false;
+      });
+  }, [documentName, engine, registry, sourceUrl]);
+
   useEffect(() => {
     if (!documentEditingEnabled) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        if (saveInProgressRef.current) return;
-
-        const changeVersionAtSaveStart = changeTrackerRef.current.version;
-        saveInProgressRef.current = true;
-        savePdf(registry, { sourceUrl, fileName: documentName })
-          .then((saved) => {
-            if (!saved) {
-              return;
-            }
-
-            // A new edit may have landed while PDF serialization or disk I/O
-            // was in progress. Keep the dirty marker in that case.
-            if (changeTrackerRef.current.version === changeVersionAtSaveStart) {
-              setHasUnsavedChanges(false);
-            }
-          })
-          .catch((error) => {
-            if (!(error instanceof DOMException && error.name === 'AbortError')) {
-              console.error('[pdf-ts] failed to save PDF', error);
-            }
-          })
-          .finally(() => {
-            saveInProgressRef.current = false;
-          });
+        saveDocument();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [documentName, registry, sourceUrl]);
+  }, [saveDocument]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -452,6 +449,7 @@ function App({
             setSidePanel(null);
             setActiveDialog(null);
             setTranslationRequest(null);
+            setPanMode(false);
             setHasUnsavedChanges(false);
             if (navigationVisibleRef.current) {
               navigationVisibleRef.current = false;
@@ -513,10 +511,10 @@ function App({
                           <GlobalPointerProvider documentId={activeDocumentId}>
                             <Viewport
                               documentId={activeDocumentId}
-                              className="viewer"
+                              className={`viewer${panMode ? ' is-pan-mode' : ''}`}
                               onDragStart={(event) => event.preventDefault()}
                             >
-                              <ViewportInput documentId={activeDocumentId}>
+                              <ViewportInput documentId={activeDocumentId} panMode={panMode}>
                                 <Scroller
                                   documentId={activeDocumentId}
                                   className="pdf-scroller"
@@ -576,6 +574,8 @@ function App({
         outlineOpen={sidePanel?.type === 'outline'}
         colorPaletteOpen={sidePanel?.type === 'colors'}
         commentsOpen={sidePanel?.type === 'comments'}
+        panMode={panMode}
+        onPanModeChange={setPanMode}
         onSearchOpenChange={setSearchOpen}
         onToggleThumbnails={() => setSidePanel((current) => (
           current?.type === 'thumbnails' ? null : { type: 'thumbnails' }
@@ -598,6 +598,7 @@ function App({
           setSidePanel(null);
           setActiveDialog('protect');
         }}
+        onSave={saveDocument}
         onPinnedInsetChange={setToolbarInset}
       />
       <Outline

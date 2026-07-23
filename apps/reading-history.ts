@@ -1,6 +1,7 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
+import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import { platform } from '#platform';
 import {
   EMPTY_CLEANUP,
@@ -30,6 +31,7 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
   if (!scroll) return EMPTY_CLEANUP;
 
   const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
+  const viewport = getPluginCapability<ViewportCapability>(registry, 'viewport');
   let historyReady = false;
   let disposed = false;
   let pendingWriteId = 0;
@@ -49,6 +51,36 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
       updatedAt: new Date().toISOString(),
     };
   };
+
+  const getViewSnapshot = (documentId: string) => {
+    const metrics = viewport?.forDocument(documentId).getMetrics();
+    return {
+      pageNumber: scroll.forDocument(documentId).getCurrentPage(),
+      scrollStrategy: getDocumentScrollStrategy(registry, documentId),
+      spreadMode: spread?.forDocument(documentId).getSpreadMode(),
+      scrollLeft: metrics?.scrollLeft,
+      scrollTop: metrics?.scrollTop,
+    };
+  };
+
+  const hasViewChanged = (
+    before: ReturnType<typeof getViewSnapshot>,
+    after: ReturnType<typeof getViewSnapshot>,
+  ) => (
+    before.pageNumber !== after.pageNumber
+    || before.scrollStrategy !== after.scrollStrategy
+    || before.spreadMode !== after.spreadMode
+    || (
+      before.scrollLeft !== undefined
+      && after.scrollLeft !== undefined
+      && Math.abs(before.scrollLeft - after.scrollLeft) > 1
+    )
+    || (
+      before.scrollTop !== undefined
+      && after.scrollTop !== undefined
+      && Math.abs(before.scrollTop - after.scrollTop) > 1
+    )
+  );
 
   const flushPendingWrite = () => {
     pendingWriteId = 0;
@@ -81,16 +113,22 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
     layoutReadyHandled = true;
     unsubscribeLayoutReady?.();
     unsubscribeLayoutReady = null;
+    const initialView = getViewSnapshot(event.documentId);
 
     platform.readReadingProgress(documentKey)
       .then((saved) => {
         if (disposed) return;
-        if (saved && isValidPageNumber(saved.pageNumber)) {
+        const viewChangedWhileReading = hasViewChanged(
+          initialView,
+          getViewSnapshot(event.documentId),
+        );
+        if (!viewChangedWhileReading && saved && isValidPageNumber(saved.pageNumber)) {
           if (isSpreadMode(saved.spreadMode)) spread?.forDocument(event.documentId).setSpreadMode(saved.spreadMode);
           if (isScrollStrategy(saved.scrollStrategy)) scroll.setScrollStrategy(saved.scrollStrategy, event.documentId);
           restoreScrollAnchor(registry, { documentId: event.documentId, pageNumber: saved.pageNumber });
         }
         historyReady = true;
+        if (viewChangedWhileReading) scheduleHistoryWrite();
       })
       .catch((error) => {
         if (disposed) return;
