@@ -5,10 +5,11 @@ import { ZoomGestureWrapper, useZoomCapability } from '@embedpdf/plugin-zoom/rea
 
 const WHEEL_DELTA_LIMIT_PX = 50;
 const WHEEL_ZOOM_SENSITIVITY = 0.0012;
-const CROSS_AXIS_WHEEL_SPEED = 0.35;
+const WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX = 24;
+const WHEEL_SCROLL_COMPRESSION_RATIO = 0.25;
 const MIN_ZOOM_LEVEL = 0.2;
 const MAX_ZOOM_LEVEL = 60;
-const MIDDLE_MOUSE_DRAG_THRESHOLD_PX = 4;
+const PAN_DRAG_THRESHOLD_PX = 4;
 
 function wheelDeltaInPixels(delta: number, event: WheelEvent, pageSize: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16;
@@ -19,6 +20,15 @@ function wheelDeltaInPixels(delta: number, event: WheelEvent, pageSize: number) 
 function normalizedZoomDelta(event: WheelEvent, pageHeight: number) {
   const delta = wheelDeltaInPixels(event.deltaY, event, pageHeight);
   return Math.max(-WHEEL_DELTA_LIMIT_PX, Math.min(WHEEL_DELTA_LIMIT_PX, delta));
+}
+
+function compressWheelDelta(delta: number) {
+  const magnitude = Math.abs(delta);
+  if (magnitude <= WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX) return delta;
+  return Math.sign(delta) * (
+    WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX
+    + (magnitude - WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX) * WHEEL_SCROLL_COMPRESSION_RATIO
+  );
 }
 
 function touchDistance(touches: TouchList) {
@@ -35,7 +45,7 @@ function touchCenter(touches: TouchList) {
   };
 }
 
-function ViewportInputPipeline({ documentId }: { documentId: string }) {
+function ViewportInputPipeline({ documentId, panMode }: { documentId: string; panMode: boolean }) {
   const { provides: zoom } = useZoomCapability();
   const { provides: viewportCapability } = useViewportCapability();
   const viewportElementRef = useViewportElement();
@@ -53,7 +63,7 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
     let pendingScroll: { left: number; top: number } | null = null;
     let zoomAnchor = { vx: 0, vy: 0 };
     let pinchStart: { distance: number; zoom: number } | null = null;
-    let middlePan: {
+    let panGesture: {
       pointerId: number;
       pointerX: number;
       pointerY: number;
@@ -74,15 +84,17 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
       if (!scrollFrame) scrollFrame = window.requestAnimationFrame(flushScroll);
     };
 
-    const scrollBy = (deltaX: number, deltaY: number) => {
-      const current = pendingScroll ?? { left: viewport.scrollLeft, top: viewport.scrollTop };
-      scrollTo(current.left + deltaX, current.top + deltaY);
-    };
-
     const flushPendingScroll = () => {
       if (!scrollFrame) return;
       window.cancelAnimationFrame(scrollFrame);
       flushScroll();
+    };
+
+    const scrollHiddenAxisBy = (deltaX: number, deltaY: number) => {
+      viewport.scrollTo(
+        viewport.scrollLeft + compressWheelDelta(deltaX),
+        viewport.scrollTop + compressWheelDelta(deltaY),
+      );
     };
 
     const setAnchor = (clientX: number, clientY: number) => {
@@ -138,9 +150,8 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
     };
 
     const handleWheel = (event: WheelEvent) => {
-      event.preventDefault();
-
       if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
         flushPendingScroll();
         pendingZoomLevel = null;
         pendingZoomDelta += normalizedZoomDelta(event, viewport.clientHeight);
@@ -150,13 +161,32 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
       }
 
       flushPendingZoom();
+      flushPendingScroll();
+      const horizontalLayout = (
+        document.documentElement.dataset.shnctlScrollStrategy === 'horizontal'
+      );
+      // This axis is visible, so retain the browser's native Shift + wheel.
+      if (event.shiftKey && horizontalLayout) return;
+
       const deltaX = wheelDeltaInPixels(event.deltaX, event, viewport.clientWidth);
       const deltaY = wheelDeltaInPixels(event.deltaY, event, viewport.clientHeight);
-      const horizontalLayout = document.documentElement.dataset.shnctlScrollStrategy === 'horizontal';
-      scrollBy(
-        deltaX * (horizontalLayout ? 1 : CROSS_AXIS_WHEEL_SPEED),
-        deltaY * (horizontalLayout ? CROSS_AXIS_WHEEL_SPEED : 1),
-      );
+      if (event.shiftKey) {
+        event.preventDefault();
+        // Vertical layout hides the horizontal axis, so it still needs a
+        // programmatic fallback. Browsers differ on which delta carries Shift.
+        scrollHiddenAxisBy(Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY, 0);
+        return;
+      }
+
+      if (horizontalLayout && deltaY) {
+        // The vertical scrollbar is hidden in horizontal layout, but
+        // overflow:hidden remains programmatically scrollable.
+        scrollHiddenAxisBy(0, deltaY);
+      } else if (!horizontalLayout && deltaX) {
+        // Likewise, retain trackpad horizontal movement while the horizontal
+        // scrollbar is hidden in vertical layout.
+        scrollHiddenAxisBy(deltaX, 0);
+      }
     };
 
     const handleTouchStart = (event: TouchEvent) => {
@@ -186,13 +216,15 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
       if (event.touches.length < 2) pinchStart = null;
     };
 
-    const startMiddlePan = (event: PointerEvent) => {
-      if (event.button !== 1 || middlePan) return;
+    const startPan = (event: PointerEvent) => {
+      const startedByMiddleMouse = event.button === 1;
+      const startedByToolbarPan = panMode && event.button === 0 && event.pointerType !== 'touch';
+      if ((!startedByMiddleMouse && !startedByToolbarPan) || panGesture) return;
       event.preventDefault();
       event.stopPropagation();
       flushPendingInput();
       const scrollPosition = pendingScroll ?? { left: viewport.scrollLeft, top: viewport.scrollTop };
-      middlePan = {
+      panGesture = {
         pointerId: event.pointerId,
         pointerX: event.clientX,
         pointerY: event.clientY,
@@ -200,26 +232,28 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
         scrollTop: scrollPosition.top,
         dragging: false,
       };
+      viewport.dataset.shnctlPanning = 'true';
       viewport.setPointerCapture(event.pointerId);
     };
 
-    const updateMiddlePan = (event: PointerEvent) => {
-      if (!middlePan || event.pointerId !== middlePan.pointerId) return;
+    const updatePan = (event: PointerEvent) => {
+      if (!panGesture || event.pointerId !== panGesture.pointerId) return;
       event.preventDefault();
       event.stopPropagation();
-      const deltaX = event.clientX - middlePan.pointerX;
-      const deltaY = event.clientY - middlePan.pointerY;
-      middlePan.dragging ||= deltaX * deltaX + deltaY * deltaY >= MIDDLE_MOUSE_DRAG_THRESHOLD_PX ** 2;
-      if (middlePan.dragging) {
-        scrollTo(middlePan.scrollLeft - deltaX, middlePan.scrollTop - deltaY);
+      const deltaX = event.clientX - panGesture.pointerX;
+      const deltaY = event.clientY - panGesture.pointerY;
+      panGesture.dragging ||= deltaX * deltaX + deltaY * deltaY >= PAN_DRAG_THRESHOLD_PX ** 2;
+      if (panGesture.dragging) {
+        scrollTo(panGesture.scrollLeft - deltaX, panGesture.scrollTop - deltaY);
       }
     };
 
-    const finishMiddlePan = (event?: PointerEvent) => {
-      if (!middlePan || (event && event.pointerId !== middlePan.pointerId)) return;
-      if (event) updateMiddlePan(event);
-      const completed = middlePan;
-      middlePan = null;
+    const finishPan = (event?: PointerEvent) => {
+      if (!panGesture || (event && event.pointerId !== panGesture.pointerId)) return;
+      if (event) updatePan(event);
+      const completed = panGesture;
+      panGesture = null;
+      delete viewport.dataset.shnctlPanning;
       if (!completed.dragging) scrollTo(completed.scrollLeft, completed.scrollTop);
       if (viewport.hasPointerCapture(completed.pointerId)) viewport.releasePointerCapture(completed.pointerId);
     };
@@ -230,47 +264,56 @@ function ViewportInputPipeline({ documentId }: { documentId: string }) {
       event.stopPropagation();
     };
 
-    const cancelMiddlePan = () => finishMiddlePan();
+    const cancelPan = () => finishPan();
 
     viewport.addEventListener('wheel', handleWheel, { passive: false });
     viewport.addEventListener('touchstart', handleTouchStart, { passive: false });
     viewport.addEventListener('touchmove', handleTouchMove, { passive: false });
     viewport.addEventListener('touchend', handleTouchEnd);
     viewport.addEventListener('touchcancel', handleTouchEnd);
-    viewport.addEventListener('pointerdown', startMiddlePan, { capture: true });
-    viewport.addEventListener('pointermove', updateMiddlePan, { capture: true });
-    viewport.addEventListener('pointerup', finishMiddlePan, { capture: true });
-    viewport.addEventListener('pointercancel', finishMiddlePan, { capture: true });
-    viewport.addEventListener('lostpointercapture', finishMiddlePan, { capture: true });
+    viewport.addEventListener('pointerdown', startPan, { capture: true });
+    viewport.addEventListener('pointermove', updatePan, { capture: true });
+    viewport.addEventListener('pointerup', finishPan, { capture: true });
+    viewport.addEventListener('pointercancel', finishPan, { capture: true });
+    viewport.addEventListener('lostpointercapture', finishPan, { capture: true });
     viewport.addEventListener('mousedown', stopMiddleMouseDefault, { capture: true });
     viewport.addEventListener('auxclick', stopMiddleMouseDefault, { capture: true });
-    window.addEventListener('blur', cancelMiddlePan);
+    window.addEventListener('blur', cancelPan);
     return () => {
       viewport.removeEventListener('wheel', handleWheel);
       viewport.removeEventListener('touchstart', handleTouchStart);
       viewport.removeEventListener('touchmove', handleTouchMove);
       viewport.removeEventListener('touchend', handleTouchEnd);
       viewport.removeEventListener('touchcancel', handleTouchEnd);
-      viewport.removeEventListener('pointerdown', startMiddlePan, { capture: true });
-      viewport.removeEventListener('pointermove', updateMiddlePan, { capture: true });
-      viewport.removeEventListener('pointerup', finishMiddlePan, { capture: true });
-      viewport.removeEventListener('pointercancel', finishMiddlePan, { capture: true });
-      viewport.removeEventListener('lostpointercapture', finishMiddlePan, { capture: true });
+      viewport.removeEventListener('pointerdown', startPan, { capture: true });
+      viewport.removeEventListener('pointermove', updatePan, { capture: true });
+      viewport.removeEventListener('pointerup', finishPan, { capture: true });
+      viewport.removeEventListener('pointercancel', finishPan, { capture: true });
+      viewport.removeEventListener('lostpointercapture', finishPan, { capture: true });
       viewport.removeEventListener('mousedown', stopMiddleMouseDefault, { capture: true });
       viewport.removeEventListener('auxclick', stopMiddleMouseDefault, { capture: true });
-      window.removeEventListener('blur', cancelMiddlePan);
+      window.removeEventListener('blur', cancelPan);
+      delete viewport.dataset.shnctlPanning;
       if (zoomFrame) window.cancelAnimationFrame(zoomFrame);
       if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
     };
-  }, [documentId, viewportCapability, viewportElementRef, zoom]);
+  }, [documentId, panMode, viewportCapability, viewportElementRef, zoom]);
 
   return null;
 }
 
-export function ViewportInput({ documentId, children }: { documentId: string; children: ReactNode }) {
+export function ViewportInput({
+  documentId,
+  panMode,
+  children,
+}: {
+  documentId: string;
+  panMode: boolean;
+  children: ReactNode;
+}) {
   return (
     <ZoomGestureWrapper documentId={documentId} enablePinch={false} enableWheel={false}>
-      <ViewportInputPipeline documentId={documentId} />
+      <ViewportInputPipeline documentId={documentId} panMode={panMode} />
       {children}
     </ZoomGestureWrapper>
   );

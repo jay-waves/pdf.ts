@@ -27,7 +27,6 @@ export default defineConfig({
       ...(isVsCode ? [
         '@embedpdf/plugin-form/react',
         '@embedpdf/plugin-history/react',
-        '@embedpdf/plugin-export/react',
       ].map((find) => ({
         find,
         replacement: resolve(__dirname, 'apps/platform/vscode-editing-stubs.tsx'),

@@ -386,6 +386,16 @@ textarea {
   background: var(--shnctl-background-app);
 }
 
+.viewer.is-pan-mode,
+.viewer.is-pan-mode * {
+  cursor: grab !important;
+}
+
+.viewer[data-shnctl-panning="true"],
+.viewer[data-shnctl-panning="true"] * {
+  cursor: grabbing !important;
+}
+
 :root[data-shnctl-scroll-strategy="vertical"] .viewer {
   overflow-x: hidden !important;
   overflow-y: auto !important;

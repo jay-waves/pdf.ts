@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import type { ExportCapability } from '@embedpdf/plugin-export';
 import type { HistoryCapability } from '@embedpdf/plugin-history';
-import type { PanCapability } from '@embedpdf/plugin-pan';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
@@ -11,7 +9,6 @@ import {
   ArrowDownUp,
   ArrowLeftRight,
   BookImage,
-  Download,
   GalleryHorizontal,
   Hand,
   Highlighter,
@@ -30,6 +27,7 @@ import {
   Printer,
   Redo2,
   RotateCw,
+  Save,
   Search as SearchIcon,
   ShieldCheck,
   Square,
@@ -76,6 +74,8 @@ interface ToolbarProps {
   outlineOpen: boolean;
   colorPaletteOpen: boolean;
   commentsOpen: boolean;
+  panMode: boolean;
+  onPanModeChange(enabled: boolean): void;
   onSearchOpenChange(open: boolean): void;
   onToggleThumbnails(): void;
   onOpenOutline(): void;
@@ -83,6 +83,7 @@ interface ToolbarProps {
   onToggleComments(): void;
   onOpenPrint(): void;
   onOpenProtect(): void;
+  onSave(): void;
   onPinnedInsetChange(inset: number): void;
 }
 
@@ -145,7 +146,6 @@ function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: Toolbar
 function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?: string | null) {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
-  const [panMode, setPanMode] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [spreadMode, setSpreadMode] = useState(SpreadMode.None);
   const [scrollStrategy, setScrollStrategy] = useState(ScrollStrategy.Vertical);
@@ -164,17 +164,6 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
 
     syncZoom();
     return zoomScope.onStateChange(syncZoom);
-  }, [activeDocumentId, registry]);
-
-  useEffect(() => {
-    const scopeInfo = getDocumentCapability<PanCapability>(registry, 'pan', activeDocumentId);
-    if (!scopeInfo) {
-      return;
-    }
-
-    const panScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
-    setPanMode(panScope.isPanMode());
-    return panScope.onPanModeChange(setPanMode);
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
@@ -209,7 +198,7 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
     return scroll.onStateChange((state) => setScrollStrategy(state.strategy ?? ScrollStrategy.Vertical));
   }, [activeDocumentId, registry]);
 
-  return { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy };
+  return { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy };
 }
 
 function switchLayoutPreservingAnchor(registry: PluginRegistry | undefined, updateLayout: (documentId: string) => void) {
@@ -235,6 +224,8 @@ export function Toolbar({
   outlineOpen,
   colorPaletteOpen,
   commentsOpen,
+  panMode,
+  onPanModeChange,
   onSearchOpenChange,
   onToggleThumbnails,
   onOpenOutline,
@@ -242,6 +233,7 @@ export function Toolbar({
   onToggleComments,
   onOpenPrint,
   onOpenProtect,
+  onSave,
   onPinnedInsetChange,
 }: ToolbarProps) {
   const [openMenu, setOpenMenu] = useState<'document' | 'mode' | null>(null);
@@ -249,7 +241,7 @@ export function Toolbar({
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
-  const { zoomPercent, zoomLevel, panMode, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
+  const { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
   const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
   const activeModeItem = MODE_ITEMS.find(({ id }) => id === mode) ?? MODE_ITEMS[0];
   const canUseRegistry = Boolean(registry && activeDocumentId);
@@ -300,9 +292,10 @@ export function Toolbar({
 
   useEffect(() => {
     if (documentEditingEnabled && activeTool && !searchOpen) {
+      onPanModeChange(false);
       setSelectedMode('draw');
     }
-  }, [activeTool, searchOpen]);
+  }, [activeTool, onPanModeChange, searchOpen]);
 
   const closeSearch = () => onSearchOpenChange(false);
   const setMode = (nextMode: ToolbarMode) => {
@@ -322,17 +315,11 @@ export function Toolbar({
   };
 
   const togglePan = () => {
-    const scopeInfo = getDocumentCapability<PanCapability>(registry, 'pan');
-    if (!scopeInfo) {
-      return;
+    const nextPanMode = !panMode;
+    if (nextPanMode && documentEditingEnabled) {
+      getAnnotationScope(registry)?.scope.setActiveTool(null);
     }
-
-    const panScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
-    if (panScope.isPanMode()) {
-      panScope.disablePan();
-    } else {
-      panScope.enablePan();
-    }
+    onPanModeChange(nextPanMode);
   };
 
   const togglePinned = () => {
@@ -362,6 +349,7 @@ export function Toolbar({
 
   const selectDrawTool = (toolId: string) => {
     closeSearch();
+    onPanModeChange(false);
     const scopeInfo = getAnnotationScope(registry);
     if (!scopeInfo) {
       return;
@@ -402,11 +390,6 @@ export function Toolbar({
   const openSecurityDialog = () => {
     closeSearch();
     onOpenProtect();
-  };
-
-  const exportDocument = () => {
-    const scopeInfo = getDocumentCapability<ExportCapability>(registry, 'export');
-    scopeInfo?.capability.forDocument(scopeInfo.documentId).download();
   };
 
   const toggleThumbnailsPanel = () => {
@@ -521,9 +504,9 @@ export function Toolbar({
                 <ShieldCheck size={14} strokeWidth={2} />
                 <span>Security</span>
               </DropdownMenuItem> : null}
-              {documentEditingEnabled ? <DropdownMenuItem onSelect={exportDocument} disabled={!canUseRegistry}>
-                <Download size={14} strokeWidth={2} />
-                <span>Export</span>
+              {documentEditingEnabled ? <DropdownMenuItem onSelect={onSave} disabled={!canUseRegistry}>
+                <Save size={14} strokeWidth={2} />
+                <span>Save</span>
               </DropdownMenuItem> : null}
             </DropdownMenu>
             <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
