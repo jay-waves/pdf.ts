@@ -146,6 +146,18 @@
   transition: var(--shnctl-control-transition);
 }
 
+.shnctl-color-swatch[data-transparent="true"] {
+  background-color: var(--shnctl-background-input);
+  background-image:
+    linear-gradient(45deg, var(--shnctl-border-default) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--shnctl-border-default) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--shnctl-border-default) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--shnctl-border-default) 75%);
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+  background-size: 10px 10px;
+  color: var(--shnctl-foreground-primary);
+}
+
 .shnctl-color-swatch:hover,
 .shnctl-color-swatch:focus-visible,
 .shnctl-color-swatch.is-active {

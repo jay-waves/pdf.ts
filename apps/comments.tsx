@@ -7,12 +7,18 @@ import {
   type PdfEngine,
   type PdfPageObject,
   type PdfTextRun,
-  type Rect,
 } from '@embedpdf/models';
-import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
+import {
+  TEXT_MARKUP_TYPES,
+  getAnnotationFocusPosition,
+  getAnnotationLabel,
+  getAnnotationRects,
+  getAnnotationScope,
+  rectsIntersect,
+} from './annotations';
 import { Dialog } from './components';
-import { getActiveDocumentId, getDocumentCapability, getPluginCapability, type ScrollCapability } from './utils';
+import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
 
 type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
 type AnnotationSummaries = Record<string, string>;
@@ -27,32 +33,6 @@ const HIDDEN_ANNOTATION_TYPES = new Set([
   PdfAnnotationSubtype.WIDGET,
 ]);
 
-const TEXT_MARKUP_TYPES = new Set([
-  PdfAnnotationSubtype.HIGHLIGHT,
-  PdfAnnotationSubtype.UNDERLINE,
-  PdfAnnotationSubtype.STRIKEOUT,
-  PdfAnnotationSubtype.SQUIGGLY,
-]);
-
-function getTextMarkupRects(annotation: PdfAnnotationObject): Rect[] {
-  switch (annotation.type) {
-    case PdfAnnotationSubtype.HIGHLIGHT:
-    case PdfAnnotationSubtype.UNDERLINE:
-    case PdfAnnotationSubtype.STRIKEOUT:
-    case PdfAnnotationSubtype.SQUIGGLY:
-      return annotation.segmentRects.length ? annotation.segmentRects : [annotation.rect];
-    default:
-      return [];
-  }
-}
-
-function rectsIntersect(left: Rect, right: Rect) {
-  return left.origin.x < right.origin.x + right.size.width &&
-    left.origin.x + left.size.width > right.origin.x &&
-    left.origin.y < right.origin.y + right.size.height &&
-    left.origin.y + left.size.height > right.origin.y;
-}
-
 function normalizeSummary(value: string) {
   const normalized = value.replace(/\s+/g, ' ').trim();
   return normalized.length > SUMMARY_MAX_LENGTH
@@ -61,7 +41,7 @@ function normalizeSummary(value: string) {
 }
 
 function summarizeMarkup(annotation: PdfAnnotationObject, runs: PdfTextRun[]) {
-  const annotationRects = getTextMarkupRects(annotation);
+  const annotationRects = getAnnotationRects(annotation);
   const pieces = runs
     .filter((run) => annotationRects.some((rect) => rectsIntersect(rect, run.rect)))
     .map((run) => run.text.trim())
@@ -90,30 +70,16 @@ function getPageTextRuns(
 }
 
 function getEntries(registry: PluginRegistry | undefined) {
-  const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+  const scoped = getAnnotationScope(registry);
   if (!scoped) return [];
 
-  return scoped.capability.forDocument(scoped.documentId).getAnnotations()
+  return scoped.scope.getAnnotations()
     .map(({ object }) => object)
     .filter((annotation) => !HIDDEN_ANNOTATION_TYPES.has(annotation.type))
     .sort((left, right) => left.pageIndex - right.pageIndex ||
       left.rect.origin.y - right.rect.origin.y ||
       left.rect.origin.x - right.rect.origin.x ||
       left.id.localeCompare(right.id));
-}
-
-function getEntryLabel(annotation: PdfAnnotationObject) {
-  switch (annotation.type) {
-    case PdfAnnotationSubtype.TEXT: return 'Comment';
-    case PdfAnnotationSubtype.HIGHLIGHT: return 'Highlight';
-    case PdfAnnotationSubtype.UNDERLINE: return 'Underline';
-    case PdfAnnotationSubtype.STRIKEOUT: return 'Strikeout';
-    case PdfAnnotationSubtype.SQUIGGLY: return 'Squiggly';
-    case PdfAnnotationSubtype.FREETEXT: return 'Text';
-    case PdfAnnotationSubtype.STAMP: return 'Stamp';
-    case PdfAnnotationSubtype.INK: return 'Drawing';
-    default: return 'Annotation';
-  }
 }
 
 function getEntryIcon(annotation: PdfAnnotationObject) {
@@ -130,21 +96,23 @@ function getEntryIcon(annotation: PdfAnnotationObject) {
 }
 
 function navigateToAnnotation(registry: PluginRegistry, annotation: PdfAnnotationObject) {
-  const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+  const scoped = getAnnotationScope(registry);
   const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scoped || !scroll) return;
 
-  scoped.capability.forDocument(scoped.documentId).selectAnnotation(annotation.pageIndex, annotation.id);
+  scoped.scope.selectAnnotation(annotation.pageIndex, annotation.id);
   scroll.forDocument(scoped.documentId).scrollToPage({
     pageNumber: annotation.pageIndex + 1,
-    pageCoordinates: annotation.rect.origin,
+    pageCoordinates: getAnnotationFocusPosition(annotation),
     behavior: 'instant',
+    alignX: 50,
+    alignY: 50,
   });
 }
 
 function deleteAnnotation(registry: PluginRegistry | undefined, pageIndex: number, annotationId: string) {
-  const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
-  scoped?.capability.forDocument(scoped.documentId).deleteAnnotations([{
+  const scoped = getAnnotationScope(registry);
+  scoped?.scope.deleteAnnotations([{
     pageIndex,
     id: annotationId,
   }]);
@@ -178,9 +146,9 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
 
   useEffect(() => {
     if (!open) return;
-    const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+    const scoped = getAnnotationScope(registry);
     if (!scoped) return;
-    return scoped.capability.onAnnotationEvent((event) => {
+    return scoped.scope.onAnnotationEvent((event) => {
       if (event.documentId === scoped.documentId) setRevision((value) => value + 1);
     });
   }, [open, registry]);
@@ -268,11 +236,16 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   }, [currentPageNumber, entries.length, open]);
 
   const saveComment = (annotation: PdfAnnotationObject) => {
-    const scoped = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+    const scoped = getAnnotationScope(registry);
     if (!scoped) return;
     const contents = editingComment?.draft.trim() ?? '';
-    scoped.capability.forDocument(scoped.documentId)
-      .updateAnnotation(annotation.pageIndex, annotation.id, { contents });
+    if (!contents && pendingCreationRef.current?.annotationId === annotation.id) {
+      deleteAnnotation(registry, annotation.pageIndex, annotation.id);
+      pendingCreationRef.current = null;
+      setEditingComment(null);
+      return;
+    }
+    scoped.scope.updateAnnotation(annotation.pageIndex, annotation.id, { contents });
     if (pendingCreationRef.current?.annotationId === annotation.id) pendingCreationRef.current = null;
     setEditingComment(null);
   };
@@ -307,7 +280,7 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
                 <ol className="shnctl-comment-page-entries">
                   {group.entries.map((annotation) => {
                     const Icon = getEntryIcon(annotation);
-                    const label = getEntryLabel(annotation);
+                    const label = getAnnotationLabel(annotation);
                     const contents = annotation.contents?.trim();
                     const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
                     const isEditing = isComment && editingComment?.annotationId === annotation.id;

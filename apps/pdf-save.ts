@@ -1,6 +1,7 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import type { ExportCapability } from '@embedpdf/plugin-export';
+import { getAnnotationScope } from './annotations';
 import { getActiveDocumentId, getPluginCapability } from './utils';
 import { platform } from '#platform';
 
@@ -30,10 +31,8 @@ export async function savePdf(
   const target = await platform.preparePdfSave(options);
   if (!target) return false;
 
-  const annotation = getPluginCapability<AnnotationCapability>(registry, 'annotation');
-  if (annotation) {
-    await commitPendingAnnotations(annotation.forDocument(documentId));
-  }
+  const annotation = getAnnotationScope(registry, documentId);
+  if (annotation) await commitPendingAnnotations(annotation.scope);
 
   const data = await exportPlugin.forDocument(documentId).saveAsCopy().toPromise();
   return data ? target.save(data) : false;

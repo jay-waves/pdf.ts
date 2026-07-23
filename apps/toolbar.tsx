@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import type { ExportCapability } from '@embedpdf/plugin-export';
 import type { HistoryCapability } from '@embedpdf/plugin-history';
 import type { PanCapability } from '@embedpdf/plugin-pan';
@@ -40,6 +39,7 @@ import {
   Underline,
   Undo2,
 } from 'lucide-react';
+import { getAnnotationScope } from './annotations';
 import {
   getActiveDocumentId,
   getCurrentScrollAnchor,
@@ -178,14 +178,13 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
-    const scopeInfo = getDocumentCapability<AnnotationCapability>(registry, 'annotation', activeDocumentId);
+    const scopeInfo = getAnnotationScope(registry, activeDocumentId);
     if (!scopeInfo) {
       return;
     }
 
-    const annotationScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
-    setActiveTool(annotationScope.getActiveTool()?.id ?? null);
-    return annotationScope.onActiveToolChange((tool) => setActiveTool(tool?.id ?? null));
+    setActiveTool(scopeInfo.scope.getActiveTool()?.id ?? null);
+    return scopeInfo.scope.onActiveToolChange((tool) => setActiveTool(tool?.id ?? null));
   }, [activeDocumentId, registry]);
 
   useEffect(() => {
@@ -309,9 +308,8 @@ export function Toolbar({
   const setMode = (nextMode: ToolbarMode) => {
     setOpenMenu(null);
 
-    const annotation = documentEditingEnabled ? getDocumentCapability<AnnotationCapability>(registry, 'annotation') : null;
     if (documentEditingEnabled && nextMode !== 'draw') {
-      annotation?.capability.forDocument(annotation.documentId).setActiveTool(null);
+      getAnnotationScope(registry)?.scope.setActiveTool(null);
     }
 
     if (nextMode === 'search') {
@@ -364,13 +362,12 @@ export function Toolbar({
 
   const selectDrawTool = (toolId: string) => {
     closeSearch();
-    const scopeInfo = getDocumentCapability<AnnotationCapability>(registry, 'annotation');
+    const scopeInfo = getAnnotationScope(registry);
     if (!scopeInfo) {
       return;
     }
 
-    const annotationScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
-    annotationScope.setActiveTool(activeTool === toolId ? null : toolId);
+    scopeInfo.scope.setActiveTool(activeTool === toolId ? null : toolId);
     setSelectedMode('draw');
   };
 

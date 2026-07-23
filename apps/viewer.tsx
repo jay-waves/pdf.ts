@@ -6,7 +6,7 @@ import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embed
 import { usePdfiumEngine } from '@embedpdf/engines/react';
 import { Rotation, type PdfEngine } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
-import { AnnotationLayer, AnnotationPluginPackage, LockModeType, type AnnotationCapability } from '@embedpdf/plugin-annotation/react';
+import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
 import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
 import { ExportPluginPackage } from '@embedpdf/plugin-export/react';
@@ -50,6 +50,12 @@ import {
 import { Toolbar } from './toolbar';
 import { Thumbnails } from './thumbnails';
 import { ColorPalette } from './color-palette';
+import {
+  createAnnotationPluginConfig,
+  installAnnotationDirtyTracker,
+  installAnnotationUriNavigation,
+  installNewCommentEditor,
+} from './annotations';
 import { Comments } from './comments';
 import { PrintDialog, ProtectDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
@@ -108,32 +114,6 @@ function ResourceConsumedNotifier({ resource, onConsumed }: {
 }) {
   useEffect(() => onConsumed(resource), [onConsumed, resource]);
   return null;
-}
-
-function installUnsavedChangesTracker(registry: PluginRegistry, onDirtyChange: (dirty: boolean) => void) {
-  const annotation = getPluginCapability<AnnotationCapability>(registry, 'annotation');
-
-  if (!annotation) {
-    return EMPTY_CLEANUP;
-  }
-
-  return annotation.onAnnotationEvent((event) => {
-    // Each edit emits an uncommitted event immediately and another event after
-    // PDFium catches up. Mark it dirty at the first event so a quick close/save
-    // cannot slip through the asynchronous commit window.
-    if (event.type !== 'loaded' && !event.committed) {
-      onDirtyChange(true);
-    }
-  });
-}
-
-function installAnnotationUriNavigation(registry: PluginRegistry) {
-  const annotation = getPluginCapability<AnnotationCapability>(registry, 'annotation');
-  if (!annotation) return EMPTY_CLEANUP;
-
-  return annotation.onNavigate((event) => {
-    if (event.result.outcome === 'uri') platform.openExternal(event.result.uri);
-  });
 }
 
 function installAll(installers: Array<() => () => void>) {
@@ -288,20 +268,10 @@ function createViewerPlugins(fileUrl?: string) {
     createPluginRegistration(InteractionManagerPluginPackage),
     createPluginRegistration(PanPluginPackage, { defaultMode: 'mobile' }),
     createPluginRegistration(SelectionPluginPackage, { maxCachedGeometries: 8 }),
-    createPluginRegistration(AnnotationPluginPackage, documentEditingEnabled ? {
-      locked: { type: LockModeType.Include, categories: ['form', 'link'] },
-      autoOpenLinks: false,
-      deactivateToolAfterCreate: true,
-      tools: [
-        ...['square', 'lineArrow', 'ink'].map((id) => ({ id, defaults: { strokeWidth: 2 } })),
-        // Locked link annotations remain interactive for URI and destination navigation.
-        { id: 'link', categories: ['link'] },
-      ],
-    } : {
-      // The read-only viewer still needs annotations for clickable PDF links.
-      locked: { type: LockModeType.All },
-      autoOpenLinks: false,
-    }),
+    createPluginRegistration(
+      AnnotationPluginPackage,
+      createAnnotationPluginConfig(documentEditingEnabled),
+    ),
     ...(documentEditingEnabled ? [
       createPluginRegistration(HistoryPluginPackage),
       createPluginRegistration(FormPluginPackage),
@@ -500,8 +470,16 @@ function App({
               () => installPageKeyboardNavigation(nextRegistry, revealNavigation),
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
-              () => installAnnotationUriNavigation(nextRegistry),
-              ...(documentEditingEnabled ? [() => installUnsavedChangesTracker(nextRegistry, setHasUnsavedChanges)] : []),
+              () => installAnnotationUriNavigation(nextRegistry, platform.openExternal),
+              ...(documentEditingEnabled ? [
+                () => installNewCommentEditor(nextRegistry, (annotationId) => {
+                  setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
+                }),
+                () => installAnnotationDirtyTracker(
+                  nextRegistry,
+                  () => setHasUnsavedChanges(true),
+                ),
+              ] : []),
               () => installPlatformReadingHistory(nextRegistry, documentKey),
               () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
