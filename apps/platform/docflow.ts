@@ -1,4 +1,17 @@
-import type { PlatformDocument } from './types';
+import {
+  getPreference,
+  readReadingHistoryStore,
+  setPreference,
+  writeReadingProgress,
+} from './browser-storage';
+import { translateExternally } from './external-translation';
+import type {
+  PlatformDocument,
+  ReadingProgress,
+  ViewerPlatform,
+} from './types';
+
+export const documentEditingEnabled = true;
 
 type WriteResponse = {
   version: string;
@@ -19,22 +32,28 @@ function stripEtag(value: string | null) {
   return value?.trim().replace(/^"|"$/g, '') ?? '';
 }
 
+function filenameFromDisposition(value: string | null) {
+  const match = value?.match(/filename="([^"]*)"/i);
+  return match?.[1]?.replace(/[\r\n]/g, '') || 'document.pdf';
+}
+
 class DocflowSession {
   readonly resourceUrl: string;
-  readonly heartbeatUrl: string;
-  readonly name: string;
   private version = '';
 
-  constructor(resourceUrl: string, heartbeatUrl: string, name: string) {
-    this.resourceUrl = new URL(resourceUrl, window.location.href).href;
-    this.heartbeatUrl = new URL(heartbeatUrl, window.location.href).href;
-    this.name = name || 'document.pdf';
-    this.startHeartbeat();
+  constructor(documentId: string) {
+    this.resourceUrl = new URL(
+      `/api/documents/${encodeURIComponent(documentId)}`,
+      window.location.origin,
+    ).href;
   }
 
   async openDocument(): Promise<PlatformDocument> {
     const response = await fetch(this.resourceUrl, { method: 'HEAD', cache: 'no-store' });
     if (!response.ok) {
+      if (response.status === 410) {
+        throw new Error('This PDF was moved or deleted. Open it with Docflow again to register its new location.');
+      }
       throw new Error(`Docflow could not open the document (${response.status}).`);
     }
     this.version = stripEtag(response.headers.get('ETag'));
@@ -45,7 +64,7 @@ class DocflowSession {
       resource: { url: this.resourceUrl },
       sourceUrl: this.resourceUrl,
       key: `docflow:${this.resourceUrl}`,
-      name: this.name,
+      name: filenameFromDisposition(response.headers.get('Content-Disposition')),
     };
   }
 
@@ -89,19 +108,75 @@ class DocflowSession {
     throw new Error(failure.message ?? `Docflow could not save the PDF (${response.status}).`);
   }
 
-  private startHeartbeat() {
-    const heartbeat = () => {
-      void fetch(this.heartbeatUrl, { method: 'POST', cache: 'no-store' }).catch(() => {});
-    };
-    heartbeat();
-    window.setInterval(heartbeat, 15_000);
+  getPreference(key: string) {
+    return getPreference(key);
   }
+
+  setPreference(key: string, value: string) {
+    setPreference(key, value);
+  }
+
+  async readReadingProgress(documentKey: string) {
+    return (await readReadingHistoryStore())?.[documentKey];
+  }
+
+  writeReadingProgress(documentKey: string, progress: ReadingProgress) {
+    return writeReadingProgress(documentKey, progress);
+  }
+
 }
 
-export function getDocflowSession() {
+function createDocflowSession() {
   const query = new URLSearchParams(window.location.search);
-  const resourceUrl = query.get('docflowResource');
-  const heartbeatUrl = query.get('docflowHeartbeat');
-  if (!resourceUrl || !heartbeatUrl) return null;
-  return new DocflowSession(resourceUrl, heartbeatUrl, query.get('docflowName') ?? 'document.pdf');
+  const documentId = query.get('docflowDocument');
+  return documentId ? new DocflowSession(documentId) : null;
 }
+
+const docflow = createDocflowSession();
+
+export const platform: ViewerPlatform = {
+  async loadViewerResources(bundledWasmUrl) {
+    if (!docflow) {
+      throw new Error('This Docflow viewer URL is missing its daemon document identifier.');
+    }
+    return {
+      wasm: { url: bundledWasmUrl },
+      document: await docflow.openDocument(),
+    };
+  },
+  openExternal(url) {
+    try {
+      const target = new URL(url, window.location.href);
+      if (target.protocol !== 'http:' && target.protocol !== 'https:') return;
+      window.open(target.href, '_blank', 'noopener,noreferrer');
+    } catch {
+      // Ignore malformed or unsafe targets embedded in a PDF.
+    }
+  },
+  translate: translateExternally,
+  getPreference(key) {
+    return docflow?.getPreference(key) ?? null;
+  },
+  setPreference(key, value) {
+    docflow?.setPreference(key, value);
+  },
+  async preparePdfSave() {
+    if (!docflow) return null;
+    return {
+      async save(data) {
+        try {
+          return await docflow.save(data);
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : 'Docflow could not save the PDF.');
+          throw error;
+        }
+      },
+    };
+  },
+  readReadingProgress(documentKey) {
+    return docflow?.readReadingProgress(documentKey) ?? Promise.resolve(undefined);
+  },
+  writeReadingProgress(documentKey, progress) {
+    return docflow?.writeReadingProgress(documentKey, progress) ?? Promise.resolve();
+  },
+};

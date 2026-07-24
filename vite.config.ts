@@ -6,22 +6,30 @@ import { defineConfig } from 'vite';
 const viewerPlatform = process.env.VIEWER_PLATFORM ?? 'chrome';
 const isVsCode = viewerPlatform === 'vscode';
 const isWeb = viewerPlatform === 'web';
+const isDocflow = viewerPlatform === 'docflow';
+const isBrowser = isWeb || isDocflow;
 const outputDir = isVsCode
   ? 'release/vscode/extension/media'
-  : isWeb
-    ? 'release/web'
+  : isBrowser
+    ? `release/${viewerPlatform}`
     : 'release/chrome/extension';
 
 export default defineConfig({
   base: './',
-  publicDir: isVsCode || isWeb ? false : 'chrome',
+  publicDir: isVsCode || isBrowser ? false : 'chrome',
   resolve: {
     alias: [
       {
         find: '#platform',
         replacement: resolve(
           __dirname,
-          isVsCode ? 'apps/platform/vscode.ts' : isWeb ? 'apps/platform/web.ts' : 'apps/platform/chrome.ts',
+          isVsCode
+            ? 'apps/platform/vscode.ts'
+            : isDocflow
+              ? 'apps/platform/docflow.ts'
+              : isWeb
+                ? 'apps/platform/web.ts'
+                : 'apps/platform/chrome.ts',
         ),
       },
       ...(isVsCode ? [
@@ -59,10 +67,10 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       input: {
-        [isWeb ? 'index' : 'viewer']: resolve(__dirname, isWeb ? 'index.html' : 'viewer.html'),
+        [isBrowser ? 'index' : 'viewer']: resolve(__dirname, isBrowser ? 'index.html' : 'viewer.html'),
       },
       output: {
-        entryFileNames: isWeb ? 'assets/[name]-[hash].js' : 'assets/[name].js',
+        entryFileNames: isBrowser ? 'assets/[name]-[hash].js' : 'assets/[name].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
       },
