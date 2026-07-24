@@ -6,17 +6,14 @@ import {
 } from './browser-storage';
 import { blobResource } from './resources';
 import { translateExternally } from './external-translation';
-import { getDocflowSession } from './docflow';
 import type { ViewerPlatform } from './types';
 
 export const documentEditingEnabled = true;
-const docflow = getDocflowSession();
 
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
     return {
       wasm: { url: bundledWasmUrl },
-      document: docflow ? await docflow.openDocument() : undefined,
     };
   },
   openLocalDocument(file) {
@@ -39,18 +36,6 @@ export const platform: ViewerPlatform = {
   getPreference,
   setPreference,
   async preparePdfSave({ fileName }) {
-    if (docflow) {
-      return {
-        async save(data) {
-          try {
-            return await docflow.save(data);
-          } catch (error) {
-            window.alert(error instanceof Error ? error.message : 'Docflow could not save the PDF.');
-            throw error;
-          }
-        },
-      };
-    }
     return {
       async save(data) {
         const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
