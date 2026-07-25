@@ -4,14 +4,12 @@ import {
   setPreference,
   writeReadingProgress,
 } from './browser-storage';
-import { translateExternally } from './external-translation';
+import { translateWithModelDownload } from './browser-translation';
 import type {
   PlatformDocument,
   ReadingProgress,
   ViewerPlatform,
 } from './types';
-
-export const documentEditingEnabled = true;
 
 type WriteResponse = {
   version: string;
@@ -33,8 +31,15 @@ function stripEtag(value: string | null) {
 }
 
 function filenameFromDisposition(value: string | null) {
-  const match = value?.match(/filename="([^"]*)"/i);
-  return match?.[1]?.replace(/[\r\n]/g, '') || 'document.pdf';
+  const encoded = value?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.trim());
+    } catch {
+      // Fall through to the ASCII filename.
+    }
+  }
+  return value?.match(/filename="([^"]*)"/i)?.[1]?.replace(/[\r\n]/g, '') || 'document.pdf';
 }
 
 class DocflowSession {
@@ -62,9 +67,22 @@ class DocflowSession {
     }
     return {
       resource: { url: this.resourceUrl },
-      sourceUrl: this.resourceUrl,
       key: `docflow:${this.resourceUrl}`,
       name: filenameFromDisposition(response.headers.get('Content-Disposition')),
+      fileHandle: this,
+    };
+  }
+
+  async prepareWrite() {
+    return {
+      save: async (data: ArrayBuffer) => {
+        try {
+          return await this.save(data);
+        } catch (error) {
+          window.alert(error instanceof Error ? error.message : 'Docflow could not save the PDF.');
+          throw error;
+        }
+      },
     };
   }
 
@@ -153,25 +171,12 @@ export const platform: ViewerPlatform = {
       // Ignore malformed or unsafe targets embedded in a PDF.
     }
   },
-  translate: translateExternally,
+  translate: translateWithModelDownload,
   getPreference(key) {
     return docflow?.getPreference(key) ?? null;
   },
   setPreference(key, value) {
     docflow?.setPreference(key, value);
-  },
-  async preparePdfSave() {
-    if (!docflow) return null;
-    return {
-      async save(data) {
-        try {
-          return await docflow.save(data);
-        } catch (error) {
-          window.alert(error instanceof Error ? error.message : 'Docflow could not save the PDF.');
-          throw error;
-        }
-      },
-    };
   },
   readReadingProgress(documentKey) {
     return docflow?.readReadingProgress(documentKey) ?? Promise.resolve(undefined);

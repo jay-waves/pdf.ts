@@ -1,8 +1,6 @@
 import { blobResource } from './resources';
-import { translateExternally } from './external-translation';
-import type { ReadingProgress, ViewerPlatform } from './types';
-
-export const documentEditingEnabled = false;
+import { translateWithInstalledModel } from './browser-translation';
+import type { PdfFileHandle, ReadingProgress, ViewerPlatform } from './types';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -11,8 +9,18 @@ interface VsCodeApi {
 interface HostResponse {
   type: 'response';
   requestId: number;
-  value?: ReadingProgress;
+  value?: unknown;
   error?: string;
+}
+
+interface HostSaveRequest {
+  type: 'performSave';
+  requestId: number;
+  preserveDirty?: boolean;
+}
+
+interface HostReloadRequest {
+  type: 'reloadDocument';
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -21,13 +29,29 @@ const vscode = acquireVsCodeApi();
 const preferences = new Map<string, string>();
 const THEME_STORAGE_KEY = 'shnctl-viewer-theme-v1';
 const pending = new Map<number, {
-  resolve(value: ReadingProgress | undefined): void;
+  resolve(value: unknown): void;
   reject(error: Error): void;
 }>();
 let nextRequestId = 1;
+let saveHandler: ((preserveDirty: boolean) => Promise<boolean>) | undefined;
 
-window.addEventListener('message', (event: MessageEvent<HostResponse>) => {
+window.addEventListener('message', (event: MessageEvent<HostResponse | HostSaveRequest | HostReloadRequest>) => {
   const message = event.data;
+  if (message?.type === 'performSave') {
+    void (saveHandler?.(Boolean(message.preserveDirty)) ?? Promise.resolve(false))
+      .then((saved) => {
+        vscode.postMessage({
+          type: 'saveResponse',
+          requestId: message.requestId,
+          saved,
+        });
+      });
+    return;
+  }
+  if (message?.type === 'reloadDocument') {
+    window.location.reload();
+    return;
+  }
   if (message?.type !== 'response') return;
   const request = pending.get(message.requestId);
   if (!request) return;
@@ -53,18 +77,45 @@ async function fetchResource(url: string, contentType: string) {
 const configuredTheme = readMeta('pdf-ts-theme');
 if (configuredTheme) preferences.set(THEME_STORAGE_KEY, configuredTheme);
 
-function request(type: 'readReadingProgress' | 'writeReadingProgress', documentKey: string, progress?: ReadingProgress) {
+function request<T>(
+  type: 'readReadingProgress' | 'writeReadingProgress' | 'writeDocument',
+  documentKey: string,
+  payload: { progress?: ReadingProgress; data?: Uint8Array } = {},
+) {
   const requestId = nextRequestId++;
-  return new Promise<ReadingProgress | undefined>((resolve, reject) => {
-    pending.set(requestId, { resolve, reject });
-    vscode.postMessage({ type, requestId, documentKey, progress });
+  return new Promise<T>((resolve, reject) => {
+    pending.set(requestId, {
+      resolve: (value) => resolve(value as T),
+      reject,
+    });
+    vscode.postMessage({ type, requestId, documentKey, ...payload });
   });
+}
+
+class VsCodePdfFileHandle implements PdfFileHandle {
+  constructor(
+    private readonly documentKey: string,
+    readonly name?: string,
+  ) {}
+
+  async prepareWrite() {
+    const { documentKey } = this;
+    return {
+      async save(data: ArrayBuffer) {
+        await request<void>('writeDocument', documentKey, {
+          data: new Uint8Array(data),
+        });
+        return true;
+      },
+    };
+  }
 }
 
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = readMeta('pdf-document-url');
     const documentKey = readMeta('pdf-document-key');
+    const documentName = readMeta('pdf-document-name');
     const wasmUrl = readMeta('pdfium-wasm-url') ?? bundledWasmUrl;
     const [wasmResult, documentResult] = await Promise.allSettled([
       fetchResource(wasmUrl, 'application/wasm'),
@@ -80,13 +131,30 @@ export const platform: ViewerPlatform = {
 
     return {
       wasm: wasmResult.value,
-      document: documentResult.value ? { resource: documentResult.value, key: documentKey } : undefined,
+      document: documentResult.value && documentKey ? {
+        resource: documentResult.value,
+        key: documentKey,
+        name: documentName,
+        fileHandle: new VsCodePdfFileHandle(documentKey, documentName),
+      } : undefined,
     };
   },
   openExternal(url) {
     vscode.postMessage({ type: 'openExternal', url });
   },
-  translate: translateExternally,
+  requestDocumentSave() {
+    vscode.postMessage({ type: 'requestDocumentSave' });
+  },
+  onDocumentSaveRequested(handler) {
+    saveHandler = handler;
+    return () => {
+      if (saveHandler === handler) saveHandler = undefined;
+    };
+  },
+  setDocumentDirty(dirty) {
+    vscode.postMessage({ type: 'documentDirty', dirty });
+  },
+  translate: translateWithInstalledModel,
   getPreference: (key) => preferences.get(key) ?? null,
   setPreference(key, value) {
     preferences.set(key, value);
@@ -94,13 +162,10 @@ export const platform: ViewerPlatform = {
       vscode.postMessage({ type: 'writeThemePreference', value });
     }
   },
-  async preparePdfSave() {
-    return null;
-  },
   readReadingProgress(documentKey) {
-    return request('readReadingProgress', documentKey);
+    return request<ReadingProgress | undefined>('readReadingProgress', documentKey);
   },
   async writeReadingProgress(documentKey, progress) {
-    await request('writeReadingProgress', documentKey, progress);
+    await request<void>('writeReadingProgress', documentKey, { progress });
   },
 };

@@ -4,25 +4,89 @@ import {
   setPreference,
   writeReadingProgress,
 } from './browser-storage';
+import {
+  BrowserPdfFileHandle,
+  readStoredFileHandle,
+  storeFileHandle,
+  verifyFilePermission,
+} from './browser-file-handle';
 import { blobResource } from './resources';
-import { translateExternally } from './external-translation';
-import type { ViewerPlatform } from './types';
+import { translateWithInstalledModel } from './browser-translation';
+import type { PdfFileHandle, PlatformDocument, ViewerPlatform } from './types';
 
-export const documentEditingEnabled = true;
+const RECENT_FILE_KEY = 'web:recent-pdf';
+
+class DownloadPdfFileHandle implements PdfFileHandle {
+  constructor(readonly name: string) {}
+
+  async prepareWrite() {
+    const fileName = this.name;
+    return {
+      async save(data: ArrayBuffer) {
+        const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.hidden = true;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+        return true;
+      },
+    };
+  }
+}
+
+function documentFromFile(file: File, fileHandle: PdfFileHandle): PlatformDocument {
+  return {
+    resource: blobResource(file),
+    key: `local:${file.name}:${file.size}:${file.lastModified}`,
+    name: file.name,
+    fileHandle,
+  };
+}
+
+async function restoreRecentDocument() {
+  try {
+    const handle = await readStoredFileHandle(RECENT_FILE_KEY);
+    if (!handle || !(await verifyFilePermission(handle, 'read', false))) return undefined;
+    return documentFromFile(
+      await handle.getFile(),
+      new BrowserPdfFileHandle(handle, RECENT_FILE_KEY),
+    );
+  } catch {
+    // A stale, moved, or browser-evicted handle should not block the picker.
+    return undefined;
+  }
+}
 
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
     return {
       wasm: { url: bundledWasmUrl },
+      document: await restoreRecentDocument(),
     };
   },
   openLocalDocument(file) {
-    return {
-      resource: blobResource(file),
-      key: `local:${file.name}:${file.size}:${file.lastModified}`,
-      name: file.name,
-    };
+    return documentFromFile(file, new DownloadPdfFileHandle(file.name));
   },
+  ...('showOpenFilePicker' in window ? {
+    async pickLocalDocument() {
+      const [handle] = await window.showOpenFilePicker({
+        id: 'pdf-file',
+        startIn: 'documents',
+        types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+        excludeAcceptAllOption: true,
+        multiple: false,
+      });
+      await storeFileHandle(RECENT_FILE_KEY, handle);
+      return documentFromFile(
+        await handle.getFile(),
+        new BrowserPdfFileHandle(handle, RECENT_FILE_KEY),
+      );
+    },
+  } : {}),
   openExternal(url) {
     try {
       const target = new URL(url, window.location.href);
@@ -32,25 +96,9 @@ export const platform: ViewerPlatform = {
       // Ignore malformed or unsafe targets embedded in a PDF.
     }
   },
-  translate: translateExternally,
+  translate: translateWithInstalledModel,
   getPreference,
   setPreference,
-  async preparePdfSave({ fileName }) {
-    return {
-      async save(data) {
-        const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = fileName ?? 'document.pdf';
-        anchor.hidden = true;
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 0);
-        return true;
-      },
-    };
-  },
   async readReadingProgress(documentKey) {
     return (await readReadingHistoryStore())?.[documentKey];
   },

@@ -60,7 +60,6 @@ import {
   IconButton,
   Select,
 } from './components';
-import { documentEditingEnabled } from '#platform';
 
 type ToolbarMode = 'view' | 'page' | 'search' | 'draw';
 type PersistentToolbarMode = Exclude<ToolbarMode, 'search'>;
@@ -103,10 +102,10 @@ const MODE_ITEMS: Array<{
   { id: 'view', label: 'VIEW', icon: Eye },
   { id: 'page', label: 'PAGE', icon: StickyNote },
   { id: 'search', label: 'SEARCH', icon: SearchIcon },
-  ...(documentEditingEnabled ? [{ id: 'draw' as const, label: 'DRAW', icon: PencilRuler }] : []),
+  { id: 'draw', label: 'DRAW', icon: PencilRuler },
 ];
 
-const DRAW_TOOLS = documentEditingEnabled ? [
+const DRAW_TOOLS = [
   { id: 'highlight', label: 'Highlight', icon: Highlighter },
   { id: 'underline', label: 'Underline', icon: Underline },
   { id: 'strikeout', label: 'Strikeout', icon: Strikethrough },
@@ -115,7 +114,7 @@ const DRAW_TOOLS = documentEditingEnabled ? [
   { id: 'ink', label: 'Ink', icon: LineSquiggle },
   { id: 'textComment', label: 'Comment', icon: MessageSquareMore },
   { id: 'freeText', label: 'Text', icon: Type },
-] : [];
+];
 
 const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
   { label: 'Fit page', value: ZoomMode.FitPage },
@@ -291,7 +290,7 @@ export function Toolbar({
   };
 
   useEffect(() => {
-    if (documentEditingEnabled && activeTool && !searchOpen) {
+    if (activeTool && !searchOpen) {
       onPanModeChange(false);
       setSelectedMode('draw');
     }
@@ -301,7 +300,7 @@ export function Toolbar({
   const setMode = (nextMode: ToolbarMode) => {
     setOpenMenu(null);
 
-    if (documentEditingEnabled && nextMode !== 'draw') {
+    if (nextMode !== 'draw') {
       getAnnotationScope(registry)?.scope.setActiveTool(null);
     }
 
@@ -316,7 +315,7 @@ export function Toolbar({
 
   const togglePan = () => {
     const nextPanMode = !panMode;
-    if (nextPanMode && documentEditingEnabled) {
+    if (nextPanMode) {
       getAnnotationScope(registry)?.scope.setActiveTool(null);
     }
     onPanModeChange(nextPanMode);
@@ -412,8 +411,6 @@ export function Toolbar({
   };
 
   useEffect(() => {
-    if (!documentEditingEnabled) return;
-
     const onKeyDown = (event: KeyboardEvent) => {
       if ((!event.ctrlKey && !event.metaKey) || event.altKey) {
         return;
@@ -485,7 +482,7 @@ export function Toolbar({
                 <ListTree size={14} strokeWidth={2} />
                 <span>Contents</span>
               </DropdownMenuItem>
-              {documentEditingEnabled ? <DropdownMenuItem
+              <DropdownMenuItem
                 className={commentsOpen ? 'is-active' : undefined}
                 onSelect={() => {
                   closeSearch();
@@ -495,19 +492,19 @@ export function Toolbar({
               >
                 <MessageSquareMore size={14} strokeWidth={2} />
                 <span>Comments</span>
-              </DropdownMenuItem> : null}
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={printDocument} disabled={!canUseRegistry}>
                 <Printer size={14} strokeWidth={2} />
                 <span>Print</span>
               </DropdownMenuItem>
-              {documentEditingEnabled ? <DropdownMenuItem onSelect={openSecurityDialog} disabled={!canUseRegistry}>
+              <DropdownMenuItem onSelect={openSecurityDialog} disabled={!canUseRegistry}>
                 <ShieldCheck size={14} strokeWidth={2} />
                 <span>Security</span>
-              </DropdownMenuItem> : null}
-              {documentEditingEnabled ? <DropdownMenuItem onSelect={onSave} disabled={!canUseRegistry}>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onSave} disabled={!canUseRegistry}>
                 <Save size={14} strokeWidth={2} />
                 <span>Save</span>
-              </DropdownMenuItem> : null}
+              </DropdownMenuItem>
             </DropdownMenu>
             <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
             <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
@@ -584,7 +581,7 @@ export function Toolbar({
 
       {mode === 'search' ? <Search registry={registry} open /> : null}
 
-      {documentEditingEnabled && mode === 'draw' ? (
+      {mode === 'draw' ? (
         <div className="shnctl-toolbar-secondary" role="toolbar" aria-label="Draw toolbar">
           <div className="shnctl-toolbar-group shnctl-draw-tools">
             {DRAW_TOOLS.map(({ id, label, icon }) => (

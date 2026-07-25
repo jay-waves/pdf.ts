@@ -5,13 +5,21 @@ export interface ReadingProgress {
   updatedAt: string;
 }
 
-export interface SavePdfOptions {
-  sourceUrl?: string;
-  fileName?: string;
+export interface PdfFileWriter {
+  save(data: ArrayBuffer): Promise<boolean>;
 }
 
-export interface PdfSaveTarget {
-  save(data: ArrayBuffer): Promise<boolean>;
+/**
+ * Cross-platform reference to the PDF currently being edited.
+ *
+ * Browser platforms back this with a FileSystemFileHandle, VS Code backs it
+ * with the custom document Uri, and docflow backs it with its daemon session.
+ * Preparing the writer is deliberately separate from writing because browser
+ * permission prompts must run while the save user gesture is still active.
+ */
+export interface PdfFileHandle {
+  readonly name?: string;
+  prepareWrite(): Promise<PdfFileWriter | null>;
 }
 
 export interface ManagedResource {
@@ -21,9 +29,9 @@ export interface ManagedResource {
 
 export interface PlatformDocument {
   readonly resource: ManagedResource;
-  readonly sourceUrl?: string;
   readonly key?: string;
   readonly name?: string;
+  readonly fileHandle: PdfFileHandle;
 }
 
 export interface ViewerResources {
@@ -38,11 +46,16 @@ export type PlatformTranslationResult =
 export interface ViewerPlatform {
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file: File): PlatformDocument;
+  pickLocalDocument?(): Promise<PlatformDocument | undefined>;
+  requestDocumentSave?(): void;
+  onDocumentSaveRequested?(
+    handler: (preserveDirty: boolean) => Promise<boolean>,
+  ): () => void;
+  setDocumentDirty?(dirty: boolean): void;
   openExternal(url: string): void;
-  translate?(text: string): Promise<PlatformTranslationResult>;
+  translate(text: string): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;
-  preparePdfSave(options: SavePdfOptions): Promise<PdfSaveTarget | null>;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
   writeReadingProgress(documentKey: string, progress: ReadingProgress): Promise<void>;
 }

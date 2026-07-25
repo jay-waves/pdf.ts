@@ -332,14 +332,7 @@ export function createTextMarkupAnnotations(
 
 // Plugin setup and lifecycle events
 
-export function createAnnotationPluginConfig(editable: boolean): AnnotationPluginConfig {
-  if (!editable) {
-    return {
-      locked: { type: LockModeType.All },
-      autoOpenLinks: false,
-    };
-  }
-
+export function createAnnotationPluginConfig(): AnnotationPluginConfig {
   return {
     locked: { type: LockModeType.Include, categories: ['form', 'link'] },
     autoOpenLinks: false,

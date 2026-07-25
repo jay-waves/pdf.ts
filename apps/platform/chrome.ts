@@ -1,4 +1,3 @@
-import { get, update } from 'idb-keyval';
 import { getFileNameFromUrl } from '../utils';
 import {
   getPreference,
@@ -6,16 +5,15 @@ import {
   setPreference,
   writeReadingProgress,
 } from './browser-storage';
-import { translateText } from './chrome-translation';
-import type { SavePdfOptions, ViewerPlatform } from './types';
+import {
+  BrowserPdfFileHandle,
+  readStoredFileHandle,
+  verifyFilePermission,
+} from './browser-file-handle';
+import { translateWithModelDownload } from './browser-translation';
+import type { PdfFileHandle, ViewerPlatform } from './types';
 
-export const documentEditingEnabled = true;
-
-// v1 could contain handles returned by showSaveFilePicker, which may point to
-// a copy rather than the source PDF. Do not silently reuse those handles.
-const FILE_HANDLES_KEY = 'embedpdf-file-handles-v2';
-type FileHandleStore = Record<string, { handle: FileSystemFileHandle }>;
-let activeFile: { sourceUrl: string; handle: FileSystemFileHandle } | null = null;
+const LEGACY_FILE_HANDLES_KEY = 'embedpdf-file-handles-v2';
 let activeDocumentUrl: string | undefined;
 let googleTranslateTabId: number | undefined;
 interface ChromeTab {
@@ -64,66 +62,50 @@ async function openGoogleTranslate(url: string) {
   googleTranslateTabId = createdTab.id;
 }
 
-async function verifyWritePermission(handle: FileSystemFileHandle) {
-  const options: FileSystemHandlePermissionDescriptor = { mode: 'readwrite' };
-  return (await handle.queryPermission(options)) === 'granted' ||
-    (await handle.requestPermission(options)) === 'granted';
-}
+class ChromePdfFileHandle implements PdfFileHandle {
+  private nativeHandle?: FileSystemFileHandle;
 
-async function getWritableFileHandle({ sourceUrl, fileName }: SavePdfOptions) {
-  if (!sourceUrl?.startsWith('file://')) return null;
+  constructor(
+    private readonly sourceUrl: string,
+    readonly name: string,
+  ) {}
 
-  if (activeFile?.sourceUrl === sourceUrl && await verifyWritePermission(activeFile.handle)) {
-    return activeFile.handle;
+  private async resolveHandle() {
+    if (
+      this.nativeHandle &&
+      await verifyFilePermission(this.nativeHandle, 'readwrite', true)
+    ) {
+      return this.nativeHandle;
+    }
+
+    const storedHandle = await readStoredFileHandle(this.sourceUrl, LEGACY_FILE_HANDLES_KEY);
+    if (storedHandle && await verifyFilePermission(storedHandle, 'readwrite', true)) {
+      this.nativeHandle = storedHandle;
+      return storedHandle;
+    }
+
+    const [pickedHandle] = await window.showOpenFilePicker({
+      id: 'pdf-file',
+      startIn: 'documents',
+      types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+      excludeAcceptAllOption: true,
+      multiple: false,
+    });
+    if (pickedHandle.name !== this.name) {
+      throw new DOMException(`Please select the original PDF (${this.name}).`, 'InvalidStateError');
+    }
+    if (!(await verifyFilePermission(pickedHandle, 'readwrite', true))) return null;
+
+    this.nativeHandle = pickedHandle;
+    return pickedHandle;
   }
 
-  const store = await get<FileHandleStore>(FILE_HANDLES_KEY);
-  const storedHandle = store?.[sourceUrl]?.handle;
-  if (storedHandle && await verifyWritePermission(storedHandle)) {
-    activeFile = { sourceUrl, handle: storedHandle };
-    return storedHandle;
+  async prepareWrite() {
+    const handle = await this.resolveHandle();
+    return handle
+      ? new BrowserPdfFileHandle(handle, this.sourceUrl).prepareWrite()
+      : null;
   }
-
-  const [pickedHandle] = await window.showOpenFilePicker({
-    id: 'pdf-file',
-    startIn: 'documents',
-    types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
-    excludeAcceptAllOption: true,
-    multiple: false,
-  });
-  const expectedName = fileName ?? getFileNameFromUrl(sourceUrl);
-  if (expectedName && pickedHandle.name !== expectedName) {
-    throw new DOMException(`Please select the original PDF (${expectedName}).`, 'InvalidStateError');
-  }
-  if (!(await verifyWritePermission(pickedHandle))) return null;
-
-  activeFile = { sourceUrl, handle: pickedHandle };
-  return pickedHandle;
-}
-
-async function preparePdfFileSave(options: SavePdfOptions) {
-  const handle = await getWritableFileHandle(options);
-  const { sourceUrl } = options;
-  if (!handle || !sourceUrl) return null;
-
-  return {
-    async save(data: ArrayBuffer) {
-      const writable = await handle.createWritable();
-      await writable.write(new Blob([data], { type: 'application/pdf' }));
-      await writable.close();
-
-      const writtenFile = await handle.getFile();
-      if (writtenFile.size !== data.byteLength) {
-        throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
-      }
-
-      await update<FileHandleStore>(FILE_HANDLES_KEY, (store) => ({
-        ...(store && typeof store === 'object' ? store : {}),
-        [sourceUrl]: { handle },
-      }));
-      return true;
-    },
-  };
 }
 
 function getDocumentUrl() {
@@ -142,14 +124,15 @@ function getDocumentUrl() {
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = getDocumentUrl();
+    const documentName = documentUrl ? getFileNameFromUrl(documentUrl) ?? 'document.pdf' : undefined;
     activeDocumentUrl = documentUrl;
     return {
       wasm: { url: bundledWasmUrl },
       document: documentUrl ? {
         resource: { url: documentUrl },
-        sourceUrl: documentUrl,
         key: documentUrl,
-        name: getFileNameFromUrl(documentUrl),
+        name: documentName,
+        fileHandle: new ChromePdfFileHandle(documentUrl, documentName ?? 'document.pdf'),
       } : undefined,
     };
   },
@@ -166,10 +149,9 @@ export const platform: ViewerPlatform = {
       // Ignore malformed or unsafe targets embedded in a PDF.
     }
   },
-  translate: translateText,
+  translate: translateWithModelDownload,
   getPreference,
   setPreference,
-  preparePdfSave: preparePdfFileSave,
   async readReadingProgress(documentKey) {
     return (await readReadingHistoryStore())?.[documentKey];
   },

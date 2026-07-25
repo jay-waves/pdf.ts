@@ -6,12 +6,11 @@ import { defineConfig } from 'vite';
 const viewerPlatform = process.env.VIEWER_PLATFORM ?? 'chrome';
 const isVsCode = viewerPlatform === 'vscode';
 const isWeb = viewerPlatform === 'web';
-const isDocflow = viewerPlatform === 'docflow';
-const isBrowser = isWeb || isDocflow;
+const isBrowser = isWeb;
 const outputDir = isVsCode
   ? 'release/vscode/extension/media'
   : isBrowser
-    ? `release/${viewerPlatform}`
+    ? 'release/web'
     : 'release/chrome/extension';
 
 export default defineConfig({
@@ -25,20 +24,11 @@ export default defineConfig({
           __dirname,
           isVsCode
             ? 'apps/platform/vscode.ts'
-            : isDocflow
-              ? 'apps/platform/docflow.ts'
-              : isWeb
-                ? 'apps/platform/web.ts'
+            : isWeb
+              ? 'apps/platform/browser.ts'
                 : 'apps/platform/chrome.ts',
         ),
       },
-      ...(isVsCode ? [
-        '@embedpdf/plugin-form/react',
-        '@embedpdf/plugin-history/react',
-      ].map((find) => ({
-        find,
-        replacement: resolve(__dirname, 'apps/platform/vscode-editing-stubs.tsx'),
-      })) : []),
     ],
   },
   plugins: [

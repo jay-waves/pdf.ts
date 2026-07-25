@@ -8,7 +8,7 @@
     "typecheck": "tsgo --noEmit",
     "dev": "node scripts/sync-chrome-version.mjs && vite build --watch",
     "build:chrome": "pnpm typecheck && node scripts/sync-chrome-version.mjs && vite build",
-    "build:docflow": "pnpm typecheck && VIEWER_PLATFORM=docflow vite build",
+    "build:docflow": "pnpm build:web",
     "build:web": "pnpm typecheck && VIEWER_PLATFORM=web vite build",
     "deploy:web": "bash scripts/deploy-web.sh",
     "build:vscode": "pnpm typecheck && node scripts/build-vscode.mjs",

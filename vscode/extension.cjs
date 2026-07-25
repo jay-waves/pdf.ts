@@ -4,6 +4,7 @@ const vscode = require('vscode');
 const VIEW_TYPE = 'pdf-ts.viewer';
 const READING_PROGRESS_KEY = 'pdf-ts.reading-progress-v1';
 const THEMES = new Set(['light', 'dark', 'nord', 'solar']);
+let nextWebviewRequestId = 1;
 
 function escapeHtml(value) {
   return String(value)
@@ -66,16 +67,113 @@ async function writeThemePreference(uri, theme) {
   await configuration.update('theme', theme, target);
 }
 
-class PdfReadonlyEditorProvider {
+class PdfCustomDocument {
+  constructor(uri) {
+    this.uri = uri;
+    this.panel = undefined;
+    this.saveTarget = undefined;
+    this.saveQueue = Promise.resolve();
+    this.dirty = false;
+  }
+
+  dispose() {
+    this.panel = undefined;
+  }
+}
+
+class PdfEditorProvider {
   constructor(context) {
     this.context = context;
+    this.changeEmitter = new vscode.EventEmitter();
+    this.onDidChangeCustomDocument = this.changeEmitter.event;
+    this.pendingSaves = new Map();
   }
 
   openCustomDocument(uri) {
-    return { uri, dispose() {} };
+    return new PdfCustomDocument(uri);
+  }
+
+  requestWebviewSave(document, target, preserveDirty, cancellation) {
+    const operation = document.saveQueue.then(() => (
+      this.performWebviewSave(document, target, preserveDirty, cancellation)
+    ));
+    document.saveQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  performWebviewSave(document, target, preserveDirty, cancellation) {
+    const panel = document.panel;
+    if (!panel) throw new Error('The PDF editor is not open.');
+
+    const requestId = nextWebviewRequestId++;
+    document.saveTarget = target;
+    return new Promise((resolve, reject) => {
+      const cancellationSubscription = cancellation?.onCancellationRequested(() => {
+        this.pendingSaves.delete(requestId);
+        reject(new vscode.CancellationError());
+      });
+      this.pendingSaves.set(requestId, {
+        document,
+        resolve,
+        reject,
+        dispose: () => cancellationSubscription?.dispose(),
+      });
+      void panel.webview.postMessage({
+        type: 'performSave',
+        requestId,
+        preserveDirty,
+      }).then((delivered) => {
+        if (delivered) return;
+        const pending = this.pendingSaves.get(requestId);
+        if (!pending) return;
+        this.pendingSaves.delete(requestId);
+        pending.dispose();
+        reject(new Error('The PDF editor did not accept the save request.'));
+      });
+    }).finally(() => {
+      if (document.saveTarget?.toString() === target.toString()) {
+        document.saveTarget = undefined;
+      }
+    });
+  }
+
+  async saveCustomDocument(document, cancellation) {
+    const saved = await this.requestWebviewSave(document, document.uri, false, cancellation);
+    if (!saved) throw new Error('The PDF could not be saved.');
+    document.dirty = false;
+  }
+
+  async saveCustomDocumentAs(document, destination, cancellation) {
+    const saved = await this.requestWebviewSave(document, destination, false, cancellation);
+    if (!saved) throw new Error('The PDF could not be saved.');
+    document.dirty = false;
+  }
+
+  async revertCustomDocument(document) {
+    document.dirty = false;
+    await document.panel?.webview.postMessage({ type: 'reloadDocument' });
+  }
+
+  async backupCustomDocument(document, context, cancellation) {
+    const saved = await this.requestWebviewSave(document, context.destination, true, cancellation);
+    if (!saved) throw new Error('The PDF backup could not be created.');
+    return {
+      id: context.destination.toString(),
+      delete: async () => {
+        try {
+          await vscode.workspace.fs.delete(context.destination);
+        } catch {
+          // VS Code may already have removed the backup.
+        }
+      },
+    };
   }
 
   async resolveCustomEditor(document, panel) {
+    document.panel = panel;
+    panel.onDidDispose(() => {
+      if (document.panel === panel) document.panel = undefined;
+    });
     const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'media');
     panel.webview.options = {
       enableScripts: true,
@@ -83,6 +181,31 @@ class PdfReadonlyEditorProvider {
     };
 
     panel.webview.onDidReceiveMessage(async (message) => {
+      if (message?.type === 'saveResponse') {
+        const pending = this.pendingSaves.get(Number(message.requestId));
+        if (!pending || pending.document !== document) return;
+        this.pendingSaves.delete(Number(message.requestId));
+        pending.dispose();
+        pending.resolve(Boolean(message.saved));
+        return;
+      }
+
+      if (message?.type === 'documentDirty') {
+        const dirty = Boolean(message.dirty);
+        if (dirty && !document.dirty) {
+          document.dirty = true;
+          this.changeEmitter.fire({ document });
+        } else if (!dirty) {
+          document.dirty = false;
+        }
+        return;
+      }
+
+      if (message?.type === 'requestDocumentSave') {
+        await vscode.commands.executeCommand('workbench.action.files.save');
+        return;
+      }
+
       if (message?.type === 'writeThemePreference') {
         try {
           await writeThemePreference(document.uri, message.value);
@@ -114,6 +237,15 @@ class PdfReadonlyEditorProvider {
       if (!Number.isInteger(requestId) || message?.documentKey !== document.uri.toString()) return;
 
       try {
+        if (message.type === 'writeDocument') {
+          if (!(message.data instanceof Uint8Array)) {
+            throw new Error('Invalid PDF data.');
+          }
+          await vscode.workspace.fs.writeFile(document.saveTarget ?? document.uri, message.data);
+          await panel.webview.postMessage({ type: 'response', requestId });
+          return;
+        }
+
         const store = this.context.workspaceState.get(READING_PROGRESS_KEY, {});
         if (message.type === 'readReadingProgress') {
           await panel.webview.postMessage({ type: 'response', requestId, value: store[message.documentKey] });
@@ -148,6 +280,7 @@ class PdfReadonlyEditorProvider {
 
     const scriptNonce = nonce();
     const documentUrl = panel.webview.asWebviewUri(document.uri).toString();
+    const documentName = document.uri.path.split('/').pop() || 'document.pdf';
     const theme = vscode.workspace.getConfiguration('pdf-ts', document.uri).get('theme', 'light');
     const assetsRoot = vscode.Uri.joinPath(mediaRoot, 'assets');
     const wasmFile = fs.readdirSync(assetsRoot.fsPath).find((name) => /^pdfium-.*\.wasm$/.test(name));
@@ -164,17 +297,19 @@ class PdfReadonlyEditorProvider {
     ].join('; ');
 
     html = html
-      .replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}">\n    <meta name="pdf-document-url" content="${escapeHtml(documentUrl)}">\n    <meta name="pdf-document-key" content="${escapeHtml(document.uri.toString())}">\n    <meta name="pdfium-wasm-url" content="${escapeHtml(wasmUrl)}">\n    <meta name="pdf-ts-theme" content="${escapeHtml(theme)}">`)
+      .replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}">\n    <meta name="pdf-document-url" content="${escapeHtml(documentUrl)}">\n    <meta name="pdf-document-key" content="${escapeHtml(document.uri.toString())}">\n    <meta name="pdf-document-name" content="${escapeHtml(documentName)}">\n    <meta name="pdfium-wasm-url" content="${escapeHtml(wasmUrl)}">\n    <meta name="pdf-ts-theme" content="${escapeHtml(theme)}">`)
       .replace('<script type="module"', `<script nonce="${scriptNonce}" type="module"`);
     panel.webview.html = html;
   }
 }
 
 function activate(context) {
-  const provider = new PdfReadonlyEditorProvider(context);
+  const provider = new PdfEditorProvider(context);
   context.subscriptions.push(vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
     supportsMultipleEditorsPerDocument: false,
-    webviewOptions: { retainContextWhenHidden: false },
+    // Serialization currently happens in the PDFium worker owned by the
+    // webview. Keep it alive so Auto Save and backups also work while hidden.
+    webviewOptions: { retainContextWhenHidden: true },
   }));
 }
 

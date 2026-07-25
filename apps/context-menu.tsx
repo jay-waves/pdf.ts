@@ -236,8 +236,6 @@ export function ContextMenu({
   engine,
   registry,
   container,
-  canEdit,
-  canTranslate,
   onOpenComments,
   onOpenColorPalette,
   onTranslate,
@@ -245,8 +243,6 @@ export function ContextMenu({
   engine?: PdfEngine<Blob> | null;
   registry?: PluginRegistry;
   container: HTMLElement | null;
-  canEdit: boolean;
-  canTranslate: boolean;
   onOpenComments(annotationId: string, isNew: boolean): void;
   onOpenColorPalette(): void;
   onTranslate(documentId: string, anchor: { x: number; y: number }): void;
@@ -257,7 +253,7 @@ export function ContextMenu({
     if (!registry || !container) return;
     const documentId = getActiveDocumentId(registry);
     const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
-    const annotation = canEdit ? getAnnotationScope(registry, documentId)?.scope : undefined;
+    const annotation = getAnnotationScope(registry, documentId)?.scope;
     if (!documentId) return;
     let annotationMenuFrame = 0;
 
@@ -300,7 +296,7 @@ export function ContextMenu({
       container.removeEventListener('contextmenu', preventContextMenu, { capture: true });
       container.removeEventListener('pointerup', openAnnotationMenu, { capture: true });
     };
-  }, [canEdit, container, registry]);
+  }, [container, registry]);
 
   useEffect(() => {
     if (!menu) return;
@@ -321,7 +317,7 @@ export function ContextMenu({
   if (!documentId) return null;
 
   const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
-  const annotation = canEdit ? getAnnotationScope(registry, documentId)?.scope : undefined;
+  const annotation = getAnnotationScope(registry, documentId)?.scope;
 
   const addTextMarkup = (type: TextMarkupSubtype) => {
     const selectionScope = selection?.forDocument(documentId);
@@ -339,14 +335,10 @@ export function ContextMenu({
         .then((parts) => copyText(parts.join('\n')))
         .catch((error) => console.error('[pdf-ts] failed to copy selected text', error));
     } },
-    ...(canEdit ? [
-      { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
-      { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
-      { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    ] : []),
-    ...(canTranslate ? [
-      { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
-    ] : []),
+    { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
+    { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
+    { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
+    { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
     { label: 'Search', icon: ExternalLink, action: () => {
       const selectedText = selection?.forDocument(documentId).getSelectedText();
       setMenu(null);
@@ -413,7 +405,7 @@ export function ContextMenu({
     } },
   ];
 
-  const items = menu.kind === 'selection' ? selectionItems : canEdit ? annotationItems : [];
+  const items = menu.kind === 'selection' ? selectionItems : annotationItems;
   if (!items.length) return null;
   return (
     <FloatingPopover

@@ -10,6 +10,7 @@ import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annot
 import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
 import { FormPluginPackage } from '@embedpdf/plugin-form/react';
+import type { FormCapability } from '@embedpdf/plugin-form';
 import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
 import { GlobalPointerProvider, InteractionManagerPluginPackage, PagePointerProvider } from '@embedpdf/plugin-interaction-manager/react';
 import { PrintPluginPackage } from '@embedpdf/plugin-print/react';
@@ -62,8 +63,8 @@ import { ViewportInput } from './viewport-input';
 import { savePdf } from './pdf-save';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
-import { documentEditingEnabled, platform } from '#platform';
-import type { ManagedResource, ViewerResources } from './platform/types';
+import { platform } from '#platform';
+import type { ManagedResource, PdfFileHandle, ViewerResources } from './platform/types';
 
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
@@ -146,6 +147,11 @@ function installScrollStrategyAttribute(registry: PluginRegistry) {
   return scroll.onStateChange((state) => sync(state.strategy));
 }
 
+function installFormDirtyTracker(registry: PluginRegistry, onDirty: () => void) {
+  const form = getPluginCapability<FormCapability>(registry, 'form');
+  return form?.onFieldValueChange(onDirty) ?? EMPTY_CLEANUP;
+}
+
 function installRenderDprCap(maxDpr: number) {
   const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
   const originalDpr = window.devicePixelRatio || 1;
@@ -224,9 +230,9 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
 interface AppProps {
   engine: PdfEngine<Blob>;
   fileUrl?: string;
-  sourceUrl?: string;
   documentKey?: string;
   documentName?: string;
+  fileHandle?: PdfFileHandle;
   wasmResource: ManagedResource;
   documentResource?: ManagedResource;
   onResourceConsumed(resource?: ManagedResource): void;
@@ -267,12 +273,10 @@ function createViewerPlugins(fileUrl?: string) {
     createPluginRegistration(SelectionPluginPackage, { maxCachedGeometries: 8 }),
     createPluginRegistration(
       AnnotationPluginPackage,
-      createAnnotationPluginConfig(documentEditingEnabled),
+      createAnnotationPluginConfig(),
     ),
-    ...(documentEditingEnabled ? [
-      createPluginRegistration(HistoryPluginPackage),
-      createPluginRegistration(FormPluginPackage),
-    ] : []),
+    createPluginRegistration(HistoryPluginPackage),
+    createPluginRegistration(FormPluginPackage),
     createPluginRegistration(SearchPluginPackage),
     createPluginRegistration(BookmarkPluginPackage),
     createPluginRegistration(PrintPluginPackage),
@@ -282,14 +286,14 @@ function createViewerPlugins(fileUrl?: string) {
 function App({
   engine,
   fileUrl,
-  sourceUrl,
   documentKey,
   documentName,
+  fileHandle,
   wasmResource,
   documentResource,
   onResourceConsumed,
 }: AppProps) {
-  const saveInProgressRef = useRef(false);
+  const saveInProgressRef = useRef<Promise<boolean> | null>(null);
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
   const [toolbarInset, setToolbarInset] = useState(0);
@@ -328,6 +332,7 @@ function App({
     } else {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     }
+    platform.setDocumentDirty?.(dirty);
     renderDocumentTitle();
   };
 
@@ -364,43 +369,56 @@ function App({
     initializeViewerTheme();
   }, []);
 
-  const saveDocument = useCallback(() => {
-    if (saveInProgressRef.current) return;
+  const saveDocument = useCallback((
+    options: { fromHost?: boolean; preserveDirty?: boolean } = {},
+  ): Promise<boolean> => {
+    if (platform.requestDocumentSave && !options.fromHost) {
+      platform.requestDocumentSave();
+      return Promise.resolve(false);
+    }
+    if (saveInProgressRef.current) return saveInProgressRef.current;
 
     const changeVersionAtSaveStart = changeTrackerRef.current.version;
-    saveInProgressRef.current = true;
-    savePdf(engine, registry, { sourceUrl, fileName: documentName })
+    const save = savePdf(engine, registry, fileHandle)
       .then((saved) => {
-        if (!saved) return;
-
-        // A new edit may have landed while PDF serialization or disk I/O
-        // was in progress. Keep the dirty marker in that case.
-        if (changeTrackerRef.current.version === changeVersionAtSaveStart) {
+        if (
+          saved &&
+          !options.preserveDirty &&
+          changeTrackerRef.current.version === changeVersionAtSaveStart
+        ) {
+          // A new edit may have landed while PDF serialization or disk I/O
+          // was in progress. Keep the dirty marker in that case.
           setHasUnsavedChanges(false);
         }
+        return saved;
       })
       .catch((error) => {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('[pdf-ts] failed to save PDF', error);
         }
+        return false;
       })
       .finally(() => {
-        saveInProgressRef.current = false;
+        saveInProgressRef.current = null;
       });
-  }, [documentName, engine, registry, sourceUrl]);
+    saveInProgressRef.current = save;
+    return save;
+  }, [engine, fileHandle, registry]);
 
   useEffect(() => {
-    if (!documentEditingEnabled) return;
-
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault();
-        saveDocument();
+        void saveDocument();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [saveDocument]);
+
+  useEffect(() => platform.onDocumentSaveRequested?.(
+    (preserveDirty) => saveDocument({ fromHost: true, preserveDirty }),
+  ), [saveDocument]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -469,15 +487,17 @@ function App({
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
               () => installAnnotationUriNavigation(nextRegistry, platform.openExternal),
-              ...(documentEditingEnabled ? [
-                () => installNewCommentEditor(nextRegistry, (annotationId) => {
-                  setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
-                }),
-                () => installAnnotationDirtyTracker(
-                  nextRegistry,
-                  () => setHasUnsavedChanges(true),
-                ),
-              ] : []),
+              () => installNewCommentEditor(nextRegistry, (annotationId) => {
+                setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
+              }),
+              () => installAnnotationDirtyTracker(
+                nextRegistry,
+                () => setHasUnsavedChanges(true),
+              ),
+              () => installFormDirtyTracker(
+                nextRegistry,
+                () => setHasUnsavedChanges(true),
+              ),
               () => installPlatformReadingHistory(nextRegistry, documentKey),
               () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
@@ -598,7 +618,7 @@ function App({
           setSidePanel(null);
           setActiveDialog('protect');
         }}
-        onSave={saveDocument}
+        onSave={() => void saveDocument()}
         onPinnedInsetChange={setToolbarInset}
       />
       <Outline
@@ -609,12 +629,12 @@ function App({
         onCacheChange={setOutlineCache}
         onClose={() => setSidePanel(null)}
       />
-      {documentEditingEnabled ? <ColorPalette
+      <ColorPalette
         registry={registry}
         open={sidePanel?.type === 'colors'}
         onClose={() => setSidePanel(null)}
-      /> : null}
-      {documentEditingEnabled ? <Comments
+      />
+      <Comments
         engine={engine}
         registry={registry}
         open={sidePanel?.type === 'comments'}
@@ -622,13 +642,11 @@ function App({
         targetAnnotationId={commentTarget?.annotationId}
         targetAnnotationIsNew={commentTarget?.isNew}
         onClose={() => setSidePanel(null)}
-      /> : null}
+      />
       <ContextMenu
         engine={engine}
         registry={registry}
         container={viewerRootRef.current}
-        canEdit={documentEditingEnabled}
-        canTranslate={Boolean(platform.translate)}
         onOpenComments={(annotationId, isNew) => setSidePanel({
           type: 'comments',
           target: { annotationId, isNew },
@@ -639,7 +657,7 @@ function App({
           anchor,
         })}
       />
-      {platform.translate && translationRequest ? (
+      {translationRequest ? (
         <SelectionTranslate
           registry={registry}
           request={translationRequest}
@@ -653,12 +671,12 @@ function App({
         totalPages={totalPages}
         onClose={() => setActiveDialog(null)}
       />
-      {documentEditingEnabled ? <ProtectDialog
+      <ProtectDialog
         registry={registry}
         open={activeDialog === 'protect'}
         onClose={() => setActiveDialog(null)}
         onProtected={() => setHasUnsavedChanges(true)}
-      /> : null}
+      />
       <BottomNavigationControl
         registry={registry}
         title={currentTitle}
@@ -676,7 +694,13 @@ function App({
   );
 }
 
-function WebDocumentPicker({ onSelect }: { onSelect(file: File): void }) {
+function WebDocumentPicker({
+  onSelect,
+  onPick,
+}: {
+  onSelect(file: File): void;
+  onPick?(): Promise<void>;
+}) {
   const [dragging, setDragging] = useState(false);
   const [selectionError, setSelectionError] = useState('');
 
@@ -712,14 +736,26 @@ function WebDocumentPicker({ onSelect }: { onSelect(file: File): void }) {
       >
         <img className="web-welcome-logo" src="./logo.svg" alt="" />
         <h1>PDF.ts Web Viewer</h1>
-        <label className="web-file-button">
-          Choose a PDF file
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            onChange={(event) => selectFile(event.target.files?.[0])}
-          />
-        </label>
+        {onPick ? (
+          <button className="web-file-button" type="button" onClick={() => {
+            void onPick().catch((error: unknown) => {
+              if (!(error instanceof DOMException && error.name === 'AbortError')) {
+                setSelectionError(error instanceof Error ? error.message : 'Unable to open PDF.');
+              }
+            });
+          }}>
+            Choose a PDF file
+          </button>
+        ) : (
+          <label className="web-file-button">
+            Choose a PDF file
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(event) => selectFile(event.target.files?.[0])}
+            />
+          </label>
+        )}
         <span className="web-drop-hint">or drop a PDF here</span>
         {selectionError ? <p className="web-selection-error" role="alert">{selectionError}</p> : null}
         <small>Local files are processed only in this browser tab and are never uploaded.</small>
@@ -808,11 +844,17 @@ function ReadyViewer({
 
   if (platform.openLocalDocument && !resources.document) {
     const openLocalDocument = platform.openLocalDocument;
-    return <WebDocumentPicker onSelect={(file) => {
-      const document = openLocalDocument(file);
+    const useDocument = (document: NonNullable<ViewerResources['document']>) => {
       trackResource(document.resource);
       setResources({ ...resources, document });
-    }} />;
+    };
+    return <WebDocumentPicker
+      onSelect={(file) => useDocument(openLocalDocument(file))}
+      onPick={platform.pickLocalDocument ? async () => {
+        const document = await platform.pickLocalDocument!();
+        if (document) useDocument(document);
+      } : undefined}
+    />;
   }
 
   if (!engine) {
@@ -828,9 +870,9 @@ function ReadyViewer({
       key={resources.document?.resource.url}
       engine={engine}
       fileUrl={resources.document?.resource.url}
-      sourceUrl={resources.document?.sourceUrl}
       documentKey={resources.document?.key}
       documentName={resources.document?.name}
+      fileHandle={resources.document?.fileHandle}
       wasmResource={resources.wasm}
       documentResource={resources.document?.resource}
       onResourceConsumed={releaseResource}
