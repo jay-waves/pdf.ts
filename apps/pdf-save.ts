@@ -3,7 +3,7 @@ import type { PdfEngine } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { getAnnotationScope } from './annotations';
 import { getActiveDocumentId } from './utils';
-import { platform } from '#platform';
+import type { PdfFileHandle } from './platform/types';
 
 async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCapability['forDocument']>) {
   // commit() resolves immediately when an auto-commit is already running, so
@@ -19,9 +19,9 @@ async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCa
 export async function savePdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
-  options: { sourceUrl?: string; fileName?: string },
+  fileHandle: PdfFileHandle | undefined,
 ) {
-  if (!registry) return false;
+  if (!registry || !fileHandle) return false;
 
   const documentId = getActiveDocumentId(registry);
   const document = documentId
@@ -29,9 +29,9 @@ export async function savePdf(
     : undefined;
   if (!documentId || !document) return false;
 
-  // Chrome must acquire its writable handle while the Ctrl+S user activation
-  // is still live. Web returns a download target here without prompting.
-  const target = await platform.preparePdfSave(options);
+  // Browser-backed handles must acquire permission while the Ctrl+S user
+  // activation is still live, before PDF serialization yields to the engine.
+  const target = await fileHandle.prepareWrite();
   if (!target) return false;
 
   const annotation = getAnnotationScope(registry, documentId);

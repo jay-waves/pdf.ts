@@ -39,7 +39,7 @@ export function SelectionTranslate({
     setResult(null);
     const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
     const translate = platform.translate;
-    if (!selection || !translate) return;
+    if (!selection) return;
 
     let cancelled = false;
     selection.forDocument(request.documentId).getSelectedText().toPromise()

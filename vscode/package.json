@@ -1,7 +1,7 @@
 {
   "name": "pdf-ts",
   "displayName": "PDF.ts Viewer",
-  "description": "A fast, read-only PDF viewer for Visual Studio Code.",
+  "description": "A fast PDF viewer and editor for Visual Studio Code.",
   "version": "0.0.0",
   "publisher": "jay-waves",
   "license": "UNLICENSED",
