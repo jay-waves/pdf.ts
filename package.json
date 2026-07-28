@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
+    "test:patch": "node --test tests/embedpdf-patch.test.mjs",
     "dev": "node scripts/sync-chrome-version.mjs && vite build --watch",
     "build:chrome": "pnpm typecheck && node scripts/sync-chrome-version.mjs && vite build",
     "build:docflow": "pnpm build:web",

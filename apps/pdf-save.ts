@@ -2,6 +2,10 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfEngine } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { getAnnotationScope } from './annotations';
+import {
+  isIncrementalSaveAvailable,
+  savePdfIncrementally,
+} from './pdf-engine';
 import { getActiveDocumentId } from './utils';
 import type { PdfFileHandle } from './platform/types';
 
@@ -20,6 +24,7 @@ export async function savePdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
   fileHandle: PdfFileHandle | undefined,
+  options: { forceFullSave?: boolean } = {},
 ) {
   if (!registry || !fileHandle) return false;
 
@@ -36,6 +41,23 @@ export async function savePdf(
 
   const annotation = getAnnotationScope(registry, documentId);
   if (annotation) await commitPendingAnnotations(annotation.scope);
+
+  if (
+    target.saveIncremental
+    && !options.forceFullSave
+    && isIncrementalSaveAvailable(engine)
+  ) {
+    try {
+      const revision = await savePdfIncrementally(engine, document).toPromise();
+      if (revision.delta.byteLength > 0) {
+        return await target.saveIncremental(revision);
+      }
+    } catch (error) {
+      // Unsupported/encrypted PDFs and stale files safely fall back to the
+      // existing full serialization + conflict-copy flow.
+      console.info('[pdf-ts] incremental save unavailable; using a full save', error);
+    }
+  }
 
   const data = await engine.saveAsCopy(document).toPromise();
   return data ? target.save(data) : false;
