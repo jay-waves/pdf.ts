@@ -26,7 +26,7 @@ const bridges = new WeakMap<object, IncrementalBridge>();
 
 export function useDocflowPdfiumEngine(options: {
   wasmUrl: string;
-  fontFallback: FontFallbackConfig;
+  fontFallback: FontFallbackConfig | null;
 }) {
   const [state, setState] = useState<{
     engine: PdfEngine<Blob> | null;

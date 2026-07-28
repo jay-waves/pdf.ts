@@ -1,5 +1,6 @@
 {
   "name": "pdf-ts",
+  "license": "MIT",
   "private": true,
   "version": "0.4.5",
   "packageManager": "pnpm@11.7.0",
@@ -49,7 +50,6 @@
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^5.0.0",
     "@vscode/vsce": "^3.9.2",
-    "typescript": "^5.8.0",
     "vite": "^7.0.0"
   }
 }
