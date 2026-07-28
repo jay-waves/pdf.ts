@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
-import { usePdfiumEngine } from '@embedpdf/engines/react';
 import { Rotation, type PdfEngine } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
@@ -61,6 +60,7 @@ import { ContextMenu } from './context-menu';
 import { TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
 import { savePdf } from './pdf-save';
+import { useDocflowPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { platform } from '#platform';
@@ -315,7 +315,7 @@ function App({
   const outlineCacheRef = useRef(outlineCache);
   const currentPageNumberRef = useRef(1);
   const titleTrackerRefreshRef = useRef<(() => void) | null>(null);
-  const changeTrackerRef = useRef({ dirty: false, version: 0 });
+  const changeTrackerRef = useRef({ dirty: false, version: 0, forceFullSave: false });
   const cleanDocumentTitleRef = useRef(document.title);
   const navigationHideTimerRef = useRef<number>(0);
   const navigationVisibleRef = useRef(false);
@@ -324,9 +324,11 @@ function App({
     document.title = `${changeTrackerRef.current.dirty ? '*' : ''}${cleanDocumentTitleRef.current}`;
   };
 
-  const setHasUnsavedChanges = (dirty: boolean) => {
+  const setHasUnsavedChanges = (dirty: boolean, forceFullSave = false) => {
     if (dirty) changeTrackerRef.current.version++;
     changeTrackerRef.current.dirty = dirty;
+    if (forceFullSave) changeTrackerRef.current.forceFullSave = true;
+    if (!dirty) changeTrackerRef.current.forceFullSave = false;
     if (dirty) {
       window.addEventListener('beforeunload', handleBeforeUnload);
     } else {
@@ -372,6 +374,7 @@ function App({
   const saveDocument = useCallback((
     options: { fromHost?: boolean; preserveDirty?: boolean } = {},
   ): Promise<boolean> => {
+    if (!changeTrackerRef.current.dirty) return Promise.resolve(true);
     if (platform.requestDocumentSave && !options.fromHost) {
       platform.requestDocumentSave();
       return Promise.resolve(false);
@@ -379,7 +382,9 @@ function App({
     if (saveInProgressRef.current) return saveInProgressRef.current;
 
     const changeVersionAtSaveStart = changeTrackerRef.current.version;
-    const save = savePdf(engine, registry, fileHandle)
+    const save = savePdf(engine, registry, fileHandle, {
+      forceFullSave: changeTrackerRef.current.forceFullSave,
+    })
       .then((saved) => {
         if (
           saved &&
@@ -675,7 +680,7 @@ function App({
         registry={registry}
         open={activeDialog === 'protect'}
         onClose={() => setActiveDialog(null)}
-        onProtected={() => setHasUnsavedChanges(true)}
+        onProtected={() => setHasUnsavedChanges(true, true)}
       />
       <BottomNavigationControl
         registry={registry}
@@ -834,10 +839,8 @@ function ReadyViewer({
   trackResource(resource?: ManagedResource): void;
   releaseResource(resource?: ManagedResource): void;
 }) {
-  const { engine: workerEngine, isLoading, error } = usePdfiumEngine({
+  const { engine: workerEngine, isLoading, error } = useDocflowPdfiumEngine({
     wasmUrl: resources.wasm.url,
-    worker: true,
-    encoderPoolSize: 0,
     fontFallback: PDFIUM_FONT_FALLBACK,
   });
   const engine = configureBundledBmpEngine(workerEngine);

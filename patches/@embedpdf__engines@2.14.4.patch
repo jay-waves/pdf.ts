@@ -12,3 +12,25 @@ index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..26700c3b01ffcd1201fb9fa498cae52f
        },
        (error) => {
          this.logger.error(
+diff --git a/dist/lib/pdfium/web/worker-engine.d.ts b/dist/lib/pdfium/web/worker-engine.d.ts
+index 9f846f1..72be903 100644
+--- a/dist/lib/pdfium/web/worker-engine.d.ts
++++ b/dist/lib/pdfium/web/worker-engine.d.ts
+@@ -2,5 +2,6 @@ import { Logger } from '@embedpdf/models';
+ import { PdfEngine } from '../../orchestrator/pdf-engine';
+ import { FontFallbackConfig } from '../font-fallback';
++export { RemoteExecutor } from '../../orchestrator/remote-executor';
+ export type { FontFallbackConfig };
+ export interface CreatePdfiumEngineOptions {
+     /**
+diff --git a/dist/lib/pdfium/web/worker-engine.js b/dist/lib/pdfium/web/worker-engine.js
+index 26700c3..96624df 100644
+--- a/dist/lib/pdfium/web/worker-engine.js
++++ b/dist/lib/pdfium/web/worker-engine.js
+@@ -633,5 +633,6 @@ async function createPdfiumEngine(wasmUrl, options = {}) {
+ }
+ export {
++  RemoteExecutor,
+   createPdfiumEngine
+ };
+ //# sourceMappingURL=worker-engine.js.map

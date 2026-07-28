@@ -45,6 +45,9 @@ function filenameFromDisposition(value: string | null) {
 class DocflowSession {
   readonly resourceUrl: string;
   private version = '';
+  private baseVersion = '';
+  private baseSize = 0;
+  private incrementalAvailable = true;
 
   constructor(documentId: string) {
     this.resourceUrl = new URL(
@@ -65,6 +68,11 @@ class DocflowSession {
     if (!this.version) {
       throw new Error('Docflow did not provide a document version.');
     }
+    this.baseVersion = this.version;
+    this.baseSize = Number(response.headers.get('Content-Length'));
+    if (!Number.isSafeInteger(this.baseSize) || this.baseSize <= 0) {
+      throw new Error('Docflow did not provide the PDF size.');
+    }
     return {
       resource: { url: this.resourceUrl },
       key: `docflow:${this.resourceUrl}`,
@@ -75,15 +83,46 @@ class DocflowSession {
 
   async prepareWrite() {
     return {
+      saveIncremental: this.incrementalAvailable
+        ? async (revision: { baseSize: number; delta: ArrayBuffer }) => (
+            this.saveIncremental(revision)
+          )
+        : undefined,
       save: async (data: ArrayBuffer) => {
         try {
-          return await this.save(data);
+          const saved = await this.save(data);
+          if (saved) this.incrementalAvailable = false;
+          return saved;
         } catch (error) {
           window.alert(error instanceof Error ? error.message : 'Docflow could not save the PDF.');
           throw error;
         }
       },
     };
+  }
+
+  async saveIncremental(revision: { baseSize: number; delta: ArrayBuffer }) {
+    if (revision.baseSize !== this.baseSize) {
+      throw new Error('The PDFium incremental revision does not match the opened PDF.');
+    }
+    const response = await fetch(this.resourceUrl, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/pdf',
+        'If-Match': `"${this.version}"`,
+        'X-Docflow-Base-Version': `"${this.baseVersion}"`,
+        'X-Docflow-Base-Size': String(this.baseSize),
+      },
+      body: revision.delta,
+    });
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({})) as { message?: string };
+      throw new Error(failure.message ?? `Docflow could not append the PDF revision (${response.status}).`);
+    }
+
+    const result = await response.json() as WriteResponse;
+    this.version = result.version;
+    return true;
   }
 
   async save(data: ArrayBuffer) {

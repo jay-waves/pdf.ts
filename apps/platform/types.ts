@@ -7,6 +7,10 @@ export interface ReadingProgress {
 
 export interface PdfFileWriter {
   save(data: ArrayBuffer): Promise<boolean>;
+  saveIncremental?(revision: {
+    baseSize: number;
+    delta: ArrayBuffer;
+  }): Promise<boolean>;
 }
 
 /**
