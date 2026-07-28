@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
+import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
 import { Rotation, type PdfEngine } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
+import notoSansVariableUrl from '#noto-sans-variable.ttf';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
 import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
@@ -73,9 +75,18 @@ const TILING_EXTRA_RINGS = 0;
 const MAX_RENDER_DPR = 1.75;
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 1200;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
-// usePdfiumEngine tracks fontFallback by reference. Keep it module-stable so
+// The engine tracks fontFallback by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
-const PDFIUM_FONT_FALLBACK = { fonts: {} };
+const PDFIUM_FONT_FALLBACK: FontFallbackConfig = {
+  fonts: {
+    [FontCharset.ANSI]: notoSansVariableUrl,
+    [FontCharset.DEFAULT]: notoSansVariableUrl,
+    [FontCharset.CYRILLIC]: notoSansVariableUrl,
+    [FontCharset.GREEK]: notoSansVariableUrl,
+    [FontCharset.VIETNAMESE]: notoSansVariableUrl,
+    [FontCharset.EASTERNEUROPEAN]: notoSansVariableUrl,
+  },
+};
 const bmpConfiguredEngines = new WeakSet<object>();
 
 function configureBundledBmpEngine(engine: PdfEngine<Blob> | null) {

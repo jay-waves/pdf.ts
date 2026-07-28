@@ -1,5 +1,43 @@
+diff --git a/dist/lib/pdfium/index.js b/dist/lib/pdfium/index.js
+index 223849764e96d821859d3b6e332ae55b5e9b5137..0c5368bcbd31049fcad16b46ed08f709abce225b 100644
+--- a/dist/lib/pdfium/index.js
++++ b/dist/lib/pdfium/index.js
+@@ -3,13 +3,14 @@ import { I, b as b2, c as c2, a as a2 } from "../../browser-BKLM0ThC.js";
+ import { P as P2 } from "../../pdf-engine-D9v0RfKe.js";
+ import { FontCharset } from "@embedpdf/models";
+ import { FontCharset as FontCharset2 } from "@embedpdf/models";
+-import { fonts as fonts$6 } from "@embedpdf/fonts-jp";
+-import { fonts as fonts$5 } from "@embedpdf/fonts-kr";
+-import { fonts as fonts$4 } from "@embedpdf/fonts-sc";
+-import { fonts as fonts$3 } from "@embedpdf/fonts-tc";
+-import { fonts as fonts$2 } from "@embedpdf/fonts-arabic";
+-import { fonts as fonts$1 } from "@embedpdf/fonts-hebrew";
+-import { fonts } from "@embedpdf/fonts-latin";
++// Built-in CDN fallback is disabled; the application supplies local fonts.
++const fonts$6 = [];
++const fonts$5 = [];
++const fonts$4 = [];
++const fonts$3 = [];
++const fonts$2 = [];
++const fonts$1 = [];
++const fonts = [];
+ import { createPdfiumEngine } from "./web/worker-engine.js";
+ function buildCdnUrls(version = "latest") {
+   return {
+diff --git a/dist/lib/pdfium/web/worker-engine.d.ts b/dist/lib/pdfium/web/worker-engine.d.ts
+index f0749cafa7683917a46f0ea5385e5f952dbbb02a..5926a814e91ddf9567e31c1c9f93f329aac770a8 100644
+--- a/dist/lib/pdfium/web/worker-engine.d.ts
++++ b/dist/lib/pdfium/web/worker-engine.d.ts
+@@ -1,6 +1,7 @@
+ import { Logger } from '@embedpdf/models';
+ import { PdfEngine } from '../../orchestrator/pdf-engine';
+ import { FontFallbackConfig } from '../font-fallback';
++export { RemoteExecutor } from '../../orchestrator/remote-executor';
+ export type { FontFallbackConfig };
+ export interface CreatePdfiumEngineOptions {
+     /**
 diff --git a/dist/lib/pdfium/web/worker-engine.js b/dist/lib/pdfium/web/worker-engine.js
-index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..26700c3b01ffcd1201fb9fa498cae52fb5105cb6 100644
+index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..7d361228c9583e38b1f0823b5d61cb3dbf323735 100644
 --- a/dist/lib/pdfium/web/worker-engine.js
 +++ b/dist/lib/pdfium/web/worker-engine.js
 @@ -86,7 +86,8 @@ const _RemoteExecutor = class _RemoteExecutor {
@@ -12,22 +50,8 @@ index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..26700c3b01ffcd1201fb9fa498cae52f
        },
        (error) => {
          this.logger.error(
-diff --git a/dist/lib/pdfium/web/worker-engine.d.ts b/dist/lib/pdfium/web/worker-engine.d.ts
-index 9f846f1..72be903 100644
---- a/dist/lib/pdfium/web/worker-engine.d.ts
-+++ b/dist/lib/pdfium/web/worker-engine.d.ts
-@@ -2,5 +2,6 @@ import { Logger } from '@embedpdf/models';
- import { PdfEngine } from '../../orchestrator/pdf-engine';
- import { FontFallbackConfig } from '../font-fallback';
-+export { RemoteExecutor } from '../../orchestrator/remote-executor';
- export type { FontFallbackConfig };
- export interface CreatePdfiumEngineOptions {
-     /**
-diff --git a/dist/lib/pdfium/web/worker-engine.js b/dist/lib/pdfium/web/worker-engine.js
-index 26700c3..96624df 100644
---- a/dist/lib/pdfium/web/worker-engine.js
-+++ b/dist/lib/pdfium/web/worker-engine.js
-@@ -633,5 +633,6 @@ async function createPdfiumEngine(wasmUrl, options = {}) {
+@@ -629,6 +630,7 @@ self.onmessage = async (event) => {
+   });
  }
  export {
 +  RemoteExecutor,

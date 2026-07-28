@@ -27,12 +27,36 @@ export default defineConfig({
             : isWeb
               ? 'apps/platform/browser.ts'
                 : 'apps/platform/chrome.ts',
+          ),
+      },
+      {
+        find: '#noto-sans-variable.ttf',
+        replacement: resolve(
+          __dirname,
+          'assets/NotoSans-VariableFont_wdth,wght.ttf',
         ),
       },
     ],
   },
   plugins: [
     react(),
+    {
+      name: 'third-party-licenses',
+      writeBundle() {
+        const licenseOutputDir = isVsCode
+          ? resolve(__dirname, outputDir, '..')
+          : resolve(__dirname, outputDir);
+        cpSync(
+          resolve(__dirname, 'LICENSE.txt'),
+          resolve(licenseOutputDir, 'LICENSE.txt'),
+        );
+        cpSync(
+          resolve(__dirname, 'licenses'),
+          resolve(licenseOutputDir, 'licenses'),
+          { recursive: true },
+        );
+      },
+    },
     ...(!isVsCode ? [{
       name: 'viewer-brand-assets',
       writeBundle() {
