@@ -19,7 +19,7 @@ export function DropdownMenu({
       <RadixDropdownMenu.Trigger asChild>{trigger}</RadixDropdownMenu.Trigger>
       <RadixDropdownMenu.Portal>
         <RadixDropdownMenu.Content
-          className="shnctl-toolbar-menu"
+          className="relative z-40 grid min-w-26 gap-0.5 rounded-md border border-border bg-toolbar-secondary p-1 shadow-popover"
           align={align}
           sideOffset={5}
           collisionPadding={6}
@@ -34,17 +34,34 @@ export function DropdownMenu({
 export function DropdownMenuItem({
   children,
   className,
+  active,
   disabled,
   onSelect,
 }: {
   children: ReactNode;
   className?: string;
+  active?: boolean;
   disabled?: boolean;
   onSelect(): void;
 }) {
   return (
     <RadixDropdownMenu.Item asChild disabled={disabled} onSelect={onSelect}>
-      <button type="button" className={className} disabled={disabled}>{children}</button>
+      <button
+        type="button"
+        className={[
+          'flex h-6.5 w-full cursor-pointer items-center gap-1.75 rounded-md',
+          'border border-transparent bg-transparent px-2 text-left text-inherit',
+          'transition-[border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none',
+          'hover:border-accent hover:shadow-control focus-visible:border-accent focus-visible:shadow-control focus-visible:outline-none',
+          'disabled:cursor-default disabled:opacity-46',
+          'data-[active=true]:border-accent data-[active=true]:text-accent data-[active=true]:shadow-control',
+          className ?? '',
+        ].join(' ')}
+        disabled={disabled}
+        data-active={active ? 'true' : undefined}
+      >
+        {children}
+      </button>
     </RadixDropdownMenu.Item>
   );
 }

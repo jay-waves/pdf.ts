@@ -1,0 +1,138 @@
+/* Tailwind utilities only: keep browser defaults and EmbedPDF internals untouched. */
+@layer theme, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@theme inline {
+  --color-surface: var(--pdf-background-surface);
+  --color-surface-alt: var(--pdf-background-surface-alt);
+  --color-app: var(--pdf-background-app);
+  --color-elevated: var(--pdf-background-elevated);
+  --color-toolbar: var(--pdf-toolbar-background);
+  --color-toolbar-secondary: var(--pdf-toolbar-secondary-background);
+  --color-input: var(--pdf-background-input);
+  --color-foreground: var(--pdf-foreground-primary);
+  --color-secondary: var(--pdf-foreground-secondary);
+  --color-muted: var(--pdf-foreground-muted);
+  --color-border: var(--pdf-border-default);
+  --color-border-subtle: var(--pdf-border-subtle);
+  --color-border-strong: var(--pdf-border-strong);
+  --color-control-border: var(--pdf-control-border);
+  --color-accent: var(--pdf-accent-primary);
+  --color-accent-hover: color-mix(in srgb, var(--pdf-accent-primary) 88%, var(--pdf-background-app));
+  --color-hover: var(--pdf-interactive-hover);
+  --color-selected: var(--pdf-interactive-selected);
+  --color-danger: var(--pdf-danger-primary);
+  --ease-control: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --shadow-control: var(--pdf-control-ring);
+  --shadow-float: 0 6px 18px rgb(15 23 42 / 18%);
+  --shadow-popover: 0 10px 26px rgb(15 23 42 / 16%);
+  --shadow-dialog: 0 16px 40px rgb(15 23 42 / 18%);
+  --shadow-popup: 0 12px 32px rgb(0 0 0 / 22%);
+}
+
+/* Runtime theme values stay as CSS variables so Tailwind and PDF-specific CSS
+   share one source of truth. */
+:root {
+  color-scheme: light;
+  --pdf-background-app: #f8fafc;
+  --pdf-background-surface: #ffffff;
+  --pdf-background-surface-alt: #f1f3f5;
+  --pdf-background-input: #ffffff;
+  --pdf-background-elevated: #ffffff;
+  --pdf-toolbar-background: #f1f3f5;
+  --pdf-toolbar-secondary-background: #ffffff;
+  --pdf-foreground-primary: #0f172a;
+  --pdf-foreground-secondary: #475569;
+  --pdf-foreground-muted: #64748b;
+  --pdf-border-default: #dbe3ef;
+  --pdf-border-subtle: #e5e7eb;
+  --pdf-border-strong: #2563eb;
+  --pdf-control-border: var(--pdf-border-default);
+  --pdf-accent-primary: #2563eb;
+  --pdf-danger-primary: #b42318;
+  --pdf-interactive-hover: #eff6ff;
+  --pdf-interactive-selected: #dbeafe;
+  --pdf-scrollbar-track: #f8fafc;
+  --pdf-scrollbar-thumb: #cbd5e1;
+  --pdf-scrollbar-thumb-hover: #94a3b8;
+  --pdf-control-ring: inset 0 0 0 0.5px color-mix(in srgb, var(--pdf-accent-primary) 72%, transparent);
+  background: var(--pdf-background-app);
+  color: var(--pdf-foreground-primary);
+}
+
+:root[data-viewer-theme='dark'],
+:root[data-viewer-theme='nord'] {
+  color-scheme: dark;
+}
+
+:root[data-viewer-theme='dark'] {
+  --pdf-background-app: #161616;
+  --pdf-background-surface: #333333;
+  --pdf-background-surface-alt: #262626;
+  --pdf-background-input: #161616;
+  --pdf-background-elevated: #333333;
+  --pdf-toolbar-background: #242424;
+  --pdf-toolbar-secondary-background: #2c2c2c;
+  --pdf-foreground-primary: #f4f4f4;
+  --pdf-foreground-secondary: #e0e0e0;
+  --pdf-foreground-muted: #a8a8a8;
+  --pdf-border-default: #333333;
+  --pdf-border-subtle: #262626;
+  --pdf-border-strong: #525252;
+  --pdf-control-border: #525252;
+  --pdf-accent-primary: #f4f4f4;
+  --pdf-danger-primary: #ff8389;
+  --pdf-interactive-hover: #404040;
+  --pdf-interactive-selected: #454545;
+  --pdf-scrollbar-track: #161616;
+  --pdf-scrollbar-thumb: #525252;
+  --pdf-scrollbar-thumb-hover: #6f6f6f;
+}
+
+:root[data-viewer-theme='nord'] {
+  --pdf-background-app: #2e3440;
+  --pdf-background-surface: #3b4252;
+  --pdf-background-surface-alt: #434c5e;
+  --pdf-background-input: #434c5e;
+  --pdf-background-elevated: #434c5e;
+  --pdf-toolbar-background: #434c5e;
+  --pdf-toolbar-secondary-background: #3b4252;
+  --pdf-foreground-primary: #eceff4;
+  --pdf-foreground-secondary: #e5e9f0;
+  --pdf-foreground-muted: #d8dee9;
+  --pdf-border-default: #4c566a;
+  --pdf-border-subtle: #434c5e;
+  --pdf-border-strong: #88c0d0;
+  --pdf-accent-primary: #88c0d0;
+  --pdf-danger-primary: #bf616a;
+  --pdf-interactive-hover: #434c5e;
+  --pdf-interactive-selected: #4c566a;
+  --pdf-scrollbar-track: #2e3440;
+  --pdf-scrollbar-thumb: #4c566a;
+  --pdf-scrollbar-thumb-hover: #5e81ac;
+}
+
+:root[data-viewer-theme='solar'] {
+  --pdf-background-app: #fbfaf6;
+  --pdf-background-surface: #f7f4ee;
+  --pdf-background-surface-alt: #faf8f3;
+  --pdf-background-input: #fffefa;
+  --pdf-background-elevated: #fffefa;
+  --pdf-toolbar-background: #faf8f3;
+  --pdf-toolbar-secondary-background: #f7f4ee;
+  --pdf-foreground-primary: #2d332f;
+  --pdf-foreground-secondary: #646b63;
+  --pdf-foreground-muted: #969c92;
+  --pdf-border-default: #ddd6c9;
+  --pdf-border-subtle: #eee9df;
+  --pdf-border-strong: #5f8f86;
+  --pdf-accent-primary: #5f8f86;
+  --pdf-danger-primary: #b0524d;
+  --pdf-interactive-hover: #f0ebe2;
+  --pdf-interactive-selected: #e4eee9;
+  --pdf-scrollbar-track: #fbfaf6;
+  --pdf-scrollbar-thumb: #d1c8b8;
+  --pdf-scrollbar-thumb-hover: #a9a091;
+}

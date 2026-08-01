@@ -9,8 +9,8 @@ const VIEWER_THEMES = [
 
 type ViewerTheme = (typeof VIEWER_THEMES)[number];
 
-const THEME_STORAGE_KEY = 'shnctl-viewer-theme-v1';
-const TOOLBAR_PIN_STORAGE_KEY = 'shnctl-toolbar-pinned-v1';
+const THEME_STORAGE_KEY = 'pdf-viewer-theme-v1';
+const TOOLBAR_PIN_STORAGE_KEY = 'pdf-toolbar-pinned-v1';
 
 export function getStoredToolbarPinned() {
   return platform.getPreference(TOOLBAR_PIN_STORAGE_KEY) === 'true';
@@ -38,5 +38,5 @@ export function cycleViewerTheme() {
 }
 
 export function setViewerScrollStrategyAttribute(strategy: 'vertical' | 'horizontal') {
-  document.documentElement.dataset.shnctlScrollStrategy = strategy;
+  document.documentElement.dataset.pdfScrollStrategy = strategy;
 }

@@ -1,0 +1,15 @@
+@reference './tailwind.css';
+
+.button {
+  @apply inline-grid size-6 flex-none place-items-center rounded p-0 outline-none;
+  @apply transition-[background-color,border-color,transform] duration-150 ease-control motion-reduce:transition-none;
+}
+
+.button:hover,
+.button:focus-visible {
+  @apply -translate-y-px border-border-subtle bg-hover;
+}
+
+.button:active {
+  @apply translate-y-0 bg-selected;
+}

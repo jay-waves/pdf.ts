@@ -23,7 +23,7 @@ export function FloatingPopover({
   return (
     <Popover.Root open onOpenChange={(nextOpen) => !nextOpen && onClose()} modal={false}>
       <Popover.Anchor asChild>
-        <span className="shnctl-floating-anchor" style={{ left: anchor.x, top: anchor.y }} />
+        <span className="pointer-events-none fixed size-0" style={{ left: anchor.x, top: anchor.y }} />
       </Popover.Anchor>
       <Popover.Portal>
         <Popover.Content

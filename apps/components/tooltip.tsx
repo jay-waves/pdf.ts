@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Tooltip as RadixTooltip } from 'radix-ui';
+import styles from './tooltip.module.css';
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
   return (
@@ -20,9 +21,14 @@ export function Tooltip({
     <RadixTooltip.Root>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
-        <RadixTooltip.Content className="shnctl-tooltip" side="bottom" sideOffset={8} collisionPadding={8}>
+        <RadixTooltip.Content
+          className={styles.content}
+          side="bottom"
+          sideOffset={8}
+          collisionPadding={8}
+        >
           {content}
-          <RadixTooltip.Arrow className="shnctl-tooltip-arrow" width={7} height={4} />
+          <RadixTooltip.Arrow className={styles.arrow} width={7} height={4} />
         </RadixTooltip.Content>
       </RadixTooltip.Portal>
     </RadixTooltip.Root>

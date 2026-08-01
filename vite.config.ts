@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { cpSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 const viewerPlatform = process.env.VIEWER_PLATFORM ?? 'chrome';
@@ -40,6 +41,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    tailwindcss(),
     {
       name: 'third-party-licenses',
       writeBundle() {

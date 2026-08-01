@@ -41,6 +41,7 @@ import {
 import { FloatingPopover, IconButton } from './components';
 import { getActiveDocumentId, getPluginCapability, normalizePdfText } from './utils';
 import { platform } from '#platform';
+import styles from './context-menu.module.css';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
@@ -411,7 +412,7 @@ export function ContextMenu({
     <FloatingPopover
       onClose={() => setMenu(null)}
       anchor={menu}
-      className="shnctl-context-menu"
+      className="relative z-[2147483646] flex items-center gap-px rounded border border-border bg-elevated p-0.5 text-foreground shadow-float"
       role="toolbar"
       label={menu.kind === 'selection' ? 'Text selection actions' : 'Annotation actions'}
       align={menu.kind === 'selection' ? 'center' : 'start'}
@@ -419,7 +420,7 @@ export function ContextMenu({
       {items.map(({ label, icon, action }) => (
         <IconButton
           key={label}
-          className="shnctl-context-menu-button"
+          className={styles.button}
           label={label}
           icon={icon}
           iconSize={13}

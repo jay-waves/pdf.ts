@@ -1,0 +1,11 @@
+@reference './tailwind.css';
+
+.welcomeCard {
+  @apply w-[min(520px,100%)] rounded-2xl border border-border bg-surface p-10.5 text-center text-foreground;
+  @apply shadow-[0_8px_30px_rgb(15_23_42_/_5%)] transition-[border-color,transform] duration-150 ease-control motion-reduce:transition-none;
+  @apply max-[540px]:px-5 max-[540px]:py-7.5;
+}
+
+.welcomeCard[data-dragging='true'] {
+  @apply -translate-y-0.5 border-accent;
+}

@@ -1,4 +1,2 @@
+@import './tailwind.css';
 @import './viewer-foundation.css';
-@import './viewer-navigation.css';
-@import './viewer-overlays.css';
-@import './viewer-tools.css';

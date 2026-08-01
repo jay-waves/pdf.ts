@@ -163,7 +163,7 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
       flushPendingZoom();
       flushPendingScroll();
       const horizontalLayout = (
-        document.documentElement.dataset.shnctlScrollStrategy === 'horizontal'
+        document.documentElement.dataset.pdfScrollStrategy === 'horizontal'
       );
       // This axis is visible, so retain the browser's native Shift + wheel.
       if (event.shiftKey && horizontalLayout) return;
@@ -232,7 +232,7 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
         scrollTop: scrollPosition.top,
         dragging: false,
       };
-      viewport.dataset.shnctlPanning = 'true';
+      viewport.dataset.pdfPanning = 'true';
       viewport.setPointerCapture(event.pointerId);
     };
 
@@ -253,7 +253,7 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
       if (event) updatePan(event);
       const completed = panGesture;
       panGesture = null;
-      delete viewport.dataset.shnctlPanning;
+      delete viewport.dataset.pdfPanning;
       if (!completed.dragging) scrollTo(completed.scrollLeft, completed.scrollTop);
       if (viewport.hasPointerCapture(completed.pointerId)) viewport.releasePointerCapture(completed.pointerId);
     };
@@ -293,7 +293,7 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
       viewport.removeEventListener('mousedown', stopMiddleMouseDefault, { capture: true });
       viewport.removeEventListener('auxclick', stopMiddleMouseDefault, { capture: true });
       window.removeEventListener('blur', cancelPan);
-      delete viewport.dataset.shnctlPanning;
+      delete viewport.dataset.pdfPanning;
       if (zoomFrame) window.cancelAnimationFrame(zoomFrame);
       if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
     };

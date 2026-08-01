@@ -1,0 +1,64 @@
+@reference './tailwind.css';
+
+.list { @apply m-0 list-none p-0; }
+.nestedList { @apply relative mt-1 mb-1.5 ml-4 list-none p-0 pl-2.75; }
+.nestedList::before {
+  @apply absolute top-0.75 bottom-0.75 left-0 w-px bg-border-subtle;
+  content: ' ';
+}
+
+.bookmark {
+  @apply flex min-h-9 items-center gap-2.75 overflow-hidden rounded-md border border-transparent bg-transparent px-2.25 py-1.75;
+  @apply text-left text-[11px] leading-4 text-inherit outline-none transition-[background-color,border-color,color] duration-150 ease-control motion-reduce:transition-none;
+}
+
+.bookmark:hover { @apply bg-hover text-foreground; }
+.bookmark:focus-visible { @apply bg-hover text-foreground; }
+.bookmark:disabled { @apply cursor-default opacity-48; }
+
+summary.bookmark { @apply list-none; }
+summary.bookmark::-webkit-details-marker { display: none; }
+
+.title { @apply min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap; }
+.bookmark[data-current='true'] { @apply border-accent text-accent; }
+
+.page { @apply min-w-7.75 flex-none text-right text-[10.5px] leading-3.75 text-muted tabular-nums; }
+.bookmark:hover .page,
+.bookmark:focus-visible .page { @apply text-secondary; }
+.bookmark[data-current='true'] .page { @apply text-accent; }
+
+.navigation {
+  @apply pointer-events-none fixed right-1/2 bottom-12 z-19 grid min-h-8.5 w-fit max-w-[calc(100vw-32px)] translate-x-1/2 translate-y-2 grid-cols-[auto_auto] items-center gap-1.25;
+  @apply rounded-lg border border-border bg-surface p-1 opacity-0 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none;
+  @apply max-[640px]:bottom-8.75 max-[640px]:max-w-[calc(100vw-16px)];
+}
+.navigation:hover,
+.navigation:focus-within,
+.navigation[data-visible='true'] { @apply pointer-events-auto translate-y-0 opacity-100; }
+
+.navigationButtons { @apply flex min-w-0 items-center gap-1.25 max-[640px]:gap-0.75; }
+.navigationContent { @apply flex min-w-0 max-w-[min(430px,calc(100vw-136px))] items-center justify-end gap-1.5 max-[640px]:max-w-[calc(100vw-86px)] max-[640px]:gap-1.25; }
+
+.navigationButton {
+  @apply grid size-6.5 min-w-0 cursor-pointer place-items-center rounded-md border border-transparent bg-transparent p-0 text-inherit leading-none outline-none;
+}
+.outlineButton {
+  @apply inline-flex h-6.5 min-w-0 max-w-[min(320px,calc(100vw-236px))] flex-[0_1_auto] cursor-pointer items-center justify-center gap-1.25 rounded-md border border-transparent bg-transparent px-2 text-left text-inherit outline-none;
+  @apply max-[640px]:size-6.5 max-[640px]:max-w-6.5 max-[640px]:flex-none max-[640px]:p-0;
+}
+.navigationButton:hover,
+.navigationButton:focus-visible,
+.outlineButton:hover,
+.outlineButton:focus-visible { @apply border-border-subtle bg-hover; }
+.navigationButton:disabled,
+.outlineButton:disabled { @apply cursor-default opacity-48; }
+.thumbnailButton { @apply size-6.5 max-w-6.5 flex-none p-0; }
+.navigationTitleIcon { @apply hidden flex-none max-[640px]:block; }
+.navigationTitle { @apply block overflow-hidden text-[10.5px] leading-6 text-ellipsis whitespace-nowrap max-[640px]:hidden; }
+
+.pageForm {
+  @apply flex h-6.5 min-w-15.5 flex-none items-center justify-center gap-1 rounded-md border border-transparent px-1.5 text-[10.5px] whitespace-nowrap text-secondary tabular-nums;
+}
+.pageForm:focus-within { @apply border-border-subtle bg-hover; }
+.pageInput { @apply h-4.75 w-6.5 min-w-0 border-0 bg-transparent px-0.5 text-right text-[10.5px] leading-4.5 text-foreground tabular-nums outline-none disabled:text-muted; }
+.pageTotal { @apply text-muted; }

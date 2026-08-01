@@ -7,15 +7,17 @@ export function Dialog({
   preventClose = false,
   title,
   children,
-  contentClassName,
-  titleClassName = 'shnctl-visually-hidden',
+  contentClassName = '',
+  variant = 'panel',
+  titleClassName = 'sr-only',
 }: {
   open: boolean;
   onClose(): void;
   preventClose?: boolean;
   title: ReactNode;
   children: ReactNode;
-  contentClassName: string;
+  contentClassName?: string;
+  variant?: 'panel' | 'panelCompact' | 'popup' | 'popupWide';
   titleClassName?: string;
 }) {
   return (
@@ -23,8 +25,18 @@ export function Dialog({
       if (!nextOpen && !preventClose) onClose();
     }}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="shnctl-overlay" />
-        <RadixDialog.Content className={contentClassName} aria-describedby={undefined}>
+        <RadixDialog.Overlay className="fixed inset-0 z-20 bg-black/50" />
+        <RadixDialog.Content
+          className={[
+            'fixed top-1/2 left-1/2 z-21 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border border-border bg-surface',
+            variant === 'panel' ? 'h-[min(720px,calc(100vh-42px))] w-[min(720px,calc(100vw-42px))] shadow-dialog max-[640px]:h-[min(640px,calc(100vh-22px))] max-[640px]:w-[calc(100vw-22px)]' : '',
+            variant === 'panelCompact' ? 'w-[min(332px,calc(100vw-42px))] shadow-dialog' : '',
+            variant === 'popup' ? 'w-[min(360px,calc(100vw-32px))] shadow-popup' : '',
+            variant === 'popupWide' ? 'w-[min(520px,calc(100vw-32px))] shadow-popup' : '',
+            contentClassName,
+          ].join(' ')}
+          aria-describedby={undefined}
+        >
           <RadixDialog.Title className={titleClassName}>{title}</RadixDialog.Title>
           {children}
         </RadixDialog.Content>

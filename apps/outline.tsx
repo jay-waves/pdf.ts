@@ -13,6 +13,7 @@ import {
 import {
   type BookmarkCapability,
 } from '@embedpdf/plugin-bookmark';
+import { PanelContent, PanelState } from './components';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
@@ -22,6 +23,7 @@ import {
   scrollToPagePreservingViewport,
   type ScrollCapability,
 } from './utils';
+import styles from './outline.module.css';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
 const flattenedBookmarksCache = new WeakMap<PdfBookmarkObject[], FlattenedBookmark[]>();
@@ -436,15 +438,15 @@ export function Outline({
 
   const body = useMemo(() => {
     if (cache.status === 'idle' || cache.status === 'loading') {
-      return <div className="shnctl-state">Loading outline...</div>;
+      return <PanelState className="text-[11px]">Loading outline...</PanelState>;
     }
 
     if (cache.status === 'empty') {
-      return <div className="shnctl-state">This PDF does not include an outline.</div>;
+      return <PanelState className="text-[11px]">This PDF does not include an outline.</PanelState>;
     }
 
     if (cache.status === 'error') {
-      return <div className="shnctl-state">Failed to load the outline.</div>;
+      return <PanelState className="text-[11px]">Failed to load the outline.</PanelState>;
     }
 
     return (
@@ -461,7 +463,11 @@ export function Outline({
     );
   }, [cache.bookmarks, cache.status, currentBookmarkKey, registry]);
 
-  return <div className="shnctl-content shnctl-outline-content" ref={contentRef} hidden={!open}>{body}</div>;
+  return (
+    <PanelContent overflow="hidden" hidden={!open}>
+      <div ref={contentRef} className="h-full overflow-y-auto">{body}</div>
+    </PanelContent>
+  );
 }
 
 function BookmarkList({
@@ -476,7 +482,7 @@ function BookmarkList({
   onSelect: (bookmark: PdfBookmarkObject) => void;
 }) {
   return (
-    <ol className="shnctl-list">
+    <ol className={path.length ? styles.nestedList : styles.list}>
       {bookmarks.map((bookmark, index) => {
         const destination = getDestinationFromTarget(bookmark.target);
         const pageNumber = destination ? destination.pageIndex + 1 : undefined;
@@ -492,7 +498,8 @@ function BookmarkList({
             <li key={bookmarkKey}>
               <details open={isCurrent || hasCurrentChild}>
                 <summary
-                  className="shnctl-action shnctl-bookmark shnctl-summary"
+                  className={styles.bookmark}
+                  data-outline-bookmark
                   data-current={isCurrent ? 'true' : undefined}
                   onClick={(event) => {
                     const details = event.currentTarget.parentElement;
@@ -505,8 +512,8 @@ function BookmarkList({
                     if (destination) onSelect(bookmark);
                   }}
                 >
-                  <span className="shnctl-bookmark-title">{title}</span>
-                  {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
+                  <span className={styles.title}>{title}</span>
+                  {pageNumber ? <span className={styles.page}>{pageNumber}</span> : null}
                 </summary>
                 <BookmarkList bookmarks={children} currentBookmarkKey={currentBookmarkKey} path={bookmarkPath} onSelect={onSelect} />
               </details>
@@ -518,14 +525,15 @@ function BookmarkList({
           <li key={bookmarkKey}>
             <button
               type="button"
-              className="shnctl-action shnctl-bookmark"
+              className={styles.bookmark}
+              data-outline-bookmark
               data-current={isCurrent ? 'true' : undefined}
               style={{ marginLeft: `${path.length * 18}px`, width: `calc(100% - ${path.length * 18}px)` }}
               onClick={() => onSelect(bookmark)}
               disabled={!destination}
             >
-              <span className="shnctl-bookmark-title">{title}</span>
-              {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
+              <span className={styles.title}>{title}</span>
+              {pageNumber ? <span className={styles.page}>{pageNumber}</span> : null}
             </button>
             {children.length ? (
               <BookmarkList bookmarks={children} currentBookmarkKey={currentBookmarkKey} path={bookmarkPath} onSelect={onSelect} />
@@ -543,7 +551,7 @@ function scrollCurrentBookmarkIntoView(root: HTMLElement | null) {
   }
 
   const scrollToCurrent = () => {
-    const currentBookmark = root.querySelector<HTMLElement>('.shnctl-bookmark[data-current="true"]');
+    const currentBookmark = root.querySelector<HTMLElement>('[data-outline-bookmark][data-current="true"]');
     if (!currentBookmark) {
       root.scrollTo({ top: 0, behavior: 'auto' });
       return;
@@ -633,15 +641,16 @@ export function BottomNavigationControl({
 
   return (
     <nav
-      className={`shnctl-bottom-nav${visible ? ' is-visible' : ''}`}
+      className={styles.navigation}
+      data-visible={visible ? 'true' : undefined}
       aria-label="PDF navigation"
       onMouseEnter={onReveal}
       onFocus={onReveal}
     >
-      <div className="shnctl-bottom-nav-actions">
+      <div className={styles.navigationButtons}>
         <button
           type="button"
-          className="shnctl-action shnctl-bottom-nav-button"
+          className={styles.navigationButton}
           onClick={() => scrollByPage(-1)}
           disabled={!canGoPrevious}
           aria-label="Previous page"
@@ -650,7 +659,7 @@ export function BottomNavigationControl({
         </button>
         <button
           type="button"
-          className="shnctl-action shnctl-bottom-nav-button"
+          className={styles.navigationButton}
           onClick={() => scrollByPage(1)}
           disabled={!canGoNext}
           aria-label="Next page"
@@ -658,25 +667,24 @@ export function BottomNavigationControl({
           <CornerUpRight size={16} strokeWidth={1.8} aria-hidden="true" />
         </button>
       </div>
-      <div className="shnctl-bottom-nav-meta">
+      <div className={styles.navigationContent}>
         {shouldShowOutlineTitle ? (
           <button
             type="button"
-            className="shnctl-action shnctl-bottom-nav-outline"
-            title={outlineTitle}
+            className={styles.outlineButton}
             aria-label="Open outline"
             onClick={() => {
               onReveal();
               onOpenOutline();
             }}
           >
-            <ListTree className="shnctl-bottom-nav-outline-icon" size={14} strokeWidth={1.8} aria-hidden="true" />
-            <span className="shnctl-bottom-nav-title">{outlineTitle}</span>
+            <ListTree className={styles.navigationTitleIcon} size={14} strokeWidth={1.8} aria-hidden="true" />
+            <span className={styles.navigationTitle}>{outlineTitle}</span>
           </button>
         ) : shouldShowThumbnails ? (
           <button
             type="button"
-            className="shnctl-action shnctl-bottom-nav-outline is-icon-only"
+            className={`${styles.outlineButton} ${styles.thumbnailButton}`}
             title="Open thumbnails"
             aria-label="Open thumbnails"
             onClick={() => {
@@ -684,12 +692,12 @@ export function BottomNavigationControl({
               onOpenThumbnails();
             }}
           >
-            <BookImage className="shnctl-bottom-nav-outline-icon" size={14} strokeWidth={1.8} aria-hidden="true" />
+            <BookImage className="block flex-none" size={14} strokeWidth={1.8} aria-hidden="true" />
           </button>
         ) : null}
-        <form className="shnctl-bottom-nav-page" onSubmit={handlePageSubmit} aria-label="Page jump">
+        <form className={styles.pageForm} onSubmit={handlePageSubmit} aria-label="Page jump">
           <input
-            className="shnctl-bottom-nav-page-input"
+            className={styles.pageInput}
             value={pageInput}
             type="text"
             inputMode="numeric"
@@ -704,7 +712,7 @@ export function BottomNavigationControl({
             onFocus={onReveal}
             onBlur={() => setPageInput(String(pageNumber || 1))}
           />
-          <span className="shnctl-bottom-nav-page-total">/ {totalPages || '-'}</span>
+          <span className={styles.pageTotal}>/ {totalPages || '-'}</span>
         </form>
       </div>
     </nav>

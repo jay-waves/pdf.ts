@@ -74,6 +74,7 @@ import {
 } from './signature-certificate';
 import { platform } from '#platform';
 import type { ManagedResource, PdfFileHandle, ViewerResources } from './platform/types';
+import styles from './viewer.module.css';
 
 const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_TILE_SIZE = 768;
@@ -82,6 +83,7 @@ const TILING_EXTRA_RINGS = 0;
 const MAX_RENDER_DPR = 1.75;
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 1200;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
+const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
 // The engine tracks fontFallback by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
 const PDFIUM_FONT_FALLBACK: FontFallbackConfig = {
@@ -543,7 +545,7 @@ function App({
   }, []);
 
   return (
-    <main ref={viewerRootRef} className="app-shell" style={{ paddingTop: toolbarInset }}>
+    <main ref={viewerRootRef} className="fixed inset-0 overflow-hidden" style={{ paddingTop: toolbarInset }}>
       <EmbedPDF
           engine={engine}
           plugins={plugins}
@@ -617,7 +619,7 @@ function App({
                 <DocumentContent documentId={activeDocumentId}>
                   {({ documentState, isLoading, isError, isLoaded }) => (
                     <>
-                      {isLoading && <div className="viewer-status">Loading document...</div>}
+                      {isLoading && <div className={VIEWER_STATUS_CLASS}>Loading document...</div>}
                       {isError && documentState.errorCode === PdfErrorCode.Password ? (
                         <OpenPasswordDialog
                           registry={registry}
@@ -626,7 +628,7 @@ function App({
                         />
                       ) : null}
                       {isError && documentState.errorCode !== PdfErrorCode.Password ? (
-                        <div className="viewer-status viewer-status-error">Unable to load PDF.</div>
+                        <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>
                       ) : null}
                       {isLoaded && (
                         <>
@@ -653,14 +655,14 @@ function App({
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
                                           scale={0.5}
-                                          className="shnctl-page-render-image"
+                                          className="pdf-page-render-image"
                                           draggable={false}
                                           style={{ pointerEvents: 'none' }}
                                         />
                                         <TilingLayer
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
-                                          className="shnctl-page-tiling-layer"
+                                          className="pdf-page-tiling-layer"
                                         />
                                         <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                                         <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
@@ -682,7 +684,7 @@ function App({
                   )}
                 </DocumentContent>
               ) : (
-                <div className="viewer-status">No PDF document.</div>
+                <div className={VIEWER_STATUS_CLASS}>No PDF document.</div>
               )}
             </>
           )}
@@ -728,7 +730,6 @@ function App({
         open={documentPane !== null}
         onClose={() => setSidePanel(null)}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
-        contentClassName="shnctl-panel"
       >
         <Thumbnails
           registry={registry}
@@ -823,6 +824,8 @@ function App({
   );
 }
 
+const WEB_FILE_CONTROL_CLASS = 'inline-flex min-h-9.5 cursor-pointer items-center justify-center rounded-lg border border-accent bg-accent px-5.5 text-[13px] font-semibold text-surface';
+
 function WebDocumentPicker({
   onSelect,
   onPick,
@@ -844,9 +847,10 @@ function WebDocumentPicker({
   };
 
   return (
-    <main className="web-welcome">
+    <main className="grid min-h-screen place-items-center bg-app p-6">
       <section
-        className={`web-welcome-card${dragging ? ' is-dragging' : ''}`}
+        className={styles.welcomeCard}
+        data-dragging={dragging ? 'true' : undefined}
         onDragEnter={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -863,10 +867,10 @@ function WebDocumentPicker({
           selectFile(event.dataTransfer.files[0]);
         }}
       >
-        <img className="web-welcome-logo" src="./logo.svg" alt="" />
-        <h1>PDF.ts Web Viewer</h1>
+        <img className="size-13.5" src="./logo.svg" alt="" />
+        <h1 className="mt-4.5 mb-6.5 text-[25px]">PDF.ts Web Viewer</h1>
         {onPick ? (
-          <button className="web-file-button" type="button" onClick={() => {
+          <button className={WEB_FILE_CONTROL_CLASS} type="button" onClick={() => {
             void onPick().catch((error: unknown) => {
               if (!(error instanceof DOMException && error.name === 'AbortError')) {
                 setSelectionError(error instanceof Error ? error.message : 'Unable to open PDF.');
@@ -876,18 +880,19 @@ function WebDocumentPicker({
             Choose a PDF file
           </button>
         ) : (
-          <label className="web-file-button">
+          <label className={WEB_FILE_CONTROL_CLASS}>
             Choose a PDF file
             <input
+              className="sr-only"
               type="file"
               accept="application/pdf,.pdf"
               onChange={(event) => selectFile(event.target.files?.[0])}
             />
           </label>
         )}
-        <span className="web-drop-hint">or drop a PDF here</span>
-        {selectionError ? <p className="web-selection-error" role="alert">{selectionError}</p> : null}
-        <small>Local files are processed only in this browser tab and are never uploaded.</small>
+        <span className="mt-2.5 mb-6.5 block text-[11px] text-muted">or drop a PDF here</span>
+        {selectionError ? <p className="mt-3 mb-0 text-xs text-danger" role="alert">{selectionError}</p> : null}
+        <small className="mt-5.5 block leading-[1.6] text-muted">Local files are processed only in this browser tab and are never uploaded.</small>
       </section>
     </main>
   );
@@ -935,11 +940,11 @@ function ViewerBootstrap() {
   }, []);
 
   if (error) {
-    return <div className="viewer-status viewer-status-error">Unable to load PDF resources: {error.message}</div>;
+    return <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF resources: {error.message}</div>;
   }
 
   if (!resources) {
-    return <div className="viewer-status">Loading PDF resources...</div>;
+    return <div className={VIEWER_STATUS_CLASS}>Loading PDF resources...</div>;
   }
 
   return (
@@ -986,7 +991,7 @@ function ReadyViewer({
 
   if (!engine) {
     return (
-      <div className={`viewer-status${error ? ' viewer-status-error' : ''}`}>
+      <div className={`${VIEWER_STATUS_CLASS} ${error ? 'text-danger' : ''}`}>
         {error ? `Unable to initialize PDF engine: ${error.message}` : isLoading ? 'Loading PDF engine...' : 'PDF engine unavailable.'}
       </div>
     );

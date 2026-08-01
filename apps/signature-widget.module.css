@@ -1,0 +1,17 @@
+@reference './tailwind.css';
+
+.widget {
+  @apply pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 overflow-hidden rounded border border-dashed border-secondary/65 bg-app/80 text-[11px] leading-none text-secondary;
+}
+
+.widget[data-appearance-active='true'] {
+  @apply border-0 bg-transparent;
+}
+
+.widget svg {
+  @apply size-3.5 flex-none;
+}
+
+.widget span {
+  @apply overflow-hidden text-ellipsis whitespace-nowrap;
+}
