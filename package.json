@@ -1,5 +1,5 @@
 {
-  "name": "pdf-ts",
+  "name": "pdf.ts",
   "license": "MIT",
   "private": true,
   "version": "0.4.5",
@@ -10,7 +10,8 @@
     "test:patch": "node --test tests/embedpdf-patch.test.mjs",
     "dev": "node scripts/sync-chrome-version.mjs && vite build --watch",
     "build:chrome": "pnpm typecheck && node scripts/sync-chrome-version.mjs && vite build",
-    "build:docflow": "pnpm build:web",
+    "build:linux": "pnpm build:web && node scripts/build-launcher.mjs linux-amd64",
+    "build:windows": "pnpm build:web && node scripts/build-launcher.mjs windows-amd64",
     "build:web": "pnpm typecheck && VIEWER_PLATFORM=web vite build",
     "deploy:web": "bash scripts/deploy-web.sh",
     "build:vscode": "pnpm typecheck && node scripts/build-vscode.mjs",

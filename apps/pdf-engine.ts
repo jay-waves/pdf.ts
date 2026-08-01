@@ -24,7 +24,7 @@ type IncrementalBridge = {
 
 const bridges = new WeakMap<object, IncrementalBridge>();
 
-export function useDocflowPdfiumEngine(options: {
+export function usePdfTsPdfiumEngine(options: {
   wasmUrl: string;
   fontFallback: FontFallbackConfig | null;
 }) {

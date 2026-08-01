@@ -42,7 +42,7 @@ function filenameFromDisposition(value: string | null) {
   return value?.match(/filename="([^"]*)"/i)?.[1]?.replace(/[\r\n]/g, '') || 'document.pdf';
 }
 
-class DocflowSession {
+class PdfLauncherSession {
   readonly resourceUrl: string;
   private version = '';
   private baseVersion = '';
@@ -60,22 +60,22 @@ class DocflowSession {
     const response = await fetch(this.resourceUrl, { method: 'HEAD', cache: 'no-store' });
     if (!response.ok) {
       if (response.status === 410) {
-        throw new Error('This PDF was moved or deleted. Open it with Docflow again to register its new location.');
+        throw new Error('This PDF was moved or deleted. Open it with PDF.ts again to register its new location.');
       }
-      throw new Error(`Docflow could not open the document (${response.status}).`);
+      throw new Error(`PDF.ts could not open the document (${response.status}).`);
     }
     this.version = stripEtag(response.headers.get('ETag'));
     if (!this.version) {
-      throw new Error('Docflow did not provide a document version.');
+      throw new Error('PDF.ts did not provide a document version.');
     }
     this.baseVersion = this.version;
     this.baseSize = Number(response.headers.get('Content-Length'));
     if (!Number.isSafeInteger(this.baseSize) || this.baseSize <= 0) {
-      throw new Error('Docflow did not provide the PDF size.');
+      throw new Error('PDF.ts did not provide the PDF size.');
     }
     return {
       resource: { url: this.resourceUrl },
-      key: `docflow:${this.resourceUrl}`,
+      key: `pdf.ts:${this.resourceUrl}`,
       name: filenameFromDisposition(response.headers.get('Content-Disposition')),
       fileHandle: this,
     };
@@ -94,7 +94,7 @@ class DocflowSession {
           if (saved) this.incrementalAvailable = false;
           return saved;
         } catch (error) {
-          window.alert(error instanceof Error ? error.message : 'Docflow could not save the PDF.');
+          window.alert(error instanceof Error ? error.message : 'PDF.ts could not save the PDF.');
           throw error;
         }
       },
@@ -110,14 +110,14 @@ class DocflowSession {
       headers: {
         'Content-Type': 'application/pdf',
         'If-Match': `"${this.version}"`,
-        'X-Docflow-Base-Version': `"${this.baseVersion}"`,
-        'X-Docflow-Base-Size': String(this.baseSize),
+        'X-Pdf-Ts-Base-Version': `"${this.baseVersion}"`,
+        'X-Pdf-Ts-Base-Size': String(this.baseSize),
       },
       body: revision.delta,
     });
     if (!response.ok) {
       const failure = await response.json().catch(() => ({})) as { message?: string };
-      throw new Error(failure.message ?? `Docflow could not append the PDF revision (${response.status}).`);
+      throw new Error(failure.message ?? `PDF.ts could not append the PDF revision (${response.status}).`);
     }
 
     const result = await response.json() as WriteResponse;
@@ -143,7 +143,7 @@ class DocflowSession {
     if (response.status === 409) {
       const conflict = await response.json().catch(() => ({})) as ConflictResponse;
       const shouldSaveCopy = window.confirm(
-        `${conflict.message ?? 'This PDF was modified by another program or docflow window.'}\n\n`
+        `${conflict.message ?? 'This PDF was modified by another program or launcher window.'}\n\n`
         + 'The original will not be overwritten. Save your changes as a conflict copy beside it?',
       );
       if (!shouldSaveCopy) return false;
@@ -154,7 +154,7 @@ class DocflowSession {
         body: data,
       });
       if (!copyResponse.ok) {
-        throw new Error(`Docflow could not save a conflict copy (${copyResponse.status}).`);
+        throw new Error(`PDF.ts could not save a conflict copy (${copyResponse.status}).`);
       }
       const copy = await copyResponse.json() as CopyResponse;
       window.alert(`The PDF changed on disk. Your edits were saved as:\n${copy.name}`);
@@ -162,7 +162,7 @@ class DocflowSession {
     }
 
     const failure = await response.json().catch(() => ({})) as { message?: string };
-    throw new Error(failure.message ?? `Docflow could not save the PDF (${response.status}).`);
+    throw new Error(failure.message ?? `PDF.ts could not save the PDF (${response.status}).`);
   }
 
   getPreference(key: string) {
@@ -183,22 +183,22 @@ class DocflowSession {
 
 }
 
-function createDocflowSession() {
+function createPdfLauncherSession() {
   const query = new URLSearchParams(window.location.search);
-  const documentId = query.get('docflowDocument');
-  return documentId ? new DocflowSession(documentId) : null;
+  const documentId = query.get('launcherDocument');
+  return documentId ? new PdfLauncherSession(documentId) : null;
 }
 
-const docflow = createDocflowSession();
+const launcher = createPdfLauncherSession();
 
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
-    if (!docflow) {
-      throw new Error('This Docflow viewer URL is missing its daemon document identifier.');
+    if (!launcher) {
+      throw new Error('This PDF.ts viewer URL is missing its daemon document identifier.');
     }
     return {
       wasm: { url: bundledWasmUrl },
-      document: await docflow.openDocument(),
+      document: await launcher.openDocument(),
     };
   },
   openExternal(url) {
@@ -212,15 +212,15 @@ export const platform: ViewerPlatform = {
   },
   translate: translateWithModelDownload,
   getPreference(key) {
-    return docflow?.getPreference(key) ?? null;
+    return launcher?.getPreference(key) ?? null;
   },
   setPreference(key, value) {
-    docflow?.setPreference(key, value);
+    launcher?.setPreference(key, value);
   },
   readReadingProgress(documentKey) {
-    return docflow?.readReadingProgress(documentKey) ?? Promise.resolve(undefined);
+    return launcher?.readReadingProgress(documentKey) ?? Promise.resolve(undefined);
   },
   writeReadingProgress(documentKey, progress) {
-    return docflow?.writeReadingProgress(documentKey, progress) ?? Promise.resolve();
+    return launcher?.writeReadingProgress(documentKey, progress) ?? Promise.resolve();
   },
 };
