@@ -8,15 +8,15 @@ import {
   type SearchCapability,
 } from '@embedpdf/plugin-search';
 import {
-  CaseSensitive,
   ChevronLeft,
   ChevronRight,
   Search as SearchIcon,
-  SpellCheck,
   X,
 } from 'lucide-react';
 import { Tooltip } from './components';
+import styles from './search.module.css';
 import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
+
 
 type SearchScope = NonNullable<ReturnType<SearchCapability['forDocument']>>;
 type SearchPanelState = Pick<
@@ -57,6 +57,10 @@ function getActiveSearchScope(registry?: PluginRegistry): SearchScope | undefine
 
 function getSearchFlags(searchScope?: SearchScope) {
   return searchScope?.getFlags() ?? [];
+}
+
+function hasUppercaseLetter(value: string) {
+  return /\p{Lu}/u.test(value);
 }
 
 function scrollToSearchResult(registry: PluginRegistry | undefined, result: SearchResult | undefined) {
@@ -136,6 +140,8 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getCurrentPageIndex(registry));
   const searchScope = useMemo(() => getActiveSearchScope(registry), [registry]);
   const alignedSearchKeyRef = useRef('');
+  const matchCaseAutoEnabledRef = useRef(false);
+  const matchCaseManuallyDisabledRef = useRef(false);
 
   useEffect(() => {
     if (!open || !registry) {
@@ -156,6 +162,8 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     }
 
     searchScope.startSearch();
+    matchCaseAutoEnabledRef.current = false;
+    matchCaseManuallyDisabledRef.current = false;
 
     const nextState = toSearchPanelState(searchScope.getState());
     setSearchState(nextState);
@@ -164,7 +172,6 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     const unsubscribe = searchScope.onStateChange((nextState) => {
       const panelState = toSearchPanelState(nextState);
       setSearchState(panelState);
-      setQuery(panelState.query);
     });
 
     return () => {
@@ -249,14 +256,54 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
     }
 
     const flags = getSearchFlags(searchScope);
-    const nextFlags = flags.includes(flag) ? flags.filter((item) => item !== flag) : [...flags, flag];
+    const enabled = flags.includes(flag);
+    const nextFlags = enabled ? flags.filter((item) => item !== flag) : [...flags, flag];
+
+    if (flag === MatchFlag.MatchCase) {
+      matchCaseAutoEnabledRef.current = false;
+      matchCaseManuallyDisabledRef.current = enabled;
+    }
+
     alignedSearchKeyRef.current = '';
     searchScope.setFlags(nextFlags);
   };
 
+  const updateQuery = (nextQuery: string) => {
+    setQuery(nextQuery);
+
+    if (!searchScope) return;
+
+    const flags = getSearchFlags(searchScope);
+    const matchCaseEnabled = flags.includes(MatchFlag.MatchCase);
+    const containsUppercase = hasUppercaseLetter(nextQuery);
+
+    if (!nextQuery) {
+      matchCaseAutoEnabledRef.current = false;
+      matchCaseManuallyDisabledRef.current = false;
+      if (matchCaseEnabled) {
+        alignedSearchKeyRef.current = '';
+        searchScope.setFlags(flags.filter((flag) => flag !== MatchFlag.MatchCase));
+      }
+      return;
+    }
+
+    if (containsUppercase && !matchCaseEnabled && !matchCaseManuallyDisabledRef.current) {
+      matchCaseAutoEnabledRef.current = true;
+      alignedSearchKeyRef.current = '';
+      searchScope.setFlags([...flags, MatchFlag.MatchCase]);
+      return;
+    }
+
+    if (!containsUppercase && matchCaseEnabled && matchCaseAutoEnabledRef.current) {
+      matchCaseAutoEnabledRef.current = false;
+      alignedSearchKeyRef.current = '';
+      searchScope.setFlags(flags.filter((flag) => flag !== MatchFlag.MatchCase));
+    }
+  };
+
   const clearSearch = () => {
     alignedSearchKeyRef.current = '';
-    setQuery('');
+    updateQuery('');
     searchScope?.stopSearch();
   };
 
@@ -264,7 +311,7 @@ function useSearchPanel(registry: PluginRegistry | undefined, open: boolean) {
 
   return {
     query,
-    setQuery,
+    updateQuery,
     searchState,
     canSearch: Boolean(searchScope),
     flags,
@@ -285,7 +332,7 @@ export function Search({
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     query,
-    setQuery,
+    updateQuery,
     searchState,
     canSearch,
     flags,
@@ -313,41 +360,41 @@ export function Search({
   }
 
   return (
-    <div className="shnctl-toolbar-secondary shnctl-search-bar" role="search" aria-label="PDF search">
+    <div className={styles.bar} role="search" aria-label="PDF search">
       <Tooltip content="Previous result">
-        <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result">
+        <button type="button" className={styles.button} onClick={() => moveResult(-1)} disabled={!canNavigate} aria-label="Previous result">
           <ChevronLeft size={16} strokeWidth={2} />
         </button>
       </Tooltip>
-      <div className="shnctl-search-counter">
+      <div className={styles.status}>
         {searchState.loading ? 'Searching...' : `${searchState.activeResultIndex >= 0 ? searchState.activeResultIndex + 1 : 0} / ${searchState.total}`}
       </div>
       <Tooltip content="Next result">
-        <button type="button" className="shnctl-action shnctl-search-step" onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result">
+        <button type="button" className={styles.button} onClick={() => moveResult(1)} disabled={!canNavigate} aria-label="Next result">
           <ChevronRight size={16} strokeWidth={2} />
         </button>
       </Tooltip>
       <form
-        className="shnctl-search-form"
+        className={styles.form}
         onSubmit={(event) => {
           event.preventDefault();
           runSearch();
         }}
       >
-        <div className="shnctl-search-input-wrap">
+        <div className={styles.inputWrap}>
           <input
             ref={inputRef}
-            className="shnctl-search-input"
+            className={styles.input}
             value={query}
             type="search"
             placeholder={canSearch ? 'Find in document' : 'Search is not ready'}
             disabled={!canSearch}
-            onChange={(event) => setQuery(event.currentTarget.value)}
+            onChange={(event) => updateQuery(event.currentTarget.value)}
           />
           {query || searchState.total > 0 || searchState.loading ? (
             <button
               type="button"
-              className="shnctl-action shnctl-search-clear"
+              className={styles.clear}
               aria-label="Clear search"
               onClick={() => {
                 clearSearch();
@@ -359,7 +406,7 @@ export function Search({
           ) : null}
         </div>
         <Tooltip content="Search">
-          <button type="submit" className="shnctl-action shnctl-search-toggle shnctl-search-submit" disabled={!canSearch} aria-label="Search">
+          <button type="submit" className={styles.button} disabled={!canSearch} aria-label="Search">
             <SearchIcon size={15} strokeWidth={2} />
           </button>
         </Tooltip>
@@ -367,25 +414,27 @@ export function Search({
       <Tooltip content="Match case">
         <button
           type="button"
-          className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchCase) ? ' is-active' : ''}`}
+          className={styles.button}
+          data-active={flags.includes(MatchFlag.MatchCase) ? 'true' : undefined}
           onClick={() => toggleFlag(MatchFlag.MatchCase)}
           disabled={!canSearch}
           aria-label="Match case"
           aria-pressed={flags.includes(MatchFlag.MatchCase)}
         >
-          <CaseSensitive className="shnctl-search-case-icon" strokeWidth={2} />
+          <span className={styles.matchIcon} aria-hidden="true">Aa</span>
         </button>
       </Tooltip>
       <Tooltip content="Match whole word">
         <button
           type="button"
-          className={`shnctl-action shnctl-search-toggle shnctl-search-option${flags.includes(MatchFlag.MatchWholeWord) ? ' is-active' : ''}`}
+          className={styles.button}
+          data-active={flags.includes(MatchFlag.MatchWholeWord) ? 'true' : undefined}
           onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
           disabled={!canSearch}
           aria-label="Match whole word"
           aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
         >
-          <SpellCheck size={16} strokeWidth={2} />
+          <span className={styles.matchIcon} aria-hidden="true">ab|</span>
         </button>
       </Tooltip>
     </div>

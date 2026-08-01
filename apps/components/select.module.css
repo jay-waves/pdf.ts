@@ -1,0 +1,6 @@
+@reference '../tailwind.css';
+
+.content {
+  @apply z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground;
+  @apply shadow-popover;
+}

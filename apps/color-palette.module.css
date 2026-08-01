@@ -1,0 +1,80 @@
+@reference './tailwind.css';
+
+.content {
+  @apply grid gap-3;
+}
+
+.meta {
+  @apply flex items-center justify-between gap-2.5 leading-3.75 text-muted;
+}
+
+.targets {
+  @apply flex flex-wrap gap-1.25;
+}
+
+.target {
+  @apply h-6 cursor-pointer rounded-md border border-transparent bg-transparent px-2 text-secondary outline-none;
+  @apply transition-[border-color,box-shadow,color,transform] duration-150 ease-control motion-reduce:transition-none;
+}
+
+.target:hover,
+.target:focus-visible {
+  @apply -translate-y-px border-accent text-accent shadow-control;
+}
+
+.target[data-active='true'] {
+  @apply border-accent text-accent shadow-control;
+}
+
+.grid {
+  @apply grid grid-cols-6 gap-2;
+}
+
+.swatch {
+  @apply grid aspect-square min-w-0 cursor-pointer place-items-center rounded-md border border-border-subtle outline-none;
+  @apply transition-[border-color,box-shadow,transform] duration-150 ease-control motion-reduce:transition-none;
+  background: var(--pdf-swatch-color);
+  color: color-mix(in srgb, var(--pdf-swatch-color) 16%, #111827);
+}
+
+.swatch:hover,
+.swatch:focus-visible {
+  @apply -translate-y-px border-accent shadow-control;
+}
+
+.swatch[data-active='true'] {
+  @apply border-accent shadow-control;
+}
+
+.swatch[data-transparent='true'] {
+  background-color: var(--pdf-background-input);
+  background-image:
+    linear-gradient(45deg, var(--pdf-border-default) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--pdf-border-default) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--pdf-border-default) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--pdf-border-default) 75%);
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+  background-size: 10px 10px;
+  color: var(--pdf-foreground-primary);
+}
+
+.custom {
+  @apply grid grid-cols-[auto_34px_1fr] items-center gap-2 leading-3.75 text-secondary;
+}
+
+.opacity {
+  @apply grid grid-cols-[auto_1fr_34px] items-center gap-2 leading-3.75 text-secondary;
+}
+
+.value {
+  @apply text-muted tabular-nums;
+}
+
+.colorInput {
+  @apply h-6 w-8.5 cursor-pointer overflow-hidden rounded-md border border-border-subtle bg-transparent p-0;
+}
+
+.opacityInput {
+  @apply w-full;
+  accent-color: var(--pdf-accent-primary);
+}

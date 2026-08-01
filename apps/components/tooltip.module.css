@@ -1,0 +1,11 @@
+@reference '../tailwind.css';
+
+.content {
+  @apply pointer-events-none relative z-[2147483647] max-w-45 whitespace-nowrap rounded-md border border-border bg-foreground px-1.75 py-1;
+  @apply text-center text-[10px] leading-3.5 font-normal text-surface;
+  @apply shadow-float;
+}
+
+.arrow {
+  @apply fill-foreground;
+}

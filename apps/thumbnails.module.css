@@ -1,0 +1,15 @@
+@reference './tailwind.css';
+
+.card {
+  @apply flex-none cursor-pointer rounded-md border border-transparent bg-transparent p-1.5 text-center leading-3.75 text-foreground outline-none;
+  @apply transition-[border-color,background-color,box-shadow,transform] duration-150 ease-control motion-reduce:transition-none;
+}
+
+.card:hover,
+.card:focus-visible {
+  @apply -translate-y-px border-accent shadow-control;
+}
+
+.card[data-current='true'] {
+  @apply border-accent bg-selected;
+}

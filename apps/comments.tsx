@@ -9,6 +9,7 @@ import {
   type PdfTextRun,
 } from '@embedpdf/models';
 import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
+import { Button, PanelContent, PanelState } from './components';
 import {
   TEXT_MARKUP_TYPES,
   getAnnotationFocusPosition,
@@ -18,6 +19,7 @@ import {
   rectsIntersect,
 } from './annotations';
 import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
+import styles from './comments.module.css';
 
 type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
 type EditingComment = { annotationId: string; draft: string };
@@ -351,19 +353,20 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   };
 
   return (
-    <div className="shnctl-content shnctl-comment-content" ref={contentRef} hidden={!open}>
-      {!registry ? <div className="shnctl-state">Loading comments...</div> : null}
-      {registry && !entries.length ? <div className="shnctl-comment-empty">
-        <span className="shnctl-comment-empty-icon"><MessageSquareMore size={20} strokeWidth={1.6} /></span>
-        <strong>No comments yet</strong>
-        <span>Annotations and notes added to this PDF will appear here.</span>
+    <PanelContent padding="compact" overflow="hidden" className={styles.panel} hidden={!open}>
+      <div ref={contentRef} className="h-full overflow-y-auto">
+      {!registry ? <PanelState>Loading comments...</PanelState> : null}
+      {registry && !entries.length ? <div className={styles.empty}>
+        <span className={styles.emptyIcon}><MessageSquareMore size={20} strokeWidth={1.6} /></span>
+        <strong className={styles.emptyTitle}>No comments yet</strong>
+        <span className={styles.emptyDescription}>Annotations and notes added to this PDF will appear here.</span>
       </div> : null}
-      {pageGroups.length ? <ol className="shnctl-comment-list">
-        {pageGroups.map((group) => <li key={group.pageIndex} className="shnctl-comment-page-group" data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
-          <div className="shnctl-comment-page-header">
+      {pageGroups.length ? <ol className={styles.list}>
+        {pageGroups.map((group) => <li key={group.pageIndex} className={styles.pageGroup} data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
+          <div className={styles.pageHeader}>
             <span>Page {group.pageIndex + 1}</span>
           </div>
-          <ol className="shnctl-comment-page-entries">
+          <ol className={styles.entries}>
             {group.entries.map((annotation) => {
               const Icon = getEntryIcon(annotation);
               const label = getAnnotationLabel(annotation);
@@ -377,22 +380,23 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
                 : 'No text content');
               return <li
                 key={annotation.id}
-                className="shnctl-comment-item"
+                className={styles.item}
                 data-comment-annotation-id={annotation.id}
                 data-editing={isEditing ? 'true' : undefined}
               >
                 {!isEditing ? <button
                   type="button"
-                  className="shnctl-comment-card-target"
+                  className={styles.cardTarget}
                   onClick={() => registry && navigateToAnnotation(registry, annotation)}
                   aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
                 /> : null}
-                <div className="shnctl-comment-heading">
-                  <span className="shnctl-comment-icon"><Icon size={15} strokeWidth={2} /></span>
-                  <span className="shnctl-comment-meta"><span className="shnctl-comment-type">{label}</span></span>
+                <div className={styles.heading}>
+                  <span className={styles.icon}><Icon size={15} strokeWidth={2} /></span>
+                  <span className={styles.type}>{label}</span>
                 </div>
-                {isEditing ? <form className="shnctl-comment-editor" onSubmit={(event) => { event.preventDefault(); saveComment(annotation); }}>
+                {isEditing ? <form className={styles.editor} onSubmit={(event) => { event.preventDefault(); saveComment(annotation); }}>
                   <textarea
+                    className={styles.textarea}
                     value={editingComment.draft}
                     onChange={(event) => setEditingComment({
                       annotationId: annotation.id,
@@ -401,19 +405,20 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
                     autoFocus
                     aria-label={`Comment for ${label}`}
                   />
-                  <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => cancelComment(annotation)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
+                  <div className={styles.actions}><Button onClick={() => cancelComment(annotation)}>Cancel</Button><Button type="submit" variant="primary">Save</Button></div>
                 </form> : isComment
                   ? <button
                       type="button"
-                      className="shnctl-comment-body"
+                      className={`${styles.body} ${styles.editableBody}`}
                       onClick={() => setEditingComment({ annotationId: annotation.id, draft: contents ?? '' })}
                     >{contents || 'Empty comment'}</button>
-                  : <div className="shnctl-comment-body shnctl-comment-body-readonly">{summary}</div>}
+                  : <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>}
               </li>;
             })}
           </ol>
         </li>)}
       </ol> : null}
-    </div>
+      </div>
+    </PanelContent>
   );
 }

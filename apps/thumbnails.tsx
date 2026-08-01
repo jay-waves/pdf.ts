@@ -5,10 +5,12 @@ import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { RowsPhotoAlbum, type Photo } from 'react-photo-album';
 import 'react-photo-album/rows.css';
+import { PanelContent, PanelState } from './components';
 import { getActiveDocumentId, getPluginCapability, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
+import styles from './thumbnails.module.css';
 
 const THUMBNAIL_WIDTH = 150;
-const THUMBNAIL_TARGET_HEIGHT = 152;
+const THUMBNAIL_TARGET_HEIGHT = 176;
 const THUMBNAIL_GAP = 10;
 const THUMBNAIL_CARD_PADDING = 7;
 const THUMBNAIL_CACHE_LIMIT = 64;
@@ -281,7 +283,7 @@ function ThumbnailFlow({
   }, [currentPageIndex, photos]);
 
   return (
-    <div className="shnctl-thumbnail-scroll" ref={scrollRef}>
+    <div className="h-full overflow-y-auto" ref={scrollRef}>
       <RowsPhotoAlbum<ThumbnailPhoto>
         photos={photos}
         spacing={THUMBNAIL_GAP}
@@ -303,7 +305,7 @@ function ThumbnailFlow({
             return (
               <button
                 type="button"
-                className="shnctl-action shnctl-thumbnail"
+                className={`${styles.card} group`}
                 data-thumbnail-page-index={photo.pageIndex}
                 data-current={pageNumber === currentPageNumber ? 'true' : undefined}
                 aria-label={`Page ${pageNumber}`}
@@ -311,7 +313,7 @@ function ThumbnailFlow({
                 onClick={onClick}
               >
                 <span
-                  className="shnctl-thumbnail-frame"
+                  className="block w-full overflow-hidden rounded border border-border-subtle bg-input"
                   style={{ aspectRatio: photo.width / photo.height }}
                 >
                   {thumbnailUrl ? (
@@ -319,11 +321,11 @@ function ThumbnailFlow({
                       src={thumbnailUrl}
                       alt=""
                       draggable={false}
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      className="size-full object-contain"
                     />
                   ) : null}
                 </span>
-                <span className="shnctl-thumbnail-label">{pageNumber}</span>
+                <span className="mt-1 block text-muted tabular-nums group-data-[current=true]:text-accent">{pageNumber}</span>
               </button>
             );
           },
@@ -350,7 +352,7 @@ export function Thumbnails({
   const pageCount = getTotalPages(registry, documentId, totalPages);
 
   return (
-    <div className="shnctl-content shnctl-thumbnail-content" hidden={!open}>
+    <PanelContent overflow="hidden" hidden={!open}>
       {open && registry && documentId && pageCount > 0 ? (
         <ThumbnailFlow
           registry={registry}
@@ -360,8 +362,8 @@ export function Thumbnails({
           onClose={onClose}
         />
       ) : open ? (
-        <div className="shnctl-state">No pages available.</div>
+        <PanelState>No pages available.</PanelState>
       ) : null}
-    </div>
+    </PanelContent>
   );
 }

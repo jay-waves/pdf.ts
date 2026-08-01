@@ -23,11 +23,15 @@ export function IconButton({
   const button = (
     <button
       type="button"
-      className={`shnctl-action ${className}${active ? ' is-active' : ''}`}
+      className={[
+        'cursor-pointer border border-transparent bg-transparent text-inherit data-[active=true]:border-accent data-[active=true]:text-accent data-[active=true]:shadow-control',
+        className,
+      ].join(' ')}
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
+      data-active={active ? 'true' : undefined}
       title={disabled ? label : undefined}
     >
       <Icon size={iconSize} strokeWidth={2} />

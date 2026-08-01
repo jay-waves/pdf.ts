@@ -4,6 +4,7 @@ import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from './components';
 import { platform } from '#platform';
 import { getPluginCapability, normalizePdfText } from './utils';
+import styles from './selection-translate.module.css';
 
 const MAX_TEXT_LENGTH = 4000;
 
@@ -79,7 +80,8 @@ export function SelectionTranslate({
       onClose={onClose}
       anchor={request.anchor}
       sideOffset={10}
-      className={`shnctl-translate-panel${result?.status === 'error' ? ' is-error' : ''}`}
+      className={styles.panel}
+      data-error={result?.status === 'error' ? 'true' : undefined}
       label="Translation"
       role="status"
     >

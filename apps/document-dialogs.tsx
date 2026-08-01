@@ -4,12 +4,14 @@ import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manage
 import type { PrintCapability } from '@embedpdf/plugin-print';
 import { PdfPermissionFlag, type PdfSignatureObject } from '@embedpdf/models';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
-import { Dialog } from './components';
+import { Button, Dialog, DialogActions, RadioOption } from './components';
 import { getDocumentCapability } from './utils';
 import {
   getSignatureCertificateInfo,
   type SignatureVerificationResult,
 } from './signature-certificate';
+import styles from './document-dialogs.module.css';
+
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -68,20 +70,20 @@ export function SignatureDialog({ signatures, verifications, open, onClose }: {
     <Dialog
       open={open}
       onClose={onClose}
+      variant="popupWide"
       title={`Digital Signatures (${signatures.length})`}
-      titleClassName="shnctl-popup-title"
-      contentClassName="shnctl-popup shnctl-signature-dialog"
+      titleClassName={styles.title}
     >
-      <div className="shnctl-signature-list">
+      <div className={styles.signatureList}>
         {signatures.map((signature, index) => {
           const verification = verifications[index] ?? {
             state: 'pending',
             detail: 'Verification in progress.',
           };
           return (
-            <section className="shnctl-signature-card" key={index}>
-              <h3>Signature {index + 1}</h3>
-              <dl>
+            <section className={styles.signatureCard} key={index}>
+              <h3 className={styles.signatureTitle}>Signature {index + 1}</h3>
+              <dl className={styles.signatureDetails}>
                 {(() => {
                   const certificate = getSignatureCertificateInfo(signature.contents);
                   return certificate ? (
@@ -98,7 +100,8 @@ export function SignatureDialog({ signatures, verifications, open, onClose }: {
                 <div><dt>Format</dt><dd>{decodeSignatureBuffer(signature.subFilter) || 'Not provided'}</dd></div>
               </dl>
               <p
-                className={`shnctl-signature-status is-${verification.state}`}
+                className={styles.signatureStatus}
+                data-verified={verification.state === 'verified' ? 'true' : undefined}
                 title={verification.detail}
               >
                 {signatureStatusText(verification)}
@@ -107,9 +110,9 @@ export function SignatureDialog({ signatures, verifications, open, onClose }: {
           );
         })}
       </div>
-      <div className="shnctl-popup-actions">
-        <button type="button" className="is-primary" onClick={onClose}>Close</button>
-      </div>
+      <DialogActions className={styles.signatureActions}>
+        <Button variant="primary" onClick={onClose}>Close</Button>
+      </DialogActions>
     </Dialog>
   );
 }
@@ -147,6 +150,10 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!password) {
+      if (isProtected) {
+        await removeProtection();
+        return;
+      }
       setError('Enter a password.');
       return;
     }
@@ -178,7 +185,7 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
     }
   };
 
-  const removeProtection = async () => {
+  async function removeProtection() {
     if (!scoped || !document) {
       setError('Document protection is not available.');
       return;
@@ -217,31 +224,47 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
     } finally {
       setBusyAction(null);
     }
-  };
+  }
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
+      variant="popup"
       preventClose={busy}
       title="Password protection"
-      titleClassName="shnctl-popup-title"
-      contentClassName="shnctl-popup"
+      titleClassName={styles.title}
     >
-      <form className="shnctl-popup-form" onSubmit={submit}>
-        <label className="shnctl-popup-field">
+      <form className={styles.form} onSubmit={submit}>
+        <label className={styles.field}>
           <span>Password</span>
-          <input type="password" value={password} onChange={(event) => setPassword(event.currentTarget.value)} autoComplete="new-password" autoFocus />
+          <input
+            className={styles.input}
+            type="password"
+            value={password}
+            onChange={(event) => {
+              const nextPassword = event.currentTarget.value;
+              setPassword(nextPassword);
+              if (nextPassword && removalRequested) {
+                setRemovalRequested(false);
+                setOwnerPassword('');
+                setError('');
+              }
+            }}
+            autoComplete="new-password"
+            autoFocus
+          />
         </label>
-        <label className="shnctl-popup-field">
+        <label className={styles.field}>
           <span>Confirm password</span>
-          <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} autoComplete="new-password" />
+          <input className={styles.input} type="password" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} autoComplete="new-password" />
         </label>
         {isProtected && removalRequested && requiresOwnerPassword ? (
-          <label className="shnctl-popup-field">
+          <label className={styles.field}>
             <span>Owner password</span>
             <input
               type="password"
+              className={styles.input}
               value={ownerPassword}
               onChange={(event) => setOwnerPassword(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -254,18 +277,19 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
             />
           </label>
         ) : null}
-        {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
-        <div className="shnctl-popup-actions">
-          {isProtected ? (
-            <button type="button" onClick={() => void removeProtection()} disabled={busy}>
-              {busyAction === 'remove' ? 'Removing...' : 'Remove password'}
-            </button>
-          ) : null}
-          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="is-primary" disabled={busy}>
-            {busyAction === 'protect' ? 'Saving...' : isProtected ? 'Change password' : 'Protect'}
-          </button>
-        </div>
+        {error ? <div className={styles.error} role="alert">{error}</div> : null}
+        <DialogActions>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy}>
+            {busyAction === 'remove'
+              ? 'Removing...'
+              : busyAction === 'protect'
+                ? 'Saving...'
+                : isProtected && !password
+                  ? 'Remove password'
+                  : isProtected ? 'Change password' : 'Protect'}
+          </Button>
+        </DialogActions>
       </form>
     </Dialog>
   );
@@ -314,28 +338,29 @@ export function OpenPasswordDialog({ registry, documentId, incorrect }: {
     <Dialog
       open
       onClose={() => {}}
+      variant="popup"
       preventClose
       title="Password required"
-      titleClassName="shnctl-popup-title"
-      contentClassName="shnctl-popup"
+      titleClassName={styles.title}
     >
-      <form className="shnctl-popup-form" onSubmit={submit}>
-        <label className="shnctl-popup-field">
+      <form className={styles.form} onSubmit={submit}>
+        <label className={styles.field}>
           <span>This PDF is password protected.</span>
           <input
             type="password"
+            className={styles.input}
             value={password}
             onChange={(event) => setPassword(event.currentTarget.value)}
             autoComplete="current-password"
             autoFocus
           />
         </label>
-        {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
-        <div className="shnctl-popup-actions">
-          <button type="submit" className="is-primary" disabled={busy}>
+        {error ? <div className={styles.error} role="alert">{error}</div> : null}
+        <DialogActions>
+          <Button type="submit" variant="primary" disabled={busy}>
             {busy ? 'Opening...' : 'Open PDF'}
-          </button>
-        </div>
+          </Button>
+        </DialogActions>
       </form>
     </Dialog>
   );
@@ -404,14 +429,14 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
     <Dialog
       open={open}
       onClose={onClose}
+      variant="popup"
       preventClose={busy}
       title="Print"
-      titleClassName="shnctl-popup-title"
-      contentClassName="shnctl-popup"
+      titleClassName={styles.title}
     >
-      <form className="shnctl-popup-form" onSubmit={submit}>
+      <form className={styles.form} onSubmit={submit}>
         <RadixRadioGroup.Root
-          className="shnctl-print-modes"
+          className="overflow-hidden rounded border border-border"
           value={mode}
           onValueChange={(value) => {
             if (value === 'all' || value === 'current' || value === 'custom') setMode(value);
@@ -419,26 +444,26 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
           aria-label="Pages to print"
         >
           {PRINT_MODE_OPTIONS.map((option) => (
-            <label className="shnctl-radio-item" key={option.value}>
-              <RadixRadioGroup.Item className="shnctl-radio-control" value={option.value}>
-                <RadixRadioGroup.Indicator className="shnctl-radio-indicator" />
-              </RadixRadioGroup.Item>
-              <span>{option.label}</span>
-              {option.value === 'current' ? <small>{currentPageNumber}</small> : null}
-            </label>
+            <RadioOption
+              value={option.value}
+              trailing={option.value === 'current' ? currentPageNumber : undefined}
+              key={option.value}
+            >
+              {option.label}
+            </RadioOption>
           ))}
         </RadixRadioGroup.Root>
         {mode === 'custom' ? (
-          <label className="shnctl-popup-field">
+          <label className={styles.field}>
             <span>Page range</span>
-            <input value={pageRange} onChange={(event) => setPageRange(event.currentTarget.value)} placeholder="1,3,5-7" autoFocus />
+            <input className={styles.input} value={pageRange} onChange={(event) => setPageRange(event.currentTarget.value)} placeholder="1,3,5-7" autoFocus />
           </label>
         ) : null}
-        {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
-        <div className="shnctl-popup-actions">
-          <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="is-primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</button>
-        </div>
+        {error ? <div className={styles.error} role="alert">{error}</div> : null}
+        <DialogActions>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</Button>
+        </DialogActions>
       </form>
     </Dialog>
   );

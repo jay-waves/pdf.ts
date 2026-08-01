@@ -27,7 +27,7 @@ declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
 const preferences = new Map<string, string>();
-const THEME_STORAGE_KEY = 'shnctl-viewer-theme-v1';
+const THEME_STORAGE_KEY = 'pdf-viewer-theme-v1';
 const pending = new Map<number, {
   resolve(value: unknown): void;
   reject(error: Error): void;

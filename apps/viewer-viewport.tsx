@@ -28,7 +28,7 @@ export function ViewerViewport({
 
   return (
     <ViewportElementContext.Provider value={viewportRef}>
-      <ScrollArea.Root className="shnctl-viewer-scroll-area" type="always">
+      <ScrollArea.Root className="pdf-viewer-scroll-area" type="always">
         <ScrollArea.Viewport
           {...props}
           ref={viewportRef}
@@ -41,16 +41,16 @@ export function ViewerViewport({
           {!isGated ? children : null}
         </ScrollArea.Viewport>
         <ScrollArea.Scrollbar
-          className="shnctl-viewer-scrollbar shnctl-viewer-scrollbar-horizontal"
+          className="pdf-viewer-scrollbar pdf-viewer-scrollbar-horizontal"
           orientation="horizontal"
         >
-          <ScrollArea.Thumb className="shnctl-viewer-scrollbar-thumb" />
+          <ScrollArea.Thumb className="pdf-viewer-scrollbar-thumb" />
         </ScrollArea.Scrollbar>
         <ScrollArea.Scrollbar
-          className="shnctl-viewer-scrollbar shnctl-viewer-scrollbar-vertical"
+          className="pdf-viewer-scrollbar pdf-viewer-scrollbar-vertical"
           orientation="vertical"
         >
-          <ScrollArea.Thumb className="shnctl-viewer-scrollbar-thumb" />
+          <ScrollArea.Thumb className="pdf-viewer-scrollbar-thumb" />
         </ScrollArea.Scrollbar>
       </ScrollArea.Root>
     </ViewportElementContext.Provider>

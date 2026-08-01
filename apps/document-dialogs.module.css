@@ -1,0 +1,18 @@
+@reference './tailwind.css';
+
+.title { @apply m-0 bg-surface-alt px-3.25 py-2.5 text-xs font-semibold; }
+.form { @apply m-0 grid gap-2.5 bg-surface px-3.25 pt-3 pb-3.25; }
+.field { @apply grid gap-1.25 text-secondary; }
+.input { @apply h-7.25 w-full rounded border border-border bg-input px-1.75 text-inherit outline-none; }
+.input:focus { @apply border-accent; }
+.error { @apply leading-3.75 text-danger; }
+.signatureList { @apply mx-3.25 mt-3 grid max-h-[min(55vh,440px)] gap-2.5 overflow-auto; }
+.signatureCard { @apply rounded-md border border-border-subtle bg-app p-3; }
+.signatureTitle { @apply mt-0 mb-2.5 text-xs text-foreground; }
+.signatureDetails { @apply m-0 grid gap-1.5 text-[11px]; }
+.signatureDetails > div { @apply grid grid-cols-[72px_minmax(0,1fr)] gap-2; }
+.signatureDetails dt { @apply text-secondary; }
+.signatureDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
+.signatureStatus { @apply mt-2.5 mb-0 text-[10px] text-secondary; }
+.signatureStatus[data-verified='true'] { @apply font-medium text-foreground; }
+.signatureActions { @apply px-3.25 pt-3 pb-3.25; }

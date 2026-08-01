@@ -1,0 +1,12 @@
+@reference './tailwind.css';
+
+.panel {
+  @apply pointer-events-auto z-[2147483647] max-h-[min(256px,calc(100vh-24px))] min-w-40 max-w-[min(304px,calc(100vw-24px))] overflow-auto;
+  @apply rounded-lg border border-border bg-elevated px-2.5 py-2 text-[10.5px] leading-[1.45] whitespace-pre-wrap text-foreground;
+  @apply shadow-popover select-text;
+  overflow-wrap: anywhere;
+}
+
+.panel[data-error='true'] {
+  @apply text-danger;
+}

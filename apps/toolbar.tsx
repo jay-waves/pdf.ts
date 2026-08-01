@@ -55,6 +55,7 @@ import {
   setStoredToolbarPinned,
 } from './theme';
 import { Search } from './search';
+import styles from './toolbar.module.css';
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -133,7 +134,7 @@ const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), valu
 function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: ToolbarButtonProps) {
   return (
     <IconButton
-      className="shnctl-toolbar-button"
+      className={styles.iconButton}
       label={label}
       icon={Icon}
       active={active}
@@ -452,23 +453,23 @@ export function Toolbar({
   return (
     <div
       ref={toolbarRef}
-      className="shnctl-toolbar-shell"
+      className={styles.root}
       data-pinned={pinned ? 'true' : undefined}
       data-visible={pinned ? 'true' : undefined}
       onMouseEnter={showToolbar}
       onMouseLeave={scheduleToolbarHide}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <div className="shnctl-toolbar-main" role="toolbar" aria-label="PDF toolbar">
-        <div className="shnctl-toolbar-zone shnctl-toolbar-zone-left">
-          <div className="shnctl-toolbar-group">
+      <div className={styles.mainBar} role="toolbar" aria-label="PDF toolbar">
+        <div className={styles.side}>
+          <div className={styles.cluster}>
             <DropdownMenu
               open={openMenu === 'document'}
               onOpenChange={(open) => setOpenMenu((current) => (
                 open ? 'document' : current === 'document' ? null : current
               ))}
               trigger={(
-                <button type="button" className="shnctl-action shnctl-toolbar-button" aria-label="Document menu">
+                <button type="button" className={styles.iconButton} aria-label="Document menu">
                   <Menu size={14} strokeWidth={2} />
                 </button>
               )}
@@ -497,7 +498,7 @@ export function Toolbar({
               <Tooltip content={`Digitally signed document · ${signatureCount} signature${signatureCount === 1 ? '' : 's'}`}>
                 <button
                   type="button"
-                  className="shnctl-action shnctl-toolbar-button"
+                  className={styles.iconButton}
                   aria-label={`Digital signatures (${signatureCount})`}
                   onClick={onOpenSignatures}
                 >
@@ -508,8 +509,8 @@ export function Toolbar({
           </div>
         </div>
 
-        <div className="shnctl-toolbar-zone shnctl-toolbar-zone-center">
-          <div className="shnctl-toolbar-group shnctl-toolbar-modes">
+        <div className={styles.center}>
+          <div className={styles.modeCluster}>
             <DropdownMenu
               open={openMenu === 'mode'}
               onOpenChange={(open) => setOpenMenu((current) => (
@@ -517,15 +518,15 @@ export function Toolbar({
               ))}
               align="end"
               trigger={(
-                <button type="button" className="shnctl-toolbar-mode-select">
-                  <activeModeItem.icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
+                <button type="button" className={styles.mobileModeButton}>
+                  <activeModeItem.icon className={styles.icon} size={14} strokeWidth={2} />
                   <span>{activeModeItem.label}</span>
                 </button>
               )}
             >
                 {MODE_ITEMS.map(({ id, label, icon: Icon }) => (
-                <DropdownMenuItem key={id} className={mode === id ? 'is-active' : undefined} onSelect={() => setMode(id)}>
-                    <Icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
+                <DropdownMenuItem key={id} active={mode === id} onSelect={() => setMode(id)}>
+                    <Icon className={styles.icon} size={14} strokeWidth={2} />
                     <span>{label}</span>
                 </DropdownMenuItem>
                 ))}
@@ -534,12 +535,13 @@ export function Toolbar({
               <button
                 key={id}
                 type="button"
-                className={`shnctl-toolbar-tab${mode === id ? ' is-active' : ''}`}
+                className={styles.modeButton}
+                data-active={mode === id ? 'true' : undefined}
                 onClick={() => setMode(id)}
                 aria-pressed={mode === id}
               >
-                <Icon className="shnctl-mode-icon" size={14} strokeWidth={2} />
-                <span>{label}</span>
+                <Icon className={styles.icon} size={14} strokeWidth={2} />
+                <span className="text-left whitespace-nowrap">{label}</span>
               </button>
             ))}
           </div>
@@ -548,11 +550,11 @@ export function Toolbar({
       </div>
 
       {mode === 'page' ? (
-        <div className="shnctl-toolbar-secondary" role="toolbar" aria-label="Page toolbar">
-          <div className="shnctl-toolbar-group">
+        <div className={styles.secondaryBar} role="toolbar" aria-label="Page toolbar">
+          <div className={styles.cluster}>
             <ToolbarButton label="Zoom out" icon={Minus} onClick={() => zoomByButton(-1)} disabled={!canUseRegistry} />
             <Select
-              className="shnctl-toolbar-zoom-select"
+              className={styles.zoomSelect}
               value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}
               displayValue={`${zoomPercent}%`}
               options={ZOOM_SELECT_OPTIONS}
@@ -565,8 +567,8 @@ export function Toolbar({
             />
             <ToolbarButton label="Zoom in" icon={Plus} onClick={() => zoomByButton(1)} disabled={!canUseRegistry} />
           </div>
-          <div className="shnctl-toolbar-divider" />
-          <div className="shnctl-toolbar-group">
+          <div className={styles.divider} />
+          <div className={styles.cluster}>
             <ToolbarButton label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'} icon={GalleryHorizontal} active={spreadMode === SpreadMode.Odd} onClick={() => setSpread(spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd)} disabled={!canUseRegistry} />
             <ToolbarButton label="Vertical scroll" icon={ArrowDownUp} active={scrollStrategy === ScrollStrategy.Vertical} onClick={() => setScroll(ScrollStrategy.Vertical)} disabled={!canUseRegistry} />
             <ToolbarButton label="Horizontal scroll" icon={ArrowLeftRight} active={scrollStrategy === ScrollStrategy.Horizontal} onClick={() => setScroll(ScrollStrategy.Horizontal)} disabled={!canUseRegistry} />
@@ -579,12 +581,12 @@ export function Toolbar({
       {mode === 'search' ? <Search registry={registry} open /> : null}
 
       {mode === 'draw' ? (
-        <div className="shnctl-toolbar-secondary" role="toolbar" aria-label="Draw toolbar">
-          <div className="shnctl-toolbar-group shnctl-draw-tools">
+        <div className={styles.secondaryBar} role="toolbar" aria-label="Draw toolbar">
+          <div className={styles.drawTools}>
             {DRAW_TOOLS.map(({ id, label, icon }) => (
               <ToolbarButton key={id} label={label} icon={icon} active={activeTool === id} onClick={() => selectDrawTool(id)} disabled={!canUseRegistry} />
             ))}
-            <div className="shnctl-toolbar-divider" />
+            <div className={styles.divider} />
             <ToolbarButton label="Colors" icon={PaintBucket} active={colorPaletteOpen} onClick={onToggleColorPalette} disabled={!canUseRegistry} />
             <ToolbarButton label="Undo" icon={Undo2} onClick={() => runAnnotationHistory('undo')} disabled={!canUseRegistry} />
             <ToolbarButton label="Redo" icon={Redo2} onClick={() => runAnnotationHistory('redo')} disabled={!canUseRegistry} />

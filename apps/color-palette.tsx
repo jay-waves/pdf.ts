@@ -18,7 +18,8 @@ import {
   type AnnotationColorFieldKey,
   type AnnotationToolLike,
 } from './annotations';
-import { Dialog } from './components';
+import { Dialog, PanelContent, PanelState } from './components';
+import styles from './color-palette.module.css';
 
 interface PaletteSnapshot {
   activeTool: AnnotationToolLike | null;
@@ -147,22 +148,23 @@ export function ColorPalette({
   };
 
   const body = !capability
-    ? <div className="shnctl-state">Color tools are not ready.</div>
-    : <div className="shnctl-color-content">
-        <div className="shnctl-color-meta">
+    ? <PanelState>Color tools are not ready.</PanelState>
+    : <div className={styles.content}>
+        <div className={styles.meta}>
           <span>{getAnnotationToolLabel(contextTool)}</span>
           {selectedAnnotations.length ? <span>{selectedAnnotations.length} selected</span> : null}
         </div>
 
         {toolId === 'highlight' ? <div
-          className="shnctl-color-targets"
+          className={styles.targets}
           role="group"
           aria-label="Highlight style"
         >
           {HIGHLIGHT_STYLES.map(({ label, value }) => <button
             key={value}
             type="button"
-            className={`shnctl-action shnctl-color-target${currentHighlightStyle === value ? ' is-active' : ''}`}
+            className={styles.target}
+            data-active={currentHighlightStyle === value ? 'true' : undefined}
             onClick={() => applyPatch({ blendMode: value })}
             aria-pressed={currentHighlightStyle === value}
           >
@@ -171,14 +173,15 @@ export function ColorPalette({
         </div> : null}
 
         {colorFields.length > 1 ? <div
-          className="shnctl-color-targets"
+          className={styles.targets}
           role="group"
           aria-label="Color target"
         >
           {colorFields.map(({ key, label }) => <button
             key={key}
             type="button"
-            className={`shnctl-action shnctl-color-target${selectedField === key ? ' is-active' : ''}`}
+            className={styles.target}
+            data-active={selectedField === key ? 'true' : undefined}
             onClick={() => setSelectedField(key)}
             aria-pressed={selectedField === key}
           >
@@ -186,12 +189,13 @@ export function ColorPalette({
           </button>)}
         </div> : null}
 
-        <div className="shnctl-color-grid" role="group" aria-label="Color presets">
+        <div className={styles.grid} role="group" aria-label="Color presets">
           {colors.map((color) => <button
             key={color}
             type="button"
-            className={`shnctl-color-swatch${currentColor === color ? ' is-active' : ''}`}
-            style={{ '--shnctl-swatch-color': color } as CSSProperties}
+            className={styles.swatch}
+            style={{ '--pdf-swatch-color': color } as CSSProperties}
+            data-active={currentColor === color ? 'true' : undefined}
             data-transparent={color === TRANSPARENT_ANNOTATION_COLOR ? 'true' : undefined}
             onClick={() => applyColor(color)}
             aria-label={color === TRANSPARENT_ANNOTATION_COLOR ? 'Transparent' : color}
@@ -201,21 +205,21 @@ export function ColorPalette({
           </button>)}
         </div>
 
-        <label className="shnctl-color-custom">
+        <label className={styles.custom}>
           <span>Custom</span>
           <input
-            className="shnctl-color-input"
+            className={styles.colorInput}
             type="color"
             value={customInputColor}
             onChange={(event) => applyColor(event.currentTarget.value)}
           />
-          <span className="shnctl-color-value">{currentColor}</span>
+          <span className={styles.value}>{currentColor}</span>
         </label>
 
-        <label className="shnctl-color-opacity">
+        <label className={styles.opacity}>
           <span>Opacity</span>
           <input
-            className="shnctl-color-opacity-input"
+            className={styles.opacityInput}
             type="range"
             min="0"
             max="100"
@@ -225,7 +229,7 @@ export function ColorPalette({
               opacity: Number(event.currentTarget.value) / 100,
             })}
           />
-          <span className="shnctl-color-value">{Math.round(currentOpacity * 100)}%</span>
+          <span className={styles.value}>{Math.round(currentOpacity * 100)}%</span>
         </label>
       </div>;
 
@@ -234,9 +238,9 @@ export function ColorPalette({
       open={open}
       onClose={onClose}
       title="Annotation colors"
-      contentClassName="shnctl-panel shnctl-color-panel"
+      variant="panelCompact"
     >
-      <div className="shnctl-content">{body}</div>
+      <PanelContent>{body}</PanelContent>
     </Dialog>
   );
 }
