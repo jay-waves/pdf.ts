@@ -4,7 +4,7 @@ import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
 import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
-import { Rotation, type PdfEngine, type PdfSignatureObject } from '@embedpdf/models';
+import { PdfErrorCode, Rotation, type PdfEngine, type PdfSignatureObject } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import notoSansVariableUrl from '#noto-sans-variable.ttf';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
@@ -58,7 +58,7 @@ import {
   installNewCommentEditor,
 } from './annotations';
 import { Comments } from './comments';
-import { PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
+import { OpenPasswordDialog, PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
 import { Dialog, TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
@@ -335,6 +335,7 @@ function App({
   const [signatures, setSignatures] = useState<PdfSignatureObject[]>([]);
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerificationResult[]>([]);
   const [navigationVisible, setNavigationVisible] = useState(false);
+  const [protectionState, setProtectionState] = useState<boolean | null>(null);
   const { pageNumber: currentPageNumber, totalPages, bookmarkKey: currentBookmarkKey, title: currentTitle } = documentView;
   const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
@@ -557,6 +558,7 @@ function App({
             setActiveDialog(null);
             setTranslationRequest(null);
             setPanMode(false);
+            setProtectionState(null);
             setHasUnsavedChanges(false);
             if (navigationVisibleRef.current) {
               navigationVisibleRef.current = false;
@@ -613,10 +615,19 @@ function App({
               <ActiveDocumentTracker documentId={activeDocumentId} onChange={setToolbarDocumentId} />
               {activeDocumentId ? (
                 <DocumentContent documentId={activeDocumentId}>
-                  {({ isLoading, isError, isLoaded }) => (
+                  {({ documentState, isLoading, isError, isLoaded }) => (
                     <>
                       {isLoading && <div className="viewer-status">Loading document...</div>}
-                      {isError && <div className="viewer-status viewer-status-error">Unable to load PDF.</div>}
+                      {isError && documentState.errorCode === PdfErrorCode.Password ? (
+                        <OpenPasswordDialog
+                          registry={registry}
+                          documentId={activeDocumentId}
+                          incorrect={documentState.passwordProvided === true}
+                        />
+                      ) : null}
+                      {isError && documentState.errorCode !== PdfErrorCode.Password ? (
+                        <div className="viewer-status viewer-status-error">Unable to load PDF.</div>
+                      ) : null}
                       {isLoaded && (
                         <>
                           <ResourceConsumedNotifier resource={wasmResource} onConsumed={onResourceConsumed} />
@@ -779,7 +790,11 @@ function App({
         registry={registry}
         open={activeDialog === 'protect'}
         onClose={() => setActiveDialog(null)}
-        onProtected={() => setHasUnsavedChanges(true, true)}
+        protectionState={protectionState}
+        onProtectionChanged={(isProtected) => {
+          setProtectionState(isProtected);
+          setHasUnsavedChanges(true, true);
+        }}
       />
       <SignatureDialog
         signatures={signatures}
