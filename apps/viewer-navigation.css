@@ -225,7 +225,6 @@
   margin-block: -2px;
   padding-block: 2px;
   overflow: auto;
-  scrollbar-width: none;
 }
 
 .shnctl-tooltip {
@@ -274,11 +273,6 @@
 
   .shnctl-toolbar-secondary {
     overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .shnctl-toolbar-secondary::-webkit-scrollbar {
-    display: none;
   }
 }
 
