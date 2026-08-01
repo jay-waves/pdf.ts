@@ -5,7 +5,10 @@ import type { PrintCapability } from '@embedpdf/plugin-print';
 import { PdfPermissionFlag, type PdfSignatureObject } from '@embedpdf/models';
 import { Dialog, RadioGroup, RadioGroupItem } from './components';
 import { getDocumentCapability } from './utils';
-import { getSignatureCertificateInfo } from './signature-certificate';
+import {
+  getSignatureCertificateInfo,
+  type SignatureVerificationResult,
+} from './signature-certificate';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -45,8 +48,18 @@ function formatCertificateDate(value: Date) {
   }).format(value);
 }
 
-export function SignatureDialog({ signatures, open, onClose }: {
+function signatureStatusText(verification: SignatureVerificationResult) {
+  switch (verification.state) {
+    case 'verified': return 'Integrity verified · Certificate trust not established';
+    case 'failed': return 'Document integrity check failed';
+    case 'unsupported': return 'Verification unavailable';
+    default: return 'Verifying document integrity…';
+  }
+}
+
+export function SignatureDialog({ signatures, verifications, open, onClose }: {
   signatures: PdfSignatureObject[];
+  verifications: SignatureVerificationResult[];
   open: boolean;
   onClose(): void;
 }) {
@@ -59,28 +72,39 @@ export function SignatureDialog({ signatures, open, onClose }: {
       contentClassName="shnctl-popup shnctl-signature-dialog"
     >
       <div className="shnctl-signature-list">
-        {signatures.map((signature, index) => (
-          <section className="shnctl-signature-card" key={index}>
-            <h3>Signature {index + 1}</h3>
-            <dl>
-              {(() => {
-                const certificate = getSignatureCertificateInfo(signature.contents);
-                return certificate ? (
-                  <>
-                    <div><dt>Signer</dt><dd>{certificate.signer}</dd></div>
-                    <div><dt>Issuer</dt><dd>{certificate.issuer}</dd></div>
-                    <div><dt>Valid from</dt><dd>{formatCertificateDate(certificate.validFrom)}</dd></div>
-                    <div><dt>Valid until</dt><dd>{formatCertificateDate(certificate.validUntil)}</dd></div>
-                  </>
-                ) : null;
-              })()}
-              <div><dt>Signed at</dt><dd>{formatSignatureTime(signature.time)}</dd></div>
-              {signature.reason ? <div><dt>Reason</dt><dd>{signature.reason}</dd></div> : null}
-              <div><dt>Format</dt><dd>{decodeSignatureBuffer(signature.subFilter) || 'Not provided'}</dd></div>
-            </dl>
-            <p>Trust not independently verified</p>
-          </section>
-        ))}
+        {signatures.map((signature, index) => {
+          const verification = verifications[index] ?? {
+            state: 'pending',
+            detail: 'Verification in progress.',
+          };
+          return (
+            <section className="shnctl-signature-card" key={index}>
+              <h3>Signature {index + 1}</h3>
+              <dl>
+                {(() => {
+                  const certificate = getSignatureCertificateInfo(signature.contents);
+                  return certificate ? (
+                    <>
+                      <div><dt>Signer</dt><dd>{certificate.signer}</dd></div>
+                      <div><dt>Issuer</dt><dd>{certificate.issuer}</dd></div>
+                      <div><dt>Valid from</dt><dd>{formatCertificateDate(certificate.validFrom)}</dd></div>
+                      <div><dt>Valid until</dt><dd>{formatCertificateDate(certificate.validUntil)}</dd></div>
+                    </>
+                  ) : null;
+                })()}
+                <div><dt>Signed at</dt><dd>{formatSignatureTime(signature.time)}</dd></div>
+                {signature.reason ? <div><dt>Reason</dt><dd>{signature.reason}</dd></div> : null}
+                <div><dt>Format</dt><dd>{decodeSignatureBuffer(signature.subFilter) || 'Not provided'}</dd></div>
+              </dl>
+              <p
+                className={`shnctl-signature-status is-${verification.state}`}
+                title={verification.detail}
+              >
+                {signatureStatusText(verification)}
+              </p>
+            </section>
+          );
+        })}
       </div>
       <div className="shnctl-popup-actions">
         <button type="button" className="is-primary" onClick={onClose}>Close</button>

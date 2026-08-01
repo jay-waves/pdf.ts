@@ -428,7 +428,6 @@ textarea {
 }
 
 :root[data-shnctl-scroll-strategy="vertical"] .viewer {
-  width: calc(100% - var(--shnctl-viewer-scrollbar-size));
   overflow-x: hidden !important;
   overflow-y: auto !important;
 }
@@ -439,7 +438,6 @@ textarea {
 }
 
 :root[data-shnctl-scroll-strategy="horizontal"] .viewer {
-  height: calc(100% - var(--shnctl-viewer-scrollbar-size));
   overflow-x: scroll !important;
   overflow-y: hidden !important;
 }

@@ -6,6 +6,7 @@ export function blobResource(blob: Blob): ManagedResource {
 
   return {
     url,
+    openStream: () => blob.stream(),
     release() {
       if (released) return;
       released = true;

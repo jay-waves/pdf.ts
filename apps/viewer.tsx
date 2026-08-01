@@ -68,6 +68,10 @@ import { useDocflowPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { signatureWidgetRenderer } from './signature-widget';
+import {
+  verifyPdfSignatures,
+  type SignatureVerificationResult,
+} from './signature-certificate';
 import { platform } from '#platform';
 import type { ManagedResource, PdfFileHandle, ViewerResources } from './platform/types';
 
@@ -328,6 +332,7 @@ function App({
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
   const [signatures, setSignatures] = useState<PdfSignatureObject[]>([]);
+  const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerificationResult[]>([]);
   const [navigationVisible, setNavigationVisible] = useState(false);
   const { pageNumber: currentPageNumber, totalPages, title: currentTitle } = documentView;
   const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
@@ -468,15 +473,46 @@ function App({
 
   useEffect(() => {
     setSignatures([]);
+    setSignatureVerifications([]);
     if (!registry || !toolbarDocumentId) return;
     let active = true;
+    let verificationController: AbortController | undefined;
     const documentManager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
     const readSignatures = () => {
       const document = documentManager?.getDocument(toolbarDocumentId);
       if (!document) return;
       engine.getSignatures(document).wait(
         (nextSignatures) => {
-          if (active) setSignatures(nextSignatures);
+          if (!active) return;
+          verificationController?.abort();
+          setSignatures(nextSignatures);
+          setSignatureVerifications(nextSignatures.map(() => ({
+            state: 'pending',
+            detail: 'Verification in progress.',
+          })));
+          if (!nextSignatures.length) return;
+          if (!documentResource) {
+            setSignatureVerifications(nextSignatures.map(() => ({
+              state: 'unsupported',
+              detail: 'The original PDF byte stream is unavailable.',
+            })));
+            return;
+          }
+          const controller = new AbortController();
+          verificationController = controller;
+          void verifyPdfSignatures(
+            documentResource,
+            nextSignatures,
+            controller.signal,
+          ).then((results) => {
+            if (active && !controller.signal.aborted) {
+              setSignatureVerifications(results);
+            }
+          }).catch((error) => {
+            if (!controller.signal.aborted) {
+              console.error('[pdf-ts] failed to verify digital signatures', error);
+            }
+          });
         },
         (error) => console.error('[pdf-ts] failed to read digital signatures', error),
       );
@@ -486,9 +522,10 @@ function App({
     const unsubscribe = documentManager?.onDocumentOpened(() => readSignatures());
     return () => {
       active = false;
+      verificationController?.abort();
       unsubscribe?.();
     };
-  }, [engine, registry, toolbarDocumentId]);
+  }, [documentResource, engine, registry, toolbarDocumentId]);
 
   useEffect(() => {
     cleanDocumentTitleRef.current = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined) ?? 'PDF';
@@ -745,6 +782,7 @@ function App({
       />
       <SignatureDialog
         signatures={signatures}
+        verifications={signatureVerifications}
         open={activeDialog === 'signatures'}
         onClose={() => setActiveDialog(null)}
       />

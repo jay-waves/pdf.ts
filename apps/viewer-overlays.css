@@ -739,3 +739,8 @@ button.shnctl-comment-body:focus-visible {
   color: var(--shnctl-foreground-secondary);
   font-size: 10px;
 }
+
+.shnctl-signature-status.is-verified {
+  color: var(--shnctl-foreground-primary);
+  font-weight: 500;
+}
