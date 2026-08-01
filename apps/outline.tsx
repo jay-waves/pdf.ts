@@ -21,7 +21,6 @@ import {
   scrollToPagePreservingViewport,
   type ScrollCapability,
 } from './utils';
-import { Dialog } from './components';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
 const SIDE_BUTTON_LONG_PRESS_MS = 450;
@@ -367,14 +366,12 @@ export function Outline({
   cache,
   currentTitle,
   onCacheChange,
-  onClose,
 }: {
   registry?: PluginRegistry;
   open: boolean;
   cache: OutlineCache;
   currentTitle: string;
   onCacheChange: (cache: OutlineCache) => void;
-  onClose: () => void;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const retriedOnOpenRef = useRef(false);
@@ -449,16 +446,7 @@ export function Outline({
     );
   }, [cache.bookmarks, cache.status, currentTitle, registry]);
 
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="PDF Outline"
-      contentClassName="shnctl-panel"
-    >
-      <div className="shnctl-content shnctl-outline-content" ref={contentRef}>{body}</div>
-    </Dialog>
-  );
+  return <div className="shnctl-content shnctl-outline-content" ref={contentRef} hidden={!open}>{body}</div>;
 }
 
 function BookmarkList({

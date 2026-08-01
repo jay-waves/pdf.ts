@@ -225,11 +225,6 @@
     min-height: min(430px, calc(100vh - 22px));
   }
 
-  .shnctl-thumbnail-panel {
-    height: auto;
-    min-height: 0;
-  }
-
   .shnctl-content {
     padding: 12px;
   }
