@@ -38,8 +38,10 @@
     "@embedpdf/plugin-tiling": "2.14.4",
     "@embedpdf/plugin-viewport": "2.14.4",
     "@embedpdf/plugin-zoom": "2.14.4",
+    "asn1js": "^3.0.10",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^1.16.0",
+    "pkijs": "^3.4.0",
     "radix-ui": "^1.6.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

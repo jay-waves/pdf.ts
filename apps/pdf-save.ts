@@ -20,6 +20,45 @@ async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCa
   }
 }
 
+async function getDocumentForSerialization(
+  registry: PluginRegistry | undefined,
+) {
+  if (!registry) return null;
+
+  const documentId = getActiveDocumentId(registry);
+  const document = documentId
+    ? registry.getStore().getState().core.documents[documentId]?.document
+    : undefined;
+  if (!documentId || !document) return null;
+
+  const annotation = getAnnotationScope(registry, documentId);
+  if (annotation) await commitPendingAnnotations(annotation.scope);
+  return document;
+}
+
+export async function exportPdf(
+  engine: PdfEngine<Blob>,
+  registry: PluginRegistry | undefined,
+  fileName: string,
+) {
+  const document = await getDocumentForSerialization(registry);
+  if (!document) return false;
+
+  const data = await engine.saveAsCopy(document).toPromise();
+  if (!data) return false;
+
+  const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+  const anchor = window.document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+  anchor.hidden = true;
+  window.document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
+}
+
 export async function savePdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
@@ -28,19 +67,13 @@ export async function savePdf(
 ) {
   if (!registry || !fileHandle) return false;
 
-  const documentId = getActiveDocumentId(registry);
-  const document = documentId
-    ? registry.getStore().getState().core.documents[documentId]?.document
-    : undefined;
-  if (!documentId || !document) return false;
-
   // Browser-backed handles must acquire permission while the Ctrl+S user
   // activation is still live, before PDF serialization yields to the engine.
   const target = await fileHandle.prepareWrite();
   if (!target) return false;
 
-  const annotation = getAnnotationScope(registry, documentId);
-  if (annotation) await commitPendingAnnotations(annotation.scope);
+  const document = await getDocumentForSerialization(registry);
+  if (!document) return false;
 
   if (
     target.saveIncremental

@@ -2,9 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PrintCapability } from '@embedpdf/plugin-print';
-import { PdfPermissionFlag } from '@embedpdf/models';
+import { PdfPermissionFlag, type PdfSignatureObject } from '@embedpdf/models';
 import { Dialog, RadioGroup, RadioGroupItem } from './components';
 import { getDocumentCapability } from './utils';
+import { getSignatureCertificateInfo } from './signature-certificate';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -23,6 +24,69 @@ function validatePageRange(value: string, totalPages: number) {
     if (start < 1 || end < start || end > totalPages) return null;
   }
   return compact;
+}
+
+function decodeSignatureBuffer(value: ArrayBuffer) {
+  return new TextDecoder().decode(value).replace(/\0+$/g, '').trim();
+}
+
+function formatSignatureTime(value: string) {
+  const match = value.match(/^D:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  if (!match) return value || 'Not provided';
+  const [, year, month, day, hour, minute, second] = match;
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function formatCertificateDate(value: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(value);
+}
+
+export function SignatureDialog({ signatures, open, onClose }: {
+  signatures: PdfSignatureObject[];
+  open: boolean;
+  onClose(): void;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={`Digital Signatures (${signatures.length})`}
+      titleClassName="shnctl-popup-title"
+      contentClassName="shnctl-popup shnctl-signature-dialog"
+    >
+      <div className="shnctl-signature-list">
+        {signatures.map((signature, index) => (
+          <section className="shnctl-signature-card" key={index}>
+            <h3>Signature {index + 1}</h3>
+            <dl>
+              {(() => {
+                const certificate = getSignatureCertificateInfo(signature.contents);
+                return certificate ? (
+                  <>
+                    <div><dt>Signer</dt><dd>{certificate.signer}</dd></div>
+                    <div><dt>Issuer</dt><dd>{certificate.issuer}</dd></div>
+                    <div><dt>Valid from</dt><dd>{formatCertificateDate(certificate.validFrom)}</dd></div>
+                    <div><dt>Valid until</dt><dd>{formatCertificateDate(certificate.validUntil)}</dd></div>
+                  </>
+                ) : null;
+              })()}
+              <div><dt>Signed at</dt><dd>{formatSignatureTime(signature.time)}</dd></div>
+              {signature.reason ? <div><dt>Reason</dt><dd>{signature.reason}</dd></div> : null}
+              <div><dt>Format</dt><dd>{decodeSignatureBuffer(signature.subFilter) || 'Not provided'}</dd></div>
+            </dl>
+            <p>Trust not independently verified</p>
+          </section>
+        ))}
+      </div>
+      <div className="shnctl-popup-actions">
+        <button type="button" className="is-primary" onClick={onClose}>Close</button>
+      </div>
+    </Dialog>
+  );
 }
 
 export function ProtectDialog({ registry, open, onClose, onProtected }: {

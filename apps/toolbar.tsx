@@ -9,6 +9,7 @@ import {
   ArrowDownUp,
   ArrowLeftRight,
   BookImage,
+  Download,
   GalleryHorizontal,
   Hand,
   Highlighter,
@@ -30,6 +31,7 @@ import {
   Save,
   Search as SearchIcon,
   ShieldCheck,
+  Signature,
   Square,
   StickyNote,
   Strikethrough,
@@ -59,6 +61,7 @@ import {
   DropdownMenuItem,
   IconButton,
   Select,
+  Tooltip,
 } from './components';
 
 type ToolbarMode = 'view' | 'page' | 'search' | 'draw';
@@ -82,6 +85,9 @@ interface ToolbarProps {
   onToggleComments(): void;
   onOpenPrint(): void;
   onOpenProtect(): void;
+  signatureCount: number;
+  onOpenSignatures(): void;
+  onExport(): void;
   onSave(): void;
   onPinnedInsetChange(inset: number): void;
 }
@@ -232,6 +238,9 @@ export function Toolbar({
   onToggleComments,
   onOpenPrint,
   onOpenProtect,
+  signatureCount,
+  onOpenSignatures,
+  onExport,
   onSave,
   onPinnedInsetChange,
 }: ToolbarProps) {
@@ -501,6 +510,10 @@ export function Toolbar({
                 <ShieldCheck size={14} strokeWidth={2} />
                 <span>Security</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onExport} disabled={!canUseRegistry}>
+                <Download size={14} strokeWidth={2} />
+                <span>Export</span>
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={onSave} disabled={!canUseRegistry}>
                 <Save size={14} strokeWidth={2} />
                 <span>Save</span>
@@ -509,6 +522,18 @@ export function Toolbar({
             <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
             <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
             <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
+            {signatureCount > 0 ? (
+              <Tooltip content={`Digitally signed document · ${signatureCount} signature${signatureCount === 1 ? '' : 's'}`}>
+                <button
+                  type="button"
+                  className="shnctl-action shnctl-toolbar-button"
+                  aria-label={`Digital signatures (${signatureCount})`}
+                  onClick={onOpenSignatures}
+                >
+                  <Signature size={14} strokeWidth={2} />
+                </button>
+              </Tooltip>
+            ) : null}
           </div>
         </div>
 
