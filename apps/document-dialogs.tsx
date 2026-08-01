@@ -114,23 +114,34 @@ export function SignatureDialog({ signatures, verifications, open, onClose }: {
   );
 }
 
-export function ProtectDialog({ registry, open, onClose, onProtected }: {
+export function ProtectDialog({ registry, open, onClose, protectionState, onProtectionChanged }: {
   registry?: PluginRegistry;
   open: boolean;
   onClose(): void;
-  onProtected(): void;
+  protectionState: boolean | null;
+  onProtectionChanged(isProtected: boolean): void;
 }) {
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [removalRequested, setRemovalRequested] = useState(false);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<'protect' | 'remove' | null>(null);
+  const busy = busyAction !== null;
+
+  const scoped = getDocumentCapability<DocumentManagerCapability>(registry, 'document-manager');
+  const document = scoped?.capability.getDocument(scoped.documentId);
+  const isProtected = protectionState ?? document?.isEncrypted ?? false;
+  const requiresOwnerPassword = document?.isEncrypted === true && !document.isOwnerUnlocked;
 
   useEffect(() => {
     if (!open) return;
     setPassword('');
     setConfirmation('');
+    setOwnerPassword('');
+    setRemovalRequested(false);
     setError('');
-    setBusy(false);
+    setBusyAction(null);
   }, [open]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -144,26 +155,67 @@ export function ProtectDialog({ registry, open, onClose, onProtected }: {
       return;
     }
 
-    const scoped = getDocumentCapability<DocumentManagerCapability>(registry, 'document-manager');
     if (!scoped) {
       setError('Document protection is not available.');
       return;
     }
 
-    setBusy(true);
+    setBusyAction('protect');
     setError('');
     try {
-      await scoped.capability.setDocumentEncryption(scoped.documentId, {
+      const protectedDocument = await scoped.capability.setDocumentEncryption(scoped.documentId, {
         userPassword: password,
         ownerPassword: password,
         allowedFlags: PdfPermissionFlag.AllowAll,
       }).toPromise();
-      onProtected();
+      if (!protectedDocument) throw new Error('PDFium rejected document protection.');
+      onProtectionChanged(true);
       onClose();
     } catch (nextError) {
       setError(getErrorMessage(nextError, 'Failed to protect the document.'));
     } finally {
-      setBusy(false);
+      setBusyAction(null);
+    }
+  };
+
+  const removeProtection = async () => {
+    if (!scoped || !document) {
+      setError('Document protection is not available.');
+      return;
+    }
+
+    if (requiresOwnerPassword && !removalRequested) {
+      setRemovalRequested(true);
+      setError('Enter the owner password to remove protection.');
+      return;
+    }
+    if (requiresOwnerPassword && !ownerPassword) {
+      setError('Enter the owner password to remove protection.');
+      return;
+    }
+
+    setBusyAction('remove');
+    setError('');
+    try {
+      if (requiresOwnerPassword) {
+        const unlocked = await scoped.capability.unlockOwnerPermissions(
+          scoped.documentId,
+          ownerPassword,
+        ).toPromise();
+        if (!unlocked) {
+          setError('Incorrect owner password.');
+          return;
+        }
+      }
+
+      const removed = await scoped.capability.removeEncryption(scoped.documentId).toPromise();
+      if (!removed) throw new Error('PDFium rejected password removal.');
+      onProtectionChanged(false);
+      onClose();
+    } catch (nextError) {
+      setError(getErrorMessage(nextError, 'Failed to remove password protection.'));
+    } finally {
+      setBusyAction(null);
     }
   };
 
@@ -185,10 +237,104 @@ export function ProtectDialog({ registry, open, onClose, onProtected }: {
           <span>Confirm password</span>
           <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.currentTarget.value)} autoComplete="new-password" />
         </label>
+        {isProtected && removalRequested && requiresOwnerPassword ? (
+          <label className="shnctl-popup-field">
+            <span>Owner password</span>
+            <input
+              type="password"
+              value={ownerPassword}
+              onChange={(event) => setOwnerPassword(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                void removeProtection();
+              }}
+              autoComplete="current-password"
+              autoFocus
+            />
+          </label>
+        ) : null}
         {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
         <div className="shnctl-popup-actions">
+          {isProtected ? (
+            <button type="button" onClick={() => void removeProtection()} disabled={busy}>
+              {busyAction === 'remove' ? 'Removing...' : 'Remove password'}
+            </button>
+          ) : null}
           <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="is-primary" disabled={busy}>{busy ? 'Protecting...' : 'Protect'}</button>
+          <button type="submit" className="is-primary" disabled={busy}>
+            {busyAction === 'protect' ? 'Saving...' : isProtected ? 'Change password' : 'Protect'}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+export function OpenPasswordDialog({ registry, documentId, incorrect }: {
+  registry?: PluginRegistry;
+  documentId: string;
+  incorrect: boolean;
+}) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState(incorrect ? 'Incorrect password. Try again.' : '');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!password) {
+      setError('Enter the password to open this PDF.');
+      return;
+    }
+
+    const scoped = getDocumentCapability<DocumentManagerCapability>(
+      registry,
+      'document-manager',
+      documentId,
+    );
+    if (!scoped) {
+      setError('Password verification is not available.');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+    try {
+      const retry = await scoped.capability.retryDocument(documentId, { password }).toPromise();
+      await retry.task.toPromise();
+    } catch {
+      // The document manager changes the document back to its error state,
+      // which remounts this dialog for the next attempt.
+      setError('Incorrect password. Try again.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open
+      onClose={() => {}}
+      preventClose
+      title="Password required"
+      titleClassName="shnctl-popup-title"
+      contentClassName="shnctl-popup"
+    >
+      <form className="shnctl-popup-form" onSubmit={submit}>
+        <label className="shnctl-popup-field">
+          <span>This PDF is password protected.</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.currentTarget.value)}
+            autoComplete="current-password"
+            autoFocus
+          />
+        </label>
+        {error ? <div className="shnctl-popup-error" role="alert">{error}</div> : null}
+        <div className="shnctl-popup-actions">
+          <button type="submit" className="is-primary" disabled={busy}>
+            {busy ? 'Opening...' : 'Open PDF'}
+          </button>
         </div>
       </form>
     </Dialog>
