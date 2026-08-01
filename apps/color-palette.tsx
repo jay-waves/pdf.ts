@@ -51,7 +51,7 @@ export function ColorPalette({
   open: boolean;
   onClose(): void;
 }) {
-  const capability = useMemo(() => getAnnotationCapability(registry), [registry]);
+  const capability = getAnnotationCapability(registry);
   const [snapshot, setSnapshot] = useState<PaletteSnapshot>(EMPTY_SNAPSHOT);
   const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('strokeColor');
   const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;

@@ -20,7 +20,6 @@ import {
 import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
 
 type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
-type AnnotationSummaries = Record<string, string>;
 type EditingComment = { annotationId: string; draft: string };
 
 const SUMMARY_MAX_LENGTH = 160;
@@ -109,6 +108,29 @@ function navigateToAnnotation(registry: PluginRegistry, annotation: PdfAnnotatio
   });
 }
 
+function scrollCommentItemIntoView(root: HTMLElement, item: HTMLElement) {
+  const inset = 12;
+  const rootRect = root.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  const visibleTop = rootRect.top + inset;
+  const visibleBottom = rootRect.bottom - inset;
+  const availableHeight = Math.max(0, visibleBottom - visibleTop);
+  let delta = 0;
+
+  if (itemRect.height > availableHeight || itemRect.top < visibleTop) {
+    delta = itemRect.top - visibleTop;
+  } else if (itemRect.bottom > visibleBottom) {
+    delta = itemRect.bottom - visibleBottom;
+  }
+
+  if (Math.abs(delta) > 0.5) {
+    root.scrollTo({
+      top: Math.max(0, root.scrollTop + delta),
+      behavior: 'auto',
+    });
+  }
+}
+
 function deleteAnnotation(registry: PluginRegistry | undefined, pageIndex: number, annotationId: string) {
   const scoped = getAnnotationScope(registry);
   scoped?.scope.deleteAnnotations([{
@@ -127,10 +149,13 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
 }) {
   const [revision, setRevision] = useState(0);
   const [editingComment, setEditingComment] = useState<EditingComment | null>(null);
-  const [summaries, setSummaries] = useState<AnnotationSummaries>({});
+  const [summaryRevision, setSummaryRevision] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const consumedTargetIdRef = useRef<string | null>(null);
   const pendingCreationRef = useRef<{ annotationId: string; pageIndex: number } | null>(null);
+  const summaryCacheRef = useRef(new Map<string, string>());
+  const invalidSummaryIdsRef = useRef(new Set<string>());
+  const editingAnnotationId = editingComment?.annotationId;
   const entries = useMemo(() => open ? getEntries(registry) : [], [open, registry, revision]);
   const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, annotation) => {
     const lastGroup = groups.at(-1);
@@ -143,17 +168,38 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   }, []), [entries]);
 
   useEffect(() => {
-    if (!open) return;
+    summaryCacheRef.current.clear();
+    invalidSummaryIdsRef.current.clear();
+    setSummaryRevision((value) => value + 1);
+  }, [registry]);
+
+  useEffect(() => {
     const scoped = getAnnotationScope(registry);
     if (!scoped) return;
     return scoped.scope.onAnnotationEvent((event) => {
-      if (event.documentId === scoped.documentId) setRevision((value) => value + 1);
+      if (event.documentId !== scoped.documentId) return;
+
+      if (event.type === 'loaded') {
+        summaryCacheRef.current.clear();
+        invalidSummaryIdsRef.current.clear();
+      } else if (event.type === 'delete') {
+        summaryCacheRef.current.delete(event.annotation.id);
+        invalidSummaryIdsRef.current.delete(event.annotation.id);
+      } else if (event.type === 'create' || event.type === 'update') {
+        if (TEXT_MARKUP_TYPES.has(event.annotation.type)) {
+          invalidSummaryIdsRef.current.add(event.annotation.id);
+        } else {
+          summaryCacheRef.current.delete(event.annotation.id);
+          invalidSummaryIdsRef.current.delete(event.annotation.id);
+        }
+      }
+
+      setRevision((value) => value + 1);
     });
-  }, [open, registry]);
+  }, [registry]);
 
   useEffect(() => {
     if (!open || !engine || !registry) {
-      setSummaries({});
       return;
     }
 
@@ -164,21 +210,53 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
     if (!document) return;
 
     let cancelled = false;
-    const markupEntries = entries.filter((annotation) => TEXT_MARKUP_TYPES.has(annotation.type));
-    const pageIndexes = [...new Set(markupEntries.map((annotation) => annotation.pageIndex))];
-    Promise.all(pageIndexes.map(async (pageIndex) => {
+    const summaryEntries = entries.filter((annotation) => (
+      TEXT_MARKUP_TYPES.has(annotation.type) && !annotation.contents?.trim()
+    ));
+    const visibleIds = new Set(summaryEntries.map((annotation) => annotation.id));
+    const cache = summaryCacheRef.current;
+    const invalidIds = invalidSummaryIdsRef.current;
+
+    for (const annotationId of cache.keys()) {
+      if (!visibleIds.has(annotationId)) cache.delete(annotationId);
+    }
+    for (const annotationId of invalidIds) {
+      if (!visibleIds.has(annotationId)) invalidIds.delete(annotationId);
+    }
+
+    const pendingEntries = summaryEntries.filter((annotation) => (
+      invalidIds.has(annotation.id) || !cache.has(annotation.id)
+    ));
+
+    if (!pendingEntries.length) return;
+
+    const entriesByPage = new Map<number, PdfAnnotationObject[]>();
+    for (const annotation of pendingEntries) {
+      const pageEntries = entriesByPage.get(annotation.pageIndex);
+      if (pageEntries) pageEntries.push(annotation);
+      else entriesByPage.set(annotation.pageIndex, [annotation]);
+    }
+
+    Promise.all([...entriesByPage].map(async ([pageIndex, pageEntries]) => {
       const page = document.pages[pageIndex];
       if (!page) return [] as Array<[string, string]>;
       const runs = await getPageTextRuns(engine, document, page);
-      return markupEntries
-        .filter((annotation) => annotation.pageIndex === pageIndex)
+      return pageEntries
         .map((annotation) => [annotation.id, summarizeMarkup(annotation, runs)] as [string, string]);
     })).then((pageSummaries) => {
-      if (!cancelled) setSummaries(Object.fromEntries(pageSummaries.flat()));
-    }).catch(() => {
-      if (!cancelled) {
-        setSummaries(Object.fromEntries(markupEntries.map((annotation) => [annotation.id, ''])));
+      if (cancelled) return;
+      for (const [annotationId, summary] of pageSummaries.flat()) {
+        cache.set(annotationId, summary);
+        invalidIds.delete(annotationId);
       }
+      setSummaryRevision((value) => value + 1);
+    }).catch(() => {
+      if (cancelled) return;
+      for (const annotation of pendingEntries) {
+        cache.set(annotation.id, '');
+        invalidIds.delete(annotation.id);
+      }
+      setSummaryRevision((value) => value + 1);
     });
 
     return () => {
@@ -214,6 +292,8 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
       setEditingComment(null);
       return;
     }
+    if (editingAnnotationId) return;
+
     const frame = requestAnimationFrame(() => {
       const root = contentRef.current;
       if (!root) return;
@@ -231,7 +311,21 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
       root.scrollTo({ top: Math.max(0, root.scrollTop + currentRect.top - rootRect.top - 12), behavior: 'auto' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [currentPageNumber, entries.length, open]);
+  }, [currentPageNumber, editingAnnotationId, entries.length, open]);
+
+  useLayoutEffect(() => {
+    if (!open || !editingAnnotationId) return;
+
+    const frame = requestAnimationFrame(() => {
+      const root = contentRef.current;
+      if (!root) return;
+      const target = Array.from(root.querySelectorAll<HTMLElement>('[data-comment-annotation-id]'))
+        .find((item) => item.dataset.commentAnnotationId === editingAnnotationId);
+      if (target) scrollCommentItemIntoView(root, target);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [editingAnnotationId, open, summaryRevision]);
 
   const saveComment = (annotation: PdfAnnotationObject) => {
     const scoped = getAnnotationScope(registry);
@@ -277,11 +371,16 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
               const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
               const isEditing = isComment && editingComment?.annotationId === annotation.id;
               const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
-              const hasExtractedSummary = Object.hasOwn(summaries, annotation.id);
+              const hasExtractedSummary = summaryCacheRef.current.has(annotation.id);
               const summary = contents || (isTextMarkup
-                ? hasExtractedSummary ? summaries[annotation.id] || 'Text summary unavailable' : 'Loading text summary…'
+                ? hasExtractedSummary ? summaryCacheRef.current.get(annotation.id) || 'Text summary unavailable' : 'Loading text summary…'
                 : 'No text content');
-              return <li key={annotation.id} className="shnctl-comment-item" data-editing={isEditing ? 'true' : undefined}>
+              return <li
+                key={annotation.id}
+                className="shnctl-comment-item"
+                data-comment-annotation-id={annotation.id}
+                data-editing={isEditing ? 'true' : undefined}
+              >
                 {!isEditing ? <button
                   type="button"
                   className="shnctl-comment-card-target"
