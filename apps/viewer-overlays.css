@@ -18,7 +18,6 @@
   height: 100%;
   overflow: auto;
   padding: 14px;
-  scrollbar-width: none;
 }
 
 .shnctl-panel.shnctl-pane-panel {
@@ -116,11 +115,6 @@
 .shnctl-thumbnail-scroll {
   height: 100%;
   overflow-y: auto;
-  scrollbar-width: none;
-}
-
-.shnctl-thumbnail-scroll::-webkit-scrollbar {
-  display: none;
 }
 
 .shnctl-thumbnail-grid {

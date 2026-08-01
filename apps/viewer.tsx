@@ -23,7 +23,7 @@ import { SearchLayer, SearchPluginPackage } from '@embedpdf/plugin-search/react'
 import { SelectionLayer, SelectionPluginPackage } from '@embedpdf/plugin-selection/react';
 import { SpreadMode, SpreadPluginPackage } from '@embedpdf/plugin-spread/react';
 import { TilingLayer, TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
-import { Viewport, ViewportPluginPackage } from '@embedpdf/plugin-viewport/react';
+import { ViewportPluginPackage } from '@embedpdf/plugin-viewport/react';
 import { ZoomMode, ZoomPluginPackage, type ZoomCapability } from '@embedpdf/plugin-zoom/react';
 import './viewer.css';
 import {
@@ -62,6 +62,7 @@ import { PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs'
 import { ContextMenu } from './context-menu';
 import { Dialog, PaneSwitcher, TooltipProvider, type DocumentPane } from './components';
 import { ViewportInput } from './viewport-input';
+import { ViewerViewport } from './viewer-viewport';
 import { exportPdf, savePdf } from './pdf-save';
 import { useDocflowPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
@@ -579,7 +580,7 @@ function App({
                           <ResourceConsumedNotifier resource={wasmResource} onConsumed={onResourceConsumed} />
                           <ResourceConsumedNotifier resource={documentResource} onConsumed={onResourceConsumed} />
                           <GlobalPointerProvider documentId={activeDocumentId}>
-                            <Viewport
+                            <ViewerViewport
                               documentId={activeDocumentId}
                               className={`viewer${panMode ? ' is-pan-mode' : ''}`}
                               onDragStart={(event) => event.preventDefault()}
@@ -620,7 +621,7 @@ function App({
                                   )}
                                 />
                               </ViewportInput>
-                            </Viewport>
+                            </ViewerViewport>
                           </GlobalPointerProvider>
                         </>
                       )}
