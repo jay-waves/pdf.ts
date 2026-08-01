@@ -28,6 +28,8 @@ export interface PdfFileHandle {
 
 export interface ManagedResource {
   readonly url: string;
+  /** Opens the original bytes without materializing another full ArrayBuffer. */
+  openStream?(): ReadableStream<Uint8Array>;
   release?(): void;
 }
 

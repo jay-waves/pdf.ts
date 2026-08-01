@@ -39,6 +39,7 @@
     "@embedpdf/plugin-viewport": "2.14.4",
     "@embedpdf/plugin-zoom": "2.14.4",
     "asn1js": "^3.0.10",
+    "hash-wasm": "^4.12.0",
     "idb-keyval": "^6.2.2",
     "lucide-react": "^1.16.0",
     "pkijs": "^3.4.0",
