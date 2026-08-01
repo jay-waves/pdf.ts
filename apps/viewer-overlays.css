@@ -571,3 +571,95 @@ button.shnctl-comment-body:focus-visible {
 .shnctl-translate-panel.is-error {
   color: color-mix(in srgb, #dc2626 82%, var(--shnctl-foreground-primary));
 }
+.shnctl-signature-widget {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--shnctl-foreground-secondary) 65%, transparent);
+  border-radius: 3px;
+  color: var(--shnctl-foreground-secondary);
+  background: color-mix(in srgb, var(--shnctl-background-app) 82%, transparent);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.shnctl-signature-widget[data-appearance-active="true"] {
+  border: 0;
+  background: transparent;
+}
+
+.shnctl-signature-widget svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.shnctl-signature-widget span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shnctl-signature-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.shnctl-signature-list {
+  display: grid;
+  max-height: min(55vh, 440px);
+  gap: 10px;
+  margin: 12px 13px 0;
+  overflow: auto;
+}
+
+.shnctl-signature-dialog > .shnctl-popup-actions {
+  padding: 12px 13px 13px;
+}
+
+.shnctl-signature-card {
+  padding: 12px;
+  border: 1px solid var(--shnctl-border-subtle);
+  border-radius: 5px;
+  background: var(--shnctl-background-app);
+}
+
+.shnctl-signature-card h3 {
+  margin: 0 0 10px;
+  color: var(--shnctl-foreground-primary);
+  font-size: 12px;
+}
+
+.shnctl-signature-card dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.shnctl-signature-card dl > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.shnctl-signature-card dt {
+  color: var(--shnctl-foreground-secondary);
+}
+
+.shnctl-signature-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--shnctl-foreground-primary);
+}
+
+.shnctl-signature-card p {
+  margin: 10px 0 0;
+  color: var(--shnctl-foreground-secondary);
+  font-size: 10px;
+}

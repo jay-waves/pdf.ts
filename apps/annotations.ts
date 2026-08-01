@@ -348,6 +348,10 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
         },
       },
       { id: 'textComment', behavior: { editAfterCreate: true } },
+      // Keep existing stamp annotations backed by PDFium's appearance-stream
+      // renderer. Without an enabled stamp tool they have no matching runtime
+      // behavior and some stamped PDFs are loaded without a visible seal.
+      { id: 'stamp', behavior: { useAppearanceStream: false } },
       // Link annotations stay interactive for URI and destination navigation.
       { id: 'link', categories: ['link'] },
     ],

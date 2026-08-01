@@ -4,12 +4,13 @@ import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
 import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
-import { Rotation, type PdfEngine } from '@embedpdf/models';
+import { Rotation, type PdfEngine, type PdfSignatureObject } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import notoSansVariableUrl from '#noto-sans-variable.ttf';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
 import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
+import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import { FormPluginPackage } from '@embedpdf/plugin-form/react';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
@@ -57,14 +58,15 @@ import {
   installNewCommentEditor,
 } from './annotations';
 import { Comments } from './comments';
-import { PrintDialog, ProtectDialog } from './document-dialogs';
+import { PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
 import { TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
-import { savePdf } from './pdf-save';
+import { exportPdf, savePdf } from './pdf-save';
 import { useDocflowPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
+import { signatureWidgetRenderer } from './signature-widget';
 import { platform } from '#platform';
 import type { ManagedResource, PdfFileHandle, ViewerResources } from './platform/types';
 
@@ -254,7 +256,7 @@ type SidePanel =
   | { type: 'outline' | 'thumbnails' | 'colors' }
   | { type: 'comments'; target: CommentTarget | null }
   | null;
-type ActiveDialog = 'print' | 'protect' | null;
+type ActiveDialog = 'print' | 'protect' | 'signatures' | null;
 type DocumentViewState = { pageNumber: number; totalPages: number; title: string };
 
 const INITIAL_DOCUMENT_VIEW: DocumentViewState = { pageNumber: 1, totalPages: 0, title: '' };
@@ -318,6 +320,7 @@ function App({
     bookmarks: [],
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
+  const [signatures, setSignatures] = useState<PdfSignatureObject[]>([]);
   const [navigationVisible, setNavigationVisible] = useState(false);
   const { pageNumber: currentPageNumber, totalPages, title: currentTitle } = documentView;
   const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
@@ -456,6 +459,30 @@ function App({
   const plugins = useMemo(() => createViewerPlugins(fileUrl), [fileUrl]);
 
   useEffect(() => {
+    setSignatures([]);
+    if (!registry || !toolbarDocumentId) return;
+    let active = true;
+    const documentManager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
+    const readSignatures = () => {
+      const document = documentManager?.getDocument(toolbarDocumentId);
+      if (!document) return;
+      engine.getSignatures(document).wait(
+        (nextSignatures) => {
+          if (active) setSignatures(nextSignatures);
+        },
+        (error) => console.error('[pdf-ts] failed to read digital signatures', error),
+      );
+    };
+
+    readSignatures();
+    const unsubscribe = documentManager?.onDocumentOpened(() => readSignatures());
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [engine, registry, toolbarDocumentId]);
+
+  useEffect(() => {
     cleanDocumentTitleRef.current = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined) ?? 'PDF';
     renderDocumentTitle();
   }, [documentName, fileUrl]);
@@ -576,7 +603,11 @@ function App({
                                         />
                                         <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
                                         <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                        <AnnotationLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                        <AnnotationLayer
+                                          documentId={activeDocumentId}
+                                          pageIndex={pageIndex}
+                                          annotationRenderers={[signatureWidgetRenderer]}
+                                        />
                                       </PagePointerProvider>
                                     </Rotate>
                                   )}
@@ -633,6 +664,17 @@ function App({
         onOpenProtect={() => {
           setSidePanel(null);
           setActiveDialog('protect');
+        }}
+        signatureCount={signatures.length}
+        onOpenSignatures={() => setActiveDialog('signatures')}
+        onExport={() => {
+          const fileName = documentName
+            ?? fileHandle?.name
+            ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined)
+            ?? 'document.pdf';
+          void exportPdf(engine, registry, fileName).catch((error) => {
+            console.error('[pdf-ts] failed to export PDF', error);
+          });
         }}
         onSave={() => void saveDocument()}
         onPinnedInsetChange={setToolbarInset}
@@ -692,6 +734,11 @@ function App({
         open={activeDialog === 'protect'}
         onClose={() => setActiveDialog(null)}
         onProtected={() => setHasUnsavedChanges(true, true)}
+      />
+      <SignatureDialog
+        signatures={signatures}
+        open={activeDialog === 'signatures'}
+        onClose={() => setActiveDialog(null)}
       />
       <BottomNavigationControl
         registry={registry}
