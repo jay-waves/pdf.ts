@@ -3,16 +3,19 @@ import type { PluginRegistry } from '@embedpdf/core';
 import { PdfErrorCode, type PdfErrorReason, type Task } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { RowsPhotoAlbum, type Photo } from 'react-photo-album';
+import 'react-photo-album/rows.css';
 import { getActiveDocumentId, getPluginCapability, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
 
-const THUMBNAILS_PER_GROUP = 4;
 const THUMBNAIL_WIDTH = 150;
-const THUMBNAIL_OBSERVER_MARGIN = '320px 0px';
-const THUMBNAIL_CACHE_LIMIT = 32;
+const THUMBNAIL_TARGET_HEIGHT = 152;
+const THUMBNAIL_GAP = 10;
+const THUMBNAIL_CARD_PADDING = 7;
+const THUMBNAIL_CACHE_LIMIT = 64;
 const THUMBNAIL_RENDER_CONCURRENCY = 2;
 
 type DocumentPage = { index?: number; size: { width: number; height: number }; rotation?: number };
-type ThumbnailMeta = { height: number };
+type ThumbnailPhoto = Photo & { pageIndex: number };
 type ThumbnailCacheEntry = {
   state: 'queued' | 'rendering' | 'ready';
   lastUsed: number;
@@ -44,16 +47,21 @@ function getDocumentInfo(registry: PluginRegistry, documentId: string) {
   };
 }
 
-function getThumbnailMeta(page: DocumentPage | undefined, documentRotation: number): ThumbnailMeta {
+function getThumbnailPhoto(
+  page: DocumentPage | undefined,
+  pageIndex: number,
+  documentRotation: number,
+): ThumbnailPhoto {
   const rotated = (((page?.rotation ?? 0) + documentRotation) % 2) === 1;
   const pageWidth = rotated ? page?.size.height : page?.size.width;
   const pageHeight = rotated ? page?.size.width : page?.size.height;
-  const height = pageWidth && pageHeight
-    ? Math.round(THUMBNAIL_WIDTH * pageHeight / pageWidth)
-    : Math.round(THUMBNAIL_WIDTH * Math.SQRT2);
 
   return {
-    height,
+    src: `pdf-thumbnail-${pageIndex + 1}`,
+    width: pageWidth && pageWidth > 0 ? pageWidth : 1,
+    height: pageHeight && pageHeight > 0 ? pageHeight : Math.SQRT2,
+    key: String(pageIndex),
+    pageIndex,
   };
 }
 
@@ -203,18 +211,14 @@ function ThumbnailFlow({
   onClose: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), Math.max(0, pageCount - 1));
-  const initialRowStart = Math.floor(currentPageIndex / THUMBNAILS_PER_GROUP) * THUMBNAILS_PER_GROUP;
-  const [visiblePages, setVisiblePages] = useState<Set<number>>(() => new Set(
-    Array.from(
-      { length: Math.min(THUMBNAILS_PER_GROUP, pageCount - initialRowStart) },
-      (_, index) => initialRowStart + index,
-    ),
-  ));
+  const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), pageCount - 1);
   const [, setRotationRevision] = useState(0);
   const { pages, rotation: documentRotation } = getDocumentInfo(registry, documentId);
-  const metas = useMemo(
-    () => Array.from({ length: pageCount }, (_, pageIndex) => getThumbnailMeta(pages[pageIndex], documentRotation)),
+  const photos = useMemo(
+    () => Array.from(
+      { length: pageCount },
+      (_, pageIndex) => getThumbnailPhoto(pages[pageIndex], pageIndex, documentRotation),
+    ),
     [documentRotation, pageCount, pages],
   );
   const [, setCacheRevision] = useState(0);
@@ -224,7 +228,33 @@ function ThumbnailFlow({
   );
 
   useEffect(() => () => cache.dispose(), [cache]);
-  useEffect(() => cache.setVisiblePages(visiblePages), [cache, visiblePages]);
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const visiblePages = new Set<number>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const pageIndex = Number((entry.target as HTMLElement).dataset.thumbnailPageIndex);
+        if (!Number.isInteger(pageIndex)) continue;
+        if (entry.isIntersecting) visiblePages.add(pageIndex);
+        else visiblePages.delete(pageIndex);
+      }
+      cache.setVisiblePages(visiblePages);
+    }, { root, rootMargin: '320px 0px' });
+    const observeThumbnails = () => {
+      root.querySelectorAll<HTMLElement>('[data-thumbnail-page-index]').forEach((element) => {
+        observer.observe(element);
+      });
+    };
+    observeThumbnails();
+    const mutationObserver = new MutationObserver(observeThumbnails);
+    mutationObserver.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      mutationObserver.disconnect();
+      observer.disconnect();
+    };
+  }, [cache]);
   useEffect(() => {
     const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
     return rotate?.forDocument(documentId).onRotateChange(() => setRotationRevision((value) => value + 1));
@@ -232,74 +262,73 @@ function ThumbnailFlow({
 
   useLayoutEffect(() => {
     const root = scrollRef.current;
-    const current = root?.querySelector<HTMLElement>(`[data-thumbnail-page-index="${currentPageIndex}"]`);
-    if (root && current) root.scrollTop = current.offsetTop - root.offsetTop;
-  }, [currentPageIndex]);
-
-  useEffect(() => {
-    const root = scrollRef.current;
     if (!root) return;
-
-    const observer = new IntersectionObserver((entries) => {
-      setVisiblePages((previous) => {
-        const next = new Set(previous);
-        let changed = false;
-
-        for (const entry of entries) {
-          const pageIndex = Number((entry.target as HTMLElement).dataset.thumbnailPageIndex);
-          if (!Number.isInteger(pageIndex)) continue;
-
-          if (entry.isIntersecting && !next.has(pageIndex)) {
-            next.add(pageIndex);
-            changed = true;
-          } else if (!entry.isIntersecting && next.delete(pageIndex)) {
-            changed = true;
-          }
-        }
-
-        return changed ? next : previous;
-      });
-    }, { root, rootMargin: THUMBNAIL_OBSERVER_MARGIN });
-
-    root.querySelectorAll<HTMLElement>('[data-thumbnail-page-index]').forEach((item) => observer.observe(item));
-    return () => observer.disconnect();
-  }, []);
+    let frame = 0;
+    let attempts = 0;
+    const scrollToCurrentThumbnail = () => {
+      const current = root.querySelector<HTMLElement>(
+        `[data-thumbnail-page-index="${currentPageIndex}"]`,
+      );
+      if (current) {
+        root.scrollTop += current.getBoundingClientRect().top - root.getBoundingClientRect().top;
+      } else if (attempts < 10) {
+        attempts += 1;
+        frame = requestAnimationFrame(scrollToCurrentThumbnail);
+      }
+    };
+    scrollToCurrentThumbnail();
+    return () => cancelAnimationFrame(frame);
+  }, [currentPageIndex, photos]);
 
   return (
     <div className="shnctl-thumbnail-scroll" ref={scrollRef}>
-      <div className="shnctl-thumbnail-grid">
-        {metas.map((meta, pageIndex) => {
-          const pageNumber = pageIndex + 1;
-          const thumbnailUrl = cache.getUrl(pageIndex);
-
-          return (
-            <button
-              key={pageIndex}
-              type="button"
-              className="shnctl-action shnctl-thumbnail"
-              data-thumbnail-page-index={pageIndex}
-              data-current={pageNumber === currentPageNumber ? 'true' : undefined}
-              aria-label={`Page ${pageNumber}`}
-              onClick={() => {
-                scrollToPagePreservingViewport(registry, pageNumber);
-                onClose();
-              }}
-            >
-              <span className="shnctl-thumbnail-frame" style={{ height: Math.min(meta.height, 220) }}>
-                {thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt=""
-                    draggable={false}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                ) : null}
-              </span>
-              <span className="shnctl-thumbnail-label">{pageNumber}</span>
-            </button>
-          );
-        })}
-      </div>
+      <RowsPhotoAlbum<ThumbnailPhoto>
+        photos={photos}
+        spacing={THUMBNAIL_GAP}
+        padding={THUMBNAIL_CARD_PADDING}
+        targetRowHeight={THUMBNAIL_TARGET_HEIGHT}
+        componentsProps={{
+          track: { style: { justifyContent: 'flex-start', gap: THUMBNAIL_GAP } },
+        }}
+        onClick={({ photo }) => {
+          scrollToPagePreservingViewport(registry, photo.pageIndex + 1);
+          onClose();
+        }}
+        render={{
+          photo: ({ onClick }, { photo, height }) => {
+            const pageNumber = photo.pageIndex + 1;
+            const thumbnailUrl = cache.getUrl(photo.pageIndex);
+            const frameHeight = Math.min(height, THUMBNAIL_TARGET_HEIGHT);
+            const frameWidth = frameHeight * photo.width / photo.height;
+            return (
+              <button
+                type="button"
+                className="shnctl-action shnctl-thumbnail"
+                data-thumbnail-page-index={photo.pageIndex}
+                data-current={pageNumber === currentPageNumber ? 'true' : undefined}
+                aria-label={`Page ${pageNumber}`}
+                style={{ width: frameWidth + THUMBNAIL_CARD_PADDING * 2 }}
+                onClick={onClick}
+              >
+                <span
+                  className="shnctl-thumbnail-frame"
+                  style={{ aspectRatio: photo.width / photo.height }}
+                >
+                  {thumbnailUrl ? (
+                    <img
+                      src={thumbnailUrl}
+                      alt=""
+                      draggable={false}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  ) : null}
+                </span>
+                <span className="shnctl-thumbnail-label">{pageNumber}</span>
+              </button>
+            );
+          },
+        }}
+      />
     </div>
   );
 }

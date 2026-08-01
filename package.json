@@ -45,7 +45,8 @@
     "pkijs": "^3.4.0",
     "radix-ui": "^1.6.2",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-photo-album": "^3.6.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",

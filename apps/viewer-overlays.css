@@ -37,8 +37,6 @@
   bottom: calc(100% + 8px);
   left: 0;
   display: flex;
-  flex-direction: row;
-  align-items: center;
   gap: 3px;
   padding: 4px;
   border-radius: 6px;
@@ -49,7 +47,6 @@
   display: inline-flex;
   width: 108px;
   height: 28px;
-  flex: 0 0 28px;
   align-items: center;
   gap: 7px;
   padding: 0 8px;
@@ -60,14 +57,9 @@
   font: inherit;
   font-size: 11px;
   line-height: 14px;
-  text-align: left;
   outline: none;
   cursor: pointer;
   transition: var(--shnctl-control-transition);
-}
-
-.shnctl-pane-switcher-button svg {
-  flex: 0 0 15px;
 }
 
 .shnctl-pane-switcher-button:is(:hover, :focus-visible) {
@@ -79,7 +71,7 @@
   border-color: var(--shnctl-accent-primary);
 }
 
-.shnctl-pane-switcher-button[aria-checked="true"] {
+.shnctl-pane-switcher-button[aria-pressed="true"] {
   border-color: var(--shnctl-accent-primary);
   background: transparent;
   color: var(--shnctl-accent-primary);
@@ -117,14 +109,8 @@
   overflow-y: auto;
 }
 
-.shnctl-thumbnail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
-  gap: 10px;
-}
-
 .shnctl-thumbnail {
-  width: 100%;
+  flex: none;
   padding: 6px;
   border-radius: 5px;
   line-height: 15px;
