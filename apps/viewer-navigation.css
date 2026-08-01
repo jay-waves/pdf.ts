@@ -353,6 +353,16 @@
   flex: 0 0 auto;
 }
 
+.shnctl-bottom-nav-outline.is-icon-only {
+  flex: 0 0 26px;
+  width: 26px;
+  padding: 0;
+}
+
+.shnctl-bottom-nav-outline.is-icon-only .shnctl-bottom-nav-outline-icon {
+  display: block;
+}
+
 .shnctl-bottom-nav-title {
   display: block;
   overflow: hidden;

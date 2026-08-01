@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
+  BookImage,
   CornerDownLeft,
   CornerUpRight,
   ListTree,
@@ -23,6 +24,7 @@ import {
 } from './utils';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
+const flattenedBookmarksCache = new WeakMap<PdfBookmarkObject[], FlattenedBookmark[]>();
 const SIDE_BUTTON_LONG_PRESS_MS = 450;
 
 type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
@@ -30,6 +32,12 @@ export type OutlineCache = {
   status: OutlineStatus;
   bookmarks: PdfBookmarkObject[];
 };
+type FlattenedBookmark = {
+  key: string;
+  title: string;
+  pageNumber: number;
+};
+type CurrentBookmark = Pick<FlattenedBookmark, 'key' | 'title'>;
 
 function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
   return {
@@ -145,24 +153,29 @@ export function installPageKeyboardNavigation(registry: PluginRegistry, onNaviga
 }
 
 function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
-  const flattened: Array<{ title: string; pageNumber: number }> = [];
+  const cached = flattenedBookmarksCache.get(bookmarks);
+  if (cached) return cached;
 
-  const walk = (items: PdfBookmarkObject[]) => {
-    for (const item of items) {
+  const flattened: FlattenedBookmark[] = [];
+
+  const walk = (items: PdfBookmarkObject[], parentPath: number[] = []) => {
+    items.forEach((item, index) => {
       const destination = getDestinationFromTarget(item.target);
       const title = item.title?.trim();
+      const path = [...parentPath, index];
 
       if (destination && title) {
         flattened.push({
+          key: path.join('.'),
           title,
           pageNumber: destination.pageIndex + 1,
         });
       }
 
       if (item.children?.length) {
-        walk(item.children);
+        walk(item.children, path);
       }
-    }
+    });
   };
 
   walk(bookmarks);
@@ -175,32 +188,33 @@ function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
     return left.title.localeCompare(right.title, 'zh-CN');
   });
 
+  flattenedBookmarksCache.set(bookmarks, flattened);
   return flattened;
 }
 
-export function getCurrentBookmarkTitle(bookmarks: PdfBookmarkObject[], pageNumber: number) {
+export function getCurrentBookmark(bookmarks: PdfBookmarkObject[], pageNumber: number): CurrentBookmark | null {
   if (pageNumber < 1) {
-    return '';
+    return null;
   }
 
   const flattened = flattenBookmarks(bookmarks);
-  let currentTitle = '';
+  let currentBookmark: CurrentBookmark | null = null;
 
   for (const item of flattened) {
     if (item.pageNumber > pageNumber) {
       break;
     }
 
-    currentTitle = item.title;
+    currentBookmark = { key: item.key, title: item.title };
   }
 
-  return currentTitle;
+  return currentBookmark;
 }
 
 export function installCurrentTitleTracker(
   registry: PluginRegistry,
   getBookmarks: () => PdfBookmarkObject[],
-  onChange: (value: { pageNumber: number; title: string; totalPages: number }) => void,
+  onChange: (value: { pageNumber: number; bookmarkKey: string; title: string; totalPages: number }) => void,
 ) {
   const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) {
@@ -211,10 +225,11 @@ export function installCurrentTitleTracker(
   let totalPages = 0;
 
   const refresh = () => {
-    const title = getCurrentBookmarkTitle(getBookmarks(), currentPageNumber);
+    const currentBookmark = getCurrentBookmark(getBookmarks(), currentPageNumber);
     onChange({
       pageNumber: currentPageNumber,
-      title,
+      bookmarkKey: currentBookmark?.key ?? '',
+      title: currentBookmark?.title ?? '',
       totalPages,
     });
   };
@@ -364,13 +379,13 @@ export function Outline({
   registry,
   open,
   cache,
-  currentTitle,
+  currentBookmarkKey,
   onCacheChange,
 }: {
   registry?: PluginRegistry;
   open: boolean;
   cache: OutlineCache;
-  currentTitle: string;
+  currentBookmarkKey: string;
   onCacheChange: (cache: OutlineCache) => void;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -417,7 +432,7 @@ export function Outline({
     }
 
     scrollCurrentBookmarkIntoView(contentRef.current);
-  }, [cache.status, currentTitle, open]);
+  }, [cache.status, currentBookmarkKey, open]);
 
   const body = useMemo(() => {
     if (cache.status === 'idle' || cache.status === 'loading') {
@@ -435,8 +450,8 @@ export function Outline({
     return (
       <BookmarkList
         bookmarks={cache.bookmarks}
-        currentTitle={currentTitle}
-        level={0}
+        currentBookmarkKey={currentBookmarkKey}
+        path={[]}
         onSelect={(bookmark) => {
           if (registry) {
             scrollToBookmark(registry, bookmark);
@@ -444,24 +459,22 @@ export function Outline({
         }}
       />
     );
-  }, [cache.bookmarks, cache.status, currentTitle, registry]);
+  }, [cache.bookmarks, cache.status, currentBookmarkKey, registry]);
 
   return <div className="shnctl-content shnctl-outline-content" ref={contentRef} hidden={!open}>{body}</div>;
 }
 
 function BookmarkList({
   bookmarks,
-  currentTitle,
-  level,
+  currentBookmarkKey,
+  path,
   onSelect,
 }: {
   bookmarks: PdfBookmarkObject[];
-  currentTitle: string;
-  level: number;
+  currentBookmarkKey: string;
+  path: number[];
   onSelect: (bookmark: PdfBookmarkObject) => void;
 }) {
-  const normalizedCurrentTitle = currentTitle.trim();
-
   return (
     <ol className="shnctl-list">
       {bookmarks.map((bookmark, index) => {
@@ -469,11 +482,12 @@ function BookmarkList({
         const pageNumber = destination ? destination.pageIndex + 1 : undefined;
         const children = bookmark.children ?? [];
         const title = bookmark.title || `Item ${index + 1}`;
-        const bookmarkKey = `${level}-${index}-${title}`;
-        const isCurrent = normalizedCurrentTitle.length > 0 && title.trim() === normalizedCurrentTitle;
-        const hasCurrentChild = containsBookmarkTitle(children, normalizedCurrentTitle);
+        const bookmarkPath = [...path, index];
+        const bookmarkKey = bookmarkPath.join('.');
+        const isCurrent = currentBookmarkKey.length > 0 && bookmarkKey === currentBookmarkKey;
+        const hasCurrentChild = currentBookmarkKey.startsWith(`${bookmarkKey}.`);
 
-        if (children.length && level === 0) {
+        if (children.length && path.length === 0) {
           return (
             <li key={bookmarkKey}>
               <details open={isCurrent || hasCurrentChild}>
@@ -494,7 +508,7 @@ function BookmarkList({
                   <span className="shnctl-bookmark-title">{title}</span>
                   {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
                 </summary>
-                <BookmarkList bookmarks={children} currentTitle={currentTitle} level={level + 1} onSelect={onSelect} />
+                <BookmarkList bookmarks={children} currentBookmarkKey={currentBookmarkKey} path={bookmarkPath} onSelect={onSelect} />
               </details>
             </li>
           );
@@ -506,7 +520,7 @@ function BookmarkList({
               type="button"
               className="shnctl-action shnctl-bookmark"
               data-current={isCurrent ? 'true' : undefined}
-              style={{ marginLeft: `${level * 18}px`, width: `calc(100% - ${level * 18}px)` }}
+              style={{ marginLeft: `${path.length * 18}px`, width: `calc(100% - ${path.length * 18}px)` }}
               onClick={() => onSelect(bookmark)}
               disabled={!destination}
             >
@@ -514,21 +528,13 @@ function BookmarkList({
               {pageNumber ? <span className="shnctl-bookmark-page">{pageNumber}</span> : null}
             </button>
             {children.length ? (
-              <BookmarkList bookmarks={children} currentTitle={currentTitle} level={level + 1} onSelect={onSelect} />
+              <BookmarkList bookmarks={children} currentBookmarkKey={currentBookmarkKey} path={bookmarkPath} onSelect={onSelect} />
             ) : null}
           </li>
         );
       })}
     </ol>
   );
-}
-
-function containsBookmarkTitle(bookmarks: PdfBookmarkObject[], title: string): boolean {
-  if (!title) {
-    return false;
-  }
-
-  return bookmarks.some((bookmark) => bookmark.title?.trim() === title || containsBookmarkTitle(bookmark.children ?? [], title));
 }
 
 function scrollCurrentBookmarkIntoView(root: HTMLElement | null) {
@@ -568,6 +574,7 @@ export function BottomNavigationControl({
   visible,
   onReveal,
   onOpenOutline,
+  onOpenThumbnails,
 }: {
   registry?: PluginRegistry;
   title: string;
@@ -577,6 +584,7 @@ export function BottomNavigationControl({
   visible: boolean;
   onReveal: () => void;
   onOpenOutline: () => void;
+  onOpenThumbnails: () => void;
 }) {
   const [pageInput, setPageInput] = useState(String(pageNumber || 1));
   const canNavigate = Boolean(registry && totalPages > 0);
@@ -584,6 +592,7 @@ export function BottomNavigationControl({
   const canGoNext = canNavigate && pageNumber < totalPages;
   const outlineTitle = title.trim();
   const shouldShowOutlineTitle = outlineStatus === 'ready' && outlineTitle.length > 0;
+  const shouldShowThumbnails = outlineStatus === 'empty';
   useEffect(() => {
     setPageInput(String(pageNumber || 1));
   }, [pageNumber]);
@@ -663,6 +672,19 @@ export function BottomNavigationControl({
           >
             <ListTree className="shnctl-bottom-nav-outline-icon" size={14} strokeWidth={1.8} aria-hidden="true" />
             <span className="shnctl-bottom-nav-title">{outlineTitle}</span>
+          </button>
+        ) : shouldShowThumbnails ? (
+          <button
+            type="button"
+            className="shnctl-action shnctl-bottom-nav-outline is-icon-only"
+            title="Open thumbnails"
+            aria-label="Open thumbnails"
+            onClick={() => {
+              onReveal();
+              onOpenThumbnails();
+            }}
+          >
+            <BookImage className="shnctl-bottom-nav-outline-icon" size={14} strokeWidth={1.8} aria-hidden="true" />
           </button>
         ) : null}
         <form className="shnctl-bottom-nav-page" onSubmit={handlePageSubmit} aria-label="Page jump">

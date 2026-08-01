@@ -6,14 +6,12 @@ export function DropdownMenu({
   children,
   open,
   onOpenChange,
-  className = 'shnctl-toolbar-menu',
   align = 'start',
 }: {
   trigger: ReactElement;
   children: ReactNode;
   open?: boolean;
   onOpenChange?(open: boolean): void;
-  className?: string;
   align?: 'start' | 'center' | 'end';
 }) {
   return (
@@ -21,7 +19,7 @@ export function DropdownMenu({
       <RadixDropdownMenu.Trigger asChild>{trigger}</RadixDropdownMenu.Trigger>
       <RadixDropdownMenu.Portal>
         <RadixDropdownMenu.Content
-          className={className}
+          className="shnctl-toolbar-menu"
           align={align}
           sideOffset={5}
           collisionPadding={6}

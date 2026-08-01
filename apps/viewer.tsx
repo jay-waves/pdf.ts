@@ -37,7 +37,7 @@ import {
 import {
   BottomNavigationControl,
   Outline,
-  getCurrentBookmarkTitle,
+  getCurrentBookmark,
   installCurrentTitleTracker,
   installOutlinePrefetch,
   installPageKeyboardNavigation,
@@ -60,7 +60,7 @@ import {
 import { Comments } from './comments';
 import { PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
-import { Dialog, PaneSwitcher, TooltipProvider, type DocumentPane } from './components';
+import { Dialog, TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
 import { ViewerViewport } from './viewer-viewport';
 import { exportPdf, savePdf } from './pdf-save';
@@ -262,15 +262,16 @@ type SidePanel =
   | { type: 'comments'; target: CommentTarget | null }
   | null;
 type ActiveDialog = 'print' | 'protect' | 'signatures' | null;
-type DocumentViewState = { pageNumber: number; totalPages: number; title: string };
+type DocumentViewState = { pageNumber: number; totalPages: number; bookmarkKey: string; title: string };
 
+type DocumentPane = Exclude<NonNullable<SidePanel>['type'], 'colors'>;
 const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
   thumbnails: 'PDF Thumbnails',
   outline: 'PDF Outline',
   comments: 'PDF Comments',
 };
 
-const INITIAL_DOCUMENT_VIEW: DocumentViewState = { pageNumber: 1, totalPages: 0, title: '' };
+const INITIAL_DOCUMENT_VIEW: DocumentViewState = { pageNumber: 1, totalPages: 0, bookmarkKey: '', title: '' };
 
 function createViewerPlugins(fileUrl?: string) {
   return [
@@ -334,7 +335,7 @@ function App({
   const [signatures, setSignatures] = useState<PdfSignatureObject[]>([]);
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerificationResult[]>([]);
   const [navigationVisible, setNavigationVisible] = useState(false);
-  const { pageNumber: currentPageNumber, totalPages, title: currentTitle } = documentView;
+  const { pageNumber: currentPageNumber, totalPages, bookmarkKey: currentBookmarkKey, title: currentTitle } = documentView;
   const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
@@ -564,8 +565,12 @@ function App({
 
             const refreshCurrentTitle = () => {
               const pageNumber = currentPageNumberRef.current;
-              const title = getCurrentBookmarkTitle(outlineCacheRef.current.bookmarks, pageNumber);
-              setDocumentView((current) => current.title === title ? current : { ...current, title });
+              const currentBookmark = getCurrentBookmark(outlineCacheRef.current.bookmarks, pageNumber);
+              const bookmarkKey = currentBookmark?.key ?? '';
+              const title = currentBookmark?.title ?? '';
+              setDocumentView((current) => current.bookmarkKey === bookmarkKey && current.title === title
+                ? current
+                : { ...current, bookmarkKey, title });
             };
 
             titleTrackerRefreshRef.current = refreshCurrentTitle;
@@ -587,9 +592,9 @@ function App({
                 () => setHasUnsavedChanges(true),
               ),
               () => installPlatformReadingHistory(nextRegistry, documentKey),
-              () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, title, totalPages: nextTotalPages }) => {
+              () => installCurrentTitleTracker(nextRegistry, () => outlineCacheRef.current.bookmarks, ({ pageNumber, bookmarkKey, title, totalPages: nextTotalPages }) => {
                 currentPageNumberRef.current = pageNumber;
-                setDocumentView({ pageNumber, title, totalPages: nextTotalPages });
+                setDocumentView({ pageNumber, bookmarkKey, title, totalPages: nextTotalPages });
               }),
               () => installSearchKeyboardShortcut(() => setSearchOpen(true)),
               () => installOutlinePrefetch(nextRegistry, setOutlineCache, documentKey),
@@ -712,12 +717,8 @@ function App({
         open={documentPane !== null}
         onClose={() => setSidePanel(null)}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
-        contentClassName="shnctl-panel shnctl-pane-panel"
+        contentClassName="shnctl-panel"
       >
-        <PaneSwitcher
-          active={documentPane ?? 'thumbnails'}
-          onSelect={(type) => setSidePanel(type === 'comments' ? { type, target: null } : { type })}
-        />
         <Thumbnails
           registry={registry}
           open={documentPane === 'thumbnails'}
@@ -729,7 +730,7 @@ function App({
           registry={registry}
           open={documentPane === 'outline'}
           cache={outlineCache}
-          currentTitle={currentTitle}
+          currentBookmarkKey={currentBookmarkKey}
           onCacheChange={setOutlineCache}
         />
         <Comments
@@ -797,6 +798,10 @@ function App({
         onOpenOutline={() => {
           setSearchOpen(false);
           setSidePanel({ type: 'outline' });
+        }}
+        onOpenThumbnails={() => {
+          setSearchOpen(false);
+          setSidePanel({ type: 'thumbnails' });
         }}
       />
     </main>

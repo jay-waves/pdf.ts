@@ -467,7 +467,6 @@ export function Toolbar({
               onOpenChange={(open) => setOpenMenu((current) => (
                 open ? 'document' : current === 'document' ? null : current
               ))}
-              className="shnctl-toolbar-menu"
               trigger={(
                 <button type="button" className="shnctl-action shnctl-toolbar-button" aria-label="Document menu">
                   <Menu size={14} strokeWidth={2} />

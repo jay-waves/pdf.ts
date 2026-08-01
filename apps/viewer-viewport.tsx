@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useState, type HTMLAttributes, type ReactNode } from 'react';
 import {
   ViewportElementContext,
   useIsViewportGated,
@@ -34,7 +34,7 @@ export function ViewerViewport({
           ref={viewportRef}
           className={className}
           style={{
-            ...style as CSSProperties,
+            ...style,
             padding: `${viewportGap}px`,
           }}
         >

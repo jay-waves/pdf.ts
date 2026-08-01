@@ -8,7 +8,6 @@ interface IconButtonProps {
   active?: boolean;
   disabled?: boolean;
   iconSize?: number;
-  tooltip?: boolean;
   onClick(): void;
 }
 
@@ -19,7 +18,6 @@ export function IconButton({
   active,
   disabled,
   iconSize = 14,
-  tooltip = true,
   onClick,
 }: IconButtonProps) {
   const button = (
@@ -30,13 +28,11 @@ export function IconButton({
       disabled={disabled}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
-      title={!tooltip || disabled ? label : undefined}
+      title={disabled ? label : undefined}
     >
       <Icon size={iconSize} strokeWidth={2} />
     </button>
   );
 
-  return tooltip && !disabled
-    ? <Tooltip content={label}>{button}</Tooltip>
-    : button;
+  return disabled ? button : <Tooltip content={label}>{button}</Tooltip>;
 }

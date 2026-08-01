@@ -3,7 +3,8 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PrintCapability } from '@embedpdf/plugin-print';
 import { PdfPermissionFlag, type PdfSignatureObject } from '@embedpdf/models';
-import { Dialog, RadioGroup, RadioGroupItem } from './components';
+import { RadioGroup as RadixRadioGroup } from 'radix-ui';
+import { Dialog } from './components';
 import { getDocumentCapability } from './utils';
 import {
   getSignatureCertificateInfo,
@@ -195,6 +196,11 @@ export function ProtectDialog({ registry, open, onClose, onProtected }: {
 }
 
 type PrintMode = 'all' | 'current' | 'custom';
+const PRINT_MODE_OPTIONS = [
+  { value: 'all', label: 'All pages' },
+  { value: 'current', label: 'Current page' },
+  { value: 'custom', label: 'Pages' },
+] as const;
 
 export function PrintDialog({ registry, open, currentPageNumber, totalPages, onClose }: {
   registry?: PluginRegistry;
@@ -258,16 +264,24 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
       contentClassName="shnctl-popup"
     >
       <form className="shnctl-popup-form" onSubmit={submit}>
-        <RadioGroup<PrintMode>
+        <RadixRadioGroup.Root
           className="shnctl-print-modes"
           value={mode}
-          onValueChange={setMode}
-          label="Pages to print"
+          onValueChange={(value) => {
+            if (value === 'all' || value === 'current' || value === 'custom') setMode(value);
+          }}
+          aria-label="Pages to print"
         >
-          <RadioGroupItem value="all">All pages</RadioGroupItem>
-          <RadioGroupItem value="current" detail={currentPageNumber}>Current page</RadioGroupItem>
-          <RadioGroupItem value="custom">Pages</RadioGroupItem>
-        </RadioGroup>
+          {PRINT_MODE_OPTIONS.map((option) => (
+            <label className="shnctl-radio-item" key={option.value}>
+              <RadixRadioGroup.Item className="shnctl-radio-control" value={option.value}>
+                <RadixRadioGroup.Indicator className="shnctl-radio-indicator" />
+              </RadixRadioGroup.Item>
+              <span>{option.label}</span>
+              {option.value === 'current' ? <small>{currentPageNumber}</small> : null}
+            </label>
+          ))}
+        </RadixRadioGroup.Root>
         {mode === 'custom' ? (
           <label className="shnctl-popup-field">
             <span>Page range</span>
