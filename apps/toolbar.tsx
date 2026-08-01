@@ -14,7 +14,6 @@ import {
   Hand,
   Highlighter,
   LineSquiggle,
-  ListTree,
   Eye,
   Menu,
   MessageSquareMore,
@@ -73,16 +72,12 @@ interface ToolbarProps {
   activeDocumentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
-  outlineOpen: boolean;
   colorPaletteOpen: boolean;
-  commentsOpen: boolean;
   panMode: boolean;
   onPanModeChange(enabled: boolean): void;
   onSearchOpenChange(open: boolean): void;
   onToggleThumbnails(): void;
-  onOpenOutline(): void;
   onToggleColorPalette(): void;
-  onToggleComments(): void;
   onOpenPrint(): void;
   onOpenProtect(): void;
   signatureCount: number;
@@ -226,16 +221,12 @@ export function Toolbar({
   activeDocumentId,
   searchOpen,
   thumbnailsOpen,
-  outlineOpen,
   colorPaletteOpen,
-  commentsOpen,
   panMode,
   onPanModeChange,
   onSearchOpenChange,
   onToggleThumbnails,
-  onOpenOutline,
   onToggleColorPalette,
-  onToggleComments,
   onOpenPrint,
   onOpenProtect,
   signatureCount,
@@ -483,25 +474,6 @@ export function Toolbar({
                 </button>
               )}
             >
-              <DropdownMenuItem className={thumbnailsOpen ? 'is-active' : undefined} onSelect={toggleThumbnailsPanel} disabled={!canUseRegistry}>
-                <BookImage size={14} strokeWidth={2} />
-                <span>Thumbnails</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className={outlineOpen ? 'is-active' : undefined} onSelect={onOpenOutline} disabled={!canUseRegistry}>
-                <ListTree size={14} strokeWidth={2} />
-                <span>Contents</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className={commentsOpen ? 'is-active' : undefined}
-                onSelect={() => {
-                  closeSearch();
-                  onToggleComments();
-                }}
-                disabled={!canUseRegistry}
-              >
-                <MessageSquareMore size={14} strokeWidth={2} />
-                <span>Comments</span>
-              </DropdownMenuItem>
               <DropdownMenuItem onSelect={printDocument} disabled={!canUseRegistry}>
                 <Printer size={14} strokeWidth={2} />
                 <span>Print</span>
@@ -600,6 +572,7 @@ export function Toolbar({
             <ToolbarButton label="Vertical scroll" icon={ArrowDownUp} active={scrollStrategy === ScrollStrategy.Vertical} onClick={() => setScroll(ScrollStrategy.Vertical)} disabled={!canUseRegistry} />
             <ToolbarButton label="Horizontal scroll" icon={ArrowLeftRight} active={scrollStrategy === ScrollStrategy.Horizontal} onClick={() => setScroll(ScrollStrategy.Horizontal)} disabled={!canUseRegistry} />
             <ToolbarButton label="Rotate" icon={RotateCw} onClick={rotateForward} disabled={!canUseRegistry} />
+            <ToolbarButton label="Thumbnails" icon={BookImage} active={thumbnailsOpen} onClick={toggleThumbnailsPanel} disabled={!canUseRegistry} />
           </div>
         </div>
       ) : null}

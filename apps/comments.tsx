@@ -17,7 +17,6 @@ import {
   getAnnotationScope,
   rectsIntersect,
 } from './annotations';
-import { Dialog } from './components';
 import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
 
 type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
@@ -118,14 +117,13 @@ function deleteAnnotation(registry: PluginRegistry | undefined, pageIndex: numbe
   }]);
 }
 
-export function Comments({ engine, registry, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew, onClose }: {
+export function Comments({ engine, registry, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew }: {
   engine?: PdfEngine<Blob> | null;
   registry?: PluginRegistry;
   open: boolean;
   currentPageNumber: number;
   targetAnnotationId?: string | null;
   targetAnnotationIsNew?: boolean;
-  onClose(): void;
 }) {
   const [revision, setRevision] = useState(0);
   const [editingComment, setEditingComment] = useState<EditingComment | null>(null);
@@ -259,71 +257,64 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title="PDF Comments"
-      contentClassName="shnctl-panel"
-    >
-          <div className="shnctl-content shnctl-comment-content" ref={contentRef}>
-            {!registry ? <div className="shnctl-state">Loading comments...</div> : null}
-            {registry && !entries.length ? <div className="shnctl-comment-empty">
-              <span className="shnctl-comment-empty-icon"><MessageSquareMore size={20} strokeWidth={1.6} /></span>
-              <strong>No comments yet</strong>
-              <span>Annotations and notes added to this PDF will appear here.</span>
-            </div> : null}
-            {pageGroups.length ? <ol className="shnctl-comment-list">
-              {pageGroups.map((group) => <li key={group.pageIndex} className="shnctl-comment-page-group" data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
-                <div className="shnctl-comment-page-header">
-                  <span>Page {group.pageIndex + 1}</span>
-                </div>
-                <ol className="shnctl-comment-page-entries">
-                  {group.entries.map((annotation) => {
-                    const Icon = getEntryIcon(annotation);
-                    const label = getAnnotationLabel(annotation);
-                    const contents = annotation.contents?.trim();
-                    const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
-                    const isEditing = isComment && editingComment?.annotationId === annotation.id;
-                    const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
-                    const hasExtractedSummary = Object.hasOwn(summaries, annotation.id);
-                    const summary = contents || (isTextMarkup
-                      ? hasExtractedSummary ? summaries[annotation.id] || 'Text summary unavailable' : 'Loading text summary…'
-                      : 'No text content');
-                    return <li key={annotation.id} className="shnctl-comment-item" data-editing={isEditing ? 'true' : undefined}>
-                      {!isEditing ? <button
-                        type="button"
-                        className="shnctl-comment-card-target"
-                        onClick={() => registry && navigateToAnnotation(registry, annotation)}
-                        aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
-                      /> : null}
-                      <div className="shnctl-comment-heading">
-                        <span className="shnctl-comment-icon"><Icon size={15} strokeWidth={2} /></span>
-                        <span className="shnctl-comment-meta"><span className="shnctl-comment-type">{label}</span></span>
-                      </div>
-                      {isEditing ? <form className="shnctl-comment-editor" onSubmit={(event) => { event.preventDefault(); saveComment(annotation); }}>
-                        <textarea
-                          value={editingComment.draft}
-                          onChange={(event) => setEditingComment({
-                            annotationId: annotation.id,
-                            draft: event.currentTarget.value,
-                          })}
-                          autoFocus
-                          aria-label={`Comment for ${label}`}
-                        />
-                        <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => cancelComment(annotation)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
-                      </form> : isComment
-                        ? <button
-                            type="button"
-                            className="shnctl-comment-body"
-                            onClick={() => setEditingComment({ annotationId: annotation.id, draft: contents ?? '' })}
-                          >{contents || 'Empty comment'}</button>
-                        : <div className="shnctl-comment-body shnctl-comment-body-readonly">{summary}</div>}
-                    </li>;
-                  })}
-                </ol>
-              </li>)}
-            </ol> : null}
+    <div className="shnctl-content shnctl-comment-content" ref={contentRef} hidden={!open}>
+      {!registry ? <div className="shnctl-state">Loading comments...</div> : null}
+      {registry && !entries.length ? <div className="shnctl-comment-empty">
+        <span className="shnctl-comment-empty-icon"><MessageSquareMore size={20} strokeWidth={1.6} /></span>
+        <strong>No comments yet</strong>
+        <span>Annotations and notes added to this PDF will appear here.</span>
+      </div> : null}
+      {pageGroups.length ? <ol className="shnctl-comment-list">
+        {pageGroups.map((group) => <li key={group.pageIndex} className="shnctl-comment-page-group" data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
+          <div className="shnctl-comment-page-header">
+            <span>Page {group.pageIndex + 1}</span>
           </div>
-    </Dialog>
+          <ol className="shnctl-comment-page-entries">
+            {group.entries.map((annotation) => {
+              const Icon = getEntryIcon(annotation);
+              const label = getAnnotationLabel(annotation);
+              const contents = annotation.contents?.trim();
+              const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
+              const isEditing = isComment && editingComment?.annotationId === annotation.id;
+              const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
+              const hasExtractedSummary = Object.hasOwn(summaries, annotation.id);
+              const summary = contents || (isTextMarkup
+                ? hasExtractedSummary ? summaries[annotation.id] || 'Text summary unavailable' : 'Loading text summary…'
+                : 'No text content');
+              return <li key={annotation.id} className="shnctl-comment-item" data-editing={isEditing ? 'true' : undefined}>
+                {!isEditing ? <button
+                  type="button"
+                  className="shnctl-comment-card-target"
+                  onClick={() => registry && navigateToAnnotation(registry, annotation)}
+                  aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
+                /> : null}
+                <div className="shnctl-comment-heading">
+                  <span className="shnctl-comment-icon"><Icon size={15} strokeWidth={2} /></span>
+                  <span className="shnctl-comment-meta"><span className="shnctl-comment-type">{label}</span></span>
+                </div>
+                {isEditing ? <form className="shnctl-comment-editor" onSubmit={(event) => { event.preventDefault(); saveComment(annotation); }}>
+                  <textarea
+                    value={editingComment.draft}
+                    onChange={(event) => setEditingComment({
+                      annotationId: annotation.id,
+                      draft: event.currentTarget.value,
+                    })}
+                    autoFocus
+                    aria-label={`Comment for ${label}`}
+                  />
+                  <div className="shnctl-comment-editor-actions"><button type="button" onClick={() => cancelComment(annotation)}>Cancel</button><button type="submit" className="shnctl-comment-save">Save</button></div>
+                </form> : isComment
+                  ? <button
+                      type="button"
+                      className="shnctl-comment-body"
+                      onClick={() => setEditingComment({ annotationId: annotation.id, draft: contents ?? '' })}
+                    >{contents || 'Empty comment'}</button>
+                  : <div className="shnctl-comment-body shnctl-comment-body-readonly">{summary}</div>}
+              </li>;
+            })}
+          </ol>
+        </li>)}
+      </ol> : null}
+    </div>
   );
 }

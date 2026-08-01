@@ -60,7 +60,7 @@ import {
 import { Comments } from './comments';
 import { PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
-import { TooltipProvider } from './components';
+import { Dialog, PaneSwitcher, TooltipProvider, type DocumentPane } from './components';
 import { ViewportInput } from './viewport-input';
 import { exportPdf, savePdf } from './pdf-save';
 import { useDocflowPdfiumEngine } from './pdf-engine';
@@ -259,6 +259,12 @@ type SidePanel =
 type ActiveDialog = 'print' | 'protect' | 'signatures' | null;
 type DocumentViewState = { pageNumber: number; totalPages: number; title: string };
 
+const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
+  thumbnails: 'PDF Thumbnails',
+  outline: 'PDF Outline',
+  comments: 'PDF Comments',
+};
+
 const INITIAL_DOCUMENT_VIEW: DocumentViewState = { pageNumber: 1, totalPages: 0, title: '' };
 
 function createViewerPlugins(fileUrl?: string) {
@@ -324,6 +330,7 @@ function App({
   const [navigationVisible, setNavigationVisible] = useState(false);
   const { pageNumber: currentPageNumber, totalPages, title: currentTitle } = documentView;
   const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
+  const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const registryCleanupRef = useRef<(() => void) | null>(null);
   const outlineCacheRef = useRef(outlineCache);
@@ -623,13 +630,6 @@ function App({
               ) : (
                 <div className="viewer-status">No PDF document.</div>
               )}
-              <Thumbnails
-                registry={registry}
-                open={sidePanel?.type === 'thumbnails'}
-                totalPages={totalPages}
-                currentPageNumber={currentPageNumber}
-                onClose={() => setSidePanel(null)}
-              />
             </>
           )}
         </EmbedPDF>
@@ -638,24 +638,15 @@ function App({
         activeDocumentId={toolbarDocumentId}
         searchOpen={searchOpen}
         thumbnailsOpen={sidePanel?.type === 'thumbnails'}
-        outlineOpen={sidePanel?.type === 'outline'}
         colorPaletteOpen={sidePanel?.type === 'colors'}
-        commentsOpen={sidePanel?.type === 'comments'}
         panMode={panMode}
         onPanModeChange={setPanMode}
         onSearchOpenChange={setSearchOpen}
         onToggleThumbnails={() => setSidePanel((current) => (
           current?.type === 'thumbnails' ? null : { type: 'thumbnails' }
         ))}
-        onOpenOutline={() => {
-          setSearchOpen(false);
-          setSidePanel({ type: 'outline' });
-        }}
         onToggleColorPalette={() => setSidePanel((current) => (
           current?.type === 'colors' ? null : { type: 'colors' }
-        ))}
-        onToggleComments={() => setSidePanel((current) => (
-          current?.type === 'comments' ? null : { type: 'comments', target: null }
         ))}
         onOpenPrint={() => {
           setSidePanel(null);
@@ -679,26 +670,42 @@ function App({
         onSave={() => void saveDocument()}
         onPinnedInsetChange={setToolbarInset}
       />
-      <Outline
-        registry={registry}
-        open={sidePanel?.type === 'outline'}
-        cache={outlineCache}
-        currentTitle={currentTitle}
-        onCacheChange={setOutlineCache}
+      <Dialog
+        open={documentPane !== null}
         onClose={() => setSidePanel(null)}
-      />
+        title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
+        contentClassName="shnctl-panel shnctl-pane-panel"
+      >
+        <PaneSwitcher
+          active={documentPane ?? 'thumbnails'}
+          onSelect={(type) => setSidePanel(type === 'comments' ? { type, target: null } : { type })}
+        />
+        <Thumbnails
+          registry={registry}
+          open={documentPane === 'thumbnails'}
+          totalPages={totalPages}
+          currentPageNumber={currentPageNumber}
+          onClose={() => setSidePanel(null)}
+        />
+        <Outline
+          registry={registry}
+          open={documentPane === 'outline'}
+          cache={outlineCache}
+          currentTitle={currentTitle}
+          onCacheChange={setOutlineCache}
+        />
+        <Comments
+          engine={engine}
+          registry={registry}
+          open={documentPane === 'comments'}
+          currentPageNumber={currentPageNumber}
+          targetAnnotationId={commentTarget?.annotationId}
+          targetAnnotationIsNew={commentTarget?.isNew}
+        />
+      </Dialog>
       <ColorPalette
         registry={registry}
         open={sidePanel?.type === 'colors'}
-        onClose={() => setSidePanel(null)}
-      />
-      <Comments
-        engine={engine}
-        registry={registry}
-        open={sidePanel?.type === 'comments'}
-        currentPageNumber={currentPageNumber}
-        targetAnnotationId={commentTarget?.annotationId}
-        targetAnnotationIsNew={commentTarget?.isNew}
         onClose={() => setSidePanel(null)}
       />
       <ContextMenu
