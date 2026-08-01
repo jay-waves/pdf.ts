@@ -63,8 +63,8 @@ export default defineConfig({
       name: 'viewer-brand-assets',
       writeBundle() {
         const resolvedOutputDir = resolve(__dirname, outputDir);
-        const brandDir = resolve(__dirname, 'assets/brand');
-        cpSync(resolve(brandDir, 'logo.svg'), resolve(resolvedOutputDir, 'logo.svg'));
+        const brandDir = resolve(__dirname, 'assets');
+        cpSync(resolve(brandDir, 'icon.png'), resolve(resolvedOutputDir, 'icon.png'));
         for (const size of [16, 32, 48, 128]) {
           cpSync(resolve(brandDir, `icon-${size}.png`), resolve(resolvedOutputDir, `icon-${size}.png`));
         }

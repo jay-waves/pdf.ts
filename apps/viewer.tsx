@@ -64,7 +64,7 @@ import { Dialog, TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
 import { ViewerViewport } from './viewer-viewport';
 import { exportPdf, savePdf } from './pdf-save';
-import { useDocflowPdfiumEngine } from './pdf-engine';
+import { usePdfTsPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { signatureWidgetRenderer } from './signature-widget';
@@ -867,7 +867,7 @@ function WebDocumentPicker({
           selectFile(event.dataTransfer.files[0]);
         }}
       >
-        <img className="size-13.5" src="./logo.svg" alt="" />
+        <img className="size-13.5" src="./icon.png" alt="" />
         <h1 className="mt-4.5 mb-6.5 text-[25px]">PDF.ts Web Viewer</h1>
         {onPick ? (
           <button className={WEB_FILE_CONTROL_CLASS} type="button" onClick={() => {
@@ -968,7 +968,7 @@ function ReadyViewer({
   trackResource(resource?: ManagedResource): void;
   releaseResource(resource?: ManagedResource): void;
 }) {
-  const { engine: workerEngine, isLoading, error } = useDocflowPdfiumEngine({
+  const { engine: workerEngine, isLoading, error } = usePdfTsPdfiumEngine({
     wasmUrl: resources.wasm.url,
     fontFallback: PDFIUM_FONT_FALLBACK,
   });

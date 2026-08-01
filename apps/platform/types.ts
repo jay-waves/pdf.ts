@@ -17,7 +17,7 @@ export interface PdfFileWriter {
  * Cross-platform reference to the PDF currently being edited.
  *
  * Browser platforms back this with a FileSystemFileHandle, VS Code backs it
- * with the custom document Uri, and docflow backs it with its daemon session.
+ * with the custom document Uri, and pdf.ts backs it with its daemon session.
  * Preparing the writer is deliberately separate from writing because browser
  * permission prompts must run while the save user gesture is still active.
  */

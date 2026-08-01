@@ -33,10 +33,10 @@ class FakeWorker {
   }
 }
 
-test('EmbedPDF patch keeps the docflow worker bridge contract', async () => {
+test('EmbedPDF patch keeps the pdf.ts worker bridge contract', async () => {
   const worker = new FakeWorker();
   const executor = new RemoteExecutor(worker, {
-    wasmUrl: 'https://docflow.invalid/pdfium.wasm',
+    wasmUrl: 'https://pdf.ts.invalid/pdfium.wasm',
     fontFallback: { fonts: {} },
   });
 
@@ -44,7 +44,7 @@ test('EmbedPDF patch keeps the docflow worker bridge contract', async () => {
     message: {
       id: '0',
       type: 'wasmInit',
-      wasmUrl: 'https://docflow.invalid/pdfium.wasm',
+      wasmUrl: 'https://pdf.ts.invalid/pdfium.wasm',
       logger: undefined,
       fontFallback: { fonts: {} },
     },
@@ -69,7 +69,7 @@ test('EmbedPDF patch keeps the docflow worker bridge contract', async () => {
   assert.equal((await openTask.toPromise()).id, 'document-1');
 
   // send() is deliberately exposed through the repository patch adapter so
-  // docflow can add one worker-side operation without forking EmbedPDF.
+  // pdf.ts can add one worker-side operation without forking EmbedPDF.
   const incrementalTask = executor.send('saveIncremental', [{ id: 'document-1' }]);
   const incrementalRequest = worker.messages.at(-1);
   assert.equal(incrementalRequest.message.type, 'execute');
