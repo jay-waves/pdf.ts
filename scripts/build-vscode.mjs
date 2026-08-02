@@ -25,4 +25,16 @@ extensionPackage.version = rootPackage.version;
 extensionPackage.icon = 'icon.png';
 writeFileSync(resolve(extensionDir, 'package.json'), `${JSON.stringify(extensionPackage, null, 2)}\n`);
 
-console.log(`Built VS Code extension at ${extensionDir}`);
+const vsixPath = resolve(repoRoot, 'release', 'vscode', `pdf-ts-vscode-v${rootPackage.version}.vsix`);
+rmSync(vsixPath, { force: true });
+const vsce = spawnSync('pnpm', [
+  'exec', 'vsce', 'package', '--no-dependencies', '--skip-license', '--out', vsixPath,
+], {
+  cwd: extensionDir,
+  stdio: 'inherit',
+  shell: process.platform === 'win32',
+});
+if (vsce.error) throw vsce.error;
+if (vsce.status !== 0) process.exit(vsce.status ?? 1);
+
+console.log(`Built ${vsixPath}`);

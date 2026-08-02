@@ -24,11 +24,9 @@ pnpm build:web
 
 # Chrome extension
 pnpm build:chrome
-pnpm package:chrome
 
 # VS Code extension
 pnpm build:vscode
-pnpm package:vscode
 ```
 
 <img src="./assets/screenshot.png" width="300" alt="PDF.ts Viewer screenshot" />
