@@ -44,10 +44,7 @@ type App struct {
 }
 
 type openResult struct {
-	ID   string `json:"id"`
-	URL  string `json:"url"`
-	Name string `json:"name"`
-	Kind string `json:"kind"`
+	URL string `json:"url"`
 }
 
 func New(options Options) (*App, error) {
@@ -293,10 +290,7 @@ func (app *App) handleRegisterDocument(response http.ResponseWriter, request *ht
 	query := url.Values{"launcherDocument": {document.ID}}
 	viewerURL := app.origin + "/?" + query.Encode()
 	writeJSON(response, http.StatusOK, openResult{
-		ID:   document.ID,
-		URL:  viewerURL,
-		Name: filepath.Base(document.Path),
-		Kind: document.Kind,
+		URL: viewerURL,
 	})
 }
 
@@ -364,21 +358,6 @@ func (app *App) handlePdfIncrement(resource *Resource, response http.ResponseWri
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
-}
-
-func (app *App) handleDocumentAsset(resource *Resource, relativePath string, response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodGet && request.Method != http.MethodHead {
-		response.Header().Set("Allow", "GET, HEAD")
-		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if err := resource.ServeAsset(response, request, relativePath); err != nil {
-		if errors.Is(err, errInvalidAssetPath) || errors.Is(err, os.ErrNotExist) {
-			http.NotFound(response, request)
-			return
-		}
-		app.writeResourceError(response, err)
-	}
 }
 
 func (app *App) handleResource(resource *Resource, response http.ResponseWriter, request *http.Request) {
@@ -452,7 +431,7 @@ func (app *App) resourceFor(document Document) (*Resource, error) {
 	if resource := app.resources[document.ID]; resource != nil && sameDocumentPath(resource.Path(), document.Path) {
 		return resource, nil
 	}
-	resource, err := NewResourceWithID(document.Path, document.ID)
+	resource, err := NewResource(document.Path)
 	if err != nil {
 		return nil, err
 	}

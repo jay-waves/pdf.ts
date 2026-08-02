@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +22,6 @@ const (
 type Document struct {
 	ID        string    `json:"id"`
 	Path      string    `json:"path"`
-	Kind      string    `json:"kind"`
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
@@ -128,7 +126,6 @@ func (registry *Registry) Register(target string) (Document, error) {
 	document := Document{
 		ID:        id,
 		Path:      canonical,
-		Kind:      documentKind(canonical),
 		ExpiresAt: now.Add(documentCapabilityLifetime),
 	}
 	registry.state.Documents[id] = document
@@ -174,19 +171,6 @@ func (registry *Registry) RemoveExpired(now time.Time) ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, nil
-}
-
-func (registry *Registry) Documents() []Document {
-	registry.mutex.RLock()
-	defer registry.mutex.RUnlock()
-	documents := make([]Document, 0, len(registry.state.Documents))
-	for _, document := range registry.state.Documents {
-		documents = append(documents, document)
-	}
-	sort.Slice(documents, func(i, j int) bool {
-		return documents[i].ID < documents[j].ID
-	})
-	return documents
 }
 
 func (registry *Registry) Endpoint() (listenAddress, publicOrigin string) {
@@ -258,10 +242,6 @@ func sameDocumentPath(left, right string) bool {
 		return strings.EqualFold(left, right)
 	}
 	return left == right
-}
-
-func documentKind(path string) string {
-	return "pdf"
 }
 
 func documentExpired(document Document, now time.Time) bool {
