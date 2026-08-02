@@ -2,7 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PrintCapability } from '@embedpdf/plugin-print';
-import { PdfPermissionFlag, type PdfSignatureObject } from '@embedpdf/models';
+import {
+  PdfPermissionFlag,
+  type PdfMetadataObject,
+  type PdfSignatureObject,
+} from '@embedpdf/models';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { Button, Dialog, DialogActions, RadioOption } from './components';
 import { getDocumentCapability } from './utils';
@@ -49,6 +53,95 @@ function formatCertificateDate(value: Date) {
     month: '2-digit',
     day: '2-digit',
   }).format(value);
+}
+
+function formatMetadataDate(value: Date | null) {
+  if (!value || Number.isNaN(value.getTime())) return 'Not provided';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }).format(value);
+}
+
+export function MetadataDialog({ registry, open, fileName, pageCount, onClose }: {
+  registry?: PluginRegistry;
+  open: boolean;
+  fileName?: string;
+  pageCount: number;
+  onClose(): void;
+}) {
+  const [metadata, setMetadata] = useState<PdfMetadataObject | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    const scoped = getDocumentCapability<DocumentManagerCapability>(registry, 'document-manager');
+    const document = scoped?.capability.getDocument(scoped.documentId);
+    const engine = registry?.getEngine();
+
+    setMetadata(null);
+    setError('');
+    setLoading(false);
+    if (!document || !engine) {
+      setError('Document metadata is not available.');
+      return;
+    }
+
+    setLoading(true);
+    void engine.getMetadata(document).toPromise().then((nextMetadata) => {
+      if (!cancelled) setMetadata(nextMetadata);
+    }).catch((nextError: unknown) => {
+      if (!cancelled) setError(getErrorMessage(nextError, 'Failed to read document metadata.'));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, registry]);
+
+  const fields = metadata ? [
+    ['File name', fileName],
+    ['Pages', String(pageCount)],
+    ['Title', metadata.title],
+    ['Author', metadata.author],
+    ['Creator', metadata.creator],
+    ['Producer', metadata.producer],
+    ['Created', formatMetadataDate(metadata.creationDate)],
+    ['Modified', formatMetadataDate(metadata.modificationDate)],
+  ] : [];
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      variant="popup"
+      title="Metadata"
+      titleClassName={styles.title}
+    >
+      <div className={styles.metadataContent}>
+        {loading ? <div className={styles.metadataStatus}>Loading metadata…</div> : null}
+        {error ? <div className={styles.error} role="alert">{error}</div> : null}
+        {metadata ? (
+          <dl className={styles.metadataDetails}>
+            {fields.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value || 'Not provided'}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        <DialogActions>
+          <Button variant="primary" onClick={onClose}>Close</Button>
+        </DialogActions>
+      </div>
+    </Dialog>
+  );
 }
 
 function signatureStatusText(verification: SignatureVerificationResult) {

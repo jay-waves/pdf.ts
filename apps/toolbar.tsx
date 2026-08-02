@@ -13,6 +13,7 @@ import {
   GalleryHorizontal,
   Hand,
   Highlighter,
+  Info,
   LineSquiggle,
   Eye,
   Menu,
@@ -81,6 +82,7 @@ interface ToolbarProps {
   onToggleColorPalette(): void;
   onOpenPrint(): void;
   onOpenProtect(): void;
+  onOpenMetadata(): void;
   signatureCount: number;
   onOpenSignatures(): void;
   onExport(): void;
@@ -230,6 +232,7 @@ export function Toolbar({
   onToggleColorPalette,
   onOpenPrint,
   onOpenProtect,
+  onOpenMetadata,
   signatureCount,
   onOpenSignatures,
   onExport,
@@ -392,6 +395,11 @@ export function Toolbar({
     onOpenProtect();
   };
 
+  const openMetadataDialog = () => {
+    closeSearch();
+    onOpenMetadata();
+  };
+
   const toggleThumbnailsPanel = () => {
     closeSearch();
     onToggleThumbnails();
@@ -489,6 +497,10 @@ export function Toolbar({
               <DropdownMenuItem onSelect={onSave} disabled={!canUseRegistry}>
                 <Save size={14} strokeWidth={2} />
                 <span>Save</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={openMetadataDialog} disabled={!canUseRegistry}>
+                <Info size={14} strokeWidth={2} />
+                <span>Metadata</span>
               </DropdownMenuItem>
             </DropdownMenu>
             <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
