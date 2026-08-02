@@ -6,9 +6,7 @@ import {
 } from './browser-storage';
 import {
   BrowserPdfFileHandle,
-  readStoredFileHandle,
   storeFileHandle,
-  verifyFilePermission,
 } from './browser-file-handle';
 import { blobResource } from './resources';
 import { translateWithInstalledModel } from './browser-translation';
@@ -20,6 +18,11 @@ class DownloadPdfFileHandle implements PdfFileHandle {
   constructor(readonly name: string) {}
 
   async prepareWrite() {
+    const shouldDownload = window.confirm(
+      'Direct saving is not available for this file. Download a copy instead?',
+    );
+    if (!shouldDownload) return null;
+
     const fileName = this.name;
     return {
       async save(data: ArrayBuffer) {
@@ -47,25 +50,11 @@ function documentFromFile(file: File, fileHandle: PdfFileHandle): PlatformDocume
   };
 }
 
-async function restoreRecentDocument() {
-  try {
-    const handle = await readStoredFileHandle(RECENT_FILE_KEY);
-    if (!handle || !(await verifyFilePermission(handle, 'read', false))) return undefined;
-    return documentFromFile(
-      await handle.getFile(),
-      new BrowserPdfFileHandle(handle, RECENT_FILE_KEY),
-    );
-  } catch {
-    // A stale, moved, or browser-evicted handle should not block the picker.
-    return undefined;
-  }
-}
-
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
     return {
       wasm: { url: bundledWasmUrl },
-      document: await restoreRecentDocument(),
+      document: undefined,
     };
   },
   openLocalDocument(file) {
