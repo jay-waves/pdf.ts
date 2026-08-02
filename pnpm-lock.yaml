@@ -134,6 +134,9 @@ importers:
       vite:
         specifier: ^7.0.0
         version: 7.3.2(jiti@2.7.0)(lightningcss@1.32.0)
+      yazl:
+        specifier: 2.5.1
+        version: 2.5.1
 
 packages:
 
