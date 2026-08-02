@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -61,49 +60,6 @@ func TestServeReportsDocumentFilename(t *testing.T) {
 	if disposition := response.Header().Get("Content-Disposition"); disposition !=
 		`inline; filename="reader copy.epub"; filename*=UTF-8''reader%20copy.epub` {
 		t.Fatalf("unexpected Content-Disposition: %q", disposition)
-	}
-}
-
-func TestServeDocumentAsset(t *testing.T) {
-	directory := t.TempDir()
-	documentPath := filepath.Join(directory, "notes.md")
-	if err := os.WriteFile(documentPath, []byte("# Notes"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(directory, "images"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(directory, "images", "plot.png"), []byte("image"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	resource, err := NewResource(documentPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/asset", nil)
-	if err := resource.ServeAsset(response, request, "images/plot.png"); err != nil {
-		t.Fatal(err)
-	}
-	if response.Code != http.StatusOK || response.Body.String() != "image" {
-		t.Fatalf("asset response: status=%d body=%q", response.Code, response.Body.String())
-	}
-}
-
-func TestServeDocumentAssetRejectsUnsafePaths(t *testing.T) {
-	directory := t.TempDir()
-	documentPath := filepath.Join(directory, "notes.md")
-	if err := os.WriteFile(documentPath, []byte("# Notes"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	resource, err := NewResource(documentPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{"", "../secret.png", "notes.md", "/absolute.png"} {
-		if err := resource.ServeAsset(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/asset", nil), path); !errors.Is(err, errInvalidAssetPath) {
-			t.Errorf("ServeAsset(%q) error = %v, want errInvalidAssetPath", path, err)
-		}
 	}
 }
 

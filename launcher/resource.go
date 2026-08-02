@@ -17,22 +17,8 @@ import (
 const maxDocumentBytes int64 = 4 << 30
 
 var errPreconditionRequired = errors.New("If-Match is required for document writes")
-var errInvalidAssetPath = errors.New("invalid document asset path")
-
-var allowedDocumentAssetExtensions = map[string]bool{
-	".avif": true,
-	".bmp":  true,
-	".gif":  true,
-	".ico":  true,
-	".jpeg": true,
-	".jpg":  true,
-	".png":  true,
-	".svg":  true,
-	".webp": true,
-}
 
 type Resource struct {
-	id      string
 	path    string
 	mutex   sync.RWMutex
 	version string
@@ -56,17 +42,6 @@ type CopyResult struct {
 }
 
 func NewResource(path string) (*Resource, error) {
-	id, err := randomID()
-	if err != nil {
-		return nil, fmt.Errorf("create resource capability: %w", err)
-	}
-	return NewResourceWithID(path, id)
-}
-
-func NewResourceWithID(path, id string) (*Resource, error) {
-	if id == "" {
-		return nil, errors.New("resource ID must not be empty")
-	}
 	version, err := fileVersion(path)
 	if err != nil {
 		return nil, fmt.Errorf("fingerprint document: %w", err)
@@ -76,7 +51,6 @@ func NewResourceWithID(path, id string) (*Resource, error) {
 		return nil, fmt.Errorf("inspect document: %w", err)
 	}
 	return &Resource{
-		id:      id,
 		path:    path,
 		version: version,
 		size:    info.Size(),
@@ -84,7 +58,6 @@ func NewResourceWithID(path, id string) (*Resource, error) {
 	}, nil
 }
 
-func (resource *Resource) ID() string   { return resource.id }
 func (resource *Resource) Path() string { return resource.path }
 
 func (resource *Resource) Serve(response http.ResponseWriter, request *http.Request) error {
@@ -105,51 +78,6 @@ func (resource *Resource) Serve(response http.ResponseWriter, request *http.Requ
 	response.Header().Set("ETag", quoteETag(version))
 	response.Header().Set("Content-Disposition", contentDisposition(filepath.Base(resource.path)))
 	http.ServeContent(response, request, filepath.Base(resource.path), info.ModTime(), file)
-	return nil
-}
-
-func (resource *Resource) ServeAsset(response http.ResponseWriter, request *http.Request, relativePath string) error {
-	if relativePath == "" || strings.ContainsRune(relativePath, '\x00') {
-		return errInvalidAssetPath
-	}
-	relativePath = filepath.FromSlash(relativePath)
-	if filepath.IsAbs(relativePath) || !allowedDocumentAssetExtensions[strings.ToLower(filepath.Ext(relativePath))] {
-		return errInvalidAssetPath
-	}
-	cleaned := filepath.Clean(relativePath)
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return errInvalidAssetPath
-	}
-
-	base, err := filepath.EvalSymlinks(filepath.Dir(resource.path))
-	if err != nil {
-		return fmt.Errorf("resolve document directory: %w", err)
-	}
-	target, err := filepath.EvalSymlinks(filepath.Join(base, cleaned))
-	if err != nil {
-		return fmt.Errorf("resolve document asset: %w", err)
-	}
-	contained, err := filepath.Rel(base, target)
-	if err != nil || contained == ".." || strings.HasPrefix(contained, ".."+string(filepath.Separator)) {
-		return errInvalidAssetPath
-	}
-	file, err := os.Open(target)
-	if err != nil {
-		return fmt.Errorf("open document asset: %w", err)
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("inspect document asset: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return errInvalidAssetPath
-	}
-
-	if strings.EqualFold(filepath.Ext(target), ".svg") {
-		response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'")
-	}
-	http.ServeContent(response, request, filepath.Base(target), info.ModTime(), file)
 	return nil
 }
 
