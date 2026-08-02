@@ -58,7 +58,7 @@ import {
   installNewCommentEditor,
 } from './annotations';
 import { Comments } from './comments';
-import { OpenPasswordDialog, PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
+import { MetadataDialog, OpenPasswordDialog, PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
 import { Dialog, TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
@@ -263,7 +263,7 @@ type SidePanel =
   | { type: 'outline' | 'thumbnails' | 'colors' }
   | { type: 'comments'; target: CommentTarget | null }
   | null;
-type ActiveDialog = 'print' | 'protect' | 'signatures' | null;
+type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | null;
 type DocumentViewState = { pageNumber: number; totalPages: number; bookmarkKey: string; title: string };
 
 type DocumentPane = Exclude<NonNullable<SidePanel>['type'], 'colors'>;
@@ -712,6 +712,10 @@ function App({
           setSidePanel(null);
           setActiveDialog('protect');
         }}
+        onOpenMetadata={() => {
+          setSidePanel(null);
+          setActiveDialog('metadata');
+        }}
         signatureCount={signatures.length}
         onOpenSignatures={() => setActiveDialog('signatures')}
         onExport={() => {
@@ -796,6 +800,15 @@ function App({
           setProtectionState(isProtected);
           setHasUnsavedChanges(true, true);
         }}
+      />
+      <MetadataDialog
+        registry={registry}
+        open={activeDialog === 'metadata'}
+        fileName={documentName
+          ?? fileHandle?.name
+          ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined)}
+        pageCount={totalPages}
+        onClose={() => setActiveDialog(null)}
       />
       <SignatureDialog
         signatures={signatures}
