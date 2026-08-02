@@ -40,7 +40,28 @@ export class BrowserPdfFileHandle implements PdfFileHandle {
   }
 
   async prepareWrite() {
-    if (!(await verifyFilePermission(this.nativeHandle, 'readwrite', true))) return null;
+    if (!(await verifyFilePermission(this.nativeHandle, 'readwrite', true))) {
+      const shouldDownload = window.confirm(
+        'Write permission was not granted. Download a copy instead?',
+      );
+      if (!shouldDownload) return null;
+
+      const fileName = this.name;
+      return {
+        async save(data: ArrayBuffer) {
+          const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = fileName;
+          anchor.hidden = true;
+          document.body.append(anchor);
+          anchor.click();
+          anchor.remove();
+          window.setTimeout(() => URL.revokeObjectURL(url), 0);
+          return true;
+        },
+      };
+    }
 
     const { nativeHandle, storageKey } = this;
     return {
