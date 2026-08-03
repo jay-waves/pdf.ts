@@ -434,7 +434,7 @@ export function Search({
           aria-label="Match whole word"
           aria-pressed={flags.includes(MatchFlag.MatchWholeWord)}
         >
-          <span className={styles.matchIcon} aria-hidden="true">ab|</span>
+          <span className={styles.matchIcon} aria-hidden="true">'ab'</span>
         </button>
       </Tooltip>
     </div>
