@@ -28,13 +28,13 @@ summary.bookmark::-webkit-details-marker { display: none; }
 .bookmark:focus-visible .page { @apply text-accent; }
 
 .navigation {
-  @apply pointer-events-none fixed right-1/2 bottom-3 z-19 grid min-h-8.5 w-fit max-w-[calc(100vw-32px)] translate-x-1/2 translate-y-2 grid-cols-[auto_auto] items-center gap-1.25;
-  @apply rounded-lg border border-border bg-surface p-1 opacity-0 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none;
-  @apply max-[640px]:bottom-2 max-[640px]:max-w-[calc(100vw-16px)];
+  @apply pointer-events-none fixed right-1/2 z-19 grid translate-x-1/2 grid-cols-[auto_auto] items-center gap-1.25 opacity-0;
+  @apply transition-opacity duration-200 ease-out motion-reduce:transition-none;
+  bottom: 2.5vh;
 }
 .navigation:hover,
 .navigation:focus-within,
-.navigation[data-visible='true'] { @apply pointer-events-auto translate-y-0 opacity-100; }
+.navigation[data-visible='true'] { @apply pointer-events-auto opacity-100; }
 
 .navigationButtons { @apply flex min-w-0 items-center gap-1.25 max-[640px]:gap-0.75; }
 .navigationContent { @apply flex min-w-0 max-w-[min(430px,calc(100vw-136px))] items-center justify-end gap-1.5 max-[640px]:max-w-[calc(100vw-86px)] max-[640px]:gap-1.25; }
@@ -49,7 +49,7 @@ summary.bookmark::-webkit-details-marker { display: none; }
 .navigationButton:hover,
 .navigationButton:focus-visible,
 .outlineButton:hover,
-.outlineButton:focus-visible { @apply border-border-subtle bg-hover; }
+.outlineButton:focus-visible { @apply border-accent shadow-control; }
 .navigationButton:disabled,
 .outlineButton:disabled { @apply cursor-default opacity-48; }
 .thumbnailButton { @apply size-6.5 max-w-6.5 flex-none p-0; }

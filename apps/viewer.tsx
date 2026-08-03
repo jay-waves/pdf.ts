@@ -334,7 +334,6 @@ function App({
   const saveInProgressRef = useRef<Promise<boolean> | null>(null);
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
-  const [toolbarInset, setToolbarInset] = useState(0);
   const [panMode, setPanMode] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidePanel, setSidePanel] = useState<SidePanel>(null);
@@ -406,7 +405,6 @@ function App({
 
   useEffect(() => {
     currentPageNumberRef.current = currentPageNumber;
-    revealNavigation();
   }, [currentPageNumber]);
 
   useEffect(() => {
@@ -556,7 +554,7 @@ function App({
   }, []);
 
   return (
-    <main ref={viewerRootRef} className="fixed inset-0 overflow-hidden" style={{ paddingTop: toolbarInset }}>
+    <main ref={viewerRootRef} className="fixed inset-0 overflow-hidden">
       <EmbedPDF
           engine={engine}
           plugins={plugins}
@@ -739,7 +737,6 @@ function App({
           });
         }}
         onSave={() => void saveDocument()}
-        onPinnedInsetChange={setToolbarInset}
       />
       <Dialog
         open={documentPane !== null}

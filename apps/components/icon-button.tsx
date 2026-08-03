@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { Tooltip } from './tooltip';
+import styles from './icon-button.module.css';
 
 interface IconButtonProps {
   label: string;
@@ -24,7 +25,8 @@ export function IconButton({
     <button
       type="button"
       className={[
-        'cursor-pointer border border-transparent bg-transparent text-inherit data-[active=true]:border-accent data-[active=true]:text-accent data-[active=true]:shadow-control',
+        'cursor-pointer border border-transparent bg-transparent text-inherit',
+        styles.button,
         className,
       ].join(' ')}
       onClick={onClick}

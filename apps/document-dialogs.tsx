@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type ComponentProps, type FormEvent } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PrintCapability } from '@embedpdf/plugin-print';
@@ -21,6 +21,18 @@ function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message;
   return fallback;
+}
+
+function FlatDocumentDialog(props: ComponentProps<typeof Dialog>) {
+  return (
+    <Dialog
+      {...props}
+      variant="popup"
+      titleClassName={styles.flatTitle}
+      contentClassName={styles.flatDialog}
+      overlayClassName={styles.flatOverlay}
+    />
+  );
 }
 
 function validatePageRange(value: string, totalPages: number) {
@@ -116,12 +128,10 @@ export function MetadataDialog({ registry, open, fileName, pageCount, onClose }:
   ] : [];
 
   return (
-    <Dialog
+    <FlatDocumentDialog
       open={open}
       onClose={onClose}
-      variant="popup"
       title="Metadata"
-      titleClassName={styles.title}
     >
       <div className={styles.metadataContent}>
         {loading ? <div className={styles.metadataStatus}>Loading metadata…</div> : null}
@@ -136,11 +146,11 @@ export function MetadataDialog({ registry, open, fileName, pageCount, onClose }:
             ))}
           </dl>
         ) : null}
-        <DialogActions>
-          <Button variant="primary" onClick={onClose}>Close</Button>
+        <DialogActions className={styles.flatActions}>
+          <Button className={styles.flatButton} variant="primary" onClick={onClose}>Close</Button>
         </DialogActions>
       </div>
-    </Dialog>
+    </FlatDocumentDialog>
   );
 }
 
@@ -320,13 +330,11 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
   }
 
   return (
-    <Dialog
+    <FlatDocumentDialog
       open={open}
       onClose={onClose}
-      variant="popup"
       preventClose={busy}
       title="Password protection"
-      titleClassName={styles.title}
     >
       <form className={styles.form} onSubmit={submit}>
         <label className={styles.field}>
@@ -371,9 +379,9 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
           </label>
         ) : null}
         {error ? <div className={styles.error} role="alert">{error}</div> : null}
-        <DialogActions>
-          <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy}>
+        <DialogActions className={styles.flatActions}>
+          <Button className={styles.flatButton} onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button className={styles.flatButton} type="submit" variant="primary" disabled={busy}>
             {busyAction === 'remove'
               ? 'Removing...'
               : busyAction === 'protect'
@@ -384,7 +392,7 @@ export function ProtectDialog({ registry, open, onClose, protectionState, onProt
           </Button>
         </DialogActions>
       </form>
-    </Dialog>
+    </FlatDocumentDialog>
   );
 }
 
@@ -519,17 +527,15 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
   };
 
   return (
-    <Dialog
+    <FlatDocumentDialog
       open={open}
       onClose={onClose}
-      variant="popup"
       preventClose={busy}
       title="Print"
-      titleClassName={styles.title}
     >
       <form className={styles.form} onSubmit={submit}>
         <RadixRadioGroup.Root
-          className="overflow-hidden rounded border border-border"
+          className={styles.optionGroup}
           value={mode}
           onValueChange={(value) => {
             if (value === 'all' || value === 'current' || value === 'custom') setMode(value);
@@ -553,11 +559,11 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
           </label>
         ) : null}
         {error ? <div className={styles.error} role="alert">{error}</div> : null}
-        <DialogActions>
-          <Button onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</Button>
+        <DialogActions className={styles.flatActions}>
+          <Button className={styles.flatButton} onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button className={styles.flatButton} type="submit" variant="primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</Button>
         </DialogActions>
       </form>
-    </Dialog>
+    </FlatDocumentDialog>
   );
 }

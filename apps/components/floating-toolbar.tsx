@@ -1,5 +1,13 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import styles from './floating-toolbar.module.css';
+
+export function FloatingSurface({
+  as: Component = 'div',
+  className = '',
+  ...props
+}: HTMLAttributes<HTMLElement> & { as?: 'div' | 'nav' }) {
+  return <Component className={[styles.surface, className].filter(Boolean).join(' ')} {...props} />;
+}
 
 export function FloatingToolbar({
   label,
@@ -13,14 +21,14 @@ export function FloatingToolbar({
   className?: string;
 }) {
   return (
-    <div
-      className={[styles.root, className].filter(Boolean).join(' ')}
+    <FloatingSurface
+      className={[styles.toolbar, className].filter(Boolean).join(' ')}
       role="toolbar"
       aria-label={label}
       data-overflow={overflow ? 'true' : undefined}
     >
       {children}
-    </div>
+    </FloatingSurface>
   );
 }
 

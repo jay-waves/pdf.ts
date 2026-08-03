@@ -13,7 +13,7 @@ import {
 import {
   type BookmarkCapability,
 } from '@embedpdf/plugin-bookmark';
-import { PanelContent, PanelState } from './components';
+import { FloatingSurface, PanelContent, PanelState } from './components';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
@@ -640,7 +640,8 @@ export function BottomNavigationControl({
   };
 
   return (
-    <nav
+    <FloatingSurface
+      as="nav"
       className={styles.navigation}
       data-visible={visible ? 'true' : undefined}
       aria-label="PDF navigation"
@@ -715,6 +716,6 @@ export function BottomNavigationControl({
           <span className={styles.pageTotal}>/ {totalPages || '-'}</span>
         </form>
       </div>
-    </nav>
+    </FloatingSurface>
   );
 }
