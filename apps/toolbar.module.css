@@ -27,7 +27,7 @@
 .modeButton:focus-visible { @apply border-accent shadow-control; }
 
 .modeButton {
-  @apply inline-flex px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
+  @apply inline-flex w-14 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
 }
 .modeLabel { @apply text-left whitespace-nowrap max-[640px]:hidden; }
 
