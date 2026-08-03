@@ -1,0 +1,10 @@
+@reference '../tailwind.css';
+
+.root {
+  @apply flex min-h-8.5 w-fit max-w-[calc(100vw-32px)] items-center justify-center gap-1.25 rounded-lg border border-border bg-surface p-1;
+  @apply max-[640px]:max-w-[calc(100vw-16px)];
+}
+
+.root[data-overflow='true'] { @apply overflow-x-auto; }
+.group { @apply inline-flex min-w-0 items-center gap-0.75; }
+.divider { @apply h-4.5 w-px flex-none bg-border; }

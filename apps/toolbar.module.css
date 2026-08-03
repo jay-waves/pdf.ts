@@ -1,27 +1,14 @@
 @reference './tailwind.css';
 
 .root {
-  @apply pointer-events-none fixed inset-x-0 top-0 z-31 flex -translate-y-full flex-col bg-toolbar-secondary opacity-0;
+  @apply pointer-events-none fixed inset-x-0 top-0 z-31 flex -translate-y-2 flex-col items-center bg-transparent pt-3 opacity-0;
   @apply transition-[transform,opacity] duration-200 ease-out;
+  @apply max-[640px]:pt-2;
 }
 .root[data-visible='true'] { @apply pointer-events-auto translate-y-0 opacity-100; }
 
-.mainBar {
-  @apply grid h-8.75 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.25 bg-toolbar px-2 py-1.25;
-  @apply max-[768px]:grid-cols-[auto_minmax(0,1fr)] max-[768px]:px-1.5;
-}
-
-.secondaryBar {
-  @apply flex h-8.75 items-center justify-center gap-1.25 border-b border-border bg-toolbar-secondary px-2 py-1.25;
-  @apply max-[768px]:overflow-x-auto max-[768px]:px-1.5;
-}
-
-.side { @apply flex min-w-0 items-center; }
-.center { @apply flex min-w-0 items-center justify-center max-[768px]:justify-end; }
-.cluster { @apply inline-flex min-w-0 items-center gap-0.75; }
 .modeCluster { @apply inline-flex min-w-0 items-center gap-2; }
 .drawTools { @apply my-[-2px] inline-flex min-w-0 max-w-[min(720px,calc(100vw-18px))] items-center gap-0.75 overflow-auto py-0.5; }
-.divider { @apply h-4.5 w-px bg-border; }
 .icon { @apply block size-3.5 flex-none; }
 
 .iconButton {
@@ -41,31 +28,17 @@
 .iconButton.iconButton[data-active='true']:focus-visible { @apply border-accent shadow-control; }
 .iconButton:disabled { @apply cursor-default opacity-46; }
 
-.modeButton,
-.mobileModeButton {
+.modeButton {
   @apply h-6.5 min-w-0 cursor-pointer items-center justify-center gap-1.25 rounded-md border border-transparent bg-transparent text-inherit leading-3.5 outline-none;
   @apply transition-[border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
 }
 .modeButton:hover,
-.modeButton:focus-visible,
-.mobileModeButton:hover,
-.mobileModeButton:focus-visible { @apply border-accent shadow-control; }
+.modeButton:focus-visible { @apply border-accent shadow-control; }
 
 .modeButton {
-  @apply inline-flex px-1.5 max-[768px]:hidden;
+  @apply inline-flex px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
 }
-.modeButton[data-active='true'] {
-  border-color: transparent;
-  background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
-  color: inherit;
-  box-shadow: none;
-}
-.modeButton[data-active='true']:hover,
-.modeButton[data-active='true']:focus-visible { @apply border-accent shadow-control; }
-
-.mobileModeButton {
-  @apply hidden min-w-21.5 px-1.75 max-[768px]:inline-flex;
-}
+.modeLabel { @apply text-left whitespace-nowrap max-[640px]:hidden; }
 
 .zoomSelect {
   @apply inline-flex h-6.5 w-18.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5;

@@ -1,8 +1,7 @@
 @reference './tailwind.css';
 
 .bar {
-  @apply flex h-8.75 items-center justify-center gap-1.25 border-b border-border bg-surface px-2.75 py-1.25;
-  @apply max-[768px]:overflow-x-auto max-[768px]:px-2 max-[768px]:py-0.5;
+  @apply flex min-w-0 items-center justify-center gap-1.25;
 }
 
 .button {

@@ -81,9 +81,20 @@ const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
 const MAX_RENDER_DPR = 1.75;
-const NAVIGATION_AUTO_HIDE_DELAY_MS = 1200;
+const NAVIGATION_AUTO_HIDE_DELAY_MS = 900;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
+
+function LoadingStatus({ label }: { label: string }) {
+  return (
+    <div className={VIEWER_STATUS_CLASS} role="status" aria-live="polite">
+      <div className={styles.loadingStatus}>
+        <span className={styles.loadingSpinner} aria-hidden="true" />
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
 // The engine tracks fontFallback by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
 const PDFIUM_FONT_FALLBACK: FontFallbackConfig = {
@@ -619,7 +630,7 @@ function App({
                 <DocumentContent documentId={activeDocumentId}>
                   {({ documentState, isLoading, isError, isLoaded }) => (
                     <>
-                      {isLoading && <div className={VIEWER_STATUS_CLASS}>Loading document...</div>}
+                      {isLoading && <LoadingStatus label="Loading document…" />}
                       {isError && documentState.errorCode === PdfErrorCode.Password ? (
                         <OpenPasswordDialog
                           registry={registry}
@@ -957,7 +968,7 @@ function ViewerBootstrap() {
   }
 
   if (!resources) {
-    return <div className={VIEWER_STATUS_CLASS}>Loading PDF resources...</div>;
+    return <LoadingStatus label="Loading PDF resources…" />;
   }
 
   return (
@@ -1003,9 +1014,12 @@ function ReadyViewer({
   }
 
   if (!engine) {
+    if (isLoading) {
+      return <LoadingStatus label="Starting PDF engine…" />;
+    }
     return (
       <div className={`${VIEWER_STATUS_CLASS} ${error ? 'text-danger' : ''}`}>
-        {error ? `Unable to initialize PDF engine: ${error.message}` : isLoading ? 'Loading PDF engine...' : 'PDF engine unavailable.'}
+        {error ? `Unable to initialize PDF engine: ${error.message}` : 'PDF engine unavailable.'}
       </div>
     );
   }

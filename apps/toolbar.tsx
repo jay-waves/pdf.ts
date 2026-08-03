@@ -7,6 +7,7 @@ import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
 import { ZoomMode, type ZoomCapability, type ZoomLevel } from '@embedpdf/plugin-zoom';
 import {
   ArrowDownUp,
+  ArrowLeft,
   ArrowLeftRight,
   BookImage,
   Download,
@@ -15,7 +16,6 @@ import {
   Highlighter,
   Info,
   LineSquiggle,
-  Eye,
   Menu,
   MessageSquareMore,
   Minus,
@@ -58,8 +58,9 @@ import {
 import { Search } from './search';
 import styles from './toolbar.module.css';
 import {
-  DropdownMenu,
-  DropdownMenuItem,
+  FloatingToolbar,
+  FloatingToolbarDivider,
+  FloatingToolbarGroup,
   IconButton,
   Select,
   Tooltip,
@@ -67,7 +68,9 @@ import {
 
 type ToolbarMode = 'view' | 'page' | 'search' | 'draw';
 type PersistentToolbarMode = Exclude<ToolbarMode, 'search'>;
-const TOOLBAR_HIDE_DELAY_MS = 420;
+type ToolbarSection = 'document' | ToolbarMode;
+const TOOLBAR_HIDE_DELAY_MS = 900;
+const PINNED_TOOLBAR_RESIZES_VIEWPORT = false;
 
 interface ToolbarProps {
   registry?: PluginRegistry;
@@ -98,12 +101,12 @@ interface ToolbarButtonProps {
   onClick(): void;
 }
 
-const MODE_ITEMS: Array<{
-  id: ToolbarMode;
+const PRIMARY_ITEMS: Array<{
+  id: ToolbarSection;
   label: string;
   icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
 }> = [
-  { id: 'view', label: 'VIEW', icon: Eye },
+  { id: 'document', label: 'DOCS', icon: Menu },
   { id: 'page', label: 'PAGE', icon: StickyNote },
   { id: 'search', label: 'SEARCH', icon: SearchIcon },
   { id: 'draw', label: 'DRAW', icon: PencilRuler },
@@ -239,17 +242,21 @@ export function Toolbar({
   onSave,
   onPinnedInsetChange,
 }: ToolbarProps) {
-  const [openMenu, setOpenMenu] = useState<'document' | 'mode' | null>(null);
+  const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [selectedMode, setSelectedMode] = useState<PersistentToolbarMode>('view');
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
   const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
-  const activeModeItem = MODE_ITEMS.find(({ id }) => id === mode) ?? MODE_ITEMS[0];
   const canUseRegistry = Boolean(registry && activeDocumentId);
 
   useEffect(() => {
+    if (!PINNED_TOOLBAR_RESIZES_VIEWPORT) {
+      onPinnedInsetChange(0);
+      return;
+    }
+
     const toolbar = toolbarRef.current;
     if (!toolbar) return;
 
@@ -279,13 +286,13 @@ export function Toolbar({
 
   const hideToolbar = () => {
     clearToolbarHideTimer();
-    if (!pinned && !openMenu && !toolbarRef.current?.matches(':hover, :focus-within')) {
+    if (!pinned && !toolbarRef.current?.matches(':hover, :focus-within')) {
       toolbarRef.current?.removeAttribute('data-visible');
     }
   };
 
   const scheduleToolbarHide = () => {
-    if (pinned || openMenu) {
+    if (pinned) {
       return;
     }
 
@@ -297,12 +304,19 @@ export function Toolbar({
     if (activeTool && !searchOpen) {
       onPanModeChange(false);
       setSelectedMode('draw');
+      setActiveSection('draw');
     }
   }, [activeTool, onPanModeChange, searchOpen]);
 
+  useEffect(() => {
+    setActiveSection((current) => (
+      searchOpen ? 'search' : current === 'search' ? null : current
+    ));
+  }, [searchOpen]);
+
   const closeSearch = () => onSearchOpenChange(false);
   const setMode = (nextMode: ToolbarMode) => {
-    setOpenMenu(null);
+    setActiveSection(nextMode);
 
     if (nextMode !== 'draw') {
       getAnnotationScope(registry)?.scope.setActiveTool(null);
@@ -315,6 +329,19 @@ export function Toolbar({
 
     setSelectedMode(nextMode);
     closeSearch();
+  };
+
+  const openSection = (section: ToolbarSection) => {
+    if (section === 'document') {
+      setActiveSection('document');
+      return;
+    }
+    setMode(section);
+  };
+
+  const returnToPrimaryToolbar = () => {
+    setActiveSection(null);
+    if (searchOpen) closeSearch();
   };
 
   const togglePan = () => {
@@ -456,7 +483,30 @@ export function Toolbar({
       window.removeEventListener('pointermove', onPointerMove);
       clearToolbarHideTimer();
     };
-  }, [openMenu, pinned]);
+  }, [pinned]);
+
+  const renderPersistentControls = () => (
+    <>
+      <FloatingToolbarDivider />
+      <FloatingToolbarGroup>
+        <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
+        <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
+        <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
+        {signatureCount > 0 ? (
+          <Tooltip content={`Digitally signed document · ${signatureCount} signature${signatureCount === 1 ? '' : 's'}`}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              aria-label={`Digital signatures (${signatureCount})`}
+              onClick={onOpenSignatures}
+            >
+              <Signature size={14} strokeWidth={2} />
+            </button>
+          </Tooltip>
+        ) : null}
+      </FloatingToolbarGroup>
+    </>
+  );
 
   return (
     <div
@@ -468,102 +518,47 @@ export function Toolbar({
       onMouseLeave={scheduleToolbarHide}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <div className={styles.mainBar} role="toolbar" aria-label="PDF toolbar">
-        <div className={styles.side}>
-          <div className={styles.cluster}>
-            <DropdownMenu
-              open={openMenu === 'document'}
-              onOpenChange={(open) => setOpenMenu((current) => (
-                open ? 'document' : current === 'document' ? null : current
-              ))}
-              trigger={(
-                <button type="button" className={styles.iconButton} aria-label="Document menu">
-                  <Menu size={14} strokeWidth={2} />
-                </button>
-              )}
-            >
-              <DropdownMenuItem onSelect={printDocument} disabled={!canUseRegistry}>
-                <Printer size={14} strokeWidth={2} />
-                <span>Print</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={openSecurityDialog} disabled={!canUseRegistry}>
-                <ShieldCheck size={14} strokeWidth={2} />
-                <span>Security</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onExport} disabled={!canUseRegistry}>
-                <Download size={14} strokeWidth={2} />
-                <span>Export</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onSave} disabled={!canUseRegistry}>
-                <Save size={14} strokeWidth={2} />
-                <span>Save</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={openMetadataDialog} disabled={!canUseRegistry}>
-                <Info size={14} strokeWidth={2} />
-                <span>Metadata</span>
-              </DropdownMenuItem>
-            </DropdownMenu>
-            <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
-            <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
-            <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
-            {signatureCount > 0 ? (
-              <Tooltip content={`Digitally signed document · ${signatureCount} signature${signatureCount === 1 ? '' : 's'}`}>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label={`Digital signatures (${signatureCount})`}
-                  onClick={onOpenSignatures}
-                >
-                  <Signature size={14} strokeWidth={2} />
-                </button>
-              </Tooltip>
-            ) : null}
-          </div>
-        </div>
-
-        <div className={styles.center}>
+      {activeSection === null ? (
+        <FloatingToolbar label="PDF toolbar">
           <div className={styles.modeCluster}>
-            <DropdownMenu
-              open={openMenu === 'mode'}
-              onOpenChange={(open) => setOpenMenu((current) => (
-                open ? 'mode' : current === 'mode' ? null : current
-              ))}
-              align="end"
-              trigger={(
-                <button type="button" className={styles.mobileModeButton}>
-                  <activeModeItem.icon className={styles.icon} size={14} strokeWidth={2} />
-                  <span>{activeModeItem.label}</span>
-                </button>
-              )}
-            >
-                {MODE_ITEMS.map(({ id, label, icon: Icon }) => (
-                <DropdownMenuItem key={id} active={mode === id} onSelect={() => setMode(id)}>
-                    <Icon className={styles.icon} size={14} strokeWidth={2} />
-                    <span>{label}</span>
-                </DropdownMenuItem>
-                ))}
-            </DropdownMenu>
-            {MODE_ITEMS.map(({ id, label, icon: Icon }) => (
+            {PRIMARY_ITEMS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 className={styles.modeButton}
-                data-active={mode === id ? 'true' : undefined}
-                onClick={() => setMode(id)}
-                aria-pressed={mode === id}
+                onClick={() => openSection(id)}
+                aria-pressed={id === 'document' ? undefined : mode === id}
+                aria-label={label}
               >
                 <Icon className={styles.icon} size={14} strokeWidth={2} />
-                <span className="text-left whitespace-nowrap">{label}</span>
+                <span className={styles.modeLabel}>{label}</span>
               </button>
             ))}
           </div>
-        </div>
+          {renderPersistentControls()}
+        </FloatingToolbar>
+      ) : null}
 
-      </div>
+      {activeSection === 'document' ? (
+        <FloatingToolbar label="Document toolbar">
+          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <FloatingToolbarDivider />
+          <FloatingToolbarGroup>
+            <ToolbarButton label="Print" icon={Printer} onClick={printDocument} disabled={!canUseRegistry} />
+            <ToolbarButton label="Security" icon={ShieldCheck} onClick={openSecurityDialog} disabled={!canUseRegistry} />
+            <ToolbarButton label="Export" icon={Download} onClick={onExport} disabled={!canUseRegistry} />
+            <ToolbarButton label="Save" icon={Save} onClick={onSave} disabled={!canUseRegistry} />
+            <ToolbarButton label="Metadata" icon={Info} onClick={openMetadataDialog} disabled={!canUseRegistry} />
+          </FloatingToolbarGroup>
+          {renderPersistentControls()}
+        </FloatingToolbar>
+      ) : null}
 
-      {mode === 'page' ? (
-        <div className={styles.secondaryBar} role="toolbar" aria-label="Page toolbar">
-          <div className={styles.cluster}>
+      {activeSection === 'page' ? (
+        <FloatingToolbar label="Page toolbar" overflow>
+          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <FloatingToolbarDivider />
+          <FloatingToolbarGroup>
             <ToolbarButton label="Zoom out" icon={Minus} onClick={() => zoomByButton(-1)} disabled={!canUseRegistry} />
             <Select
               className={styles.zoomSelect}
@@ -578,32 +573,43 @@ export function Toolbar({
               disabled={!canUseRegistry}
             />
             <ToolbarButton label="Zoom in" icon={Plus} onClick={() => zoomByButton(1)} disabled={!canUseRegistry} />
-          </div>
-          <div className={styles.divider} />
-          <div className={styles.cluster}>
+          </FloatingToolbarGroup>
+          <FloatingToolbarDivider />
+          <FloatingToolbarGroup>
             <ToolbarButton label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'} icon={GalleryHorizontal} active={spreadMode === SpreadMode.Odd} onClick={() => setSpread(spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd)} disabled={!canUseRegistry} />
             <ToolbarButton label="Vertical scroll" icon={ArrowDownUp} active={scrollStrategy === ScrollStrategy.Vertical} onClick={() => setScroll(ScrollStrategy.Vertical)} disabled={!canUseRegistry} />
             <ToolbarButton label="Horizontal scroll" icon={ArrowLeftRight} active={scrollStrategy === ScrollStrategy.Horizontal} onClick={() => setScroll(ScrollStrategy.Horizontal)} disabled={!canUseRegistry} />
             <ToolbarButton label="Rotate" icon={RotateCw} onClick={rotateForward} disabled={!canUseRegistry} />
             <ToolbarButton label="Thumbnails" icon={BookImage} active={thumbnailsOpen} onClick={toggleThumbnailsPanel} disabled={!canUseRegistry} />
-          </div>
-        </div>
+          </FloatingToolbarGroup>
+          {renderPersistentControls()}
+        </FloatingToolbar>
       ) : null}
 
-      {mode === 'search' ? <Search registry={registry} open /> : null}
+      {activeSection === 'search' ? (
+        <FloatingToolbar label="Search toolbar" overflow>
+          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <FloatingToolbarDivider />
+          <Search registry={registry} open />
+          {renderPersistentControls()}
+        </FloatingToolbar>
+      ) : null}
 
-      {mode === 'draw' ? (
-        <div className={styles.secondaryBar} role="toolbar" aria-label="Draw toolbar">
+      {activeSection === 'draw' ? (
+        <FloatingToolbar label="Draw toolbar" overflow>
+          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <FloatingToolbarDivider />
           <div className={styles.drawTools}>
             {DRAW_TOOLS.map(({ id, label, icon }) => (
               <ToolbarButton key={id} label={label} icon={icon} active={activeTool === id} onClick={() => selectDrawTool(id)} disabled={!canUseRegistry} />
             ))}
-            <div className={styles.divider} />
+            <FloatingToolbarDivider />
             <ToolbarButton label="Colors" icon={PaintBucket} active={colorPaletteOpen} onClick={onToggleColorPalette} disabled={!canUseRegistry} />
             <ToolbarButton label="Undo" icon={Undo2} onClick={() => runAnnotationHistory('undo')} disabled={!canUseRegistry} />
             <ToolbarButton label="Redo" icon={Redo2} onClick={() => runAnnotationHistory('redo')} disabled={!canUseRegistry} />
           </div>
-        </div>
+          {renderPersistentControls()}
+        </FloatingToolbar>
       ) : null}
     </div>
   );
