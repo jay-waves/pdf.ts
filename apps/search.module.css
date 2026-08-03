@@ -17,7 +17,9 @@
 .button[data-active='true']:hover,
 .button[data-active='true']:focus-visible { @apply border-accent shadow-control; }
 .button:disabled { @apply cursor-default opacity-48; }
-.matchIcon { @apply block w-4 text-center text-[12px] font-medium leading-none tracking-[-0.06em]; }
+.matchIcon {
+  @apply block w-4 text-center text-[12.5px] font-medium leading-none tracking-[-0.06em];
+}
 
 .status { @apply min-w-11.5 flex-none text-center leading-4 whitespace-nowrap text-secondary tabular-nums max-[640px]:min-w-8; }
 .form { @apply flex min-w-0 flex-[0_1_240px] items-center gap-0.75 max-[640px]:gap-1.25; }
