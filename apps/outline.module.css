@@ -54,11 +54,11 @@ summary.bookmark::-webkit-details-marker { display: none; }
 .outlineButton:disabled { @apply cursor-default opacity-48; }
 .thumbnailButton { @apply size-6.5 max-w-6.5 flex-none p-0; }
 .navigationTitleIcon { @apply hidden flex-none max-[640px]:block; }
-.navigationTitle { @apply block overflow-hidden text-[10.5px] leading-6 text-ellipsis whitespace-nowrap max-[640px]:hidden; }
+.navigationTitle { @apply inline-flex h-3.5 items-center overflow-hidden text-[12px] leading-3.5 text-ellipsis whitespace-nowrap max-[640px]:hidden; }
 
 .pageForm {
-  @apply flex h-6.5 min-w-15.5 flex-none items-center justify-center gap-1 rounded-md border border-transparent px-1.5 text-[10.5px] whitespace-nowrap text-secondary tabular-nums;
+  @apply flex h-6.5 min-w-15.5 flex-none items-center justify-center gap-1 rounded-md border border-transparent px-1.5 text-[12px] whitespace-nowrap text-secondary tabular-nums;
 }
 .pageForm:focus-within { @apply border-border-subtle bg-hover; }
-.pageInput { @apply h-4.75 w-6.5 min-w-0 border-0 bg-transparent px-0.5 text-right text-[10.5px] leading-4.5 text-foreground tabular-nums outline-none disabled:text-muted; }
+.pageInput { @apply h-4.75 w-6.5 min-w-0 border-0 bg-transparent px-0.5 text-right text-[12px] leading-4.5 text-foreground tabular-nums outline-none disabled:text-muted; }
 .pageTotal { @apply text-muted; }

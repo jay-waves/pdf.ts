@@ -9,6 +9,7 @@
 
 .drawTools { @apply my-[-2px] inline-flex min-w-0 max-w-[min(720px,calc(100vw-18px))] items-center gap-0.75 overflow-auto py-0.5; }
 .icon { @apply block size-3.5 flex-none; }
+.searchModeIcon { @apply size-4; }
 
 .iconButton {
   @apply inline-grid size-6.5 flex-none cursor-pointer place-items-center rounded-md border border-transparent bg-transparent p-0 leading-3.5 text-inherit outline-none;
@@ -27,9 +28,9 @@
 .modeButton:focus-visible { @apply border-accent shadow-control; }
 
 .modeButton {
-  @apply inline-flex w-14 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
+  @apply inline-flex w-16 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
 }
-.modeLabel { @apply text-left whitespace-nowrap max-[640px]:hidden; }
+.modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
 
 .zoomSelect {
   @apply inline-flex h-6.5 w-18.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5;
