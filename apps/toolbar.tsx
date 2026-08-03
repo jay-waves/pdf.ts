@@ -66,11 +66,8 @@ import {
   Tooltip,
 } from './components';
 
-type ToolbarMode = 'view' | 'page' | 'search' | 'draw';
-type PersistentToolbarMode = Exclude<ToolbarMode, 'search'>;
-type ToolbarSection = 'document' | ToolbarMode;
+type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 const TOOLBAR_HIDE_DELAY_MS = 900;
-const PINNED_TOOLBAR_RESIZES_VIEWPORT = false;
 
 interface ToolbarProps {
   registry?: PluginRegistry;
@@ -90,7 +87,6 @@ interface ToolbarProps {
   onOpenSignatures(): void;
   onExport(): void;
   onSave(): void;
-  onPinnedInsetChange(inset: number): void;
 }
 
 interface ToolbarButtonProps {
@@ -240,37 +236,13 @@ export function Toolbar({
   onOpenSignatures,
   onExport,
   onSave,
-  onPinnedInsetChange,
 }: ToolbarProps) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
-  const [selectedMode, setSelectedMode] = useState<PersistentToolbarMode>('view');
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
-  const mode: ToolbarMode = searchOpen ? 'search' : selectedMode;
   const canUseRegistry = Boolean(registry && activeDocumentId);
-
-  useEffect(() => {
-    if (!PINNED_TOOLBAR_RESIZES_VIEWPORT) {
-      onPinnedInsetChange(0);
-      return;
-    }
-
-    const toolbar = toolbarRef.current;
-    if (!toolbar) return;
-
-    const updateInset = () => {
-      onPinnedInsetChange(pinned ? toolbar.getBoundingClientRect().height : 0);
-    };
-
-    updateInset();
-    if (!pinned) return;
-
-    const observer = new ResizeObserver(updateInset);
-    observer.observe(toolbar);
-    return () => observer.disconnect();
-  }, [onPinnedInsetChange, pinned]);
 
   const clearToolbarHideTimer = () => {
     if (toolbarHideTimerRef.current !== undefined) {
@@ -303,7 +275,6 @@ export function Toolbar({
   useEffect(() => {
     if (activeTool && !searchOpen) {
       onPanModeChange(false);
-      setSelectedMode('draw');
       setActiveSection('draw');
     }
   }, [activeTool, onPanModeChange, searchOpen]);
@@ -315,28 +286,19 @@ export function Toolbar({
   }, [searchOpen]);
 
   const closeSearch = () => onSearchOpenChange(false);
-  const setMode = (nextMode: ToolbarMode) => {
-    setActiveSection(nextMode);
+  const openSection = (section: ToolbarSection) => {
+    setActiveSection(section);
 
-    if (nextMode !== 'draw') {
+    if (section !== 'draw' && section !== 'document') {
       getAnnotationScope(registry)?.scope.setActiveTool(null);
     }
 
-    if (nextMode === 'search') {
+    if (section === 'search') {
       onSearchOpenChange(true);
       return;
     }
 
-    setSelectedMode(nextMode);
-    closeSearch();
-  };
-
-  const openSection = (section: ToolbarSection) => {
-    if (section === 'document') {
-      setActiveSection('document');
-      return;
-    }
-    setMode(section);
+    if (section !== 'document') closeSearch();
   };
 
   const returnToPrimaryToolbar = () => {
@@ -386,7 +348,6 @@ export function Toolbar({
     }
 
     scopeInfo.scope.setActiveTool(activeTool === toolId ? null : toolId);
-    setSelectedMode('draw');
   };
 
   const setSpread = (nextSpreadMode: SpreadMode) => {
@@ -512,7 +473,6 @@ export function Toolbar({
     <div
       ref={toolbarRef}
       className={styles.root}
-      data-pinned={pinned ? 'true' : undefined}
       data-visible={pinned ? 'true' : undefined}
       onMouseEnter={showToolbar}
       onMouseLeave={scheduleToolbarHide}
@@ -520,21 +480,20 @@ export function Toolbar({
     >
       {activeSection === null ? (
         <FloatingToolbar label="PDF toolbar">
-          <div className={styles.modeCluster}>
+          <FloatingToolbarGroup>
             {PRIMARY_ITEMS.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 className={styles.modeButton}
                 onClick={() => openSection(id)}
-                aria-pressed={id === 'document' ? undefined : mode === id}
                 aria-label={label}
               >
                 <Icon className={styles.icon} size={14} strokeWidth={2} />
                 <span className={styles.modeLabel}>{label}</span>
               </button>
             ))}
-          </div>
+          </FloatingToolbarGroup>
           {renderPersistentControls()}
         </FloatingToolbar>
       ) : null}

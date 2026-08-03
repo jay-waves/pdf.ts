@@ -2,14 +2,14 @@
 
 .button {
   @apply inline-grid size-6 flex-none place-items-center rounded p-0 outline-none;
-  @apply transition-[background-color,border-color,transform] duration-150 ease-control motion-reduce:transition-none;
+  @apply transition-[background-color,border-color,box-shadow] duration-150 ease-control motion-reduce:transition-none;
 }
 
 .button:hover,
 .button:focus-visible {
-  @apply -translate-y-px border-border-subtle bg-hover;
+  @apply border-accent shadow-control;
 }
 
 .button:active {
-  @apply translate-y-0 bg-selected;
+  @apply bg-selected shadow-none;
 }

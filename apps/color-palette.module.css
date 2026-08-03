@@ -14,16 +14,17 @@
 
 .target {
   @apply h-6 cursor-pointer rounded-md border border-transparent bg-transparent px-2 text-secondary outline-none;
-  @apply transition-[border-color,box-shadow,color,transform] duration-150 ease-control motion-reduce:transition-none;
+  @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
 }
 
 .target:hover,
 .target:focus-visible {
-  @apply -translate-y-px border-accent text-accent shadow-control;
+  @apply border-accent shadow-control;
 }
 
 .target[data-active='true'] {
-  @apply border-accent text-accent shadow-control;
+  background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
+  color: var(--pdf-foreground-secondary);
 }
 
 .grid {
@@ -32,14 +33,14 @@
 
 .swatch {
   @apply grid aspect-square min-w-0 cursor-pointer place-items-center rounded-md border border-border-subtle outline-none;
-  @apply transition-[border-color,box-shadow,transform] duration-150 ease-control motion-reduce:transition-none;
+  @apply transition-[border-color,box-shadow] duration-150 ease-control motion-reduce:transition-none;
   background: var(--pdf-swatch-color);
   color: color-mix(in srgb, var(--pdf-swatch-color) 16%, #111827);
 }
 
 .swatch:hover,
 .swatch:focus-visible {
-  @apply -translate-y-px border-accent shadow-control;
+  @apply border-accent shadow-control;
 }
 
 .swatch[data-active='true'] {

@@ -8,6 +8,7 @@ export function Dialog({
   title,
   children,
   contentClassName = '',
+  overlayClassName = 'bg-black/50',
   variant = 'panel',
   titleClassName = 'sr-only',
 }: {
@@ -17,6 +18,7 @@ export function Dialog({
   title: ReactNode;
   children: ReactNode;
   contentClassName?: string;
+  overlayClassName?: string;
   variant?: 'panel' | 'panelCompact' | 'popup' | 'popupWide';
   titleClassName?: string;
 }) {
@@ -25,7 +27,7 @@ export function Dialog({
       if (!nextOpen && !preventClose) onClose();
     }}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-20 bg-black/50" />
+        <RadixDialog.Overlay className={`fixed inset-0 z-20 ${overlayClassName}`} />
         <RadixDialog.Content
           className={[
             'fixed top-1/2 left-1/2 z-21 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border border-border bg-surface',

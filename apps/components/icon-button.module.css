@@ -1,0 +1,11 @@
+@reference '../tailwind.css';
+
+.button[data-active='true'] {
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
+  color: inherit;
+  box-shadow: none;
+}
+
+.button[data-active='true']:hover,
+.button[data-active='true']:focus-visible { @apply border-accent shadow-control; }

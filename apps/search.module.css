@@ -11,7 +11,11 @@
 
 .button:hover,
 .button:focus-visible { @apply border-accent shadow-control; }
-.button[data-active='true'] { @apply border-accent text-accent shadow-control; }
+.button[data-active='true'] {
+  background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
+}
+.button[data-active='true']:hover,
+.button[data-active='true']:focus-visible { @apply border-accent shadow-control; }
 .button:disabled { @apply cursor-default opacity-48; }
 .matchIcon { @apply block w-4 text-center text-[10px] font-bold leading-none tracking-[-0.06em]; }
 
