@@ -10,31 +10,31 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   BookImage,
+  BookText,
   Download,
   GalleryHorizontal,
   Hand,
   Highlighter,
   Info,
+  LayoutTemplate,
   LineSquiggle,
-  Menu,
   MessageSquareMore,
   Minus,
   MoveUpRight,
   Palette,
   PaintBucket,
-  PencilRuler,
+  PenLine,
   Pin,
   Plus,
   Printer,
   Redo2,
   RotateCw,
   Save,
-  Search as SearchIcon,
   ShieldCheck,
   Signature,
   Square,
-  StickyNote,
   Strikethrough,
+  TextSearch,
   Type,
   Underline,
   Undo2,
@@ -102,10 +102,10 @@ const PRIMARY_ITEMS: Array<{
   label: string;
   icon: ComponentType<{ className?: string; size?: number; strokeWidth?: number }>;
 }> = [
-  { id: 'document', label: 'DOCS', icon: Menu },
-  { id: 'page', label: 'PAGE', icon: StickyNote },
-  { id: 'search', label: 'FIND', icon: SearchIcon },
-  { id: 'draw', label: 'DRAW', icon: PencilRuler },
+  { id: 'document', label: 'Docs', icon: BookText },
+  { id: 'page', label: 'Page', icon: LayoutTemplate },
+  { id: 'draw', label: 'Draw', icon: PenLine },
+  { id: 'search', label: 'Find', icon: TextSearch },
 ];
 
 const DRAW_TOOLS = [
@@ -453,18 +453,6 @@ export function Toolbar({
         <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
         <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
         <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
-        {signatureCount > 0 ? (
-          <Tooltip content={`Digitally signed document · ${signatureCount} signature${signatureCount === 1 ? '' : 's'}`}>
-            <button
-              type="button"
-              className={styles.iconButton}
-              aria-label={`Digital signatures (${signatureCount})`}
-              onClick={onOpenSignatures}
-            >
-              <Signature size={14} strokeWidth={2} />
-            </button>
-          </Tooltip>
-        ) : null}
       </FloatingToolbarGroup>
     </>
   );
@@ -489,7 +477,11 @@ export function Toolbar({
                 onClick={() => openSection(id)}
                 aria-label={label}
               >
-                <Icon className={styles.icon} size={14} strokeWidth={2} />
+                <Icon
+                  className={`${styles.icon} ${id === 'search' ? styles.searchModeIcon : ''}`}
+                  size={id === 'search' ? 16 : 14}
+                  strokeWidth={2}
+                />
                 <span className={styles.modeLabel}>{label}</span>
               </button>
             ))}
@@ -508,6 +500,18 @@ export function Toolbar({
             <ToolbarButton label="Export" icon={Download} onClick={onExport} disabled={!canUseRegistry} />
             <ToolbarButton label="Save" icon={Save} onClick={onSave} disabled={!canUseRegistry} />
             <ToolbarButton label="Metadata" icon={Info} onClick={openMetadataDialog} disabled={!canUseRegistry} />
+            {signatureCount > 0 ? (
+              <Tooltip content={`Signatures (${signatureCount})`}>
+                <button
+                  type="button"
+                  className={styles.iconButton}
+                  aria-label={`Digital signatures (${signatureCount})`}
+                  onClick={onOpenSignatures}
+                >
+                  <Signature size={14} strokeWidth={2} />
+                </button>
+              </Tooltip>
+            ) : null}
           </FloatingToolbarGroup>
           {renderPersistentControls()}
         </FloatingToolbar>
