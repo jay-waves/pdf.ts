@@ -104,7 +104,7 @@ const PRIMARY_ITEMS: Array<{
 }> = [
   { id: 'document', label: 'DOCS', icon: Menu },
   { id: 'page', label: 'PAGE', icon: StickyNote },
-  { id: 'search', label: 'SEARCH', icon: SearchIcon },
+  { id: 'search', label: 'FIND', icon: SearchIcon },
   { id: 'draw', label: 'DRAW', icon: PencilRuler },
 ];
 
