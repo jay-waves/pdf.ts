@@ -1,5 +1,13 @@
 @reference './tailwind.css';
 
+.loadingStatus {
+  @apply inline-flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2 text-secondary;
+}
+
+.loadingSpinner {
+  @apply size-4 shrink-0 rounded-full border-2 border-border border-t-accent animate-spin motion-reduce:animate-none;
+}
+
 .welcomeCard {
   @apply w-[min(520px,100%)] rounded-2xl border border-border bg-surface p-10.5 text-center text-foreground;
   @apply shadow-[0_8px_30px_rgb(15_23_42_/_5%)] transition-[border-color,transform] duration-150 ease-control motion-reduce:transition-none;

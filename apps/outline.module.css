@@ -28,9 +28,9 @@ summary.bookmark::-webkit-details-marker { display: none; }
 .bookmark:focus-visible .page { @apply text-accent; }
 
 .navigation {
-  @apply pointer-events-none fixed right-1/2 bottom-12 z-19 grid min-h-8.5 w-fit max-w-[calc(100vw-32px)] translate-x-1/2 translate-y-2 grid-cols-[auto_auto] items-center gap-1.25;
+  @apply pointer-events-none fixed right-1/2 bottom-3 z-19 grid min-h-8.5 w-fit max-w-[calc(100vw-32px)] translate-x-1/2 translate-y-2 grid-cols-[auto_auto] items-center gap-1.25;
   @apply rounded-lg border border-border bg-surface p-1 opacity-0 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none;
-  @apply max-[640px]:bottom-8.75 max-[640px]:max-w-[calc(100vw-16px)];
+  @apply max-[640px]:bottom-2 max-[640px]:max-w-[calc(100vw-16px)];
 }
 .navigation:hover,
 .navigation:focus-within,
