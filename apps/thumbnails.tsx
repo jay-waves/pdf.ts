@@ -3,24 +3,16 @@ import type { PluginRegistry } from '@embedpdf/core';
 import { PdfErrorCode, type PdfErrorReason, type Task } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
-import { RowsPhotoAlbum, type Photo } from 'react-photo-album';
-import 'react-photo-album/rows.css';
 import { PanelContent, PanelState } from './components';
 import { getActiveDocumentId, getPluginCapability, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
 import styles from './thumbnails.module.css';
 
-const THUMBNAIL_WIDTH = 150;
-const THUMBNAIL_TARGET_HEIGHT = 176;
-const THUMBNAIL_GAP = 10;
-const THUMBNAIL_CARD_PADDING = 7;
-const THUMBNAIL_CACHE_LIMIT = 64;
+const THUMBNAIL_RENDER_HEIGHT = 112;
 const THUMBNAIL_RENDER_CONCURRENCY = 2;
 
 type DocumentPage = { index?: number; size: { width: number; height: number }; rotation?: number };
-type ThumbnailPhoto = Photo & { pageIndex: number };
-type ThumbnailCacheEntry = {
-  state: 'queued' | 'rendering' | 'ready';
-  lastUsed: number;
+type ThumbnailItem = { pageIndex: number; aspectRatio: number };
+type ThumbnailRenderEntry = {
   task?: Task<Blob, PdfErrorReason>;
   url?: string;
 };
@@ -49,30 +41,25 @@ function getDocumentInfo(registry: PluginRegistry, documentId: string) {
   };
 }
 
-function getThumbnailPhoto(
+function getThumbnailItem(
   page: DocumentPage | undefined,
   pageIndex: number,
   documentRotation: number,
-): ThumbnailPhoto {
-  const rotated = (((page?.rotation ?? 0) + documentRotation) % 2) === 1;
-  const pageWidth = rotated ? page?.size.height : page?.size.width;
-  const pageHeight = rotated ? page?.size.width : page?.size.height;
-
+): ThumbnailItem {
+  const quarterTurn = ((page?.rotation ?? 0) + documentRotation) % 2 === 1;
+  const width = quarterTurn ? page?.size.height : page?.size.width;
+  const height = quarterTurn ? page?.size.width : page?.size.height;
   return {
-    src: `pdf-thumbnail-${pageIndex + 1}`,
-    width: pageWidth && pageWidth > 0 ? pageWidth : 1,
-    height: pageHeight && pageHeight > 0 ? pageHeight : Math.SQRT2,
-    key: String(pageIndex),
     pageIndex,
+    aspectRatio: width && height && width > 0 && height > 0 ? width / height : 1 / Math.SQRT2,
   };
 }
 
-class ThumbnailRenderCache {
-  private readonly entries = new Map<number, ThumbnailCacheEntry>();
+class ThumbnailRenderWindow {
+  private readonly entries = new Map<number, ThumbnailRenderEntry>();
   private readonly queue: number[] = [];
   private visiblePages = new Set<number>();
   private activeRenders = 0;
-  private accessTick = 0;
   private disposed = false;
 
   constructor(
@@ -84,20 +71,15 @@ class ThumbnailRenderCache {
   ) {}
 
   setVisiblePages(pageIndexes: Set<number>) {
-    const wantedPages = [...pageIndexes]
-      .filter((pageIndex) => this.pages[pageIndex])
-      .sort((left, right) => left - right)
-      .slice(0, THUMBNAIL_CACHE_LIMIT);
-    this.visiblePages = new Set(wantedPages);
+    this.visiblePages = new Set(
+      [...pageIndexes].filter((pageIndex) => this.pages[pageIndex]),
+    );
 
-    for (const [pageIndex, entry] of this.entries) {
-      if (!this.visiblePages.has(pageIndex) && entry.state !== 'ready') {
-        this.remove(pageIndex, 'Thumbnail left the render window');
-      }
+    for (const pageIndex of this.entries.keys()) {
+      if (!this.visiblePages.has(pageIndex)) this.remove(pageIndex, 'Thumbnail left the render window');
     }
 
-    for (const pageIndex of wantedPages) this.request(pageIndex);
-    this.evict();
+    for (const pageIndex of this.visiblePages) this.request(pageIndex);
     this.pump();
   }
 
@@ -107,20 +89,16 @@ class ThumbnailRenderCache {
 
   dispose() {
     this.disposed = true;
-    for (const pageIndex of [...this.entries.keys()]) {
+    for (const pageIndex of this.entries.keys()) {
       this.remove(pageIndex, 'Thumbnail cache disposed');
     }
     this.queue.length = 0;
   }
 
   private request(pageIndex: number) {
-    const existing = this.entries.get(pageIndex);
-    if (existing) {
-      existing.lastUsed = ++this.accessTick;
-      return;
-    }
+    if (this.entries.has(pageIndex)) return;
 
-    this.entries.set(pageIndex, { state: 'queued', lastUsed: ++this.accessTick });
+    this.entries.set(pageIndex, {});
     this.queue.push(pageIndex);
   }
 
@@ -131,7 +109,7 @@ class ThumbnailRenderCache {
       const pageIndex = this.queue.shift()!;
       const entry = this.entries.get(pageIndex);
       const page = this.pages[pageIndex];
-      if (!entry || entry.state !== 'queued' || !this.visiblePages.has(pageIndex) || !page) continue;
+      if (!entry || entry.task || entry.url || !this.visiblePages.has(pageIndex) || !page) continue;
 
       const render = getPluginCapability<RenderCapability>(this.registry, 'render');
       if (!render) {
@@ -139,16 +117,17 @@ class ThumbnailRenderCache {
         continue;
       }
 
+      const rotation = ((page.rotation ?? 0) + this.documentRotation) % 4;
+      const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
       const task = render.forDocument(this.documentId).renderPageRect({
         pageIndex: page.index ?? pageIndex,
         rect: { origin: { x: 0, y: 0 }, size: page.size },
         options: {
-          scaleFactor: THUMBNAIL_WIDTH / page.size.width,
-          dpr: Math.min(window.devicePixelRatio || 1, 2),
-          rotation: ((page.rotation ?? 0) + this.documentRotation) % 4,
+          scaleFactor: THUMBNAIL_RENDER_HEIGHT / rotatedHeight,
+          dpr: Math.min(window.devicePixelRatio || 1, 1.5),
+          rotation,
         },
       });
-      entry.state = 'rendering';
       entry.task = task;
       this.activeRenders += 1;
 
@@ -159,7 +138,7 @@ class ThumbnailRenderCache {
     }
   }
 
-  private finish(pageIndex: number, entry: ThumbnailCacheEntry, blob?: Blob) {
+  private finish(pageIndex: number, entry: ThumbnailRenderEntry, blob?: Blob) {
     this.activeRenders = Math.max(0, this.activeRenders - 1);
     if (this.disposed || this.entries.get(pageIndex) !== entry) {
       this.pump();
@@ -167,27 +146,13 @@ class ThumbnailRenderCache {
     }
 
     if (blob) {
-      entry.state = 'ready';
       entry.task = undefined;
       entry.url = URL.createObjectURL(blob);
-      entry.lastUsed = ++this.accessTick;
     } else {
       this.entries.delete(pageIndex);
     }
-    this.evict();
     this.onChange();
     this.pump();
-  }
-
-  private evict() {
-    while (this.entries.size > THUMBNAIL_CACHE_LIMIT) {
-      const readyEntries = [...this.entries]
-        .filter(([, entry]) => entry.state === 'ready')
-        .sort((left, right) => left[1].lastUsed - right[1].lastUsed);
-      const candidate = readyEntries.find(([pageIndex]) => !this.visiblePages.has(pageIndex)) ?? readyEntries[0];
-      if (!candidate) break;
-      this.remove(candidate[0], 'Thumbnail evicted from LRU cache');
-    }
   }
 
   private remove(pageIndex: number, reason: string) {
@@ -214,22 +179,22 @@ function ThumbnailFlow({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), pageCount - 1);
-  const [, setRotationRevision] = useState(0);
+  const [rotationRevision, setRotationRevision] = useState(0);
   const { pages, rotation: documentRotation } = getDocumentInfo(registry, documentId);
-  const photos = useMemo(
+  const items = useMemo(
     () => Array.from(
       { length: pageCount },
-      (_, pageIndex) => getThumbnailPhoto(pages[pageIndex], pageIndex, documentRotation),
+      (_, pageIndex) => getThumbnailItem(pages[pageIndex], pageIndex, documentRotation),
     ),
-    [documentRotation, pageCount, pages],
+    [documentRotation, pageCount, pages, rotationRevision],
   );
-  const [, setCacheRevision] = useState(0);
-  const cache = useMemo(
-    () => new ThumbnailRenderCache(registry, documentId, pages, documentRotation, () => setCacheRevision((value) => value + 1)),
-    [documentId, documentRotation, pages, registry],
+  const [, setRenderRevision] = useState(0);
+  const renderWindow = useMemo(
+    () => new ThumbnailRenderWindow(registry, documentId, pages, documentRotation, () => setRenderRevision((value) => value + 1)),
+    [documentId, documentRotation, pages, registry, rotationRevision],
   );
 
-  useEffect(() => () => cache.dispose(), [cache]);
+  useEffect(() => () => renderWindow.dispose(), [renderWindow]);
   useEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
@@ -241,22 +206,14 @@ function ThumbnailFlow({
         if (entry.isIntersecting) visiblePages.add(pageIndex);
         else visiblePages.delete(pageIndex);
       }
-      cache.setVisiblePages(visiblePages);
-    }, { root, rootMargin: '320px 0px' });
-    const observeThumbnails = () => {
-      root.querySelectorAll<HTMLElement>('[data-thumbnail-page-index]').forEach((element) => {
-        observer.observe(element);
-      });
-    };
-    observeThumbnails();
-    const mutationObserver = new MutationObserver(observeThumbnails);
-    mutationObserver.observe(root, { childList: true, subtree: true });
+      renderWindow.setVisiblePages(visiblePages);
+    }, { root, rootMargin: `${root.clientHeight}px 0px` });
+    root.querySelectorAll<HTMLElement>('[data-thumbnail-page-index]').forEach((element) => {
+      observer.observe(element);
+    });
 
-    return () => {
-      mutationObserver.disconnect();
-      observer.disconnect();
-    };
-  }, [cache]);
+    return () => observer.disconnect();
+  }, [renderWindow]);
   useEffect(() => {
     const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
     return rotate?.forDocument(documentId).onRotateChange(() => setRotationRevision((value) => value + 1));
@@ -265,72 +222,48 @@ function ThumbnailFlow({
   useLayoutEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
-    let frame = 0;
-    let attempts = 0;
-    const scrollToCurrentThumbnail = () => {
-      const current = root.querySelector<HTMLElement>(
-        `[data-thumbnail-page-index="${currentPageIndex}"]`,
-      );
-      if (current) {
-        root.scrollTop += current.getBoundingClientRect().top - root.getBoundingClientRect().top;
-      } else if (attempts < 10) {
-        attempts += 1;
-        frame = requestAnimationFrame(scrollToCurrentThumbnail);
-      }
-    };
-    scrollToCurrentThumbnail();
-    return () => cancelAnimationFrame(frame);
-  }, [currentPageIndex, photos]);
+    const current = root.querySelector<HTMLElement>(
+      `[data-thumbnail-page-index="${currentPageIndex}"]`,
+    );
+    if (current) {
+      root.scrollTop += current.getBoundingClientRect().top - root.getBoundingClientRect().top;
+    }
+  }, [currentPageIndex]);
 
   return (
     <div className="h-full overflow-y-auto" ref={scrollRef}>
-      <RowsPhotoAlbum<ThumbnailPhoto>
-        photos={photos}
-        spacing={THUMBNAIL_GAP}
-        padding={THUMBNAIL_CARD_PADDING}
-        targetRowHeight={THUMBNAIL_TARGET_HEIGHT}
-        componentsProps={{
-          track: { style: { justifyContent: 'flex-start', gap: THUMBNAIL_GAP } },
-        }}
-        onClick={({ photo }) => {
-          scrollToPagePreservingViewport(registry, photo.pageIndex + 1);
-          onClose();
-        }}
-        render={{
-          photo: ({ onClick }, { photo, height }) => {
-            const pageNumber = photo.pageIndex + 1;
-            const thumbnailUrl = cache.getUrl(photo.pageIndex);
-            const frameHeight = Math.min(height, THUMBNAIL_TARGET_HEIGHT);
-            const frameWidth = frameHeight * photo.width / photo.height;
-            return (
-              <button
-                type="button"
-                className={`${styles.card} group`}
-                data-thumbnail-page-index={photo.pageIndex}
-                data-current={pageNumber === currentPageNumber ? 'true' : undefined}
-                aria-label={`Page ${pageNumber}`}
-                style={{ width: frameWidth + THUMBNAIL_CARD_PADDING * 2 }}
-                onClick={onClick}
-              >
-                <span
-                  className="block w-full overflow-hidden rounded border border-border-subtle bg-input"
-                  style={{ aspectRatio: photo.width / photo.height }}
-                >
-                  {thumbnailUrl ? (
-                    <img
-                      src={thumbnailUrl}
-                      alt=""
-                      draggable={false}
-                      className="size-full object-contain"
-                    />
-                  ) : null}
-                </span>
-                <span className="mt-1 block text-muted tabular-nums group-data-[current=true]:text-accent">{pageNumber}</span>
-              </button>
-            );
-          },
-        }}
-      />
+      <div className={styles.grid}>
+        {items.map(({ pageIndex, aspectRatio }) => {
+          const pageNumber = pageIndex + 1;
+          const thumbnailUrl = renderWindow.getUrl(pageIndex);
+          return (
+            <button
+              key={pageIndex}
+              type="button"
+              className={`${styles.card} group`}
+              data-thumbnail-page-index={pageIndex}
+              data-current={pageNumber === currentPageNumber ? 'true' : undefined}
+              aria-label={`Page ${pageNumber}`}
+              onClick={() => {
+                scrollToPagePreservingViewport(registry, pageNumber);
+                onClose();
+              }}
+            >
+              <span className={styles.frame} style={{ aspectRatio }}>
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt=""
+                    draggable={false}
+                    className="size-full object-contain"
+                  />
+                ) : null}
+              </span>
+              <span className="mt-1 block text-muted tabular-nums group-data-[current=true]:text-accent">{pageNumber}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

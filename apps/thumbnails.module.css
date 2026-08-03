@@ -1,8 +1,14 @@
 @reference './tailwind.css';
 
+.grid { @apply grid grid-cols-2 items-start gap-4 min-[640px]:grid-cols-4; }
+
 .card {
-  @apply flex-none cursor-pointer rounded-md border border-transparent bg-transparent p-1.5 text-center leading-3.75 text-foreground outline-none;
+  @apply w-full min-w-0 cursor-pointer rounded-md border border-transparent bg-transparent p-1.5 text-center leading-3.75 text-foreground outline-none;
   @apply transition-[border-color,background-color,box-shadow] duration-150 ease-control motion-reduce:transition-none;
+}
+
+.frame {
+  @apply block w-full overflow-hidden rounded border border-border-subtle bg-input;
 }
 
 .card:hover,
