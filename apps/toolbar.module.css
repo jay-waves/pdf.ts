@@ -31,6 +31,14 @@
 
 .iconButton:hover,
 .iconButton:focus-visible { @apply border-accent shadow-control; }
+.iconButton.iconButton[data-active='true'] {
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
+  color: inherit;
+  box-shadow: none;
+}
+.iconButton.iconButton[data-active='true']:hover,
+.iconButton.iconButton[data-active='true']:focus-visible { @apply border-accent shadow-control; }
 .iconButton:disabled { @apply cursor-default opacity-46; }
 
 .modeButton,
@@ -46,7 +54,14 @@
 .modeButton {
   @apply inline-flex px-1.5 max-[768px]:hidden;
 }
-.modeButton[data-active='true'] { @apply border-accent text-accent shadow-control; }
+.modeButton[data-active='true'] {
+  border-color: transparent;
+  background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
+  color: inherit;
+  box-shadow: none;
+}
+.modeButton[data-active='true']:hover,
+.modeButton[data-active='true']:focus-visible { @apply border-accent shadow-control; }
 
 .mobileModeButton {
   @apply hidden min-w-21.5 px-1.75 max-[768px]:inline-flex;
