@@ -7,6 +7,10 @@ import {
   type Task,
 } from '@embedpdf/models';
 import { init, type WrappedPdfiumModule } from '@embedpdf/pdfium';
+import {
+  toReverseByteOrderBitmapColor,
+  type PdfRenderTheme,
+} from './pdf-render-theme';
 
 type WorkerRequest =
   | {
@@ -29,6 +33,139 @@ type NativeInternals = {
   };
 };
 
+const COLOR_SCHEME_BYTES = 4 * Uint32Array.BYTES_PER_ELEMENT;
+const PAUSE_STRUCT_BYTES = 2 * Uint32Array.BYTES_PER_ELEMENT;
+const FPDF_RENDER_TOBECONTINUED = 1;
+const FPDF_RENDER_DONE = 2;
+
+type ThemeRenderResources = {
+  pauseCallback: number;
+  pausePtr: number;
+  schemePtr: number;
+};
+
+function getThemeRenderGeometry(
+  module: WrappedPdfiumModule,
+  pagePtr: number,
+  matrix: Float32Array,
+) {
+  const [a, b, c, d, e, f] = matrix;
+  const pageWidth = module.FPDF_GetPageWidthF(pagePtr);
+  const pageHeight = module.FPDF_GetPageHeightF(pagePtr);
+  let rotation = 0;
+  let scaleX = Math.abs(a);
+  let scaleY = Math.abs(d);
+  if (Math.abs(b) > Math.abs(a)) {
+    rotation = b > 0 ? 1 : 3;
+    scaleX = Math.abs(c);
+    scaleY = Math.abs(b);
+  } else if (a < 0) {
+    rotation = 2;
+  }
+
+  const fullWidth = Math.max(1, Math.round((rotation & 1 ? pageHeight : pageWidth) * scaleX));
+  const fullHeight = Math.max(1, Math.round((rotation & 1 ? pageWidth : pageHeight) * scaleY));
+  let startX = Math.round(e);
+  let startY = Math.round(f);
+  if (rotation === 1 || rotation === 2) startX -= fullWidth;
+  if (rotation === 2 || rotation === 3) startY -= fullHeight;
+  return { fullHeight, fullWidth, rotation, startX, startY };
+}
+
+function createThemeRenderResources(module: WrappedPdfiumModule): ThemeRenderResources {
+  const schemePtr = module.pdfium.wasmExports.malloc(COLOR_SCHEME_BYTES);
+  if (!schemePtr) throw new Error('PDFium could not allocate the render color scheme.');
+  const pausePtr = module.pdfium.wasmExports.malloc(PAUSE_STRUCT_BYTES);
+  if (!pausePtr) {
+    module.pdfium.wasmExports.free(schemePtr);
+    throw new Error('PDFium could not allocate the render pause handler.');
+  }
+  const pauseCallback = module.pdfium.addFunction(() => 0, 'ii');
+  // IFSDK_PAUSE is { version, NeedToPauseNow }. PDFium rejects the
+  // progressive color-scheme API when this pointer is null.
+  module.pdfium.setValue(pausePtr, 1, 'i32');
+  module.pdfium.setValue(pausePtr + Uint32Array.BYTES_PER_ELEMENT, pauseCallback, 'i32');
+  return { pauseCallback, pausePtr, schemePtr };
+}
+
+function installThemeRenderer(
+  module: WrappedPdfiumModule,
+  getTheme: () => PdfRenderTheme | null,
+) {
+  const original = module.FPDF_RenderPageBitmapWithMatrix.bind(module);
+  const resources = createThemeRenderResources(module);
+  const mutableModule = module as unknown as {
+    FPDF_RenderPageBitmapWithMatrix: typeof module.FPDF_RenderPageBitmapWithMatrix;
+  };
+  const heap = module.pdfium as typeof module.pdfium & {
+    HEAPF32: Float32Array;
+    HEAPU8: Uint8Array;
+  };
+  mutableModule.FPDF_RenderPageBitmapWithMatrix = ((
+    bitmapPtr: number,
+    pagePtr: number,
+    matrixPtr: number,
+    _clipPtr: number,
+    flags: number,
+  ) => {
+    const theme = getTheme();
+    if (!theme) {
+      original(bitmapPtr, pagePtr, matrixPtr, _clipPtr, flags);
+      return;
+    }
+
+    const matrix = new Float32Array(heap.HEAPF32.buffer, matrixPtr, 6);
+    const { fullHeight, fullWidth, rotation, startX, startY } = getThemeRenderGeometry(
+      module,
+      pagePtr,
+      matrix,
+    );
+
+    module.FPDFBitmap_FillRect(
+      bitmapPtr,
+      0,
+      0,
+      module.FPDFBitmap_GetWidth(bitmapPtr),
+      module.FPDFBitmap_GetHeight(bitmapPtr),
+      toReverseByteOrderBitmapColor(theme.background),
+    );
+
+    if (theme.mode === 'background') {
+      original(bitmapPtr, pagePtr, matrixPtr, _clipPtr, flags);
+      return;
+    }
+
+    try {
+      new Uint32Array(heap.HEAPU8.buffer, resources.schemePtr, 4).set([
+        theme.pathFill,
+        theme.pathStroke,
+        theme.textFill,
+        theme.textStroke,
+      ]);
+      let status = module.FPDF_RenderPageBitmapWithColorScheme_Start(
+        bitmapPtr,
+        pagePtr,
+        startX,
+        startY,
+        fullWidth,
+        fullHeight,
+        rotation,
+        flags,
+        resources.schemePtr,
+        resources.pausePtr,
+      );
+      while (status === FPDF_RENDER_TOBECONTINUED) {
+        status = module.FPDF_RenderPage_Continue(pagePtr, resources.pausePtr);
+      }
+      if (status !== FPDF_RENDER_DONE) {
+        throw new Error(`PDFium themed render failed with status ${status}.`);
+      }
+    } finally {
+      module.FPDF_RenderPage_Close(pagePtr);
+    }
+  }) as typeof module.FPDF_RenderPageBitmapWithMatrix;
+}
+
 const workerScope = self as unknown as {
   postMessage(message: unknown, transfer?: Transferable[]): void;
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
@@ -36,6 +173,7 @@ const workerScope = self as unknown as {
 const activeTasks = new Map<string, Task<unknown, PdfErrorReason, unknown>>();
 const originalSizes = new Map<string, number>();
 let native: PdfiumNative | null = null;
+let renderTheme: PdfRenderTheme | null = null;
 
 function taskError(message: string, code = PdfErrorCode.Unknown) {
   return {
@@ -107,6 +245,12 @@ function execute(request: Extract<WorkerRequest, { type: 'execute' }>) {
   }
 
   try {
+    if (request.method === 'setRenderTheme') {
+      renderTheme = (request.args[0] ?? null) as PdfRenderTheme | null;
+      respond(request.id, { type: 'result', data: true });
+      return;
+    }
+
     if (request.method === 'openDocumentBuffer') {
       const file = request.args[0] as { id: string; content: ArrayBuffer };
       originalSizes.set(file.id, file.content.byteLength);
@@ -171,6 +315,7 @@ workerScope.onmessage = (event) => {
       native = new PdfiumNative(module, {
         fontFallback: request.fontFallback === null ? undefined : request.fontFallback,
       });
+      installThemeRenderer(module, () => renderTheme);
       workerScope.postMessage({ id: request.id, type: 'ready' });
     } catch (error) {
       respond(request.id, {

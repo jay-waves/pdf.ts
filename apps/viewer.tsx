@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
+import { createPluginRegistration, refreshPages, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
 import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
@@ -45,8 +45,11 @@ import {
 } from './outline';
 import { installSearchKeyboardShortcut } from './search';
 import {
+  getPdfRenderTheme,
   initializeViewerTheme,
   setViewerScrollStrategyAttribute,
+  type ViewerTheme,
+  VIEWER_THEME_CHANGE_EVENT,
 } from './theme';
 import { Toolbar } from './toolbar';
 import { Thumbnails } from './thumbnails';
@@ -64,7 +67,7 @@ import { Dialog, TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
 import { ViewerViewport } from './viewer-viewport';
 import { exportPdf, savePdf } from './pdf-save';
-import { usePdfTsPdfiumEngine } from './pdf-engine';
+import { setPdfRenderTheme, usePdfTsPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { signatureWidgetRenderer } from './signature-widget';
@@ -348,6 +351,7 @@ function App({
   const [signatureVerifications, setSignatureVerifications] = useState<SignatureVerificationResult[]>([]);
   const [navigationVisible, setNavigationVisible] = useState(false);
   const [protectionState, setProtectionState] = useState<boolean | null>(null);
+  const [renderThemeVersion, setRenderThemeVersion] = useState(0);
   const { pageNumber: currentPageNumber, totalPages, bookmarkKey: currentBookmarkKey, title: currentTitle } = documentView;
   const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
@@ -408,8 +412,29 @@ function App({
   }, [currentPageNumber]);
 
   useEffect(() => {
-    initializeViewerTheme();
-  }, []);
+    if (!registry) return;
+    const refreshThemePages = () => {
+      const state = registry.getStore().getState();
+      for (const [documentId, documentState] of Object.entries(state.core.documents)) {
+        const pageCount = documentState.document?.pageCount ?? 0;
+        registry.getStore().dispatch(refreshPages(
+          documentId,
+          Array.from({ length: pageCount }, (_, pageIndex) => pageIndex),
+        ));
+      }
+    };
+    const syncRenderTheme = (event: Event) => {
+      const { theme } = (event as CustomEvent<{ theme: ViewerTheme }>).detail;
+      void setPdfRenderTheme(engine, getPdfRenderTheme(theme)).toPromise()
+        .then(() => {
+          setRenderThemeVersion((version) => version + 1);
+          refreshThemePages();
+        })
+        .catch((error) => console.error('[pdf-ts] failed to update PDF render theme', error));
+    };
+    window.addEventListener(VIEWER_THEME_CHANGE_EVENT, syncRenderTheme);
+    return () => window.removeEventListener(VIEWER_THEME_CHANGE_EVENT, syncRenderTheme);
+  }, [engine, registry]);
 
   const saveDocument = useCallback((
     options: { fromHost?: boolean; preserveDirty?: boolean } = {},
@@ -658,7 +683,13 @@ function App({
                                       <PagePointerProvider
                                         documentId={activeDocumentId}
                                         pageIndex={pageIndex}
-                                        style={{ position: 'relative', width, height, backgroundColor: '#fff' }}
+                                        className="pdf-page-surface"
+                                        style={{
+                                          position: 'relative',
+                                          width,
+                                          height,
+                                          backgroundColor: 'var(--pdf-page-background)',
+                                        }}
                                       >
                                         <RenderLayer
                                           documentId={activeDocumentId}
@@ -669,6 +700,7 @@ function App({
                                           style={{ pointerEvents: 'none' }}
                                         />
                                         <TilingLayer
+                                          key={renderThemeVersion}
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
                                           className="pdf-page-tiling-layer"
@@ -1035,6 +1067,8 @@ function ReadyViewer({
     />
   );
 }
+
+initializeViewerTheme();
 
 createRoot(document.getElementById('root')!).render(
   <TooltipProvider>

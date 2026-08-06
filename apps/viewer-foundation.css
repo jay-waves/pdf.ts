@@ -113,12 +113,15 @@ textarea {
   user-select: none;
 }
 
-:root[data-viewer-theme="dark"] :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
-  filter: brightness(0.76) contrast(1.22) saturate(1);
+.pdf-page-surface {
+  box-shadow:
+    0 0 0 1px var(--pdf-page-border),
+    0 1px 2px var(--pdf-page-shadow);
 }
 
-:root[data-viewer-theme="nord"] :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
-  filter: brightness(0.9);
+:root:is([data-viewer-theme="dark"], [data-viewer-theme="nord"])
+  :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
+  filter: brightness(0.76) contrast(1.22) saturate(1);
 }
 
 .pdf-page-tiling-layer {
