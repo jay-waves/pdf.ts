@@ -186,6 +186,20 @@ function respond(id: string, message: Record<string, unknown>, transfer: Transfe
   workerScope.postMessage({ id, ...message }, transfer);
 }
 
+function getResultTransfer(value: unknown): Transferable[] {
+  if (value instanceof ArrayBuffer) return [value];
+  const data = typeof value === 'object' && value
+    ? (value as { data?: unknown }).data
+    : undefined;
+  if (ArrayBuffer.isView(data)
+    && data.buffer instanceof ArrayBuffer
+    && data.byteOffset === 0
+    && data.byteLength === data.buffer.byteLength) {
+    return [data.buffer];
+  }
+  return [];
+}
+
 function saveIncremental(document: PdfDocumentObject) {
   if (!native) throw new Error('PDFium is not initialized.');
 
@@ -273,8 +287,7 @@ function execute(request: Extract<WorkerRequest, { type: 'execute' }>) {
       });
       task.wait(
         (value) => {
-          const transfer = value instanceof ArrayBuffer ? [value] : [];
-          respond(request.id, { type: 'result', data: value }, transfer);
+          respond(request.id, { type: 'result', data: value }, getResultTransfer(value));
           activeTasks.delete(request.id);
         },
         (error) => {
