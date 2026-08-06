@@ -12,6 +12,8 @@ import type {
   PdfTask,
   Task,
 } from '@embedpdf/models';
+import type { PdfRenderTheme } from './pdf-render-theme';
+import { getCurrentViewerTheme, getPdfRenderTheme } from './theme';
 
 export interface PdfIncrementalRevision {
   baseSize: number;
@@ -46,7 +48,14 @@ export function usePdfTsPdfiumEngine(options: {
       readyTask: Task<boolean, { code: number; message: string }>;
     }).readyTask;
     readyTask.wait(
-      () => setState({ engine, isLoading: false, error: null }),
+      () => setPdfRenderTheme(engine, getPdfRenderTheme(getCurrentViewerTheme())).wait(
+        () => setState({ engine, isLoading: false, error: null }),
+        (failure) => setState({
+          engine: null,
+          isLoading: false,
+          error: new Error(failure.reason.message),
+        }),
+      ),
       (failure) => setState({
         engine: null,
         isLoading: false,
@@ -61,6 +70,17 @@ export function usePdfTsPdfiumEngine(options: {
   }, [options.fontFallback, options.wasmUrl]);
 
   return state;
+}
+
+export function setPdfRenderTheme(
+  engine: PdfEngine<Blob>,
+  theme: PdfRenderTheme | null,
+): PdfTask<boolean> {
+  const bridge = bridges.get(engine);
+  if (!bridge) throw new Error('This PDF engine does not support render themes.');
+  return (bridge.executor as unknown as {
+    send(method: string, args: unknown[]): PdfTask<boolean>;
+  }).send('setRenderTheme', [theme]);
 }
 
 export function savePdfIncrementally(
