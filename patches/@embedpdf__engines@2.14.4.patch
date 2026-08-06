@@ -58,3 +58,16 @@ index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..7d361228c9583e38b1f0823b5d61cb3d
    createPdfiumEngine
  };
  //# sourceMappingURL=worker-engine.js.map
+diff --git a/dist/pdf-engine-D9v0RfKe.js b/dist/pdf-engine-D9v0RfKe.js
+index 62b75719296e3ca997de0227311efcb5c79528d5..69c4fcfc082218bab36b58dafc0c4f70ca47bb78 100644
+--- a/dist/pdf-engine-D9v0RfKe.js
++++ b/dist/pdf-engine-D9v0RfKe.js
+@@ -547,7 +547,7 @@ class PdfEngine extends PdfEngineBase {
+     const imageType = (options == null ? void 0 : options.imageType) ?? "image/png";
+     const quality = options == null ? void 0 : options.quality;
+     const plainImageData = {
+-      data: new Uint8ClampedArray(rawImageData.data),
++      data: rawImageData.data,
+       width: rawImageData.width,
+       height: rawImageData.height
+     };

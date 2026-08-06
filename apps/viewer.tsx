@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createPluginRegistration, refreshPages, type PluginRegistry } from '@embedpdf/core';
+import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { browserImageDataToBlobConverter, type ImageDataConverter } from '@embedpdf/engines/converters';
 import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
@@ -412,29 +412,15 @@ function App({
   }, [currentPageNumber]);
 
   useEffect(() => {
-    if (!registry) return;
-    const refreshThemePages = () => {
-      const state = registry.getStore().getState();
-      for (const [documentId, documentState] of Object.entries(state.core.documents)) {
-        const pageCount = documentState.document?.pageCount ?? 0;
-        registry.getStore().dispatch(refreshPages(
-          documentId,
-          Array.from({ length: pageCount }, (_, pageIndex) => pageIndex),
-        ));
-      }
-    };
     const syncRenderTheme = (event: Event) => {
       const { theme } = (event as CustomEvent<{ theme: ViewerTheme }>).detail;
       void setPdfRenderTheme(engine, getPdfRenderTheme(theme)).toPromise()
-        .then(() => {
-          setRenderThemeVersion((version) => version + 1);
-          refreshThemePages();
-        })
+        .then(() => setRenderThemeVersion((version) => version + 1))
         .catch((error) => console.error('[pdf-ts] failed to update PDF render theme', error));
     };
     window.addEventListener(VIEWER_THEME_CHANGE_EVENT, syncRenderTheme);
     return () => window.removeEventListener(VIEWER_THEME_CHANGE_EVENT, syncRenderTheme);
-  }, [engine, registry]);
+  }, [engine]);
 
   const saveDocument = useCallback((
     options: { fromHost?: boolean; preserveDirty?: boolean } = {},
@@ -692,6 +678,7 @@ function App({
                                         }}
                                       >
                                         <RenderLayer
+                                          key={`render-${renderThemeVersion}`}
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
                                           scale={0.5}
@@ -700,7 +687,7 @@ function App({
                                           style={{ pointerEvents: 'none' }}
                                         />
                                         <TilingLayer
-                                          key={renderThemeVersion}
+                                          key={`tiles-${renderThemeVersion}`}
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
                                           className="pdf-page-tiling-layer"

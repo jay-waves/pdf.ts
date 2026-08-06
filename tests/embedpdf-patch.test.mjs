@@ -3,7 +3,14 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PdfiumNative } from '@embedpdf/engines/pdfium';
 import { RemoteExecutor } from '@embedpdf/engines/pdfium-worker-engine';
+import { Task } from '@embedpdf/models';
 import { init } from '@embedpdf/pdfium';
+
+const orchestratorUrl = new URL(
+  './pdf-engine-D9v0RfKe.js',
+  import.meta.resolve('@embedpdf/engines'),
+);
+const { P: PdfEngine } = await import(orchestratorUrl);
 
 class FakeWorker {
   messages = [];
@@ -87,6 +94,34 @@ test('EmbedPDF patch keeps the pdf.ts worker bridge contract', async () => {
 
   executor.destroy();
   assert.equal(worker.terminated, true);
+});
+
+test('EmbedPDF passes rendered pixels to the image converter without copying', async () => {
+  const pixels = new Uint8ClampedArray([12, 34, 56, 255]);
+  const executor = {
+    renderPageRaw() {
+      const task = new Task();
+      task.resolve({ data: pixels, width: 1, height: 1 });
+      return task;
+    },
+    destroy() {},
+  };
+  let convertedPixels;
+  const engine = new PdfEngine(executor, {
+    imageConverter(getImageData) {
+      convertedPixels = getImageData().data;
+      return Promise.resolve(new Blob([], { type: 'image/bmp' }));
+    },
+  });
+
+  await engine.renderPage(
+    { id: 'document-1' },
+    { index: 0 },
+    { imageType: 'image/bmp' },
+  ).toPromise();
+
+  assert.strictEqual(convertedPixels, pixels);
+  await engine.destroy().toPromise();
 });
 
 function createMinimalPdf() {
