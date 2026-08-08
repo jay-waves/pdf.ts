@@ -377,12 +377,6 @@ function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject)
   });
 }
 
-function getCurrentPageNumber(registry: PluginRegistry) {
-  const documentId = getActiveDocumentId(registry);
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  return documentId && scroll ? scroll.forDocument(documentId).getCurrentPage() : undefined;
-}
-
 function getAncestorBookmarkKeys(bookmarkKey: string) {
   const parts = bookmarkKey.split('.');
   return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('.'));
@@ -407,10 +401,11 @@ export function Outline({
   const [expandedBookmarkKeys, setExpandedBookmarkKeys] = useState<Set<string>>(
     () => new Set(getAncestorBookmarkKeys(currentBookmarkKey)),
   );
-  const [lastNavigatedBookmarkKey, setLastNavigatedBookmarkKey] = useState('');
+  const [navigatedBookmarkKey, setNavigatedBookmarkKey] = useState(currentBookmarkKey);
 
   useEffect(() => {
     setSelectedBookmarkKey(currentBookmarkKey);
+    setNavigatedBookmarkKey(currentBookmarkKey);
     setExpandedBookmarkKeys((current) => {
       const next = new Set(current);
       getAncestorBookmarkKeys(currentBookmarkKey).forEach((key) => next.add(key));
@@ -421,7 +416,7 @@ export function Outline({
   useEffect(() => {
     setSelectedBookmarkKey(currentBookmarkKey);
     setExpandedBookmarkKeys(new Set(getAncestorBookmarkKeys(currentBookmarkKey)));
-    setLastNavigatedBookmarkKey('');
+    setNavigatedBookmarkKey(currentBookmarkKey);
   }, [cache.bookmarks]);
 
   useEffect(() => {
@@ -490,43 +485,33 @@ export function Outline({
           if (!registry) return;
 
           const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
-          if (hasChildren && !isExpanded) {
-            setExpandedBookmarkKeys((current) => new Set(current).add(bookmarkKey));
-            setSelectedBookmarkKey(bookmarkKey);
-            setLastNavigatedBookmarkKey('');
-            return;
-          }
-
           const destination = getDestinationFromTarget(bookmark.target);
-          if (
-            hasChildren
-            && lastNavigatedBookmarkKey === bookmarkKey
-            && destination?.pageIndex !== undefined
-            && getCurrentPageNumber(registry) === destination.pageIndex + 1
-          ) {
+
+          if (hasChildren && isExpanded && navigatedBookmarkKey === bookmarkKey) {
             setExpandedBookmarkKeys((current) => {
               const next = new Set(current);
               next.delete(bookmarkKey);
               return next;
             });
             setSelectedBookmarkKey(bookmarkKey);
-            setLastNavigatedBookmarkKey('');
             return;
           }
 
-          if (!destination) {
-            if (hasChildren) {
-              setExpandedBookmarkKeys((current) => {
-                const next = new Set(current);
-                next.delete(bookmarkKey);
-                return next;
-              });
+          if (hasChildren && (!isExpanded || selectedBookmarkKey !== bookmarkKey)) {
+            setExpandedBookmarkKeys((current) => new Set(current).add(bookmarkKey));
+            setSelectedBookmarkKey(bookmarkKey);
+            if (navigatedBookmarkKey !== bookmarkKey) {
+              setNavigatedBookmarkKey('');
             }
             return;
           }
 
+          if (!destination) {
+            return;
+          }
+
           setSelectedBookmarkKey(bookmarkKey);
-          setLastNavigatedBookmarkKey(bookmarkKey);
+          setNavigatedBookmarkKey(hasChildren ? bookmarkKey : '');
           scrollToBookmark(registry, bookmark);
         }}
       />
@@ -535,7 +520,7 @@ export function Outline({
     cache.bookmarks,
     cache.status,
     expandedBookmarkKeys,
-    lastNavigatedBookmarkKey,
+    navigatedBookmarkKey,
     registry,
     selectedBookmarkKey,
   ]);

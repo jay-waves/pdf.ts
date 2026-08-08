@@ -50,6 +50,8 @@ export type PlatformTranslationResult =
   | { type: 'external'; url: string };
 
 export interface ViewerPlatform {
+  /** Host-controlled viewers derive their appearance externally and hide local theme controls. */
+  viewerThemePolicy?: 'host';
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file: File): PlatformDocument;
   pickLocalDocument?(): Promise<PlatformDocument | undefined>;

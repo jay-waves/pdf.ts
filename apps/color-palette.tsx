@@ -19,6 +19,7 @@ import {
   type AnnotationToolLike,
 } from './annotations';
 import { Dialog, PanelContent, PanelState } from './components';
+import { isDarkViewerTheme, useViewerTheme } from './theme';
 import styles from './color-palette.module.css';
 
 interface PaletteSnapshot {
@@ -55,6 +56,7 @@ export function ColorPalette({
   const capability = getAnnotationCapability(registry);
   const [snapshot, setSnapshot] = useState<PaletteSnapshot>(EMPTY_SNAPSHOT);
   const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('strokeColor');
+  const viewerTheme = useViewerTheme();
   const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;
 
   useEffect(() => {
@@ -89,9 +91,11 @@ export function ColorPalette({
     sync();
     const unsubscribeTool = scoped.scope.onActiveToolChange(sync);
     const unsubscribeState = scoped.scope.onStateChange(sync);
+    const unsubscribeTools = scoped.capability.onToolsChange(sync);
     return () => {
       unsubscribeTool();
       unsubscribeState();
+      unsubscribeTools();
     };
   }, [open, registry]);
 
@@ -117,6 +121,10 @@ export function ColorPalette({
   const currentHighlightStyle = typeof values.blendMode === 'number'
     ? values.blendMode
     : PdfBlendMode.Multiply;
+  const themeManagedColor = (
+    (toolId === 'highlight' || toolId === 'textComment')
+    && isDarkViewerTheme(viewerTheme)
+  );
 
   const applyPatch = (patch: Record<string, unknown>) => {
     const scoped = getAnnotationScope(registry);
@@ -152,7 +160,9 @@ export function ColorPalette({
     : <div className={styles.content}>
         <div className={styles.meta}>
           <span>{getAnnotationToolLabel(contextTool)}</span>
-          {selectedAnnotations.length ? <span>{selectedAnnotations.length} selected</span> : null}
+          {themeManagedColor
+            ? <span>Theme auto</span>
+            : selectedAnnotations.length ? <span>{selectedAnnotations.length} selected</span> : null}
         </div>
 
         {toolId === 'highlight' ? <div
@@ -167,6 +177,7 @@ export function ColorPalette({
             data-active={currentHighlightStyle === value ? 'true' : undefined}
             onClick={() => applyPatch({ blendMode: value })}
             aria-pressed={currentHighlightStyle === value}
+            disabled={themeManagedColor}
           >
             {label}
           </button>)}
@@ -200,6 +211,7 @@ export function ColorPalette({
             onClick={() => applyColor(color)}
             aria-label={color === TRANSPARENT_ANNOTATION_COLOR ? 'Transparent' : color}
             aria-pressed={currentColor === color}
+            disabled={themeManagedColor}
           >
             {currentColor === color ? <Check size={13} strokeWidth={2.2} /> : null}
           </button>)}
@@ -212,6 +224,7 @@ export function ColorPalette({
             type="color"
             value={customInputColor}
             onChange={(event) => applyColor(event.currentTarget.value)}
+            disabled={themeManagedColor}
           />
           <span className={styles.value}>{currentColor}</span>
         </label>
@@ -228,6 +241,7 @@ export function ColorPalette({
             onChange={(event) => applyPatch({
               opacity: Number(event.currentTarget.value) / 100,
             })}
+            disabled={themeManagedColor}
           />
           <span className={styles.value}>{Math.round(currentOpacity * 100)}%</span>
         </label>

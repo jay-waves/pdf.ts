@@ -21,6 +21,7 @@ import {
   MessageSquareMore,
   Minus,
   MoveUpRight,
+  Moon,
   Palette,
   PaintBucket,
   PenLine,
@@ -34,6 +35,7 @@ import {
   Signature,
   Square,
   Strikethrough,
+  Sun,
   TextSearch,
   Type,
   Underline,
@@ -51,9 +53,12 @@ import {
   type ScrollCapability,
 } from './utils';
 import {
-  cycleViewerTheme,
   getStoredToolbarPinned,
+  isDarkViewerTheme,
   setStoredToolbarPinned,
+  supportsViewerThemeSettings,
+  toggleViewerColorMode,
+  useViewerTheme,
 } from './theme';
 import { Search } from './search';
 import styles from './toolbar.module.css';
@@ -83,6 +88,7 @@ interface ToolbarProps {
   onOpenPrint(): void;
   onOpenProtect(): void;
   onOpenMetadata(): void;
+  onOpenTheme(): void;
   signatureCount: number;
   onOpenSignatures(): void;
   onExport(): void;
@@ -94,6 +100,7 @@ interface ToolbarButtonProps {
   icon: ComponentType<{ size?: number; strokeWidth?: number }>;
   active?: boolean;
   disabled?: boolean;
+  iconSize?: number;
   onClick(): void;
 }
 
@@ -132,7 +139,7 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
 const ZOOM_SELECT_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
 const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), value]));
 
-function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: ToolbarButtonProps) {
+function ToolbarButton({ label, icon: Icon, active, disabled, iconSize, onClick }: ToolbarButtonProps) {
   return (
     <IconButton
       className={styles.iconButton}
@@ -140,6 +147,7 @@ function ToolbarButton({ label, icon: Icon, active, disabled, onClick }: Toolbar
       icon={Icon}
       active={active}
       disabled={disabled}
+      iconSize={iconSize}
       onClick={onClick}
     />
   );
@@ -232,6 +240,7 @@ export function Toolbar({
   onOpenPrint,
   onOpenProtect,
   onOpenMetadata,
+  onOpenTheme,
   signatureCount,
   onOpenSignatures,
   onExport,
@@ -239,10 +248,13 @@ export function Toolbar({
 }: ToolbarProps) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
+  const viewerTheme = useViewerTheme();
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
   const canUseRegistry = Boolean(registry && activeDocumentId);
+  const canConfigureTheme = supportsViewerThemeSettings();
+  const darkAppearance = isDarkViewerTheme(viewerTheme);
 
   const clearToolbarHideTimer = () => {
     if (toolbarHideTimerRef.current !== undefined) {
@@ -388,6 +400,11 @@ export function Toolbar({
     onOpenMetadata();
   };
 
+  const openThemeDialog = () => {
+    closeSearch();
+    onOpenTheme();
+  };
+
   const toggleThumbnailsPanel = () => {
     closeSearch();
     onToggleThumbnails();
@@ -450,7 +467,14 @@ export function Toolbar({
     <>
       <FloatingToolbarDivider />
       <FloatingToolbarGroup>
-        <ToolbarButton label="Switch theme" icon={Palette} onClick={cycleViewerTheme} />
+        {canConfigureTheme ? (
+          <ToolbarButton
+            label={darkAppearance ? 'Light theme' : 'Dark theme'}
+            icon={darkAppearance ? Sun : Moon}
+            iconSize={15.5}
+            onClick={toggleViewerColorMode}
+          />
+        ) : null}
         <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
         <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
       </FloatingToolbarGroup>
@@ -500,6 +524,7 @@ export function Toolbar({
             <ToolbarButton label="Export" icon={Download} onClick={onExport} disabled={!canUseRegistry} />
             <ToolbarButton label="Save" icon={Save} onClick={onSave} disabled={!canUseRegistry} />
             <ToolbarButton label="Metadata" icon={Info} onClick={openMetadataDialog} disabled={!canUseRegistry} />
+            {canConfigureTheme ? <ToolbarButton label="Themes" icon={Palette} onClick={openThemeDialog} /> : null}
             {signatureCount > 0 ? (
               <Tooltip content={`Signatures (${signatureCount})`}>
                 <button

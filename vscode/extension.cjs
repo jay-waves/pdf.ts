@@ -3,7 +3,6 @@ const vscode = require('vscode');
 
 const VIEW_TYPE = 'pdf-ts.viewer';
 const READING_PROGRESS_KEY = 'pdf-ts.reading-progress-v1';
-const THEMES = new Set(['light', 'dark', 'nord', 'solar']);
 let nextWebviewRequestId = 1;
 
 function escapeHtml(value) {
@@ -52,19 +51,6 @@ function resolveDocumentLink(documentUri, value) {
 function nonce() {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   return Array.from({ length: 32 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-}
-
-async function writeThemePreference(uri, theme) {
-  if (!THEMES.has(theme)) return;
-
-  const configuration = vscode.workspace.getConfiguration('pdf-ts', uri);
-  const inspected = configuration.inspect('theme');
-  const target = inspected?.workspaceFolderValue !== undefined
-    ? vscode.ConfigurationTarget.WorkspaceFolder
-    : inspected?.workspaceValue !== undefined
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
-  await configuration.update('theme', theme, target);
 }
 
 class PdfCustomDocument {
@@ -206,15 +192,6 @@ class PdfEditorProvider {
         return;
       }
 
-      if (message?.type === 'writeThemePreference') {
-        try {
-          await writeThemePreference(document.uri, message.value);
-        } catch (error) {
-          console.warn('[pdf-ts] Unable to save theme preference.', error);
-        }
-        return;
-      }
-
       if (message?.type === 'openExternal') {
         try {
           const target = resolveDocumentLink(document.uri, message.url);
@@ -281,7 +258,6 @@ class PdfEditorProvider {
     const scriptNonce = nonce();
     const documentUrl = panel.webview.asWebviewUri(document.uri).toString();
     const documentName = document.uri.path.split('/').pop() || 'document.pdf';
-    const theme = vscode.workspace.getConfiguration('pdf-ts', document.uri).get('theme', 'light');
     const assetsRoot = vscode.Uri.joinPath(mediaRoot, 'assets');
     const wasmFile = fs.readdirSync(assetsRoot.fsPath).find((name) => /^pdfium-.*\.wasm$/.test(name));
     if (!wasmFile) throw new Error('Bundled PDFium WASM file was not found.');
@@ -297,7 +273,7 @@ class PdfEditorProvider {
     ].join('; ');
 
     html = html
-      .replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}">\n    <meta name="pdf-document-url" content="${escapeHtml(documentUrl)}">\n    <meta name="pdf-document-key" content="${escapeHtml(document.uri.toString())}">\n    <meta name="pdf-document-name" content="${escapeHtml(documentName)}">\n    <meta name="pdfium-wasm-url" content="${escapeHtml(wasmUrl)}">\n    <meta name="pdf-ts-theme" content="${escapeHtml(theme)}">`)
+      .replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${escapeHtml(csp)}">\n    <meta name="pdf-document-url" content="${escapeHtml(documentUrl)}">\n    <meta name="pdf-document-key" content="${escapeHtml(document.uri.toString())}">\n    <meta name="pdf-document-name" content="${escapeHtml(documentName)}">\n    <meta name="pdfium-wasm-url" content="${escapeHtml(wasmUrl)}">`)
       .replace('<script type="module"', `<script nonce="${scriptNonce}" type="module"`);
     panel.webview.html = html;
   }
