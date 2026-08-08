@@ -377,6 +377,17 @@ function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject)
   });
 }
 
+function getCurrentPageNumber(registry: PluginRegistry) {
+  const documentId = getActiveDocumentId(registry);
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
+  return documentId && scroll ? scroll.forDocument(documentId).getCurrentPage() : undefined;
+}
+
+function getAncestorBookmarkKeys(bookmarkKey: string) {
+  const parts = bookmarkKey.split('.');
+  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('.'));
+}
+
 export function Outline({
   registry,
   open,
@@ -392,6 +403,26 @@ export function Outline({
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const retriedOnOpenRef = useRef(false);
+  const [selectedBookmarkKey, setSelectedBookmarkKey] = useState(currentBookmarkKey);
+  const [expandedBookmarkKeys, setExpandedBookmarkKeys] = useState<Set<string>>(
+    () => new Set(getAncestorBookmarkKeys(currentBookmarkKey)),
+  );
+  const [lastNavigatedBookmarkKey, setLastNavigatedBookmarkKey] = useState('');
+
+  useEffect(() => {
+    setSelectedBookmarkKey(currentBookmarkKey);
+    setExpandedBookmarkKeys((current) => {
+      const next = new Set(current);
+      getAncestorBookmarkKeys(currentBookmarkKey).forEach((key) => next.add(key));
+      return next;
+    });
+  }, [currentBookmarkKey]);
+
+  useEffect(() => {
+    setSelectedBookmarkKey(currentBookmarkKey);
+    setExpandedBookmarkKeys(new Set(getAncestorBookmarkKeys(currentBookmarkKey)));
+    setLastNavigatedBookmarkKey('');
+  }, [cache.bookmarks]);
 
   useEffect(() => {
     if (!open) {
@@ -434,7 +465,7 @@ export function Outline({
     }
 
     scrollCurrentBookmarkIntoView(contentRef.current);
-  }, [cache.status, currentBookmarkKey, open]);
+  }, [cache.status, open, selectedBookmarkKey]);
 
   const body = useMemo(() => {
     if (cache.status === 'idle' || cache.status === 'loading') {
@@ -452,16 +483,62 @@ export function Outline({
     return (
       <BookmarkList
         bookmarks={cache.bookmarks}
-        currentBookmarkKey={currentBookmarkKey}
+        selectedBookmarkKey={selectedBookmarkKey}
+        expandedBookmarkKeys={expandedBookmarkKeys}
         path={[]}
-        onSelect={(bookmark) => {
-          if (registry) {
-            scrollToBookmark(registry, bookmark);
+        onSelect={(bookmark, bookmarkKey, hasChildren) => {
+          if (!registry) return;
+
+          const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
+          if (hasChildren && !isExpanded) {
+            setExpandedBookmarkKeys((current) => new Set(current).add(bookmarkKey));
+            setSelectedBookmarkKey(bookmarkKey);
+            setLastNavigatedBookmarkKey('');
+            return;
           }
+
+          const destination = getDestinationFromTarget(bookmark.target);
+          if (
+            hasChildren
+            && lastNavigatedBookmarkKey === bookmarkKey
+            && destination?.pageIndex !== undefined
+            && getCurrentPageNumber(registry) === destination.pageIndex + 1
+          ) {
+            setExpandedBookmarkKeys((current) => {
+              const next = new Set(current);
+              next.delete(bookmarkKey);
+              return next;
+            });
+            setSelectedBookmarkKey(bookmarkKey);
+            setLastNavigatedBookmarkKey('');
+            return;
+          }
+
+          if (!destination) {
+            if (hasChildren) {
+              setExpandedBookmarkKeys((current) => {
+                const next = new Set(current);
+                next.delete(bookmarkKey);
+                return next;
+              });
+            }
+            return;
+          }
+
+          setSelectedBookmarkKey(bookmarkKey);
+          setLastNavigatedBookmarkKey(bookmarkKey);
+          scrollToBookmark(registry, bookmark);
         }}
       />
     );
-  }, [cache.bookmarks, cache.status, currentBookmarkKey, registry]);
+  }, [
+    cache.bookmarks,
+    cache.status,
+    expandedBookmarkKeys,
+    lastNavigatedBookmarkKey,
+    registry,
+    selectedBookmarkKey,
+  ]);
 
   return (
     <PanelContent overflow="hidden" hidden={!open}>
@@ -472,14 +549,16 @@ export function Outline({
 
 function BookmarkList({
   bookmarks,
-  currentBookmarkKey,
+  selectedBookmarkKey,
+  expandedBookmarkKeys,
   path,
   onSelect,
 }: {
   bookmarks: PdfBookmarkObject[];
-  currentBookmarkKey: string;
+  selectedBookmarkKey: string;
+  expandedBookmarkKeys: Set<string>;
   path: number[];
-  onSelect: (bookmark: PdfBookmarkObject) => void;
+  onSelect: (bookmark: PdfBookmarkObject, bookmarkKey: string, hasChildren: boolean) => void;
 }) {
   return (
     <ol className={path.length ? styles.nestedList : styles.list}>
@@ -490,32 +569,31 @@ function BookmarkList({
         const title = bookmark.title || `Item ${index + 1}`;
         const bookmarkPath = [...path, index];
         const bookmarkKey = bookmarkPath.join('.');
-        const isCurrent = currentBookmarkKey.length > 0 && bookmarkKey === currentBookmarkKey;
-        const hasCurrentChild = currentBookmarkKey.startsWith(`${bookmarkKey}.`);
+        const isCurrent = selectedBookmarkKey.length > 0 && bookmarkKey === selectedBookmarkKey;
 
-        if (children.length && path.length === 0) {
+        if (children.length) {
           return (
             <li key={bookmarkKey}>
-              <details open={isCurrent || hasCurrentChild}>
+              <details open={expandedBookmarkKeys.has(bookmarkKey)}>
                 <summary
                   className={styles.bookmark}
                   data-outline-bookmark
                   data-current={isCurrent ? 'true' : undefined}
                   onClick={(event) => {
-                    const details = event.currentTarget.parentElement;
-
-                    if (!(details instanceof HTMLDetailsElement) || !details.open) {
-                      return;
-                    }
-
                     event.preventDefault();
-                    if (destination) onSelect(bookmark);
+                    onSelect(bookmark, bookmarkKey, true);
                   }}
                 >
                   <span className={styles.title}>{title}</span>
                   {pageNumber ? <span className={styles.page}>{pageNumber}</span> : null}
                 </summary>
-                <BookmarkList bookmarks={children} currentBookmarkKey={currentBookmarkKey} path={bookmarkPath} onSelect={onSelect} />
+                <BookmarkList
+                  bookmarks={children}
+                  selectedBookmarkKey={selectedBookmarkKey}
+                  expandedBookmarkKeys={expandedBookmarkKeys}
+                  path={bookmarkPath}
+                  onSelect={onSelect}
+                />
               </details>
             </li>
           );
@@ -529,15 +607,12 @@ function BookmarkList({
               data-outline-bookmark
               data-current={isCurrent ? 'true' : undefined}
               style={{ marginLeft: `${path.length * 18}px`, width: `calc(100% - ${path.length * 18}px)` }}
-              onClick={() => onSelect(bookmark)}
+              onClick={() => onSelect(bookmark, bookmarkKey, false)}
               disabled={!destination}
             >
               <span className={styles.title}>{title}</span>
               {pageNumber ? <span className={styles.page}>{pageNumber}</span> : null}
             </button>
-            {children.length ? (
-              <BookmarkList bookmarks={children} currentBookmarkKey={currentBookmarkKey} path={bookmarkPath} onSelect={onSelect} />
-            ) : null}
           </li>
         );
       })}
