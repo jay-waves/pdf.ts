@@ -22,18 +22,6 @@
   "activationEvents": ["onCustomEditor:pdf-ts.viewer"],
   "main": "./extension.cjs",
   "contributes": {
-    "configuration": {
-      "title": "PDF.ts Viewer",
-      "properties": {
-        "pdf-ts.theme": {
-          "type": "string",
-          "enum": ["light", "dark", "nord", "solar"],
-          "enumDescriptions": ["Light", "Dark", "Nord", "Solar"],
-          "default": "light",
-          "description": "Theme used by the PDF viewer."
-        }
-      }
-    },
     "customEditors": [
       {
         "viewType": "pdf-ts.viewer",

@@ -27,6 +27,13 @@
   color: var(--pdf-foreground-secondary);
 }
 
+.target:disabled,
+.swatch:disabled,
+.colorInput:disabled,
+.opacityInput:disabled {
+  @apply cursor-default opacity-55;
+}
+
 .grid {
   @apply grid grid-cols-6 gap-2;
 }

@@ -59,9 +59,10 @@ import {
   installAnnotationDirtyTracker,
   installAnnotationUriNavigation,
   installNewCommentEditor,
+  installThemeHighlightDefaults,
 } from './annotations';
 import { Comments } from './comments';
-import { MetadataDialog, OpenPasswordDialog, PrintDialog, ProtectDialog, SignatureDialog } from './document-dialogs';
+import { MetadataDialog, OpenPasswordDialog, PrintDialog, ProtectDialog, SignatureDialog, ThemeDialog } from './document-dialogs';
 import { ContextMenu } from './context-menu';
 import { Dialog, TooltipProvider } from './components';
 import { ViewportInput } from './viewport-input';
@@ -71,6 +72,8 @@ import { setPdfRenderTheme, usePdfTsPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { signatureWidgetRenderer } from './signature-widget';
+import { themeHighlightRenderer } from './theme-highlight-renderer';
+import { themeCommentRenderer } from './theme-comment-renderer';
 import {
   verifyPdfSignatures,
   type SignatureVerificationResult,
@@ -87,6 +90,7 @@ const MAX_RENDER_DPR = 1.75;
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 900;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
+const ANNOTATION_RENDERERS = [themeHighlightRenderer, themeCommentRenderer, signatureWidgetRenderer];
 
 function LoadingStatus({ label }: { label: string }) {
   return (
@@ -277,7 +281,7 @@ type SidePanel =
   | { type: 'outline' | 'thumbnails' | 'colors' }
   | { type: 'comments'; target: CommentTarget | null }
   | null;
-type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | null;
+type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | null;
 type DocumentViewState = { pageNumber: number; totalPages: number; bookmarkKey: string; title: string };
 
 type DocumentPane = Exclude<NonNullable<SidePanel>['type'], 'colors'>;
@@ -604,6 +608,7 @@ function App({
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
               () => installAnnotationUriNavigation(nextRegistry, platform.openExternal),
+              () => installThemeHighlightDefaults(nextRegistry),
               () => installNewCommentEditor(nextRegistry, (annotationId) => {
                 setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
               }),
@@ -693,11 +698,17 @@ function App({
                                           className="pdf-page-tiling-layer"
                                         />
                                         <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
-                                        <SelectionLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                        <div className="pdf-text-selection-layer">
+                                          <SelectionLayer
+                                            documentId={activeDocumentId}
+                                            pageIndex={pageIndex}
+                                            background="var(--pdf-text-selection-color)"
+                                          />
+                                        </div>
                                         <AnnotationLayer
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
-                                          annotationRenderers={[signatureWidgetRenderer]}
+                                          annotationRenderers={ANNOTATION_RENDERERS}
                                         />
                                       </PagePointerProvider>
                                     </Rotate>
@@ -743,6 +754,10 @@ function App({
         onOpenMetadata={() => {
           setSidePanel(null);
           setActiveDialog('metadata');
+        }}
+        onOpenTheme={() => {
+          setSidePanel(null);
+          setActiveDialog('theme');
         }}
         signatureCount={signatures.length}
         onOpenSignatures={() => setActiveDialog('signatures')}
@@ -841,6 +856,10 @@ function App({
         signatures={signatures}
         verifications={signatureVerifications}
         open={activeDialog === 'signatures'}
+        onClose={() => setActiveDialog(null)}
+      />
+      <ThemeDialog
+        open={activeDialog === 'theme'}
         onClose={() => setActiveDialog(null)}
       />
       <BottomNavigationControl

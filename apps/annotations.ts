@@ -19,6 +19,12 @@ import {
 } from '@embedpdf/plugin-annotation';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { EMPTY_CLEANUP, getDocumentCapability, getPluginCapability } from './utils';
+import {
+  getCurrentViewerTheme,
+  isDarkViewerTheme,
+  type ViewerTheme,
+  VIEWER_THEME_CHANGE_EVENT,
+} from './theme';
 
 // Appearance and palette configuration
 
@@ -41,6 +47,50 @@ export const DEFAULT_ANNOTATION_COLORS = [
 ];
 
 export const DEFAULT_HIGHLIGHT_COLOR = DEFAULT_ANNOTATION_COLORS[0];
+
+type ThemeHighlightPolicy = {
+  color: string;
+  blendMode: PdfBlendMode;
+  opacity: number;
+};
+
+const THEME_HIGHLIGHT_POLICIES: Record<ViewerTheme, ThemeHighlightPolicy> = {
+  light: { color: DEFAULT_HIGHLIGHT_COLOR, blendMode: PdfBlendMode.Multiply, opacity: 1 },
+  dark: { color: '#a9c6ff', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+  nord: { color: '#b1d4dc', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+  gruvbox: { color: '#f7f0cd', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+  solar: { color: DEFAULT_HIGHLIGHT_COLOR, blendMode: PdfBlendMode.Multiply, opacity: 1 },
+};
+
+const LEGACY_THEME_HIGHLIGHT_POLICIES: ThemeHighlightPolicy[] = [
+  { color: '#78a9ff', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+  { color: '#88c0d0', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+  { color: '#a9b665', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+];
+
+export function getThemeHighlightPolicy(theme = getCurrentViewerTheme()) {
+  return THEME_HIGHLIGHT_POLICIES[theme];
+}
+
+function getThemeHighlightDefaults(theme = getCurrentViewerTheme()) {
+  const policy = getThemeHighlightPolicy(theme);
+  return {
+    strokeColor: policy.color,
+    color: policy.color,
+    blendMode: policy.blendMode,
+    opacity: policy.opacity,
+  };
+}
+
+export function hasThemeHighlightAppearance(annotation: PdfHighlightAnnoObject) {
+  const color = (annotation.strokeColor ?? annotation.color)?.toLowerCase();
+  return [...Object.values(THEME_HIGHLIGHT_POLICIES), ...LEGACY_THEME_HIGHLIGHT_POLICIES]
+    .some((policy) => (
+    color === policy.color.toLowerCase()
+    && annotation.blendMode === policy.blendMode
+    && Math.abs(annotation.opacity - policy.opacity) < 0.01
+    ));
+}
 
 export const HIGHLIGHT_STYLES = [
   { label: 'Marker', value: PdfBlendMode.Multiply },
@@ -306,8 +356,11 @@ export function createTextMarkupAnnotations(
   selectionScope: ReturnType<SelectionCapability['forDocument']>,
   type: TextMarkupSubtype,
 ) {
-  const strokeColor = type === PdfAnnotationSubtype.HIGHLIGHT
-    ? DEFAULT_HIGHLIGHT_COLOR
+  const highlightPolicy = type === PdfAnnotationSubtype.HIGHLIGHT
+    ? getThemeHighlightPolicy()
+    : null;
+  const strokeColor = highlightPolicy
+    ? highlightPolicy.color
     : DEFAULT_ANNOTATION_COLORS[2];
   const slices = selectionScope.getState().slices;
 
@@ -320,7 +373,8 @@ export function createTextMarkupAnnotations(
       rect: selection.rect,
       segmentRects: selection.segmentRects,
       strokeColor,
-      opacity: 1,
+      opacity: highlightPolicy?.opacity ?? 1,
+      ...(highlightPolicy ? { blendMode: highlightPolicy.blendMode } : {}),
       custom: slice ? { pdfTs: { textSlice: {
         charIndex: slice.start,
         charCount: slice.count,
@@ -333,19 +387,17 @@ export function createTextMarkupAnnotations(
 // Plugin setup and lifecycle events
 
 export function createAnnotationPluginConfig(): AnnotationPluginConfig {
+  const highlightPolicy = getThemeHighlightPolicy();
   return {
     locked: { type: LockModeType.Include, categories: ['form', 'link'] },
     autoOpenLinks: false,
     deactivateToolAfterCreate: true,
-    colorPresets: DEFAULT_ANNOTATION_COLORS,
+    colorPresets: Array.from(new Set([...DEFAULT_ANNOTATION_COLORS, highlightPolicy.color])),
     tools: [
       ...['square', 'lineArrow', 'ink'].map((id) => ({ id, defaults: { strokeWidth: 2 } })),
       {
         id: 'highlight',
-        defaults: {
-          strokeColor: DEFAULT_HIGHLIGHT_COLOR,
-          color: DEFAULT_HIGHLIGHT_COLOR,
-        },
+        defaults: getThemeHighlightDefaults(),
       },
       { id: 'textComment', behavior: { editAfterCreate: true } },
       // Keep existing stamp annotations backed by PDFium's appearance-stream
@@ -356,6 +408,42 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
       { id: 'link', categories: ['link'] },
     ],
   };
+}
+
+export function installThemeHighlightDefaults(registry: PluginRegistry) {
+  const capability = getAnnotationCapability(registry);
+  if (!capability) return EMPTY_CLEANUP;
+
+  const readDefaults = () => {
+    const defaults = capability.getTool('highlight')?.defaults as Record<string, unknown> | undefined;
+    return defaults ? {
+      strokeColor: defaults.strokeColor,
+      color: defaults.color,
+      blendMode: defaults.blendMode,
+      opacity: defaults.opacity,
+    } : null;
+  };
+  let currentTheme = getCurrentViewerTheme();
+  let manualDefaults = isDarkViewerTheme(currentTheme) ? null : readDefaults();
+
+  const sync = (event: Event) => {
+    const nextTheme = (event as CustomEvent<{ theme: ViewerTheme }>).detail.theme;
+    if (isDarkViewerTheme(nextTheme)) {
+      if (!isDarkViewerTheme(currentTheme)) manualDefaults = readDefaults();
+      const policy = getThemeHighlightPolicy(nextTheme);
+      capability.setToolDefaults('highlight', getThemeHighlightDefaults(nextTheme));
+      capability.addColorPreset(policy.color);
+    } else if (isDarkViewerTheme(currentTheme)) {
+      capability.setToolDefaults(
+        'highlight',
+        manualDefaults ?? getThemeHighlightDefaults(nextTheme),
+      );
+    }
+    currentTheme = nextTheme;
+  };
+
+  window.addEventListener(VIEWER_THEME_CHANGE_EVENT, sync);
+  return () => window.removeEventListener(VIEWER_THEME_CHANGE_EVENT, sync);
 }
 
 export function installAnnotationDirtyTracker(

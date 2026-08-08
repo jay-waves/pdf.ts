@@ -15,6 +15,12 @@ import {
   type SignatureVerificationResult,
 } from './signature-certificate';
 import styles from './document-dialogs.module.css';
+import {
+  getViewerThemeSettings,
+  setViewerThemeSettings,
+  type DarkViewerTheme,
+  type LightViewerTheme,
+} from './theme';
 
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -562,6 +568,90 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
         <DialogActions className={styles.flatActions}>
           <Button className={styles.flatButton} onClick={onClose} disabled={busy}>Cancel</Button>
           <Button className={styles.flatButton} type="submit" variant="primary" disabled={busy}>{busy ? 'Preparing...' : 'Print'}</Button>
+        </DialogActions>
+      </form>
+    </FlatDocumentDialog>
+  );
+}
+
+const LIGHT_THEME_OPTIONS = [
+  { value: 'light', label: 'Light' },
+  { value: 'solar', label: 'Solar' },
+] as const;
+const DARK_THEME_OPTIONS = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'nord', label: 'Nord' },
+  { value: 'gruvbox', label: 'Gruvbox' },
+] as const;
+
+export function ThemeDialog({ open, onClose }: {
+  open: boolean;
+  onClose(): void;
+}) {
+  const [settings, setSettings] = useState(getViewerThemeSettings);
+
+  useEffect(() => {
+    if (open) setSettings(getViewerThemeSettings());
+  }, [open]);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setViewerThemeSettings(settings);
+    onClose();
+  };
+
+  return (
+    <FlatDocumentDialog open={open} onClose={onClose} title="Themes">
+      <form className={`${styles.form} ${styles.themeForm}`} onSubmit={submit}>
+        <div className={styles.themeRow}>
+          <span>Light</span>
+          <RadixRadioGroup.Root
+            className={styles.themeOptions}
+            data-count={LIGHT_THEME_OPTIONS.length}
+            value={settings.light}
+            onValueChange={(value) => setSettings((current) => ({
+              ...current,
+              light: value as LightViewerTheme,
+            }))}
+            aria-label="Light appearance theme"
+          >
+            {LIGHT_THEME_OPTIONS.map((option) => (
+              <RadixRadioGroup.Item
+                key={option.value}
+                value={option.value}
+                className={styles.themeOption}
+              >
+                {option.label}
+              </RadixRadioGroup.Item>
+            ))}
+          </RadixRadioGroup.Root>
+        </div>
+        <div className={styles.themeRow}>
+          <span>Dark</span>
+          <RadixRadioGroup.Root
+            className={styles.themeOptions}
+            data-count={DARK_THEME_OPTIONS.length}
+            value={settings.dark}
+            onValueChange={(value) => setSettings((current) => ({
+              ...current,
+              dark: value as DarkViewerTheme,
+            }))}
+            aria-label="Dark appearance theme"
+          >
+            {DARK_THEME_OPTIONS.map((option) => (
+              <RadixRadioGroup.Item
+                key={option.value}
+                value={option.value}
+                className={styles.themeOption}
+              >
+                {option.label}
+              </RadixRadioGroup.Item>
+            ))}
+          </RadixRadioGroup.Root>
+        </div>
+        <DialogActions className={styles.flatActions}>
+          <Button className={styles.flatButton} onClick={onClose}>Cancel</Button>
+          <Button className={styles.flatButton} type="submit" variant="primary">Save</Button>
         </DialogActions>
       </form>
     </FlatDocumentDialog>

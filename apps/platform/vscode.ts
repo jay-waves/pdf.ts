@@ -27,7 +27,6 @@ declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
 const preferences = new Map<string, string>();
-const THEME_STORAGE_KEY = 'pdf-viewer-theme-v1';
 const pending = new Map<number, {
   resolve(value: unknown): void;
   reject(error: Error): void;
@@ -74,9 +73,6 @@ async function fetchResource(url: string, contentType: string) {
   return blobResource(new Blob([await response.arrayBuffer()], { type: contentType }));
 }
 
-const configuredTheme = readMeta('pdf-ts-theme');
-if (configuredTheme) preferences.set(THEME_STORAGE_KEY, configuredTheme);
-
 function request<T>(
   type: 'readReadingProgress' | 'writeReadingProgress' | 'writeDocument',
   documentKey: string,
@@ -112,6 +108,7 @@ class VsCodePdfFileHandle implements PdfFileHandle {
 }
 
 export const platform: ViewerPlatform = {
+  viewerThemePolicy: 'host',
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = readMeta('pdf-document-url');
     const documentKey = readMeta('pdf-document-key');
@@ -158,9 +155,6 @@ export const platform: ViewerPlatform = {
   getPreference: (key) => preferences.get(key) ?? null,
   setPreference(key, value) {
     preferences.set(key, value);
-    if (key === THEME_STORAGE_KEY) {
-      vscode.postMessage({ type: 'writeThemePreference', value });
-    }
   },
   readReadingProgress(documentKey) {
     return request<ReadingProgress | undefined>('readReadingProgress', documentKey);
