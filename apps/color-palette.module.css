@@ -54,6 +54,15 @@
   @apply border-accent shadow-control;
 }
 
+.swatch[data-auto='true'] {
+  background: var(--pdf-background-input);
+  color: var(--pdf-accent-primary);
+}
+
+.autoLabel {
+  @apply text-[8px] font-semibold uppercase tracking-[-0.02em];
+}
+
 .swatch[data-transparent='true'] {
   background-color: var(--pdf-background-input);
   background-image:

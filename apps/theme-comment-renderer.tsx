@@ -6,8 +6,7 @@ import {
 } from '@embedpdf/models';
 import { createRenderer } from '@embedpdf/plugin-annotation/react';
 import { MessageSquareMore } from 'lucide-react';
-import { getThemeHighlightPolicy } from './annotations';
-import { getCurrentViewerTheme, isDarkViewerTheme } from './theme';
+import { getThemeHighlightPolicy, hasAutoAnnotationStrokeColor } from './annotations';
 
 function isComment(annotation: PdfAnnotationObject): annotation is PdfTextAnnoObject {
   return annotation.type === PdfAnnotationSubtype.TEXT && !annotation.inReplyToId;
@@ -16,7 +15,7 @@ function isComment(annotation: PdfAnnotationObject): annotation is PdfTextAnnoOb
 export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
   id: 'themeComment',
   matches: (annotation): annotation is PdfTextAnnoObject => (
-    isComment(annotation) && isDarkViewerTheme(getCurrentViewerTheme())
+    isComment(annotation) && hasAutoAnnotationStrokeColor(annotation)
   ),
   useAppearanceStream: false,
   interactionDefaults: {
@@ -24,7 +23,7 @@ export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
     isResizable: false,
     isRotatable: false,
   },
-  render: ({ isSelected, onClick }) => {
+  render: ({ currentObject, isSelected, onClick }) => {
     const color = getThemeHighlightPolicy().color;
     const lineColor = getContrastStrokeColor(color);
 
@@ -44,7 +43,12 @@ export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
         fill={color}
         color={lineColor}
         strokeWidth={1.25}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          opacity: currentObject.opacity ?? 1,
+          pointerEvents: 'none',
+        }}
       />
     </div>;
   },

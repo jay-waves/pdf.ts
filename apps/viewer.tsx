@@ -56,10 +56,10 @@ import { Thumbnails } from './thumbnails';
 import { ColorPalette } from './color-palette';
 import {
   createAnnotationPluginConfig,
+  installAnnotationAutoPreviewAttribute,
   installAnnotationDirtyTracker,
   installAnnotationUriNavigation,
   installNewCommentEditor,
-  installThemeHighlightDefaults,
 } from './annotations';
 import { Comments } from './comments';
 import { MetadataDialog, OpenPasswordDialog, PrintDialog, ProtectDialog, SignatureDialog, ThemeDialog } from './document-dialogs';
@@ -72,7 +72,12 @@ import { setPdfRenderTheme, usePdfTsPdfiumEngine } from './pdf-engine';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import { signatureWidgetRenderer } from './signature-widget';
-import { themeHighlightRenderer } from './theme-highlight-renderer';
+import {
+  themeHighlightRenderer,
+  themeStrikeoutRenderer,
+  themeUnderlineRenderer,
+} from './theme-highlight-renderer';
+import { themeAnnotationColorRenderer } from './theme-annotation-color';
 import { themeCommentRenderer } from './theme-comment-renderer';
 import {
   verifyPdfSignatures,
@@ -87,10 +92,18 @@ const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
 const MAX_RENDER_DPR = 1.75;
+const SEARCH_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38%, transparent)';
+const SEARCH_ACTIVE_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-danger-primary) 62%, transparent)';
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 900;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
-const ANNOTATION_RENDERERS = [themeHighlightRenderer, themeCommentRenderer, signatureWidgetRenderer];
+const ANNOTATION_RENDERERS = [
+  themeHighlightRenderer,
+  themeUnderlineRenderer,
+  themeStrikeoutRenderer,
+  themeCommentRenderer,
+  signatureWidgetRenderer,
+];
 
 function LoadingStatus({ label }: { label: string }) {
   return (
@@ -608,7 +621,7 @@ function App({
               () => installPdfZoomKeyboardShortcuts(nextRegistry),
               () => installScrollStrategyAttribute(nextRegistry),
               () => installAnnotationUriNavigation(nextRegistry, platform.openExternal),
-              () => installThemeHighlightDefaults(nextRegistry),
+              () => installAnnotationAutoPreviewAttribute(nextRegistry),
               () => installNewCommentEditor(nextRegistry, (annotationId) => {
                 setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
               }),
@@ -697,7 +710,12 @@ function App({
                                           pageIndex={pageIndex}
                                           className="pdf-page-tiling-layer"
                                         />
-                                        <SearchLayer documentId={activeDocumentId} pageIndex={pageIndex} />
+                                        <SearchLayer
+                                          documentId={activeDocumentId}
+                                          pageIndex={pageIndex}
+                                          highlightColor={SEARCH_HIGHLIGHT_COLOR}
+                                          activeHighlightColor={SEARCH_ACTIVE_HIGHLIGHT_COLOR}
+                                        />
                                         <div className="pdf-text-selection-layer">
                                           <SelectionLayer
                                             documentId={activeDocumentId}
@@ -706,9 +724,11 @@ function App({
                                           />
                                         </div>
                                         <AnnotationLayer
+                                          className="pdf-annotation-layer"
                                           documentId={activeDocumentId}
                                           pageIndex={pageIndex}
                                           annotationRenderers={ANNOTATION_RENDERERS}
+                                          customAnnotationRenderer={themeAnnotationColorRenderer}
                                         />
                                       </PagePointerProvider>
                                     </Rotate>

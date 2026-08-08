@@ -62,13 +62,13 @@
   --pdf-page-border: color-mix(in srgb, var(--pdf-foreground-primary) 12%, transparent);
   --pdf-page-shadow: rgb(0 0 0 / 14%);
   --pdf-control-ring: inset 0 0 0 0.5px color-mix(in srgb, var(--pdf-accent-primary) 72%, transparent);
+  --pdf-annotation-auto-stroke: #e44234;
+  --pdf-annotation-auto-text: #e44234;
   background: var(--pdf-background-app);
   color: var(--pdf-foreground-primary);
 }
 
-:root[data-viewer-theme='dark'],
-:root[data-viewer-theme='nord'],
-:root[data-viewer-theme='gruvbox'] {
+:root[data-viewer-color-mode='dark'] {
   color-scheme: dark;
 }
 
@@ -94,6 +94,8 @@
   --pdf-scrollbar-thumb-hover: #6f6f6f;
   --pdf-page-background: #050505;
   --pdf-page-shadow: rgb(0 0 0 / 32%);
+  --pdf-annotation-auto-stroke: #c6c6c6;
+  --pdf-annotation-auto-text: #e8e8e8;
 }
 
 :root[data-viewer-theme='nord'] {
@@ -114,6 +116,8 @@
   --pdf-scrollbar-thumb-hover: #5e81ac;
   --pdf-page-background: #2e3440;
   --pdf-page-shadow: rgb(15 20 30 / 28%);
+  --pdf-annotation-auto-stroke: #88c0d0;
+  --pdf-annotation-auto-text: #eceff4;
 }
 
 :root[data-viewer-theme='gruvbox'] {
@@ -134,6 +138,34 @@
   --pdf-scrollbar-thumb-hover: #665c54;
   --pdf-page-background: #2d2c2a;
   --pdf-page-shadow: rgb(0 0 0 / 30%);
+  --pdf-annotation-auto-stroke: #c9b77a;
+  --pdf-annotation-auto-text: #f9f5d7;
+}
+
+:root[data-viewer-theme='catppuccin-mocha'] {
+  --pdf-background-app: #383c4f;
+  --pdf-background-surface: #383c4f;
+  --pdf-background-surface-alt: #292c3c;
+  --pdf-background-input: #51576d;
+  --pdf-background-elevated: #51576d;
+  --pdf-toolbar-background: #292c3c;
+  --pdf-toolbar-secondary-background: #383c4f;
+  --pdf-foreground-primary: #cdd6f4;
+  --pdf-foreground-secondary: #bac2de;
+  --pdf-foreground-muted: #9399b2;
+  --pdf-border-default: #51576d;
+  --pdf-border-subtle: #414559;
+  --pdf-border-strong: #737994;
+  --pdf-control-border: #626880;
+  --pdf-accent-primary: #cba6f7;
+  --pdf-text-selection-color: rgb(203 166 247 / 20%);
+  --pdf-danger-primary: #f38ba8;
+  --pdf-scrollbar-thumb: #51576d;
+  --pdf-scrollbar-thumb-hover: #626880;
+  --pdf-page-background: #383c4f;
+  --pdf-page-shadow: rgb(0 0 0 / 34%);
+  --pdf-annotation-auto-stroke: #94e2d5;
+  --pdf-annotation-auto-text: #c6d0f5;
 }
 
 :root[data-viewer-theme='solar'] {
@@ -154,4 +186,35 @@
   --pdf-scrollbar-thumb-hover: #a9a091;
   --pdf-page-background: #fbfaf6;
   --pdf-page-shadow: rgb(91 80 62 / 10%);
+  --pdf-annotation-auto-stroke: #5f8f86;
+  --pdf-annotation-auto-highlight: #78a79f;
+  --pdf-annotation-auto-text: #2d332f;
+}
+
+:root[data-viewer-theme='catppuccin-latte'] {
+  --pdf-background-app: #dce0e8;
+  --pdf-background-surface: #eff1f5;
+  --pdf-background-surface-alt: #e6e9ef;
+  --pdf-background-input: #eff1f5;
+  --pdf-background-elevated: #eff1f5;
+  --pdf-toolbar-background: #e6e9ef;
+  --pdf-toolbar-secondary-background: #eff1f5;
+  --pdf-foreground-primary: #8839ef;
+  --pdf-foreground-secondary: #179299;
+  --pdf-foreground-muted: #40a02b;
+  --pdf-border-default: color-mix(in srgb, #04a5e5 42%, #eff1f5);
+  --pdf-border-subtle: color-mix(in srgb, #179299 28%, #eff1f5);
+  --pdf-border-strong: #8839ef;
+  --pdf-control-border: color-mix(in srgb, #40a02b 55%, #eff1f5);
+  --pdf-accent-primary: #04a5e5;
+  --pdf-text-selection-color: rgb(23 146 153 / 22%);
+  --pdf-interactive-hover: color-mix(in srgb, #40a02b 13%, #eff1f5);
+  --pdf-interactive-selected: color-mix(in srgb, #8839ef 16%, #eff1f5);
+  --pdf-danger-primary: #d20f39;
+  --pdf-scrollbar-thumb: #179299;
+  --pdf-scrollbar-thumb-hover: #04a5e5;
+  --pdf-page-background: #eff1f5;
+  --pdf-page-shadow: rgb(76 79 105 / 14%);
+  --pdf-annotation-auto-stroke: #04a5e5;
+  --pdf-annotation-auto-text: #8839ef;
 }
