@@ -35,8 +35,8 @@ const PDF_RENDER_THEMES: Partial<Record<ViewerTheme, PdfRenderTheme>> = {
     background: 0xff242424,
     // Keep filled regions lighter than the page while retaining enough
     // contrast for the light text forced inside reverse-color labels.
-    pathFill: 0xff667893,
-    pathStroke: 0xffdbe8ff,
+    pathFill: 0xff8d8d8d,
+    pathStroke: 0xffc6c6c6,
     textFill: 0xffe8e8e8,
     textStroke: 0xffe8e8e8,
   },
@@ -55,10 +55,12 @@ const PDF_RENDER_THEMES: Partial<Record<ViewerTheme, PdfRenderTheme>> = {
     // Compensate for the shared dark-page filter so the rendered page lands
     // near the theme background, #2d2c2a.
     background: 0xff4f4e4c,
-    pathFill: 0xff746b5f,
-    pathStroke: 0xffbdae93,
-    textFill: 0xffebdbb2,
-    textStroke: 0xffebdbb2,
+    pathFill: 0xff857b6d,
+    // Keep vector outlines in a soft Gruvbox ochre while rendering text in a
+    // brighter warm white, so fine diagrams do not visually merge with type.
+    pathStroke: 0xffc9b77a,
+    textFill: 0xfff9f5d7,
+    textStroke: 0xfff9f5d7,
   },
   solar: {
     mode: 'background',

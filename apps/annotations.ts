@@ -56,13 +56,14 @@ type ThemeHighlightPolicy = {
 
 const THEME_HIGHLIGHT_POLICIES: Record<ViewerTheme, ThemeHighlightPolicy> = {
   light: { color: DEFAULT_HIGHLIGHT_COLOR, blendMode: PdfBlendMode.Multiply, opacity: 1 },
-  dark: { color: '#a9c6ff', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
+  dark: { color: '#a8a8a8', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
   nord: { color: '#b1d4dc', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
   gruvbox: { color: '#f7f0cd', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
   solar: { color: DEFAULT_HIGHLIGHT_COLOR, blendMode: PdfBlendMode.Multiply, opacity: 1 },
 };
 
 const LEGACY_THEME_HIGHLIGHT_POLICIES: ThemeHighlightPolicy[] = [
+  { color: '#a9c6ff', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
   { color: '#78a9ff', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
   { color: '#88c0d0', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
   { color: '#a9b665', blendMode: PdfBlendMode.Normal, opacity: 0.2 },
