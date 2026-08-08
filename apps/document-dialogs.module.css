@@ -39,10 +39,12 @@
 .optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
 .themeForm { @apply gap-1.5 pt-2.5; }
 .themeRow { @apply grid grid-cols-[42px_1fr] items-center gap-2 text-secondary; }
-.themeOptions { @apply grid grid-cols-2 overflow-hidden rounded border border-border-subtle; }
-.themeOptions[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.themeOptions {
+  @apply grid overflow-hidden rounded border border-border-subtle;
+  grid-template-columns: repeat(var(--theme-option-count), minmax(0, 1fr));
+}
 .themeOption {
-  @apply h-7 cursor-pointer border-0 border-r border-border-subtle bg-transparent px-2 text-secondary outline-none last:border-r-0;
+  @apply h-7 cursor-pointer whitespace-nowrap border-0 border-r border-border-subtle bg-transparent px-2 text-secondary outline-none last:border-r-0;
   @apply hover:bg-hover focus-visible:relative focus-visible:z-1 focus-visible:shadow-[inset_0_0_0_1px_var(--pdf-accent-primary)];
 }
 .themeOption[data-state='checked'] { @apply bg-selected text-foreground; }

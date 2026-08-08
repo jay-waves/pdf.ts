@@ -1,4 +1,10 @@
-import { useEffect, useState, type ComponentProps, type FormEvent } from 'react';
+import {
+  useEffect,
+  useState,
+  type ComponentProps,
+  type CSSProperties,
+  type FormEvent,
+} from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PrintCapability } from '@embedpdf/plugin-print';
@@ -16,10 +22,9 @@ import {
 } from './signature-certificate';
 import styles from './document-dialogs.module.css';
 import {
+  getViewerThemeOptions,
   getViewerThemeSettings,
   setViewerThemeSettings,
-  type DarkViewerTheme,
-  type LightViewerTheme,
 } from './theme';
 
 
@@ -574,15 +579,45 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
   );
 }
 
-const LIGHT_THEME_OPTIONS = [
-  { value: 'light', label: 'Light' },
-  { value: 'solar', label: 'Solar' },
-] as const;
-const DARK_THEME_OPTIONS = [
-  { value: 'dark', label: 'Dark' },
-  { value: 'nord', label: 'Nord' },
-  { value: 'gruvbox', label: 'Gruvbox' },
-] as const;
+const LIGHT_THEME_OPTIONS = getViewerThemeOptions('light');
+const DARK_THEME_OPTIONS = getViewerThemeOptions('dark');
+
+function ThemeOptionRow<Option extends string>({
+  label,
+  value,
+  options,
+  onValueChange,
+}: {
+  label: string;
+  value: Option;
+  options: Array<{ value: Option; label: string }>;
+  onValueChange(value: Option): void;
+}) {
+  const gridStyle = { '--theme-option-count': options.length } as CSSProperties;
+  return <div className={styles.themeRow}>
+    <span>{label}</span>
+    <RadixRadioGroup.Root
+      className={styles.themeOptions}
+      style={gridStyle}
+      value={value}
+      onValueChange={(nextValue) => {
+        const option = options.find((candidate) => candidate.value === nextValue);
+        if (option) onValueChange(option.value);
+      }}
+      aria-label={`${label} appearance theme`}
+    >
+      {options.map((option) => (
+        <RadixRadioGroup.Item
+          key={option.value}
+          value={option.value}
+          className={styles.themeOption}
+        >
+          {option.label}
+        </RadixRadioGroup.Item>
+      ))}
+    </RadixRadioGroup.Root>
+  </div>;
+}
 
 export function ThemeDialog({ open, onClose }: {
   open: boolean;
@@ -603,52 +638,18 @@ export function ThemeDialog({ open, onClose }: {
   return (
     <FlatDocumentDialog open={open} onClose={onClose} title="Themes">
       <form className={`${styles.form} ${styles.themeForm}`} onSubmit={submit}>
-        <div className={styles.themeRow}>
-          <span>Light</span>
-          <RadixRadioGroup.Root
-            className={styles.themeOptions}
-            data-count={LIGHT_THEME_OPTIONS.length}
-            value={settings.light}
-            onValueChange={(value) => setSettings((current) => ({
-              ...current,
-              light: value as LightViewerTheme,
-            }))}
-            aria-label="Light appearance theme"
-          >
-            {LIGHT_THEME_OPTIONS.map((option) => (
-              <RadixRadioGroup.Item
-                key={option.value}
-                value={option.value}
-                className={styles.themeOption}
-              >
-                {option.label}
-              </RadixRadioGroup.Item>
-            ))}
-          </RadixRadioGroup.Root>
-        </div>
-        <div className={styles.themeRow}>
-          <span>Dark</span>
-          <RadixRadioGroup.Root
-            className={styles.themeOptions}
-            data-count={DARK_THEME_OPTIONS.length}
-            value={settings.dark}
-            onValueChange={(value) => setSettings((current) => ({
-              ...current,
-              dark: value as DarkViewerTheme,
-            }))}
-            aria-label="Dark appearance theme"
-          >
-            {DARK_THEME_OPTIONS.map((option) => (
-              <RadixRadioGroup.Item
-                key={option.value}
-                value={option.value}
-                className={styles.themeOption}
-              >
-                {option.label}
-              </RadixRadioGroup.Item>
-            ))}
-          </RadixRadioGroup.Root>
-        </div>
+        <ThemeOptionRow
+          label="Light"
+          value={settings.light}
+          options={LIGHT_THEME_OPTIONS}
+          onValueChange={(light) => setSettings((current) => ({ ...current, light }))}
+        />
+        <ThemeOptionRow
+          label="Dark"
+          value={settings.dark}
+          options={DARK_THEME_OPTIONS}
+          onValueChange={(dark) => setSettings((current) => ({ ...current, dark }))}
+        />
         <DialogActions className={styles.flatActions}>
           <Button className={styles.flatButton} onClick={onClose}>Cancel</Button>
           <Button className={styles.flatButton} type="submit" variant="primary">Save</Button>

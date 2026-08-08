@@ -37,6 +37,7 @@ const COLOR_SCHEME_BYTES = 4 * Uint32Array.BYTES_PER_ELEMENT;
 const PAUSE_STRUCT_BYTES = 2 * Uint32Array.BYTES_PER_ELEMENT;
 const FPDF_RENDER_TOBECONTINUED = 1;
 const FPDF_RENDER_DONE = 2;
+const FPDF_CONVERT_FILL_TO_STROKE = 0x20;
 
 type ThemeRenderResources = {
   pauseCallback: number;
@@ -150,7 +151,7 @@ function installThemeRenderer(
         fullWidth,
         fullHeight,
         rotation,
-        flags,
+        flags | FPDF_CONVERT_FILL_TO_STROKE,
         resources.schemePtr,
         resources.pausePtr,
       );

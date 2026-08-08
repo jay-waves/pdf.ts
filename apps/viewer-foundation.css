@@ -119,8 +119,7 @@ textarea {
     0 1px 2px var(--pdf-page-shadow);
 }
 
-:root:is([data-viewer-theme="dark"], [data-viewer-theme="nord"], [data-viewer-theme="gruvbox"])
-  :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
+:root[data-viewer-color-mode="dark"] :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
   filter: brightness(0.76) contrast(1.22) saturate(1);
 }
 
@@ -136,7 +135,40 @@ textarea {
   pointer-events: none;
 }
 
-:root:is([data-viewer-theme="dark"], [data-viewer-theme="nord"], [data-viewer-theme="gruvbox"])
-  .pdf-text-selection-layer > div {
+/* Drawing previews are outside the per-annotation AUTO wrapper. Theme only
+   visible SVG geometry while the active tool still uses its stored AUTO color. */
+:root[data-pdf-annotation-auto-preview]
+  .pdf-annotation-layer > div[style*="z-index: 10"]
+  svg [stroke]:not([stroke="transparent"]),
+:root[data-pdf-annotation-auto-preview]
+  .pdf-annotation-layer > div[style*="z-index: 10"]
+  svg [style*="pointer-events: none"]:not([stroke="transparent"]) {
+  stroke: var(--pdf-annotation-auto-stroke) !important;
+}
+
+/* Underline and strikeout selection previews use nested divs rather than SVG. */
+:root:is(
+  [data-pdf-annotation-auto-preview="underline"],
+  [data-pdf-annotation-auto-preview="strikeout"]
+)
+  .pdf-annotation-layer > div[style*="inset: 0"] > div
+  > div[style*="pointer-events: none"] {
+  background: var(--pdf-annotation-auto-stroke) !important;
+  scale: 1 0.75;
+}
+
+:root[data-pdf-annotation-auto-preview="underline"]
+  .pdf-annotation-layer > div[style*="inset: 0"] > div
+  > div[style*="pointer-events: none"] {
+  transform-origin: center bottom;
+}
+
+/* Solar highlights use the brighter theme teal during text selection too. */
+:root[data-viewer-theme="solar"][data-pdf-annotation-auto-preview="highlight"]
+  .pdf-annotation-layer > div[style*="inset: 0"] > div {
+  background: var(--pdf-annotation-auto-highlight) !important;
+}
+
+:root[data-viewer-color-mode="dark"] .pdf-text-selection-layer > div {
   mix-blend-mode: normal !important;
 }

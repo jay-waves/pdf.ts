@@ -4,30 +4,41 @@ import {
   blendModeToCss,
   type PdfAnnotationObject,
   type PdfHighlightAnnoObject,
+  type PdfStrikeOutAnnoObject,
+  type PdfUnderlineAnnoObject,
 } from '@embedpdf/models';
 import { createRenderer } from '@embedpdf/plugin-annotation/react';
-import { getCurrentViewerTheme, isDarkViewerTheme } from './theme';
-import { getThemeHighlightPolicy, hasThemeHighlightAppearance } from './annotations';
+import type { ComponentProps } from 'react';
+import {
+  getThemeHighlightPolicy,
+  hasAutoAnnotationStrokeColor,
+  hasAutoHighlightColor,
+} from './annotations';
 
 function isHighlight(annotation: PdfAnnotationObject): annotation is PdfHighlightAnnoObject {
   return annotation.type === PdfAnnotationSubtype.HIGHLIGHT;
 }
 
-function usesThemeHighlight() {
-  return isDarkViewerTheme(getCurrentViewerTheme());
+function getHighlightAppearance(annotation: PdfHighlightAnnoObject) {
+  const blendMode = annotation.blendMode ?? PdfBlendMode.Multiply;
+  const opacity = annotation.opacity ?? 1;
+  const policy = getThemeHighlightPolicy();
+  return blendMode === PdfBlendMode.Multiply && opacity === 1
+    ? { blendMode: policy.blendMode, opacity: policy.opacity }
+    : { blendMode, opacity };
 }
 
 export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
   id: 'themeHighlight',
   matches: (annotation): annotation is PdfHighlightAnnoObject => (
     isHighlight(annotation)
-    && (usesThemeHighlight() || hasThemeHighlightAppearance(annotation))
+    && hasAutoHighlightColor(annotation)
   ),
   useAppearanceStream: false,
   zIndex: 0,
   defaultBlendMode: PdfBlendMode.Multiply,
-  containerStyle: () => ({
-    mixBlendMode: blendModeToCss(getThemeHighlightPolicy().blendMode),
+  containerStyle: (annotation) => ({
+    mixBlendMode: blendModeToCss(getHighlightAppearance(annotation).blendMode),
   }),
   interactionDefaults: {
     isDraggable: false,
@@ -36,6 +47,7 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
   },
   render: ({ currentObject, scale, onClick }) => {
     const policy = getThemeHighlightPolicy();
+    const { opacity } = getHighlightAppearance(currentObject);
 
     return <>
       {currentObject.segmentRects.map((segment, index) => <div
@@ -48,7 +60,7 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
           width: segment.size.width * scale,
           height: segment.size.height * scale,
           background: policy.color,
-          opacity: policy.opacity,
+          opacity,
           pointerEvents: onClick ? 'auto' : 'none',
           cursor: onClick ? 'pointer' : 'default',
           zIndex: onClick ? 1 : undefined,
@@ -56,4 +68,87 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
       />)}
     </>;
   },
+});
+
+type ThemeLineMarkupProps = {
+  annotation: PdfUnderlineAnnoObject | PdfStrikeOutAnnoObject;
+  placement: 'bottom' | 'middle';
+  scale: number;
+  onClick?: ComponentProps<'div'>['onPointerDown'];
+};
+
+function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMarkupProps) {
+  const thickness = 1.5 * scale;
+  return <>
+    {annotation.segmentRects.map((segment, index) => <div
+      key={index}
+      onPointerDown={onClick}
+      style={{
+        position: 'absolute',
+        left: (segment.origin.x - annotation.rect.origin.x) * scale,
+        top: (segment.origin.y - annotation.rect.origin.y) * scale,
+        width: segment.size.width * scale,
+        height: segment.size.height * scale,
+        background: 'transparent',
+        pointerEvents: onClick ? 'auto' : 'none',
+        cursor: onClick ? 'pointer' : 'default',
+        zIndex: onClick ? 1 : 0,
+      }}
+    >
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        width: '100%',
+        height: thickness,
+        background: 'var(--pdf-annotation-auto-stroke)',
+        opacity: annotation.opacity ?? 0.5,
+        pointerEvents: 'none',
+        ...(placement === 'bottom'
+          ? { bottom: 0 }
+          : { top: '50%', transform: 'translateY(-50%)' }),
+      }} />
+    </div>)}
+  </>;
+}
+
+export const themeUnderlineRenderer = createRenderer<PdfUnderlineAnnoObject>({
+  id: 'themeUnderline',
+  matches: (annotation): annotation is PdfUnderlineAnnoObject => (
+    annotation.type === PdfAnnotationSubtype.UNDERLINE
+    && hasAutoAnnotationStrokeColor(annotation)
+  ),
+  useAppearanceStream: false,
+  zIndex: 0,
+  interactionDefaults: {
+    isDraggable: false,
+    isResizable: false,
+    isRotatable: false,
+  },
+  render: ({ currentObject, scale, onClick }) => <ThemeLineMarkup
+    annotation={currentObject}
+    placement="bottom"
+    scale={scale}
+    onClick={onClick}
+  />,
+});
+
+export const themeStrikeoutRenderer = createRenderer<PdfStrikeOutAnnoObject>({
+  id: 'themeStrikeout',
+  matches: (annotation): annotation is PdfStrikeOutAnnoObject => (
+    annotation.type === PdfAnnotationSubtype.STRIKEOUT
+    && hasAutoAnnotationStrokeColor(annotation)
+  ),
+  useAppearanceStream: false,
+  zIndex: 0,
+  interactionDefaults: {
+    isDraggable: false,
+    isResizable: false,
+    isRotatable: false,
+  },
+  render: ({ currentObject, scale, onClick }) => <ThemeLineMarkup
+    annotation={currentObject}
+    placement="middle"
+    scale={scale}
+    onClick={onClick}
+  />,
 });

@@ -1,0 +1,17 @@
+.root {
+  display: contents;
+}
+
+/* Built-in SVG renderers use transparent geometry for hit testing and
+   pointer-events:none on the visible geometry. Keep hit targets transparent. */
+.root[data-auto-stroke='true'] :global(svg [stroke]:not([stroke='transparent'])),
+.root[data-auto-stroke='true']
+  :global(svg [style*='pointer-events: none']:not([stroke='transparent'])) {
+  stroke: var(--pdf-annotation-auto-stroke) !important;
+}
+
+/* FreeText and callout text are contenteditable spans in both view and edit
+   mode. Only the stored default font color opts into this override. */
+.root[data-auto-text='true'] :global([contenteditable]) {
+  color: var(--pdf-annotation-auto-text) !important;
+}
