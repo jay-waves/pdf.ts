@@ -80,9 +80,9 @@ func resolveStateDir(directory string) (string, error) {
 }
 
 func writePrivateFileAtomically(directory, name string, content []byte) error {
-	temp, err := os.CreateTemp(directory, ".pdf.ts-status-*")
+	temp, err := os.CreateTemp(directory, ".pdf.ts-*")
 	if err != nil {
-		return fmt.Errorf("create temporary daemon status: %w", err)
+		return fmt.Errorf("create temporary state file: %w", err)
 	}
 	tempPath := temp.Name()
 	defer func() {
@@ -90,19 +90,19 @@ func writePrivateFileAtomically(directory, name string, content []byte) error {
 		_ = os.Remove(tempPath)
 	}()
 	if err := temp.Chmod(0o600); err != nil {
-		return fmt.Errorf("protect daemon status: %w", err)
+		return fmt.Errorf("protect state file: %w", err)
 	}
 	if _, err := temp.Write(content); err != nil {
-		return fmt.Errorf("write daemon status: %w", err)
+		return fmt.Errorf("write state file: %w", err)
 	}
 	if err := temp.Sync(); err != nil {
-		return fmt.Errorf("flush daemon status: %w", err)
+		return fmt.Errorf("flush state file: %w", err)
 	}
 	if err := temp.Close(); err != nil {
-		return fmt.Errorf("close daemon status: %w", err)
+		return fmt.Errorf("close state file: %w", err)
 	}
 	if err := atomicReplace(tempPath, filepath.Join(directory, name)); err != nil {
-		return fmt.Errorf("replace daemon status: %w", err)
+		return fmt.Errorf("replace state file: %w", err)
 	}
 	return nil
 }

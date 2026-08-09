@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { Dialog as RadixDialog } from 'radix-ui';
 
 export function Dialog({
@@ -45,4 +45,8 @@ export function Dialog({
       </RadixDialog.Portal>
     </RadixDialog.Root>
   );
+}
+
+export function DialogActions({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={`flex justify-end gap-1.5 ${className}`.trim()} {...props} />;
 }

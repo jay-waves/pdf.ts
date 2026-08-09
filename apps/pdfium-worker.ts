@@ -8,6 +8,7 @@ import {
 } from '@embedpdf/models';
 import { init, type WrappedPdfiumModule } from '@embedpdf/pdfium';
 import {
+  getThemeRenderGeometry,
   toReverseByteOrderBitmapColor,
   type PdfRenderTheme,
 } from './pdf-render-theme';
@@ -25,6 +26,8 @@ type WorkerRequest =
       wasmUrl: string;
       fontFallback: FontFallbackConfig | null;
     };
+type ExecuteRequest = Extract<WorkerRequest, { type: 'execute' }>;
+type WorkerTask = Task<unknown, PdfErrorReason, unknown>;
 
 type NativeInternals = {
   pdfiumModule: WrappedPdfiumModule;
@@ -44,34 +47,6 @@ type ThemeRenderResources = {
   pausePtr: number;
   schemePtr: number;
 };
-
-function getThemeRenderGeometry(
-  module: WrappedPdfiumModule,
-  pagePtr: number,
-  matrix: Float32Array,
-) {
-  const [a, b, c, d, e, f] = matrix;
-  const pageWidth = module.FPDF_GetPageWidthF(pagePtr);
-  const pageHeight = module.FPDF_GetPageHeightF(pagePtr);
-  let rotation = 0;
-  let scaleX = Math.abs(a);
-  let scaleY = Math.abs(d);
-  if (Math.abs(b) > Math.abs(a)) {
-    rotation = b > 0 ? 1 : 3;
-    scaleX = Math.abs(c);
-    scaleY = Math.abs(b);
-  } else if (a < 0) {
-    rotation = 2;
-  }
-
-  const fullWidth = Math.max(1, Math.round((rotation & 1 ? pageHeight : pageWidth) * scaleX));
-  const fullHeight = Math.max(1, Math.round((rotation & 1 ? pageWidth : pageHeight) * scaleY));
-  let startX = Math.round(e);
-  let startY = Math.round(f);
-  if (rotation === 1 || rotation === 2) startX -= fullWidth;
-  if (rotation === 2 || rotation === 3) startY -= fullHeight;
-  return { fullHeight, fullWidth, rotation, startX, startY };
-}
 
 function createThemeRenderResources(module: WrappedPdfiumModule): ThemeRenderResources {
   const schemePtr = module.pdfium.wasmExports.malloc(COLOR_SCHEME_BYTES);
@@ -117,8 +92,8 @@ function installThemeRenderer(
 
     const matrix = new Float32Array(heap.HEAPF32.buffer, matrixPtr, 6);
     const { fullHeight, fullWidth, rotation, startX, startY } = getThemeRenderGeometry(
-      module,
-      pagePtr,
+      module.FPDF_GetPageWidthF(pagePtr),
+      module.FPDF_GetPageHeightF(pagePtr),
       matrix,
     );
 
@@ -171,7 +146,7 @@ const workerScope = self as unknown as {
   postMessage(message: unknown, transfer?: Transferable[]): void;
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
 };
-const activeTasks = new Map<string, Task<unknown, PdfErrorReason, unknown>>();
+const activeTasks = new Map<string, WorkerTask>();
 const originalSizes = new Map<string, number>();
 let native: PdfiumNative | null = null;
 let renderTheme: PdfRenderTheme | null = null;
@@ -189,9 +164,10 @@ function respond(id: string, message: Record<string, unknown>, transfer: Transfe
 
 function getResultTransfer(value: unknown): Transferable[] {
   if (value instanceof ArrayBuffer) return [value];
-  const data = typeof value === 'object' && value
-    ? (value as { data?: unknown }).data
-    : undefined;
+  if (!value || typeof value !== 'object') return [];
+
+  const { data, delta } = value as { data?: unknown; delta?: unknown };
+  if (delta instanceof ArrayBuffer) return [delta];
   if (ArrayBuffer.isView(data)
     && data.buffer instanceof ArrayBuffer
     && data.byteOffset === 0
@@ -201,10 +177,12 @@ function getResultTransfer(value: unknown): Transferable[] {
   return [];
 }
 
-function saveIncremental(document: PdfDocumentObject) {
-  if (!native) throw new Error('PDFium is not initialized.');
+function isTask(value: unknown): value is WorkerTask {
+  return Boolean(value && typeof value === 'object' && 'wait' in value);
+}
 
-  const internals = native as unknown as NativeInternals;
+function saveIncremental(engine: PdfiumNative, document: PdfDocumentObject) {
+  const internals = engine as unknown as NativeInternals;
   const context = internals.cache.getContext(document.id);
   const originalSize = originalSizes.get(document.id);
   if (!context || originalSize === undefined) {
@@ -250,8 +228,44 @@ function saveIncremental(document: PdfDocumentObject) {
   }
 }
 
-function execute(request: Extract<WorkerRequest, { type: 'execute' }>) {
-  if (!native) {
+function invoke(engine: PdfiumNative, request: ExecuteRequest) {
+  if (request.method === 'setRenderTheme') {
+    renderTheme = (request.args[0] ?? null) as PdfRenderTheme | null;
+    return true;
+  }
+
+  if (request.method === 'openDocumentBuffer') {
+    const file = request.args[0] as { id: string; content: ArrayBuffer };
+    originalSizes.set(file.id, file.content.byteLength);
+  } else if (request.method === 'saveIncremental') {
+    return saveIncremental(engine, request.args[0] as PdfDocumentObject);
+  }
+
+  const method = (engine as unknown as Record<string, unknown>)[request.method];
+  if (typeof method !== 'function') {
+    throw new Error(`PDFium method ${request.method} is unavailable.`);
+  }
+  return method.apply(engine, request.args) as unknown;
+}
+
+function forwardTask(id: string, task: WorkerTask) {
+  activeTasks.set(id, task);
+  task.onProgress((progress) => respond(id, { type: 'progress', progress }));
+  task.wait(
+    (value) => {
+      activeTasks.delete(id);
+      respond(id, { type: 'result', data: value }, getResultTransfer(value));
+    },
+    (error) => {
+      activeTasks.delete(id);
+      respond(id, { type: 'error', error });
+    },
+  );
+}
+
+function execute(request: ExecuteRequest) {
+  const engine = native;
+  if (!engine) {
     respond(request.id, { type: 'error', error: taskError(
       'PDFium is not initialized.',
       PdfErrorCode.NotReady,
@@ -260,52 +274,12 @@ function execute(request: Extract<WorkerRequest, { type: 'execute' }>) {
   }
 
   try {
-    if (request.method === 'setRenderTheme') {
-      renderTheme = (request.args[0] ?? null) as PdfRenderTheme | null;
-      respond(request.id, { type: 'result', data: true });
+    const result = invoke(engine, request);
+    if (isTask(result)) {
+      forwardTask(request.id, result);
       return;
     }
-
-    if (request.method === 'openDocumentBuffer') {
-      const file = request.args[0] as { id: string; content: ArrayBuffer };
-      originalSizes.set(file.id, file.content.byteLength);
-    }
-
-    const result = request.method === 'saveIncremental'
-      ? saveIncremental(request.args[0] as PdfDocumentObject)
-      : (native as unknown as Record<string, (...args: unknown[]) => unknown>)[request.method]?.(
-          ...request.args,
-        );
-
-    if (!result) {
-      throw new Error(`PDFium method ${request.method} is unavailable.`);
-    }
-    if (typeof result === 'object' && 'wait' in result) {
-      const task = result as Task<unknown, PdfErrorReason, unknown>;
-      activeTasks.set(request.id, task);
-      task.onProgress((progress) => {
-        workerScope.postMessage({ id: request.id, type: 'progress', progress });
-      });
-      task.wait(
-        (value) => {
-          respond(request.id, { type: 'result', data: value }, getResultTransfer(value));
-          activeTasks.delete(request.id);
-        },
-        (error) => {
-          respond(request.id, { type: 'error', error });
-          activeTasks.delete(request.id);
-        },
-      );
-      return;
-    }
-
-    const delta = (
-      typeof result === 'object'
-      && result
-      && 'delta' in result
-      && result.delta instanceof ArrayBuffer
-    ) ? result.delta : undefined;
-    respond(request.id, { type: 'result', data: result }, delta ? [delta] : []);
+    respond(request.id, { type: 'result', data: result }, getResultTransfer(result));
   } catch (error) {
     respond(request.id, {
       type: 'error',

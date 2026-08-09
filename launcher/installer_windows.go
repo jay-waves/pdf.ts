@@ -25,13 +25,7 @@ func installAssociations(executable string) error {
 		}},
 		{`pdf.ts.Document\DefaultIcon`, icon, nil},
 		{`pdf.ts.Document\shell\open\command`, openCommand, nil},
-	}
-	for _, extension := range []string{".pdf"} {
-		keys = append(keys, struct {
-			path         string
-			defaultValue string
-			values       map[string]string
-		}{extension + `\OpenWithProgids`, "", map[string]string{"pdf.ts.Document": ""}})
+		{`.pdf\OpenWithProgids`, "", map[string]string{"pdf.ts.Document": ""}},
 	}
 	for _, key := range keys {
 		if err := setRegistryDefault(classesRoot+key.path, key.defaultValue); err != nil {
@@ -50,10 +44,8 @@ func uninstallAssociations() error {
 	if err := deleteRegistryTree(classesRoot + `pdf.ts.Document`); err != nil {
 		return err
 	}
-	for _, extension := range []string{".pdf"} {
-		if err := deleteRegistryValue(classesRoot+extension+`\OpenWithProgids`, "pdf.ts.Document"); err != nil {
-			return err
-		}
+	if err := deleteRegistryValue(classesRoot+`.pdf\OpenWithProgids`, "pdf.ts.Document"); err != nil {
+		return err
 	}
 	return nil
 }

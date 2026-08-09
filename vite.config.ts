@@ -1,22 +1,29 @@
 import { resolve } from 'node:path';
-import { cpSync } from 'node:fs';
+import { cpSync, readFileSync, writeFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
+const packageJson = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
+) as { version: string };
+const buildTimestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+const buildInfo = `v${packageJson.version} (${buildTimestamp})`;
 const viewerPlatform = process.env.VIEWER_PLATFORM ?? 'chrome';
 const isVsCode = viewerPlatform === 'vscode';
 const isWeb = viewerPlatform === 'web';
-const isBrowser = isWeb;
 const outputDir = isVsCode
-  ? 'release/vscode/extension/media'
-  : isBrowser
+  ? 'release/vscode-extension/media'
+  : isWeb
     ? 'release/web'
-    : 'release/chrome/extension';
+    : 'release/chrome-extension';
 
 export default defineConfig({
   base: './',
-  publicDir: isVsCode || isBrowser ? false : 'chrome',
+  define: {
+    __PDF_TS_BUILD_INFO__: JSON.stringify(buildInfo),
+  },
+  publicDir: isVsCode || isWeb ? false : 'chrome',
   resolve: {
     alias: [
       {
@@ -27,7 +34,7 @@ export default defineConfig({
             ? 'apps/platform/vscode.ts'
             : isWeb
               ? 'apps/platform/browser.ts'
-                : 'apps/platform/chrome.ts',
+              : 'apps/platform/chrome.ts',
           ),
       },
       {
@@ -65,9 +72,20 @@ export default defineConfig({
         const resolvedOutputDir = resolve(__dirname, outputDir);
         const brandDir = resolve(__dirname, 'assets');
         cpSync(resolve(brandDir, 'icon.png'), resolve(resolvedOutputDir, 'icon.png'));
-        for (const size of [16, 32, 48, 128]) {
-          cpSync(resolve(brandDir, `icon-${size}.png`), resolve(resolvedOutputDir, `icon-${size}.png`));
+        if (!isWeb) {
+          for (const size of [16, 32, 48, 128]) {
+            cpSync(resolve(brandDir, `icon-${size}.png`), resolve(resolvedOutputDir, `icon-${size}.png`));
+          }
         }
+      },
+    }] : []),
+    ...(!isVsCode && !isWeb ? [{
+      name: 'chrome-manifest-version',
+      writeBundle() {
+        const manifestPath = resolve(__dirname, outputDir, 'manifest.json');
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+        manifest.version = packageJson.version;
+        writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
       },
     }] : []),
     ...(isVsCode ? [{
@@ -83,10 +101,10 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       input: {
-        [isBrowser ? 'index' : 'viewer']: resolve(__dirname, isBrowser ? 'index.html' : 'viewer.html'),
+        [isWeb ? 'index' : 'viewer']: resolve(__dirname, isWeb ? 'index.html' : 'viewer.html'),
       },
       output: {
-        entryFileNames: isBrowser ? 'assets/[name]-[hash].js' : 'assets/[name].js',
+        entryFileNames: isWeb ? 'assets/[name]-[hash].js' : 'assets/[name].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
       },

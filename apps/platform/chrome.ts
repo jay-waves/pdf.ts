@@ -1,4 +1,4 @@
-import { getFileNameFromUrl } from '../utils';
+import { getFileNameFromUrl, parseUrl } from '../url';
 import {
   getPreference,
   readReadingHistoryStore,
@@ -113,12 +113,10 @@ function getDocumentUrl() {
   const file = params.get('file');
   if (!file) return undefined;
 
-  try {
-    const url = new URL(file);
-    return url.protocol === 'file:' && url.pathname.toLowerCase().endsWith('.pdf') ? file : undefined;
-  } catch {
-    return undefined;
-  }
+  const url = parseUrl(file);
+  return url?.protocol === 'file:' && url.pathname.toLowerCase().endsWith('.pdf')
+    ? file
+    : undefined;
 }
 
 export const platform: ViewerPlatform = {
@@ -137,17 +135,13 @@ export const platform: ViewerPlatform = {
     };
   },
   openExternal(url) {
-    try {
-      const target = new URL(url, activeDocumentUrl ?? window.location.href);
-      if (!['file:', 'http:', 'https:'].includes(target.protocol)) return;
-      if (target.hostname === 'translate.google.com') {
-        void openGoogleTranslate(target.href).catch(() => {});
-        return;
-      }
-      void (globalThis as ChromeGlobal).chrome.tabs.create({ url: target.href });
-    } catch {
-      // Ignore malformed or unsafe targets embedded in a PDF.
+    const target = parseUrl(url, activeDocumentUrl ?? window.location.href);
+    if (!target || !['file:', 'http:', 'https:'].includes(target.protocol)) return;
+    if (target.hostname === 'translate.google.com') {
+      void openGoogleTranslate(target.href).catch(() => {});
+      return;
     }
+    void (globalThis as ChromeGlobal).chrome.tabs.create({ url: target.href });
   },
   translate: translateWithModelDownload,
   getPreference,

@@ -5,21 +5,18 @@ import {
   writeReadingProgress,
 } from './browser-storage';
 import { translateWithModelDownload } from './browser-translation';
+import { getExternalUrl } from '../url';
 import type {
   PlatformDocument,
-  ReadingProgress,
   ViewerPlatform,
 } from './types';
 
 type WriteResponse = {
   version: string;
-  name: string;
 };
 
 type ConflictResponse = {
-  code?: string;
   message?: string;
-  currentVersion?: string;
 };
 
 type CopyResponse = {
@@ -164,23 +161,6 @@ class PdfLauncherSession {
     const failure = await response.json().catch(() => ({})) as { message?: string };
     throw new Error(failure.message ?? `PDF.ts could not save the PDF (${response.status}).`);
   }
-
-  getPreference(key: string) {
-    return getPreference(key);
-  }
-
-  setPreference(key: string, value: string) {
-    setPreference(key, value);
-  }
-
-  async readReadingProgress(documentKey: string) {
-    return (await readReadingHistoryStore())?.[documentKey];
-  }
-
-  writeReadingProgress(documentKey: string, progress: ReadingProgress) {
-    return writeReadingProgress(documentKey, progress);
-  }
-
 }
 
 function createPdfLauncherSession() {
@@ -202,25 +182,14 @@ export const platform: ViewerPlatform = {
     };
   },
   openExternal(url) {
-    try {
-      const target = new URL(url, window.location.href);
-      if (target.protocol !== 'http:' && target.protocol !== 'https:') return;
-      window.open(target.href, '_blank', 'noopener,noreferrer');
-    } catch {
-      // Ignore malformed or unsafe targets embedded in a PDF.
-    }
+    const target = getExternalUrl(url, window.location.href);
+    if (target) window.open(target, '_blank', 'noopener,noreferrer');
   },
   translate: translateWithModelDownload,
-  getPreference(key) {
-    return launcher?.getPreference(key) ?? null;
+  getPreference,
+  setPreference,
+  async readReadingProgress(documentKey) {
+    return (await readReadingHistoryStore())?.[documentKey];
   },
-  setPreference(key, value) {
-    launcher?.setPreference(key, value);
-  },
-  readReadingProgress(documentKey) {
-    return launcher?.readReadingProgress(documentKey) ?? Promise.resolve(undefined);
-  },
-  writeReadingProgress(documentKey, progress) {
-    return launcher?.writeReadingProgress(documentKey, progress) ?? Promise.resolve();
-  },
+  writeReadingProgress,
 };

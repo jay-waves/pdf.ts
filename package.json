@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test:patch": "node --test tests/embedpdf-patch.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "dev": "node scripts/build-chrome.mjs --watch",
     "build:chrome": "pnpm typecheck && node scripts/build-chrome.mjs",
     "build:linux": "pnpm build:web && node scripts/build-launcher.mjs linux-amd64",
@@ -27,7 +27,6 @@
     "@embedpdf/plugin-form": "2.14.4",
     "@embedpdf/plugin-history": "2.14.4",
     "@embedpdf/plugin-interaction-manager": "2.14.4",
-    "@embedpdf/plugin-print": "2.14.4",
     "@embedpdf/plugin-render": "2.14.4",
     "@embedpdf/plugin-rotate": "2.14.4",
     "@embedpdf/plugin-scroll": "2.14.4",

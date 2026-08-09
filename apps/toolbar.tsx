@@ -42,14 +42,13 @@ import {
   Undo2,
 } from 'lucide-react';
 import { getAnnotationScope } from './annotations';
+import { getCurrentScrollAnchor, restoreScrollAnchor } from './page-navigation';
 import {
   getActiveDocumentId,
-  getCurrentScrollAnchor,
   getDocumentCapability,
   getDocumentScrollStrategy,
   getPluginCapability,
   isEditableTarget,
-  restoreScrollAnchor,
   type ScrollCapability,
 } from './utils';
 import {
@@ -74,25 +73,33 @@ import {
 type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 const TOOLBAR_HIDE_DELAY_MS = 900;
 
-interface ToolbarProps {
-  registry?: PluginRegistry;
-  activeDocumentId?: string | null;
+interface ToolbarState {
+  documentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
   colorPaletteOpen: boolean;
   panMode: boolean;
-  onPanModeChange(enabled: boolean): void;
-  onSearchOpenChange(open: boolean): void;
-  onToggleThumbnails(): void;
-  onToggleColorPalette(): void;
-  onOpenPrint(): void;
-  onOpenProtect(): void;
-  onOpenMetadata(): void;
-  onOpenTheme(): void;
   signatureCount: number;
-  onOpenSignatures(): void;
-  onExport(): void;
-  onSave(): void;
+}
+
+interface ToolbarActions {
+  setPanMode(enabled: boolean): void;
+  setSearchOpen(open: boolean): void;
+  toggleThumbnails(): void;
+  toggleColorPalette(): void;
+  openPrint(): void;
+  openProtect(): void;
+  openMetadata(): void;
+  openTheme(): void;
+  openSignatures(): void;
+  exportDocument(): void;
+  saveDocument(): void;
+}
+
+interface ToolbarProps {
+  registry?: PluginRegistry;
+  state: ToolbarState;
+  actions: ToolbarActions;
 }
 
 interface ToolbarButtonProps {
@@ -139,7 +146,14 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
 const ZOOM_SELECT_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
 const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), value]));
 
-function ToolbarButton({ label, icon: Icon, active, disabled, iconSize, onClick }: ToolbarButtonProps) {
+function ToolbarButton({
+  label,
+  icon: Icon,
+  active,
+  disabled,
+  iconSize,
+  onClick,
+}: ToolbarButtonProps) {
   return (
     <IconButton
       className={styles.iconButton}
@@ -211,7 +225,10 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   return { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy };
 }
 
-function switchLayoutPreservingAnchor(registry: PluginRegistry | undefined, updateLayout: (documentId: string) => void) {
+function switchLayoutPreservingAnchor(
+  registry: PluginRegistry | undefined,
+  updateLayout: (documentId: string) => void,
+) {
   if (!registry) {
     return;
   }
@@ -228,31 +245,41 @@ function switchLayoutPreservingAnchor(registry: PluginRegistry | undefined, upda
 
 export function Toolbar({
   registry,
-  activeDocumentId,
-  searchOpen,
-  thumbnailsOpen,
-  colorPaletteOpen,
-  panMode,
-  onPanModeChange,
-  onSearchOpenChange,
-  onToggleThumbnails,
-  onToggleColorPalette,
-  onOpenPrint,
-  onOpenProtect,
-  onOpenMetadata,
-  onOpenTheme,
-  signatureCount,
-  onOpenSignatures,
-  onExport,
-  onSave,
+  state: {
+    documentId,
+    searchOpen,
+    thumbnailsOpen,
+    colorPaletteOpen,
+    panMode,
+    signatureCount,
+  },
+  actions: {
+    setPanMode,
+    setSearchOpen,
+    toggleThumbnails,
+    toggleColorPalette,
+    openPrint,
+    openProtect,
+    openMetadata,
+    openTheme,
+    openSignatures,
+    exportDocument,
+    saveDocument,
+  },
 }: ToolbarProps) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const viewerTheme = useViewerTheme();
   const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
-  const { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy } = useToolbarState(registry, activeDocumentId);
-  const canUseRegistry = Boolean(registry && activeDocumentId);
+  const {
+    zoomPercent,
+    zoomLevel,
+    activeTool,
+    spreadMode,
+    scrollStrategy,
+  } = useToolbarState(registry, documentId);
+  const canUseRegistry = Boolean(registry && documentId);
   const canConfigureTheme = supportsViewerThemeSettings();
   const darkAppearance = isDarkViewerTheme(viewerTheme);
 
@@ -265,7 +292,9 @@ export function Toolbar({
 
   const showToolbar = () => {
     clearToolbarHideTimer();
-    toolbarRef.current?.setAttribute('data-visible', 'true');
+    if (toolbarRef.current?.getAttribute('data-visible') !== 'true') {
+      toolbarRef.current?.setAttribute('data-visible', 'true');
+    }
   };
 
   const hideToolbar = () => {
@@ -280,24 +309,25 @@ export function Toolbar({
       return;
     }
 
-    clearToolbarHideTimer();
+    if (toolbarHideTimerRef.current !== undefined) return;
     toolbarHideTimerRef.current = window.setTimeout(hideToolbar, TOOLBAR_HIDE_DELAY_MS);
   };
 
   useEffect(() => {
     if (activeTool && !searchOpen) {
-      onPanModeChange(false);
+      setPanMode(false);
       setActiveSection('draw');
     }
-  }, [activeTool, onPanModeChange, searchOpen]);
+  }, [activeTool, searchOpen, setPanMode]);
 
   useEffect(() => {
-    setActiveSection((current) => (
-      searchOpen ? 'search' : current === 'search' ? null : current
-    ));
+    setActiveSection((current) => {
+      if (searchOpen) return 'search';
+      return current === 'search' ? null : current;
+    });
   }, [searchOpen]);
 
-  const closeSearch = () => onSearchOpenChange(false);
+  const closeSearch = () => setSearchOpen(false);
   const openSection = (section: ToolbarSection) => {
     setActiveSection(section);
 
@@ -306,7 +336,7 @@ export function Toolbar({
     }
 
     if (section === 'search') {
-      onSearchOpenChange(true);
+      setSearchOpen(true);
       return;
     }
 
@@ -323,18 +353,13 @@ export function Toolbar({
     if (nextPanMode) {
       getAnnotationScope(registry)?.scope.setActiveTool(null);
     }
-    onPanModeChange(nextPanMode);
+    setPanMode(nextPanMode);
   };
 
   const togglePinned = () => {
     const nextPinned = !pinned;
     setPinned(nextPinned);
     setStoredToolbarPinned(nextPinned);
-  };
-
-  const requestZoom = (level: ZoomLevel) => {
-    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom');
-    scopeInfo?.capability.forDocument(scopeInfo.documentId).requestZoom(level);
   };
 
   const zoomByButton = (direction: 1 | -1) => {
@@ -353,7 +378,7 @@ export function Toolbar({
 
   const selectDrawTool = (toolId: string) => {
     closeSearch();
-    onPanModeChange(false);
+    setPanMode(false);
     const scopeInfo = getAnnotationScope(registry);
     if (!scopeInfo) {
       return;
@@ -362,13 +387,22 @@ export function Toolbar({
     scopeInfo.scope.setActiveTool(activeTool === toolId ? null : toolId);
   };
 
-  const setSpread = (nextSpreadMode: SpreadMode) => {
-    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-    if (!spread) {
-      return;
-    }
+  const selectZoom = (value: string) => {
+    const level = ZOOM_LEVELS.get(value);
+    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom');
+    if (level === undefined || !scopeInfo) return;
+    scopeInfo.capability.forDocument(scopeInfo.documentId).requestZoom(level);
+  };
 
-    switchLayoutPreservingAnchor(registry, () => spread.setSpreadMode(nextSpreadMode));
+  const toggleSpread = () => {
+    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
+    if (!spread) return;
+    const nextMode = spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd;
+    switchLayoutPreservingAnchor(registry, () => spread.setSpreadMode(nextMode));
+  };
+
+  const rotateForward = () => {
+    getPluginCapability<RotateCapability>(registry, 'rotate')?.rotateForward();
   };
 
   const setScroll = (nextStrategy: ScrollStrategy) => {
@@ -378,36 +412,6 @@ export function Toolbar({
     }
 
     switchLayoutPreservingAnchor(registry, (documentId) => scroll.setScrollStrategy(nextStrategy, documentId));
-  };
-
-  const rotateForward = () => {
-    const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
-    rotate?.rotateForward();
-  };
-
-  const printDocument = () => {
-    closeSearch();
-    onOpenPrint();
-  };
-
-  const openSecurityDialog = () => {
-    closeSearch();
-    onOpenProtect();
-  };
-
-  const openMetadataDialog = () => {
-    closeSearch();
-    onOpenMetadata();
-  };
-
-  const openThemeDialog = () => {
-    closeSearch();
-    onOpenTheme();
-  };
-
-  const toggleThumbnailsPanel = () => {
-    closeSearch();
-    onToggleThumbnails();
   };
 
   const runAnnotationHistory = (direction: 'undo' | 'redo') => {
@@ -433,7 +437,12 @@ export function Toolbar({
       if (isEditableTarget(event.target)) return;
 
       const key = event.key.toLowerCase();
-      const direction = key === 'y' || (key === 'z' && event.shiftKey) ? 'redo' : key === 'z' ? 'undo' : null;
+      let direction: 'undo' | 'redo' | null = null;
+      if (key === 'y' || (key === 'z' && event.shiftKey)) {
+        direction = 'redo';
+      } else if (key === 'z') {
+        direction = 'undo';
+      }
       if (!direction) {
         return;
       }
@@ -451,7 +460,8 @@ export function Toolbar({
     const onPointerMove = (event: PointerEvent) => {
       if (pinned || event.clientY <= 40) {
         showToolbar();
-      } else if (!toolbarRef.current?.matches(':hover, :focus-within')) {
+      } else if (toolbarHideTimerRef.current === undefined
+        && !toolbarRef.current?.matches(':hover, :focus-within')) {
         scheduleToolbarHide();
       }
     };
@@ -475,8 +485,19 @@ export function Toolbar({
             onClick={toggleViewerColorMode}
           />
         ) : null}
-        <ToolbarButton label="Pan" icon={Hand} active={panMode} onClick={togglePan} disabled={!canUseRegistry} />
-        <ToolbarButton label="Pin toolbar" icon={Pin} active={pinned} onClick={togglePinned} />
+        <ToolbarButton
+          label="Pan"
+          icon={Hand}
+          active={panMode}
+          disabled={!canUseRegistry}
+          onClick={togglePan}
+        />
+        <ToolbarButton
+          label="Pin toolbar"
+          icon={Pin}
+          active={pinned}
+          onClick={togglePinned}
+        />
       </FloatingToolbarGroup>
     </>
   );
@@ -516,22 +537,57 @@ export function Toolbar({
 
       {activeSection === 'document' ? (
         <FloatingToolbar label="Document toolbar">
-          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <ToolbarButton
+            label="Back"
+            icon={ArrowLeft}
+            onClick={returnToPrimaryToolbar}
+          />
           <FloatingToolbarDivider />
           <FloatingToolbarGroup>
-            <ToolbarButton label="Print" icon={Printer} onClick={printDocument} disabled={!canUseRegistry} />
-            <ToolbarButton label="Security" icon={ShieldCheck} onClick={openSecurityDialog} disabled={!canUseRegistry} />
-            <ToolbarButton label="Export" icon={Download} onClick={onExport} disabled={!canUseRegistry} />
-            <ToolbarButton label="Save" icon={Save} onClick={onSave} disabled={!canUseRegistry} />
-            <ToolbarButton label="Metadata" icon={Info} onClick={openMetadataDialog} disabled={!canUseRegistry} />
-            {canConfigureTheme ? <ToolbarButton label="Themes" icon={Palette} onClick={openThemeDialog} /> : null}
+            <ToolbarButton
+              label="Print"
+              icon={Printer}
+              disabled={!canUseRegistry}
+              onClick={openPrint}
+            />
+            <ToolbarButton
+              label="Security"
+              icon={ShieldCheck}
+              disabled={!canUseRegistry}
+              onClick={openProtect}
+            />
+            <ToolbarButton
+              label="Export"
+              icon={Download}
+              disabled={!canUseRegistry}
+              onClick={exportDocument}
+            />
+            <ToolbarButton
+              label="Save"
+              icon={Save}
+              disabled={!canUseRegistry}
+              onClick={saveDocument}
+            />
+            <ToolbarButton
+              label="Metadata"
+              icon={Info}
+              disabled={!canUseRegistry}
+              onClick={openMetadata}
+            />
+            {canConfigureTheme ? (
+              <ToolbarButton
+                label="Themes"
+                icon={Palette}
+                onClick={openTheme}
+              />
+            ) : null}
             {signatureCount > 0 ? (
               <Tooltip content={`Signatures (${signatureCount})`}>
                 <button
                   type="button"
                   className={styles.iconButton}
                   aria-label={`Digital signatures (${signatureCount})`}
-                  onClick={onOpenSignatures}
+                  onClick={openSignatures}
                 >
                   <Signature size={14} strokeWidth={2} />
                 </button>
@@ -544,31 +600,71 @@ export function Toolbar({
 
       {activeSection === 'page' ? (
         <FloatingToolbar label="Page toolbar" overflow>
-          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <ToolbarButton
+            label="Back"
+            icon={ArrowLeft}
+            onClick={returnToPrimaryToolbar}
+          />
           <FloatingToolbarDivider />
           <FloatingToolbarGroup>
-            <ToolbarButton label="Zoom out" icon={Minus} onClick={() => zoomByButton(-1)} disabled={!canUseRegistry} />
+            <ToolbarButton
+              label="Zoom out"
+              icon={Minus}
+              disabled={!canUseRegistry}
+              onClick={() => zoomByButton(-1)}
+            />
             <Select
               className={styles.zoomSelect}
               value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}
               displayValue={`${zoomPercent}%`}
               options={ZOOM_SELECT_OPTIONS}
-              onValueChange={(value) => {
-                const level = ZOOM_LEVELS.get(value);
-                if (level !== undefined) requestZoom(level);
-              }}
+              onValueChange={selectZoom}
               label="Zoom"
               disabled={!canUseRegistry}
             />
-            <ToolbarButton label="Zoom in" icon={Plus} onClick={() => zoomByButton(1)} disabled={!canUseRegistry} />
+            <ToolbarButton
+              label="Zoom in"
+              icon={Plus}
+              disabled={!canUseRegistry}
+              onClick={() => zoomByButton(1)}
+            />
           </FloatingToolbarGroup>
           <FloatingToolbarDivider />
           <FloatingToolbarGroup>
-            <ToolbarButton label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'} icon={GalleryHorizontal} active={spreadMode === SpreadMode.Odd} onClick={() => setSpread(spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd)} disabled={!canUseRegistry} />
-            <ToolbarButton label="Vertical scroll" icon={ArrowDownUp} active={scrollStrategy === ScrollStrategy.Vertical} onClick={() => setScroll(ScrollStrategy.Vertical)} disabled={!canUseRegistry} />
-            <ToolbarButton label="Horizontal scroll" icon={ArrowLeftRight} active={scrollStrategy === ScrollStrategy.Horizontal} onClick={() => setScroll(ScrollStrategy.Horizontal)} disabled={!canUseRegistry} />
-            <ToolbarButton label="Rotate" icon={RotateCw} onClick={rotateForward} disabled={!canUseRegistry} />
-            <ToolbarButton label="Thumbnails" icon={BookImage} active={thumbnailsOpen} onClick={toggleThumbnailsPanel} disabled={!canUseRegistry} />
+            <ToolbarButton
+              label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'}
+              icon={GalleryHorizontal}
+              active={spreadMode === SpreadMode.Odd}
+              disabled={!canUseRegistry}
+              onClick={toggleSpread}
+            />
+            <ToolbarButton
+              label="Vertical scroll"
+              icon={ArrowDownUp}
+              active={scrollStrategy === ScrollStrategy.Vertical}
+              disabled={!canUseRegistry}
+              onClick={() => setScroll(ScrollStrategy.Vertical)}
+            />
+            <ToolbarButton
+              label="Horizontal scroll"
+              icon={ArrowLeftRight}
+              active={scrollStrategy === ScrollStrategy.Horizontal}
+              disabled={!canUseRegistry}
+              onClick={() => setScroll(ScrollStrategy.Horizontal)}
+            />
+            <ToolbarButton
+              label="Rotate"
+              icon={RotateCw}
+              disabled={!canUseRegistry}
+              onClick={rotateForward}
+            />
+            <ToolbarButton
+              label="Thumbnails"
+              icon={BookImage}
+              active={thumbnailsOpen}
+              disabled={!canUseRegistry}
+              onClick={toggleThumbnails}
+            />
           </FloatingToolbarGroup>
           {renderPersistentControls()}
         </FloatingToolbar>
@@ -576,7 +672,11 @@ export function Toolbar({
 
       {activeSection === 'search' ? (
         <FloatingToolbar label="Search toolbar" overflow>
-          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <ToolbarButton
+            label="Back"
+            icon={ArrowLeft}
+            onClick={returnToPrimaryToolbar}
+          />
           <FloatingToolbarDivider />
           <Search registry={registry} open />
           {renderPersistentControls()}
@@ -585,16 +685,43 @@ export function Toolbar({
 
       {activeSection === 'draw' ? (
         <FloatingToolbar label="Draw toolbar" overflow>
-          <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+          <ToolbarButton
+            label="Back"
+            icon={ArrowLeft}
+            onClick={returnToPrimaryToolbar}
+          />
           <FloatingToolbarDivider />
           <div className={styles.drawTools}>
             {DRAW_TOOLS.map(({ id, label, icon }) => (
-              <ToolbarButton key={id} label={label} icon={icon} active={activeTool === id} onClick={() => selectDrawTool(id)} disabled={!canUseRegistry} />
+              <ToolbarButton
+                key={id}
+                label={label}
+                icon={icon}
+                active={activeTool === id}
+                disabled={!canUseRegistry}
+                onClick={() => selectDrawTool(id)}
+              />
             ))}
             <FloatingToolbarDivider />
-            <ToolbarButton label="Colors" icon={PaintBucket} active={colorPaletteOpen} onClick={onToggleColorPalette} disabled={!canUseRegistry} />
-            <ToolbarButton label="Undo" icon={Undo2} onClick={() => runAnnotationHistory('undo')} disabled={!canUseRegistry} />
-            <ToolbarButton label="Redo" icon={Redo2} onClick={() => runAnnotationHistory('redo')} disabled={!canUseRegistry} />
+            <ToolbarButton
+              label="Colors"
+              icon={PaintBucket}
+              active={colorPaletteOpen}
+              disabled={!canUseRegistry}
+              onClick={toggleColorPalette}
+            />
+            <ToolbarButton
+              label="Undo"
+              icon={Undo2}
+              disabled={!canUseRegistry}
+              onClick={() => runAnnotationHistory('undo')}
+            />
+            <ToolbarButton
+              label="Redo"
+              icon={Redo2}
+              disabled={!canUseRegistry}
+              onClick={() => runAnnotationHistory('redo')}
+            />
           </div>
           {renderPersistentControls()}
         </FloatingToolbar>

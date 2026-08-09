@@ -13,8 +13,7 @@ pnpm build:linux
 pnpm build:windows
 ```
 
-Artifacts are written to `release/launcher/pdf.ts` and
-`release/launcher/pdf.ts.exe`.
+Artifacts are written to `release/pdf.ts` and `release/pdf.ts.exe`.
 
 ## Build
 
@@ -28,5 +27,9 @@ pnpm build:chrome
 # VS Code extension
 pnpm build:vscode
 ```
+
+Extension directories are written to `release/chrome-extension` and
+`release/vscode-extension`; packaged `.zip` and `.vsix` files are written
+directly to `release`.
 
 <img src="./assets/screenshot.png" width="300" alt="PDF.ts Viewer screenshot" />

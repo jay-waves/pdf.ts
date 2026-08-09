@@ -28,13 +28,11 @@ type Resource struct {
 
 type WriteResult struct {
 	Version string `json:"version"`
-	Name    string `json:"name"`
 }
 
 type Conflict struct {
-	Code           string `json:"code"`
-	Message        string `json:"message"`
-	CurrentVersion string `json:"currentVersion"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 type CopyResult struct {
@@ -57,8 +55,6 @@ func NewResource(path string) (*Resource, error) {
 		modTime: info.ModTime(),
 	}, nil
 }
-
-func (resource *Resource) Path() string { return resource.path }
 
 func (resource *Resource) Serve(response http.ResponseWriter, request *http.Request) error {
 	file, err := os.Open(resource.path)
@@ -99,9 +95,8 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 	}
 	if current != expected {
 		return nil, &Conflict{
-			Code:           "version_conflict",
-			Message:        "The document changed on disk after it was opened.",
-			CurrentVersion: current,
+			Code:    "version_conflict",
+			Message: "The document changed on disk after it was opened.",
 		}, nil
 	}
 
@@ -145,9 +140,8 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 	}
 	if rechecked != expected {
 		return nil, &Conflict{
-			Code:           "version_conflict",
-			Message:        "The document changed on disk while the new version was being saved.",
-			CurrentVersion: rechecked,
+			Code:    "version_conflict",
+			Message: "The document changed on disk while the new version was being saved.",
 		}, nil
 	}
 	if err := atomicReplace(tempPath, resource.path); err != nil {
@@ -163,7 +157,7 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 		resource.modTime = info.ModTime()
 	}
 	resource.mutex.Unlock()
-	return &WriteResult{Version: version, Name: filepath.Base(resource.path)}, nil, nil
+	return &WriteResult{Version: version}, nil, nil
 }
 
 func (resource *Resource) SaveConflictCopy(response http.ResponseWriter, request *http.Request) (*CopyResult, error) {

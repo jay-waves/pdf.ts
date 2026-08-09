@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __PDF_TS_BUILD_INFO__: string;
+
 interface FileSystemHandlePermissionDescriptor {
   mode?: 'read' | 'readwrite';
 }

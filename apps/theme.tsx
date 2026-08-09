@@ -106,9 +106,7 @@ const LIGHT_THEME_STORAGE_KEY = 'pdf-viewer-light-theme-v2';
 const DARK_THEME_STORAGE_KEY = 'pdf-viewer-dark-theme-v2';
 const TOOLBAR_PIN_STORAGE_KEY = 'pdf-toolbar-pinned-v1';
 export const VIEWER_THEME_CHANGE_EVENT = 'pdf-ts-viewer-theme-change';
-let automaticThemeListenerInstalled = false;
 let viewerThemeSettings: ViewerThemeSettings | null = null;
-let viewerColorMode: ViewerColorMode = 'light';
 let manualColorMode: ViewerColorMode | null = null;
 
 function findViewerTheme(value: unknown) {
@@ -142,16 +140,12 @@ export function setStoredToolbarPinned(pinned: boolean) {
   platform.setPreference(TOOLBAR_PIN_STORAGE_KEY, pinned ? 'true' : 'false');
 }
 
-function getLegacyStoredTheme(): ViewerTheme {
-  return findViewerTheme(platform.getPreference(THEME_STORAGE_KEY))?.id ?? 'light';
-}
-
 function loadViewerThemeSettings(): ViewerThemeSettings {
   if (platform.viewerThemePolicy === 'host') {
     return { light: 'light', dark: 'dark' };
   }
 
-  const legacyTheme = getLegacyStoredTheme();
+  const legacyTheme = findViewerTheme(platform.getPreference(THEME_STORAGE_KEY))?.id ?? 'light';
   const storedLight = platform.getPreference(LIGHT_THEME_STORAGE_KEY);
   const storedDark = platform.getPreference(DARK_THEME_STORAGE_KEY);
   const light = isLightViewerTheme(storedLight)
@@ -227,7 +221,6 @@ function applyViewerTheme(theme: ViewerTheme) {
 }
 
 function applyViewerColorMode(mode: ViewerColorMode) {
-  viewerColorMode = mode;
   applyViewerTheme(getThemeSettings()[mode]);
 }
 
@@ -243,7 +236,7 @@ export function setViewerThemeSettings(settings: ViewerThemeSettings) {
 
 export function toggleViewerColorMode() {
   if (!supportsViewerThemeSettings()) return;
-  manualColorMode = viewerColorMode === 'dark' ? 'light' : 'dark';
+  manualColorMode = isDarkViewerTheme(getCurrentViewerTheme()) ? 'light' : 'dark';
   applyViewerColorMode(manualColorMode);
 }
 
@@ -251,8 +244,6 @@ export function initializeViewerTheme() {
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   applyViewerColorMode(getSystemColorMode(media));
 
-  if (automaticThemeListenerInstalled) return;
-  automaticThemeListenerInstalled = true;
   const syncAutomaticTheme = () => {
     manualColorMode = null;
     applyViewerColorMode(getSystemColorMode(media));

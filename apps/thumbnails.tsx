@@ -1,27 +1,40 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import { PdfErrorCode, type PdfErrorReason, type Task } from '@embedpdf/models';
+import { PdfErrorCode } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { PanelContent, PanelState } from './components';
-import { getActiveDocumentId, getPluginCapability, scrollToPagePreservingViewport, type ScrollCapability } from './utils';
+import { scrollToPagePreservingViewport } from './page-navigation';
+import {
+  getActiveDocumentId,
+  getPluginCapability,
+  type ScrollCapability,
+} from './utils';
 import styles from './thumbnails.module.css';
 
 const THUMBNAIL_RENDER_HEIGHT = 112;
-const THUMBNAIL_RENDER_CONCURRENCY = 2;
 
 type DocumentPage = { index?: number; size: { width: number; height: number }; rotation?: number };
 type ThumbnailItem = { pageIndex: number; aspectRatio: number };
-type ThumbnailRenderEntry = {
-  task?: Task<Blob, PdfErrorReason>;
-  url?: string;
-};
+const visibilityCallbacks = new Map<Element, (visible: boolean) => void>();
+let visibilityObserver: IntersectionObserver | undefined;
 
-function getTotalPages(registry: PluginRegistry | undefined, documentId: string | null, fallback: number) {
-  if (fallback > 0) return fallback;
-
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  return documentId && scroll ? scroll.forDocument(documentId).getTotalPages() : 0;
+function observeVisibility(element: Element, onChange: (visible: boolean) => void) {
+  visibilityCallbacks.set(element, onChange);
+  visibilityObserver ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      visibilityCallbacks.get(entry.target)?.(entry.isIntersecting);
+    }
+  }, { rootMargin: '100% 0px' });
+  visibilityObserver.observe(element);
+  return () => {
+    visibilityObserver?.unobserve(element);
+    visibilityCallbacks.delete(element);
+    if (!visibilityCallbacks.size) {
+      visibilityObserver?.disconnect();
+      visibilityObserver = undefined;
+    }
+  };
 }
 
 function getDocumentInfo(registry: PluginRegistry, documentId: string) {
@@ -55,113 +68,87 @@ function getThumbnailItem(
   };
 }
 
-class ThumbnailRenderWindow {
-  private readonly entries = new Map<number, ThumbnailRenderEntry>();
-  private readonly queue: number[] = [];
-  private visiblePages = new Set<number>();
-  private activeRenders = 0;
-  private disposed = false;
+function ThumbnailCard({
+  registry,
+  documentId,
+  page,
+  item,
+  documentRotation,
+  current,
+  onSelect,
+}: {
+  registry: PluginRegistry;
+  documentId: string;
+  page: DocumentPage | undefined;
+  item: ThumbnailItem;
+  documentRotation: number;
+  current: boolean;
+  onSelect(): void;
+}) {
+  const cardRef = useRef<HTMLButtonElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [url, setUrl] = useState<string>();
 
-  constructor(
-    private readonly registry: PluginRegistry,
-    private readonly documentId: string,
-    private readonly pages: DocumentPage[],
-    private readonly documentRotation: number,
-    private readonly onChange: () => void,
-  ) {}
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    return observeVisibility(card, setVisible);
+  }, []);
 
-  setVisiblePages(pageIndexes: Set<number>) {
-    this.visiblePages = new Set(
-      [...pageIndexes].filter((pageIndex) => this.pages[pageIndex]),
-    );
+  useEffect(() => {
+    if (!page || !visible) return;
+    const render = getPluginCapability<RenderCapability>(registry, 'render');
+    if (!render) return;
+    let objectUrl: string | undefined;
+    const rotation = ((page.rotation ?? 0) + documentRotation) % 4;
+    const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
+    const task = render.forDocument(documentId).renderPageRect({
+      pageIndex: page.index ?? item.pageIndex,
+      rect: { origin: { x: 0, y: 0 }, size: page.size },
+      options: {
+        scaleFactor: THUMBNAIL_RENDER_HEIGHT / rotatedHeight,
+        dpr: Math.min(window.devicePixelRatio || 1, 1.5),
+        rotation,
+      },
+    });
+    task.wait((blob) => {
+      objectUrl = URL.createObjectURL(blob);
+      setUrl(objectUrl);
+    }, () => {});
 
-    for (const pageIndex of this.entries.keys()) {
-      if (!this.visiblePages.has(pageIndex)) this.remove(pageIndex, 'Thumbnail left the render window');
-    }
-
-    for (const pageIndex of this.visiblePages) this.request(pageIndex);
-    this.pump();
-  }
-
-  getUrl(pageIndex: number) {
-    return this.entries.get(pageIndex)?.url;
-  }
-
-  dispose() {
-    this.disposed = true;
-    for (const pageIndex of this.entries.keys()) {
-      this.remove(pageIndex, 'Thumbnail cache disposed');
-    }
-    this.queue.length = 0;
-  }
-
-  private request(pageIndex: number) {
-    if (this.entries.has(pageIndex)) return;
-
-    this.entries.set(pageIndex, {});
-    this.queue.push(pageIndex);
-  }
-
-  private pump() {
-    if (this.disposed) return;
-
-    while (this.activeRenders < THUMBNAIL_RENDER_CONCURRENCY && this.queue.length) {
-      const pageIndex = this.queue.shift()!;
-      const entry = this.entries.get(pageIndex);
-      const page = this.pages[pageIndex];
-      if (!entry || entry.task || entry.url || !this.visiblePages.has(pageIndex) || !page) continue;
-
-      const render = getPluginCapability<RenderCapability>(this.registry, 'render');
-      if (!render) {
-        this.entries.delete(pageIndex);
-        continue;
-      }
-
-      const rotation = ((page.rotation ?? 0) + this.documentRotation) % 4;
-      const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
-      const task = render.forDocument(this.documentId).renderPageRect({
-        pageIndex: page.index ?? pageIndex,
-        rect: { origin: { x: 0, y: 0 }, size: page.size },
-        options: {
-          scaleFactor: THUMBNAIL_RENDER_HEIGHT / rotatedHeight,
-          dpr: Math.min(window.devicePixelRatio || 1, 1.5),
-          rotation,
-        },
+    return () => {
+      task.abort({
+        code: PdfErrorCode.Cancelled,
+        message: 'Thumbnail left the virtual window',
       });
-      entry.task = task;
-      this.activeRenders += 1;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [documentId, documentRotation, item.pageIndex, page, registry, visible]);
 
-      task.wait(
-        (blob) => this.finish(pageIndex, entry, blob),
-        () => this.finish(pageIndex, entry),
-      );
-    }
-  }
-
-  private finish(pageIndex: number, entry: ThumbnailRenderEntry, blob?: Blob) {
-    this.activeRenders = Math.max(0, this.activeRenders - 1);
-    if (this.disposed || this.entries.get(pageIndex) !== entry) {
-      this.pump();
-      return;
-    }
-
-    if (blob) {
-      entry.task = undefined;
-      entry.url = URL.createObjectURL(blob);
-    } else {
-      this.entries.delete(pageIndex);
-    }
-    this.onChange();
-    this.pump();
-  }
-
-  private remove(pageIndex: number, reason: string) {
-    const entry = this.entries.get(pageIndex);
-    if (!entry) return;
-    this.entries.delete(pageIndex);
-    if (entry.url) URL.revokeObjectURL(entry.url);
-    entry.task?.abort({ code: PdfErrorCode.Cancelled, message: reason });
-  }
+  const pageNumber = item.pageIndex + 1;
+  return (
+    <button
+      ref={cardRef}
+      type="button"
+      className={`${styles.card} group`}
+      data-page-index={item.pageIndex}
+      data-current={current ? 'true' : undefined}
+      aria-label={`Page ${pageNumber}`}
+      onClick={onSelect}
+    >
+      <span className={styles.frame} style={{ aspectRatio: item.aspectRatio }}>
+        {visible && url ? (
+          <img
+            src={url}
+            alt=""
+            draggable={false}
+            className="size-full object-contain"
+          />
+        ) : null}
+      </span>
+      <span className="mt-1 block text-muted tabular-nums group-data-[current=true]:text-accent">{pageNumber}</span>
+    </button>
+  );
 }
 
 function ThumbnailFlow({
@@ -179,90 +166,49 @@ function ThumbnailFlow({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), pageCount - 1);
-  const [rotationRevision, setRotationRevision] = useState(0);
-  const { pages, rotation: documentRotation } = getDocumentInfo(registry, documentId);
+  const documentInfo = getDocumentInfo(registry, documentId);
+  const pages = documentInfo.pages;
+  const [documentRotation, setDocumentRotation] = useState(documentInfo.rotation);
   const items = useMemo(
     () => Array.from(
       { length: pageCount },
       (_, pageIndex) => getThumbnailItem(pages[pageIndex], pageIndex, documentRotation),
     ),
-    [documentRotation, pageCount, pages, rotationRevision],
-  );
-  const [, setRenderRevision] = useState(0);
-  const renderWindow = useMemo(
-    () => new ThumbnailRenderWindow(registry, documentId, pages, documentRotation, () => setRenderRevision((value) => value + 1)),
-    [documentId, documentRotation, pages, registry, rotationRevision],
+    [documentRotation, pageCount, pages],
   );
 
-  useEffect(() => () => renderWindow.dispose(), [renderWindow]);
-  useEffect(() => {
-    const root = scrollRef.current;
-    if (!root) return;
-    const visiblePages = new Set<number>();
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const pageIndex = Number((entry.target as HTMLElement).dataset.thumbnailPageIndex);
-        if (!Number.isInteger(pageIndex)) continue;
-        if (entry.isIntersecting) visiblePages.add(pageIndex);
-        else visiblePages.delete(pageIndex);
-      }
-      renderWindow.setVisiblePages(visiblePages);
-    }, { root, rootMargin: `${root.clientHeight}px 0px` });
-    root.querySelectorAll<HTMLElement>('[data-thumbnail-page-index]').forEach((element) => {
-      observer.observe(element);
-    });
-
-    return () => observer.disconnect();
-  }, [renderWindow]);
   useEffect(() => {
     const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
-    return rotate?.forDocument(documentId).onRotateChange(() => setRotationRevision((value) => value + 1));
+    const scope = rotate?.forDocument(documentId);
+    if (!scope) return;
+    setDocumentRotation(scope.getRotation());
+    return scope.onRotateChange((rotation) => setDocumentRotation(rotation));
   }, [documentId, registry]);
 
   useLayoutEffect(() => {
     const root = scrollRef.current;
-    if (!root) return;
-    const current = root.querySelector<HTMLElement>(
-      `[data-thumbnail-page-index="${currentPageIndex}"]`,
-    );
-    if (current) {
-      root.scrollTop += current.getBoundingClientRect().top - root.getBoundingClientRect().top;
-    }
+    const current = root?.querySelector<HTMLElement>(`[data-page-index="${currentPageIndex}"]`);
+    current?.scrollIntoView({ block: 'start' });
   }, [currentPageIndex]);
 
   return (
     <div className="h-full overflow-y-auto" ref={scrollRef}>
       <div className={styles.grid}>
-        {items.map(({ pageIndex, aspectRatio }) => {
-          const pageNumber = pageIndex + 1;
-          const thumbnailUrl = renderWindow.getUrl(pageIndex);
-          return (
-            <button
-              key={pageIndex}
-              type="button"
-              className={`${styles.card} group`}
-              data-thumbnail-page-index={pageIndex}
-              data-current={pageNumber === currentPageNumber ? 'true' : undefined}
-              aria-label={`Page ${pageNumber}`}
-              onClick={() => {
-                scrollToPagePreservingViewport(registry, pageNumber);
-                onClose();
-              }}
-            >
-              <span className={styles.frame} style={{ aspectRatio }}>
-                {thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt=""
-                    draggable={false}
-                    className="size-full object-contain"
-                  />
-                ) : null}
-              </span>
-              <span className="mt-1 block text-muted tabular-nums group-data-[current=true]:text-accent">{pageNumber}</span>
-            </button>
-          );
-        })}
+        {items.map((item) => (
+          <ThumbnailCard
+            key={item.pageIndex}
+            registry={registry}
+            documentId={documentId}
+            page={pages[item.pageIndex]}
+            item={item}
+            documentRotation={documentRotation}
+            current={item.pageIndex === currentPageIndex}
+            onSelect={() => {
+              scrollToPagePreservingViewport(registry, item.pageIndex + 1);
+              onClose();
+            }}
+          />
+        ))}
       </div>
     </div>
   );
@@ -282,7 +228,10 @@ export function Thumbnails({
   onClose: () => void;
 }) {
   const documentId = registry ? getActiveDocumentId(registry) : null;
-  const pageCount = getTotalPages(registry, documentId, totalPages);
+  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
+  const pageCount = totalPages || (documentId && scroll
+    ? scroll.forDocument(documentId).getTotalPages()
+    : 0);
 
   return (
     <PanelContent overflow="hidden" hidden={!open}>

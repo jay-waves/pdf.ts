@@ -6,6 +6,7 @@ import {
 } from '@embedpdf/engines/pdfium';
 import { RemoteExecutor } from '@embedpdf/engines/pdfium-worker-engine';
 import type {
+  ImageConversionTypes,
   IPdfiumExecutor,
   PdfDocumentObject,
   PdfEngine,
@@ -15,20 +16,17 @@ import type {
 import type { PdfRenderTheme } from './pdf-render-theme';
 import { getCurrentViewerTheme, getPdfRenderTheme } from './theme';
 
-export interface PdfIncrementalRevision {
+interface PdfIncrementalRevision {
   baseSize: number;
   delta: ArrayBuffer;
 }
 
-type IncrementalBridge = {
-  executor: RemoteExecutor;
-};
-
-const bridges = new WeakMap<object, IncrementalBridge>();
+const executors = new WeakMap<PdfEngine<Blob>, RemoteExecutor>();
 
 export function usePdfTsPdfiumEngine(options: {
   wasmUrl: string;
   fontFallback: FontFallbackConfig | null;
+  defaultImageType: ImageConversionTypes;
 }) {
   const [state, setState] = useState<{
     engine: PdfEngine<Blob> | null;
@@ -40,34 +38,41 @@ export function usePdfTsPdfiumEngine(options: {
     const worker = new Worker(new URL('./pdfium-worker.ts', import.meta.url), { type: 'module' });
     const executor = new RemoteExecutor(worker, options);
     const engine = new PdfiumEngine<Blob>(executor as unknown as IPdfiumExecutor, {
-      imageConverter: browserImageDataToBlobConverter,
+      imageConverter: (getImageData, imageType, quality) => browserImageDataToBlobConverter(
+        getImageData,
+        imageType ?? options.defaultImageType,
+        quality,
+      ),
     });
-    bridges.set(engine, { executor });
+    executors.set(engine, executor);
 
     const readyTask = (executor as unknown as {
       readyTask: Task<boolean, { code: number; message: string }>;
     }).readyTask;
-    readyTask.wait(
-      () => setPdfRenderTheme(engine, getPdfRenderTheme(getCurrentViewerTheme())).wait(
-        () => setState({ engine, isLoading: false, error: null }),
-        (failure) => setState({
-          engine: null,
-          isLoading: false,
-          error: new Error(failure.reason.message),
-        }),
-      ),
-      (failure) => setState({
+    let active = true;
+    const fail: Parameters<typeof readyTask.wait>[1] = (failure) => {
+      if (!active) return;
+      setState({
         engine: null,
         isLoading: false,
         error: new Error(failure.reason.message),
-      }),
+      });
+    };
+    const finish = () => {
+      if (active) setState({ engine, isLoading: false, error: null });
+    };
+
+    readyTask.wait(
+      () => setPdfRenderTheme(engine, getPdfRenderTheme(getCurrentViewerTheme())).wait(finish, fail),
+      fail,
     );
 
     return () => {
-      bridges.delete(engine);
+      active = false;
+      executors.delete(engine);
       void engine.destroy().toPromise().catch(() => worker.terminate());
     };
-  }, [options.fontFallback, options.wasmUrl]);
+  }, [options.defaultImageType, options.fontFallback, options.wasmUrl]);
 
   return state;
 }
@@ -76,9 +81,9 @@ export function setPdfRenderTheme(
   engine: PdfEngine<Blob>,
   theme: PdfRenderTheme | null,
 ): PdfTask<boolean> {
-  const bridge = bridges.get(engine);
-  if (!bridge) throw new Error('This PDF engine does not support render themes.');
-  return (bridge.executor as unknown as {
+  const executor = executors.get(engine);
+  if (!executor) throw new Error('This PDF engine does not support render themes.');
+  return (executor as unknown as {
     send(method: string, args: unknown[]): PdfTask<boolean>;
   }).send('setRenderTheme', [theme]);
 }
@@ -87,16 +92,12 @@ export function savePdfIncrementally(
   engine: PdfEngine<Blob>,
   document: PdfDocumentObject,
 ): PdfTask<PdfIncrementalRevision> {
-  const bridge = bridges.get(engine);
-  if (!bridge) {
+  const executor = executors.get(engine);
+  if (!executor) {
     throw new Error('This PDF engine does not support incremental save.');
   }
 
-  return (bridge.executor as unknown as {
+  return (executor as unknown as {
     send(method: string, args: unknown[]): PdfTask<PdfIncrementalRevision>;
   }).send('saveIncremental', [document]);
-}
-
-export function isIncrementalSaveAvailable(engine: PdfEngine<Blob>) {
-  return bridges.has(engine);
 }

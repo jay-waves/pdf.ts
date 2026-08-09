@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-var allowedExtensions = map[string]bool{
-	".pdf": true,
-}
-
 func ResolveTarget(argument string) (string, error) {
 	raw := strings.TrimSpace(strings.Trim(argument, `"`))
 	if raw == "" {
@@ -32,7 +28,7 @@ func ResolveTarget(argument string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", errors.New("document target must be a regular file")
 	}
-	if !allowedExtensions[strings.ToLower(filepath.Ext(canonical))] {
+	if !strings.EqualFold(filepath.Ext(canonical), ".pdf") {
 		return "", errors.New("pdf.ts only opens PDF files")
 	}
 	return canonical, nil

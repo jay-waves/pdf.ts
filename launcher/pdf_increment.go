@@ -47,9 +47,8 @@ func (resource *Resource) ReplacePdfIncrement(
 	}
 	if current != expected {
 		return nil, &Conflict{
-			Code:           "version_conflict",
-			Message:        "The document changed on disk after it was opened.",
-			CurrentVersion: current,
+			Code:    "version_conflict",
+			Message: "The document changed on disk after it was opened.",
 		}, nil
 	}
 
@@ -124,9 +123,8 @@ func (resource *Resource) ReplacePdfIncrement(
 	}
 	if rechecked != expected {
 		return nil, &Conflict{
-			Code:           "version_conflict",
-			Message:        "The document changed on disk while the incremental revision was being saved.",
-			CurrentVersion: rechecked,
+			Code:    "version_conflict",
+			Message: "The document changed on disk while the incremental revision was being saved.",
 		}, nil
 	}
 	if err := atomicReplace(tempPath, resource.path); err != nil {
@@ -143,5 +141,5 @@ func (resource *Resource) ReplacePdfIncrement(
 		resource.modTime = info.ModTime()
 	}
 	resource.mutex.Unlock()
-	return &WriteResult{Version: version, Name: filepath.Base(resource.path)}, nil, nil
+	return &WriteResult{Version: version}, nil, nil
 }

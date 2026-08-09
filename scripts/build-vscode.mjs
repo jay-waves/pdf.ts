@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const extensionDir = resolve(repoRoot, 'release', 'vscode', 'extension');
+const extensionDir = resolve(repoRoot, 'release', 'vscode-extension');
 const rootPackage = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
 
 rmSync(extensionDir, { recursive: true, force: true });
@@ -25,7 +25,7 @@ extensionPackage.version = rootPackage.version;
 extensionPackage.icon = 'icon.png';
 writeFileSync(resolve(extensionDir, 'package.json'), `${JSON.stringify(extensionPackage, null, 2)}\n`);
 
-const vsixPath = resolve(repoRoot, 'release', 'vscode', `pdf-ts-vscode-v${rootPackage.version}.vsix`);
+const vsixPath = resolve(repoRoot, 'release', `pdf-ts-vscode-v${rootPackage.version}.vsix`);
 rmSync(vsixPath, { force: true });
 const vsce = spawnSync('pnpm', [
   'exec', 'vsce', 'package', '--no-dependencies', '--skip-license', '--out', vsixPath,

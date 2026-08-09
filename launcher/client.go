@@ -96,8 +96,7 @@ func daemonAddress(stateDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	listenAddress, _ := registry.Endpoint()
-	return listenAddress, nil
+	return registry.Endpoint(), nil
 }
 
 func daemonRequest(method, listenAddress, path string, body io.Reader) (*http.Response, error) {

@@ -3,12 +3,12 @@ import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
 import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import { platform } from '#platform';
+import { restoreScrollAnchor } from './page-navigation';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
   getDocumentScrollStrategy,
   getPluginCapability,
-  restoreScrollAnchor,
   type ScrollCapability,
 } from './utils';
 
@@ -48,7 +48,6 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
       pageNumber: scroll.forDocument(documentId).getCurrentPage(),
       scrollStrategy: strategy,
       spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
-      updatedAt: new Date().toISOString(),
     };
   };
 

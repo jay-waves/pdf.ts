@@ -15,7 +15,7 @@ import {
   type IHasher,
 } from 'hash-wasm';
 import type { PdfSignatureObject } from '@embedpdf/models';
-import type { ManagedResource } from './platform/types';
+import type { ManagedResource } from '../platform/types';
 
 export interface SignatureCertificateInfo {
   signer: string;
@@ -49,6 +49,7 @@ interface SignatureVerificationWork {
 const CONTENT_TYPE_ATTRIBUTE = '1.2.840.113549.1.9.3';
 const MESSAGE_DIGEST_ATTRIBUTE = '1.2.840.113549.1.9.4';
 const RSA_ENCRYPTION = '1.2.840.113549.1.1.1';
+const certificateInfoCache = new WeakMap<ArrayBuffer, SignatureCertificateInfo | null>();
 
 const HASH_FACTORIES: Record<string, () => Promise<IHasher>> = {
   '1.3.14.3.2.26': createSHA1,
@@ -134,18 +135,26 @@ function parseSignedData(contents: ArrayBuffer) {
   return new SignedData({ schema: contentInfo.content });
 }
 
+function toCertificateInfo(certificate: Certificate): SignatureCertificateInfo {
+  return {
+    signer: formatDistinguishedName(certificate.subject),
+    issuer: formatDistinguishedName(certificate.issuer),
+    validFrom: certificate.notBefore.value,
+    validUntil: certificate.notAfter.value,
+  };
+}
+
 export function getSignatureCertificateInfo(contents: ArrayBuffer): SignatureCertificateInfo | null {
+  const cached = certificateInfoCache.get(contents);
+  if (cached !== undefined || certificateInfoCache.has(contents)) return cached ?? null;
   try {
     const certificate = findSignerCertificate(parseSignedData(contents));
-    if (!certificate) return null;
-    return {
-      signer: formatDistinguishedName(certificate.subject),
-      issuer: formatDistinguishedName(certificate.issuer),
-      validFrom: certificate.notBefore.value,
-      validUntil: certificate.notAfter.value,
-    };
+    const info = certificate ? toCertificateInfo(certificate) : null;
+    certificateInfoCache.set(contents, info);
+    return info;
   } catch (error) {
     console.info('[pdf-ts] unable to parse signature certificate', error);
+    certificateInfoCache.set(contents, null);
     return null;
   }
 }
@@ -195,6 +204,7 @@ async function createVerificationWork(signature: PdfSignatureObject, index: numb
   const signerInfo = signedData.signerInfos[0];
   const certificate = findSignerCertificate(signedData);
   if (!signerInfo || !certificate) throw new Error('The signer certificate is unavailable.');
+  certificateInfoCache.set(signature.contents, toCertificateInfo(certificate));
   const createHasher = HASH_FACTORIES[signerInfo.digestAlgorithm.algorithmId];
   if (!createHasher) {
     throw new Error(`Unsupported digest algorithm: ${signerInfo.digestAlgorithm.algorithmId}`);

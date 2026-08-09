@@ -23,14 +23,7 @@ const (
 	DefaultPublicHost    = "pdf.ts.localhost"
 )
 
-type Options struct {
-	ListenAddress string
-	PublicHost    string
-	StateDir      string
-}
-
 type App struct {
-	options    Options
 	registry   *Registry
 	resources  map[string]*Resource
 	mutex      sync.Mutex
@@ -47,19 +40,12 @@ type openResult struct {
 	URL string `json:"url"`
 }
 
-func New(options Options) (*App, error) {
-	if options.ListenAddress == "" {
-		options.ListenAddress = DefaultListenAddress
-	}
-	if options.PublicHost == "" {
-		options.PublicHost = DefaultPublicHost
-	}
-	registry, err := OpenRegistry(options.StateDir)
+func New() (*App, error) {
+	registry, err := OpenRegistry("")
 	if err != nil {
 		return nil, err
 	}
 	return &App{
-		options:   options,
 		registry:  registry,
 		resources: make(map[string]*Resource),
 		done:      make(chan error, 1),
@@ -70,10 +56,10 @@ func (app *App) Start(ctx context.Context) (string, error) {
 	if err := app.acquireDaemonLock(); err != nil {
 		return "", err
 	}
-	listener, err := net.Listen("tcp", app.options.ListenAddress)
+	listener, err := net.Listen("tcp", DefaultListenAddress)
 	if err != nil {
 		app.releaseDaemonLock()
-		return "", fmt.Errorf("listen on %s: %w", app.options.ListenAddress, err)
+		return "", fmt.Errorf("listen on %s: %w", DefaultListenAddress, err)
 	}
 	tcpAddress, ok := listener.Addr().(*net.TCPAddr)
 	if !ok || !tcpAddress.IP.IsLoopback() {
@@ -82,8 +68,8 @@ func (app *App) Start(ctx context.Context) (string, error) {
 		return "", errors.New("pdf.ts must listen on a loopback address")
 	}
 	app.listener = listener
-	app.origin = "http://" + net.JoinHostPort(app.options.PublicHost, fmt.Sprint(tcpAddress.Port))
-	if err := app.registry.SetEndpoint(listener.Addr().String(), app.origin); err != nil {
+	app.origin = "http://" + net.JoinHostPort(DefaultPublicHost, fmt.Sprint(tcpAddress.Port))
+	if err := app.registry.SetEndpoint(listener.Addr().String()); err != nil {
 		_ = listener.Close()
 		app.releaseDaemonLock()
 		return "", err
@@ -338,23 +324,7 @@ func (app *App) handlePdfIncrement(resource *Resource, response http.ResponseWri
 		return
 	}
 	if err != nil {
-		status := http.StatusInternalServerError
-		code := "write_failed"
-		switch {
-		case errors.Is(err, errInvalidPdfIncrement):
-			status = http.StatusBadRequest
-			code = "invalid_pdf_increment"
-		case errors.Is(err, errPreconditionRequired):
-			status = http.StatusPreconditionRequired
-			code = "version_required"
-		case errors.Is(err, errDocumentLocked):
-			status = http.StatusLocked
-			code = "document_locked"
-		case errors.Is(err, os.ErrNotExist):
-			status = http.StatusGone
-			code = "document_missing"
-		}
-		writeJSONError(response, status, code, err.Error())
+		writeMutationError(response, err, "write_failed")
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
@@ -377,19 +347,7 @@ func (app *App) handleResource(resource *Resource, response http.ResponseWriter,
 			return
 		}
 		if err != nil {
-			status := http.StatusInternalServerError
-			code := "write_failed"
-			if errors.Is(err, errPreconditionRequired) {
-				status = http.StatusPreconditionRequired
-				code = "version_required"
-			} else if errors.Is(err, errDocumentLocked) {
-				status = http.StatusLocked
-				code = "document_locked"
-			} else if errors.Is(err, os.ErrNotExist) {
-				status = http.StatusGone
-				code = "document_missing"
-			}
-			writeJSONError(response, status, code, err.Error())
+			writeMutationError(response, err, "write_failed")
 			return
 		}
 		writeJSON(response, http.StatusOK, result)
@@ -411,24 +369,32 @@ func (app *App) handleCopy(resource *Resource, response http.ResponseWriter, req
 	}
 	result, err := resource.SaveConflictCopy(response, request)
 	if err != nil {
-		status := http.StatusInternalServerError
-		code := "copy_failed"
-		if errors.Is(err, errDocumentLocked) {
-			status = http.StatusLocked
-		} else if errors.Is(err, os.ErrNotExist) {
-			status = http.StatusGone
-			code = "document_missing"
-		}
-		writeJSONError(response, status, code, err.Error())
+		writeMutationError(response, err, "copy_failed")
 		return
 	}
 	writeJSON(response, http.StatusCreated, result)
 }
 
+func writeMutationError(response http.ResponseWriter, err error, fallbackCode string) {
+	status := http.StatusInternalServerError
+	code := fallbackCode
+	switch {
+	case errors.Is(err, errInvalidPdfIncrement):
+		status, code = http.StatusBadRequest, "invalid_pdf_increment"
+	case errors.Is(err, errPreconditionRequired):
+		status, code = http.StatusPreconditionRequired, "version_required"
+	case errors.Is(err, errDocumentLocked):
+		status, code = http.StatusLocked, "document_locked"
+	case errors.Is(err, os.ErrNotExist):
+		status, code = http.StatusGone, "document_missing"
+	}
+	writeJSONError(response, status, code, err.Error())
+}
+
 func (app *App) resourceFor(document Document) (*Resource, error) {
 	app.mutex.Lock()
 	defer app.mutex.Unlock()
-	if resource := app.resources[document.ID]; resource != nil && sameDocumentPath(resource.Path(), document.Path) {
+	if resource := app.resources[document.ID]; resource != nil && sameDocumentPath(resource.path, document.Path) {
 		return resource, nil
 	}
 	resource, err := NewResource(document.Path)

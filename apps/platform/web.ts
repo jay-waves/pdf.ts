@@ -6,13 +6,12 @@ import {
 } from './browser-storage';
 import {
   BrowserPdfFileHandle,
-  storeFileHandle,
+  createDownloadWriter,
 } from './browser-file-handle';
 import { blobResource } from './resources';
 import { translateWithInstalledModel } from './browser-translation';
 import type { PdfFileHandle, PlatformDocument, ViewerPlatform } from './types';
-
-const RECENT_FILE_KEY = 'web:recent-pdf';
+import { getExternalUrl } from '../url';
 
 class DownloadPdfFileHandle implements PdfFileHandle {
   constructor(readonly name: string) {}
@@ -22,22 +21,7 @@ class DownloadPdfFileHandle implements PdfFileHandle {
       'Direct saving is not available for this file. Download a copy instead?',
     );
     if (!shouldDownload) return null;
-
-    const fileName = this.name;
-    return {
-      async save(data: ArrayBuffer) {
-        const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = fileName;
-        anchor.hidden = true;
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 0);
-        return true;
-      },
-    };
+    return createDownloadWriter(this.name);
   }
 }
 
@@ -54,7 +38,6 @@ export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
     return {
       wasm: { url: bundledWasmUrl },
-      document: undefined,
     };
   },
   openLocalDocument(file) {
@@ -69,21 +52,15 @@ export const platform: ViewerPlatform = {
         excludeAcceptAllOption: true,
         multiple: false,
       });
-      await storeFileHandle(RECENT_FILE_KEY, handle);
       return documentFromFile(
         await handle.getFile(),
-        new BrowserPdfFileHandle(handle, RECENT_FILE_KEY),
+        new BrowserPdfFileHandle(handle),
       );
     },
   } : {}),
   openExternal(url) {
-    try {
-      const target = new URL(url, window.location.href);
-      if (target.protocol !== 'http:' && target.protocol !== 'https:') return;
-      window.open(target.href, '_blank', 'noopener,noreferrer');
-    } catch {
-      // Ignore malformed or unsafe targets embedded in a PDF.
-    }
+    const target = getExternalUrl(url, window.location.href);
+    if (target) window.open(target, '_blank', 'noopener,noreferrer');
   },
   translate: translateWithInstalledModel,
   getPreference,

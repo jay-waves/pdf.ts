@@ -1,4 +1,5 @@
 import { get, update } from 'idb-keyval';
+import { downloadPdf } from './browser-download';
 import type { PdfFileHandle } from './types';
 
 const FILE_HANDLES_KEY = 'pdf-ts-file-handles-v3';
@@ -29,12 +30,21 @@ export async function verifyFilePermission(
     (request && await handle.requestPermission(options) === 'granted');
 }
 
+export function createDownloadWriter(fileName: string) {
+  return {
+    async save(data: ArrayBuffer) {
+      downloadPdf(data, fileName);
+      return true;
+    },
+  };
+}
+
 export class BrowserPdfFileHandle implements PdfFileHandle {
   readonly name: string;
 
   constructor(
     readonly nativeHandle: FileSystemFileHandle,
-    private readonly storageKey: string,
+    private readonly storageKey?: string,
   ) {
     this.name = nativeHandle.name;
   }
@@ -45,22 +55,7 @@ export class BrowserPdfFileHandle implements PdfFileHandle {
         'Write permission was not granted. Download a copy instead?',
       );
       if (!shouldDownload) return null;
-
-      const fileName = this.name;
-      return {
-        async save(data: ArrayBuffer) {
-          const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-          const anchor = document.createElement('a');
-          anchor.href = url;
-          anchor.download = fileName;
-          anchor.hidden = true;
-          document.body.append(anchor);
-          anchor.click();
-          anchor.remove();
-          window.setTimeout(() => URL.revokeObjectURL(url), 0);
-          return true;
-        },
-      };
+      return createDownloadWriter(this.name);
     }
 
     const { nativeHandle, storageKey } = this;
@@ -80,10 +75,12 @@ export class BrowserPdfFileHandle implements PdfFileHandle {
           throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
         }
 
-        try {
-          await storeFileHandle(storageKey, nativeHandle);
-        } catch (error) {
-          console.warn('[pdf-ts] The PDF was saved, but its persistent file handle was not.', error);
+        if (storageKey) {
+          try {
+            await storeFileHandle(storageKey, nativeHandle);
+          } catch (error) {
+            console.warn('[pdf-ts] The PDF was saved, but its persistent file handle was not.', error);
+          }
         }
         return true;
       },

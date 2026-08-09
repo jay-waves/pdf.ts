@@ -89,10 +89,7 @@ function request<T>(
 }
 
 class VsCodePdfFileHandle implements PdfFileHandle {
-  constructor(
-    private readonly documentKey: string,
-    readonly name?: string,
-  ) {}
+  constructor(private readonly documentKey: string) {}
 
   async prepareWrite() {
     const { documentKey } = this;
@@ -132,7 +129,7 @@ export const platform: ViewerPlatform = {
         resource: documentResult.value,
         key: documentKey,
         name: documentName,
-        fileHandle: new VsCodePdfFileHandle(documentKey, documentName),
+        fileHandle: new VsCodePdfFileHandle(documentKey),
       } : undefined,
     };
   },

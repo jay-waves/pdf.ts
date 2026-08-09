@@ -2,7 +2,6 @@ export interface ReadingProgress {
   pageNumber: number;
   scrollStrategy?: string;
   spreadMode?: string;
-  updatedAt: string;
 }
 
 export interface PdfFileWriter {
@@ -22,7 +21,6 @@ export interface PdfFileWriter {
  * permission prompts must run while the save user gesture is still active.
  */
 export interface PdfFileHandle {
-  readonly name?: string;
   prepareWrite(): Promise<PdfFileWriter | null>;
 }
 

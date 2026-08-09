@@ -1,14 +1,10 @@
-import { createWriteStream, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import yazl from 'yazl';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
-const manifestPath = resolve(repoRoot, 'chrome', 'manifest.json');
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-manifest.version = packageJson.version;
-writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
 const watch = process.argv.includes('--watch');
 const vite = spawnSync('pnpm', ['exec', 'vite', 'build', ...(watch ? ['--watch'] : [])], {
@@ -20,8 +16,8 @@ if (vite.error) throw vite.error;
 if (vite.status !== 0) process.exit(vite.status ?? 1);
 if (watch) process.exit(0);
 
-const extensionDir = resolve(repoRoot, 'release', 'chrome', 'extension');
-const archivePath = resolve(repoRoot, 'release', 'chrome', `pdf-ts-chrome-v${packageJson.version}.zip`);
+const extensionDir = resolve(repoRoot, 'release', 'chrome-extension');
+const archivePath = resolve(repoRoot, 'release', `pdf-ts-chrome-v${packageJson.version}.zip`);
 rmSync(archivePath, { force: true });
 
 const zip = new yazl.ZipFile();

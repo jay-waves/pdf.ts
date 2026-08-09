@@ -1,10 +1,8 @@
 export { Button } from './button';
-export { Dialog } from './dialog';
-export { DialogActions } from './dialog-actions';
+export { Dialog, DialogActions } from './dialog';
 export { FloatingPopover } from './floating-popover';
 export { FloatingSurface, FloatingToolbar, FloatingToolbarDivider, FloatingToolbarGroup } from './floating-toolbar';
 export { IconButton } from './icon-button';
 export { PanelContent, PanelState } from './panel-content';
-export { RadioOption } from './radio-option';
 export { Select } from './select';
 export { Tooltip, TooltipProvider } from './tooltip';

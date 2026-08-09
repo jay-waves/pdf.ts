@@ -11,6 +11,10 @@ const MIN_ZOOM_LEVEL = 0.2;
 const MAX_ZOOM_LEVEL = 60;
 const PAN_DRAG_THRESHOLD_PX = 4;
 
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
 function wheelDeltaInPixels(delta: number, event: WheelEvent, pageSize: number) {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16;
   if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * pageSize;
@@ -19,7 +23,7 @@ function wheelDeltaInPixels(delta: number, event: WheelEvent, pageSize: number) 
 
 function normalizedZoomDelta(event: WheelEvent, pageHeight: number) {
   const delta = wheelDeltaInPixels(event.deltaY, event, pageHeight);
-  return Math.max(-WHEEL_DELTA_LIMIT_PX, Math.min(WHEEL_DELTA_LIMIT_PX, delta));
+  return clamp(delta, -WHEEL_DELTA_LIMIT_PX, WHEEL_DELTA_LIMIT_PX);
 }
 
 function compressWheelDelta(delta: number) {
@@ -100,8 +104,8 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
     const setAnchor = (clientX: number, clientY: number) => {
       const bounds = viewport.getBoundingClientRect();
       zoomAnchor = {
-        vx: Math.max(0, Math.min(viewport.clientWidth, clientX - bounds.left)),
-        vy: Math.max(0, Math.min(viewport.clientHeight, clientY - bounds.top)),
+        vx: clamp(clientX - bounds.left, 0, viewport.clientWidth),
+        vy: clamp(clientY - bounds.top, 0, viewport.clientHeight),
       };
     };
 
@@ -113,12 +117,10 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
       pendingZoomDelta = 0;
 
       const currentZoom = zoomScope.getState().currentZoomLevel;
-      const targetZoom = Math.max(
+      const targetZoom = clamp(
+        requestedLevel ?? currentZoom * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY),
         MIN_ZOOM_LEVEL,
-        Math.min(
-          MAX_ZOOM_LEVEL,
-          requestedLevel ?? currentZoom * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY),
-        ),
+        MAX_ZOOM_LEVEL,
       );
       if (Math.abs(targetZoom - currentZoom) < 0.0005) return;
 
@@ -312,7 +314,11 @@ export function ViewportInput({
   children: ReactNode;
 }) {
   return (
-    <ZoomGestureWrapper documentId={documentId} enablePinch={false} enableWheel={false}>
+    <ZoomGestureWrapper
+      documentId={documentId}
+      enablePinch={false}
+      enableWheel={false}
+    >
       <ViewportInputPipeline documentId={documentId} panMode={panMode} />
       {children}
     </ZoomGestureWrapper>

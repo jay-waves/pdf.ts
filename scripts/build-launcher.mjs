@@ -12,9 +12,6 @@ if (!existsSync(resolve(source, 'index.html'))) throw new Error('Run pnpm build:
 
 function copy(sourceDir, targetDir) {
   mkdirSync(targetDir, { recursive: true });
-  for (const entry of readdirSync(targetDir)) {
-    if (entry !== 'placeholder.txt') rmSync(resolve(targetDir, entry), { recursive: true, force: true });
-  }
   for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
     const from = resolve(sourceDir, entry.name);
     const to = resolve(targetDir, entry.name);
@@ -23,35 +20,49 @@ function copy(sourceDir, targetDir) {
   }
 }
 
-copy(source, embedded);
+function cleanEmbeddedViewer() {
+  for (const entry of readdirSync(embedded)) {
+    if (entry !== 'placeholder.txt') rmSync(resolve(embedded, entry), { recursive: true, force: true });
+  }
+}
+
+function requireSuccess(result, command) {
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`${command} exited with status ${result.status ?? 1}.`);
+}
+
 const windows = target === 'windows-amd64';
-const output = resolve(root, 'release/launcher', windows ? 'pdf.ts.exe' : 'pdf.ts');
-mkdirSync(resolve(root, 'release/launcher'), { recursive: true });
+const output = resolve(root, 'release', windows ? 'pdf.ts.exe' : 'pdf.ts');
+mkdirSync(resolve(root, 'release'), { recursive: true });
 const linkerFlags = windows ? '-s -w -H=windowsgui' : '-s -w';
 let windowsResource = null;
-if (windows) {
-  const candidates = [process.env.PDF_TS_WINDRES, "llvm-windres", "x86_64-w64-mingw32-windres", "windres"].filter(Boolean);
-  const windres = candidates.find((candidate) => {
-    const check = spawnSync(candidate, ["--version"], { stdio: "ignore" });
-    return !check.error && check.status === 0;
+cleanEmbeddedViewer();
+try {
+  copy(source, embedded);
+  if (windows) {
+    const candidates = [process.env.PDF_TS_WINDRES, 'llvm-windres', 'x86_64-w64-mingw32-windres', 'windres'].filter(Boolean);
+    const windres = candidates.find((candidate) => {
+      const check = spawnSync(candidate, ['--version'], { stdio: 'ignore' });
+      return !check.error && check.status === 0;
+    });
+    if (!windres) throw new Error('build:windows requires llvm-windres or windres');
+    windowsResource = resolve(root, 'launcher', 'icon_windows_amd64.syso');
+    const compiled = spawnSync(windres, [
+      '--input', resolve(root, 'launcher', 'icon.rc'),
+      '--output', windowsResource,
+      '--output-format', 'coff',
+      '--target', 'pe-x86-64',
+    ], { cwd: root, stdio: 'inherit' });
+    requireSuccess(compiled, windres);
+  }
+  const result = spawnSync(process.env.PDF_TS_GO ?? 'go', ['build', '-trimpath', `-ldflags=${linkerFlags}`, '-o', output, './launcher'], {
+    cwd: root,
+    env: { ...process.env, GOOS: windows ? 'windows' : 'linux', GOARCH: 'amd64' },
+    stdio: 'inherit',
   });
-  if (!windres) throw new Error("build:windows requires llvm-windres or windres");
-  windowsResource = resolve(root, "launcher", "icon_windows_amd64.syso");
-  const compiled = spawnSync(windres, [
-    "--input", resolve(root, "launcher", "icon.rc"),
-    "--output", windowsResource,
-    "--output-format", "coff",
-    "--target", "pe-x86-64",
-  ], { cwd: root, stdio: "inherit" });
-  if (compiled.error) throw compiled.error;
-  if (compiled.status !== 0) process.exit(compiled.status ?? 1);
+  requireSuccess(result, 'go build');
+  console.log(`Built ${output}`);
+} finally {
+  if (windowsResource) rmSync(windowsResource, { force: true });
+  cleanEmbeddedViewer();
 }
-const result = spawnSync(process.env.PDF_TS_GO ?? 'go', ['build', '-trimpath', `-ldflags=${linkerFlags}`, '-o', output, './launcher'], {
-  cwd: root,
-  env: { ...process.env, GOOS: windows ? 'windows' : 'linux', GOARCH: 'amd64' },
-  stdio: 'inherit',
-});
-if (windowsResource) rmSync(windowsResource, { force: true });
-if (result.error) throw result.error;
-if (result.status !== 0) process.exit(result.status ?? 1);
-console.log(`Built ${output}`);

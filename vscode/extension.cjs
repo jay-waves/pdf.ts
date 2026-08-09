@@ -270,6 +270,7 @@ class PdfEditorProvider {
       `script-src ${panel.webview.cspSource} 'nonce-${scriptNonce}' 'wasm-unsafe-eval'`,
       `worker-src ${panel.webview.cspSource} blob:`,
       `connect-src ${panel.webview.cspSource} data: blob:`,
+      'frame-src blob:',
     ].join('; ');
 
     html = html

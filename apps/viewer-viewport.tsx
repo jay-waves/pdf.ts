@@ -1,4 +1,4 @@
-import { useEffect, useState, type HTMLAttributes, type ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import {
   ViewportElementContext,
   useIsViewportGated,
@@ -17,14 +17,10 @@ export function ViewerViewport({
   children: ReactNode;
   documentId: string;
 }) {
-  const [viewportGap, setViewportGap] = useState(0);
   const viewportRef = useViewportRef(documentId);
   const { provides: viewport } = useViewportCapability();
   const isGated = useIsViewportGated(documentId);
-
-  useEffect(() => {
-    if (viewport) setViewportGap(viewport.getViewportGap());
-  }, [viewport]);
+  const viewportGap = viewport?.getViewportGap() ?? 0;
 
   return (
     <ViewportElementContext.Provider value={viewportRef}>

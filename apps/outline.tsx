@@ -1,11 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import {
-  BookImage,
-  CornerDownLeft,
-  CornerUpRight,
-  ListTree,
-} from 'lucide-react';
 import {
   PdfZoomMode,
   type PdfBookmarkObject,
@@ -13,21 +7,19 @@ import {
 import {
   type BookmarkCapability,
 } from '@embedpdf/plugin-bookmark';
-import { FloatingSurface, PanelContent, PanelState } from './components';
+import { PanelContent, PanelState } from './components';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
   getDestinationFromTarget,
   getPluginCapability,
-  isEditableTarget,
-  scrollToPagePreservingViewport,
   type ScrollCapability,
 } from './utils';
 import styles from './outline.module.css';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
 const flattenedBookmarksCache = new WeakMap<PdfBookmarkObject[], FlattenedBookmark[]>();
-const SIDE_BUTTON_LONG_PRESS_MS = 450;
+const OUTLINE_CACHE_LIMIT = 4;
 
 type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 export type OutlineCache = {
@@ -48,110 +40,12 @@ function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
   };
 }
 
-function requestPageNavigation(registry: PluginRegistry, direction: 1 | -1, pageCount = 1) {
-  const documentId = getActiveDocumentId(registry);
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-
-  if (!documentId || !scroll) {
-    return;
+function cacheOutline(key: string, cache: OutlineCache) {
+  if (!outlinePrefetchCache.has(key) && outlinePrefetchCache.size >= OUTLINE_CACHE_LIMIT) {
+    const oldestKey = outlinePrefetchCache.keys().next().value;
+    if (oldestKey !== undefined) outlinePrefetchCache.delete(oldestKey);
   }
-
-  const scrollScope = scroll.forDocument(documentId);
-  const currentPage = scrollScope.getCurrentPage();
-  const targetPage = Math.min(
-    Math.max(1, currentPage + direction * pageCount),
-    scrollScope.getTotalPages(),
-  );
-  if (targetPage === currentPage) {
-    return;
-  }
-
-  scrollToPagePreservingViewport(registry, targetPage, 'smooth');
-}
-
-export function installPageKeyboardNavigation(registry: PluginRegistry, onNavigate: () => void) {
-  let sideButtonPress: { button: 3 | 4; startedAt: number } | null = null;
-
-  const navigate = (direction: -1 | 1, pageCount = 1) => {
-    requestPageNavigation(registry, direction, pageCount);
-    onNavigate();
-  };
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-      return;
-    }
-
-    if (isEditableTarget(event.target)) {
-      return;
-    }
-
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    navigate(event.key === 'ArrowLeft' ? -1 : 1);
-  };
-
-  const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
-    if (event.button !== 3 && event.button !== 4) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-
-  const onSideButtonDown = (event: MouseEvent) => {
-    stopSideButtonEvent(event);
-    if (event.button !== 3 && event.button !== 4) return;
-    sideButtonPress = { button: event.button, startedAt: performance.now() };
-  };
-
-  const onSideButtonUp = (event: MouseEvent) => {
-    if (event.button !== 3 && event.button !== 4) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const duration = sideButtonPress?.button === event.button
-      ? performance.now() - sideButtonPress.startedAt
-      : 0;
-    sideButtonPress = null;
-    navigate(event.button === 3 ? -1 : 1, duration >= SIDE_BUTTON_LONG_PRESS_MS ? 2 : 1);
-  };
-
-  const onPointerMove = (event: PointerEvent) => {
-    if (!(event.buttons & 24)) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-
-  const clearSideButtonPress = () => {
-    sideButtonPress = null;
-  };
-
-  window.addEventListener('keydown', onKeyDown, { capture: true });
-  window.addEventListener('mousedown', onSideButtonDown, { capture: true });
-  window.addEventListener('mouseup', onSideButtonUp, { capture: true });
-  window.addEventListener('pointermove', onPointerMove, { capture: true });
-  window.addEventListener('auxclick', stopSideButtonEvent, { capture: true });
-  window.addEventListener('blur', clearSideButtonPress);
-
-  return () => {
-    window.removeEventListener('keydown', onKeyDown, { capture: true });
-    window.removeEventListener('mousedown', onSideButtonDown, { capture: true });
-    window.removeEventListener('mouseup', onSideButtonUp, { capture: true });
-    window.removeEventListener('pointermove', onPointerMove, { capture: true });
-    window.removeEventListener('auxclick', stopSideButtonEvent, { capture: true });
-    window.removeEventListener('blur', clearSideButtonPress);
-  };
+  outlinePrefetchCache.set(key, cache);
 }
 
 function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
@@ -200,23 +94,20 @@ export function getCurrentBookmark(bookmarks: PdfBookmarkObject[], pageNumber: n
   }
 
   const flattened = flattenBookmarks(bookmarks);
-  let currentBookmark: CurrentBookmark | null = null;
-
-  for (const item of flattened) {
-    if (item.pageNumber > pageNumber) {
-      break;
-    }
-
-    currentBookmark = { key: item.key, title: item.title };
+  let low = 0;
+  let high = flattened.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (flattened[middle].pageNumber <= pageNumber) low = middle + 1;
+    else high = middle;
   }
-
-  return currentBookmark;
+  const current = flattened[low - 1];
+  return current ? { key: current.key, title: current.title } : null;
 }
 
-export function installCurrentTitleTracker(
+export function installPageTracker(
   registry: PluginRegistry,
-  getBookmarks: () => PdfBookmarkObject[],
-  onChange: (value: { pageNumber: number; bookmarkKey: string; title: string; totalPages: number }) => void,
+  onChange: (value: { pageNumber: number; totalPages: number }) => void,
 ) {
   const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) {
@@ -227,11 +118,8 @@ export function installCurrentTitleTracker(
   let totalPages = 0;
 
   const refresh = () => {
-    const currentBookmark = getCurrentBookmark(getBookmarks(), currentPageNumber);
     onChange({
       pageNumber: currentPageNumber,
-      bookmarkKey: currentBookmark?.key ?? '',
-      title: currentBookmark?.title ?? '',
       totalPages,
     });
   };
@@ -276,10 +164,19 @@ async function loadBookmarks(registry: PluginRegistry, requestedDocumentId?: str
   return (await bookmark.forDocument(documentId).getBookmarks().toPromise()).bookmarks;
 }
 
+async function loadOutline(registry: PluginRegistry, documentId?: string) {
+  return toOutlineCache(await loadBookmarks(registry, documentId));
+}
+
 export function installOutlinePrefetch(
   registry: PluginRegistry,
-  onLoaded: (cache: OutlineCache) => void,
-  cacheKey?: string,
+  {
+    cacheKey,
+    onLoaded,
+  }: {
+    cacheKey?: string;
+    onLoaded(cache: OutlineCache): void;
+  },
 ) {
   const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
   if (!scroll) {
@@ -293,42 +190,36 @@ export function installOutlinePrefetch(
     return EMPTY_CLEANUP;
   }
 
-  let loadingDocumentId: string | null = null;
-  let loadedDocumentId: string | null = null;
+  let requestedDocumentId: string | null = null;
   let cancelled = false;
 
   const loadForDocument = (documentId: string) => {
     if (
       cancelled ||
       !isCurrentLoadedDocument(registry, documentId) ||
-      loadingDocumentId === documentId ||
-      loadedDocumentId === documentId
+      requestedDocumentId === documentId
     ) {
       return;
     }
 
-    loadingDocumentId = documentId;
+    requestedDocumentId = documentId;
     onLoaded({ status: 'loading', bookmarks: [] });
 
-    loadBookmarks(registry, documentId)
-      .then(toOutlineCache)
+    loadOutline(registry, documentId)
       .then((cache) => {
         if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
-          loadingDocumentId = null;
+          requestedDocumentId = null;
           return;
         }
 
-        loadingDocumentId = null;
-        loadedDocumentId = documentId;
-
         if (cacheKey && (cache.status === 'ready' || cache.status === 'empty')) {
-          outlinePrefetchCache.set(cacheKey, cache);
+          cacheOutline(cacheKey, cache);
         }
 
         onLoaded(cache);
       })
       .catch((error) => {
-        loadingDocumentId = null;
+        requestedDocumentId = null;
         if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
           return;
         }
@@ -432,8 +323,7 @@ export function Outline({
     let cancelled = false;
     onCacheChange({ status: 'loading', bookmarks: [] });
 
-    loadBookmarks(registry)
-      .then(toOutlineCache)
+    loadOutline(registry)
       .then((nextCache) => {
         if (cancelled) {
           return;
@@ -631,151 +521,4 @@ function scrollCurrentBookmarkIntoView(root: HTMLElement | null) {
   };
 
   requestAnimationFrame(scrollToCurrent);
-}
-
-export function BottomNavigationControl({
-  registry,
-  title,
-  pageNumber,
-  totalPages,
-  outlineStatus,
-  visible,
-  onReveal,
-  onOpenOutline,
-  onOpenThumbnails,
-}: {
-  registry?: PluginRegistry;
-  title: string;
-  pageNumber: number;
-  totalPages: number;
-  outlineStatus: OutlineStatus;
-  visible: boolean;
-  onReveal: () => void;
-  onOpenOutline: () => void;
-  onOpenThumbnails: () => void;
-}) {
-  const [pageInput, setPageInput] = useState(String(pageNumber || 1));
-  const canNavigate = Boolean(registry && totalPages > 0);
-  const canGoPrevious = canNavigate && pageNumber > 1;
-  const canGoNext = canNavigate && pageNumber < totalPages;
-  const outlineTitle = title.trim();
-  const shouldShowOutlineTitle = outlineStatus === 'ready' && outlineTitle.length > 0;
-  const shouldShowThumbnails = outlineStatus === 'empty';
-  useEffect(() => {
-    setPageInput(String(pageNumber || 1));
-  }, [pageNumber]);
-
-  const scrollToPage = (nextPageNumber: number) => {
-    onReveal();
-
-    if (!registry || !totalPages) {
-      return;
-    }
-
-    const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
-    scrollToPagePreservingViewport(registry, clampedPageNumber);
-    setPageInput(String(clampedPageNumber));
-  };
-
-  const handlePageSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const nextPageNumber = Number(pageInput);
-    if (!Number.isInteger(nextPageNumber)) {
-      setPageInput(String(pageNumber || 1));
-      return;
-    }
-
-    scrollToPage(nextPageNumber);
-  };
-
-  const scrollByPage = (direction: -1 | 1) => {
-    onReveal();
-
-    if (!registry) {
-      return;
-    }
-
-    requestPageNavigation(registry, direction);
-  };
-
-  return (
-    <FloatingSurface
-      as="nav"
-      className={styles.navigation}
-      data-visible={visible ? 'true' : undefined}
-      aria-label="PDF navigation"
-      onMouseEnter={onReveal}
-      onFocus={onReveal}
-    >
-      <div className={styles.navigationButtons}>
-        <button
-          type="button"
-          className={styles.navigationButton}
-          onClick={() => scrollByPage(-1)}
-          disabled={!canGoPrevious}
-          aria-label="Previous page"
-        >
-          <CornerDownLeft size={16} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className={styles.navigationButton}
-          onClick={() => scrollByPage(1)}
-          disabled={!canGoNext}
-          aria-label="Next page"
-        >
-          <CornerUpRight size={16} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-      </div>
-      <div className={styles.navigationContent}>
-        {shouldShowOutlineTitle ? (
-          <button
-            type="button"
-            className={styles.outlineButton}
-            aria-label="Open outline"
-            onClick={() => {
-              onReveal();
-              onOpenOutline();
-            }}
-          >
-            <ListTree className={styles.navigationTitleIcon} size={14} strokeWidth={1.8} aria-hidden="true" />
-            <span className={styles.navigationTitle}>{outlineTitle}</span>
-          </button>
-        ) : shouldShowThumbnails ? (
-          <button
-            type="button"
-            className={`${styles.outlineButton} ${styles.thumbnailButton}`}
-            title="Open thumbnails"
-            aria-label="Open thumbnails"
-            onClick={() => {
-              onReveal();
-              onOpenThumbnails();
-            }}
-          >
-            <BookImage className="block flex-none" size={14} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-        ) : null}
-        <form className={styles.pageForm} onSubmit={handlePageSubmit} aria-label="Page jump">
-          <input
-            className={styles.pageInput}
-            value={pageInput}
-            type="text"
-            inputMode="numeric"
-            enterKeyHint="go"
-            required
-            aria-label="Current page"
-            disabled={!canNavigate}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              if (/^\d*$/.test(value)) setPageInput(value);
-            }}
-            onFocus={onReveal}
-            onBlur={() => setPageInput(String(pageNumber || 1))}
-          />
-          <span className={styles.pageTotal}>/ {totalPages || '-'}</span>
-        </form>
-      </div>
-    </FloatingSurface>
-  );
 }

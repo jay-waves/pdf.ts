@@ -2,10 +2,8 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfEngine } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { getAnnotationScope } from './annotations';
-import {
-  isIncrementalSaveAvailable,
-  savePdfIncrementally,
-} from './pdf-engine';
+import { downloadPdf } from './platform/browser-download';
+import { savePdfIncrementally } from './pdf-engine';
 import { getActiveDocumentId } from './utils';
 import type { PdfFileHandle } from './platform/types';
 
@@ -47,15 +45,7 @@ export async function exportPdf(
   const data = await engine.saveAsCopy(document).toPromise();
   if (!data) return false;
 
-  const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-  const anchor = window.document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName.toLowerCase().endsWith('.pdf') ? fileName : `${fileName}.pdf`;
-  anchor.hidden = true;
-  window.document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  downloadPdf(data, fileName);
   return true;
 }
 
@@ -63,7 +53,7 @@ export async function savePdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
   fileHandle: PdfFileHandle | undefined,
-  options: { forceFullSave?: boolean } = {},
+  { forceFullSave = false }: { forceFullSave?: boolean } = {},
 ) {
   if (!registry || !fileHandle) return false;
 
@@ -75,11 +65,7 @@ export async function savePdf(
   const document = await getDocumentForSerialization(registry);
   if (!document) return false;
 
-  if (
-    target.saveIncremental
-    && !options.forceFullSave
-    && isIncrementalSaveAvailable(engine)
-  ) {
+  if (target.saveIncremental && !forceFullSave) {
     try {
       const revision = await savePdfIncrementally(engine, document).toPromise();
       if (revision.delta.byteLength > 0) {

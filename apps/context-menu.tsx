@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from './components';
 import { getActiveDocumentId, getPluginCapability, normalizePdfText } from './utils';
+import { getExternalUrl, getSelectedExternalUrl } from './url';
 import { platform } from '#platform';
 import styles from './context-menu.module.css';
 
@@ -53,25 +54,6 @@ const CAPTURE_PADDING = 3;
 const CAPTURE_SCALE = 4;
 const MAX_CAPTURE_PIXELS = 16_000_000;
 
-function parseExternalUrl(value: string) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
-function getSelectedExternalUrl(text: string) {
-  const value = text.trim();
-  if (!value || /\s|@/.test(value)) return null;
-  if (/^https?:\/\//i.test(value)) return parseExternalUrl(value);
-  if (/^(?:www\.)?(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i.test(value)) {
-    return parseExternalUrl(`https://${value}`);
-  }
-  return null;
-}
-
 function getExternalLink(annotation: PdfAnnotationObject | undefined) {
   if (
     annotation?.type !== PdfAnnotationSubtype.LINK ||
@@ -81,7 +63,7 @@ function getExternalLink(annotation: PdfAnnotationObject | undefined) {
     return null;
   }
 
-  return parseExternalUrl(annotation.target.action.uri);
+  return getExternalUrl(annotation.target.action.uri);
 }
 
 async function copyText(value: string) {

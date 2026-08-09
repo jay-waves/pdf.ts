@@ -26,16 +26,6 @@
 .metadataDetails > div:last-child { @apply border-b-0; }
 .metadataDetails dt { @apply text-secondary; }
 .metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
-.signatureList { @apply mx-3.25 mt-3 grid max-h-[min(55vh,440px)] gap-2.5 overflow-auto; }
-.signatureCard { @apply rounded-md border border-border-subtle bg-app p-3; }
-.signatureTitle { @apply mt-0 mb-2.5 text-xs text-foreground; }
-.signatureDetails { @apply m-0 grid gap-1.5 text-[11px]; }
-.signatureDetails > div { @apply grid grid-cols-[72px_minmax(0,1fr)] gap-2; }
-.signatureDetails dt { @apply text-secondary; }
-.signatureDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
-.signatureStatus { @apply mt-2.5 mb-0 text-[10px] text-secondary; }
-.signatureStatus[data-verified='true'] { @apply font-medium text-foreground; }
-.signatureActions { @apply px-3.25 pt-3 pb-3.25; }
 .optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
 .themeForm { @apply gap-1.5 pt-2.5; }
 .themeRow { @apply grid grid-cols-[42px_1fr] items-center gap-2 text-secondary; }
