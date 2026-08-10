@@ -3,7 +3,6 @@ import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { PdfErrorCode, Rotation, type PdfEngine } from '@embedpdf/models';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
-import { BookmarkPluginPackage } from '@embedpdf/plugin-bookmark/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
 import { FormPluginPackage } from '@embedpdf/plugin-form/react';
 import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
@@ -15,7 +14,6 @@ import {
 import { RenderLayer, RenderPluginPackage } from '@embedpdf/plugin-render/react';
 import { Rotate, RotatePluginPackage } from '@embedpdf/plugin-rotate/react';
 import { Scroller, ScrollPluginPackage, ScrollStrategy } from '@embedpdf/plugin-scroll/react';
-import { SearchLayer, SearchPluginPackage } from '@embedpdf/plugin-search/react';
 import { SelectionLayer, SelectionPluginPackage } from '@embedpdf/plugin-selection/react';
 import { SpreadMode, SpreadPluginPackage } from '@embedpdf/plugin-spread/react';
 import { TilingLayer, TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
@@ -32,6 +30,8 @@ import {
   themeUnderlineRenderer,
 } from './theme-highlight-renderer';
 import type { ManagedResource } from './platform/types';
+import type { PdfSearch } from './pdf-search';
+import { PdfSearchLayer } from './search';
 import { ViewerViewport } from './viewer-viewport';
 import { ViewportInput } from './viewer-viewport-input';
 import './viewer-surface.css';
@@ -92,8 +92,6 @@ export function createViewerPlugins(fileUrl?: string) {
     ),
     createPluginRegistration(HistoryPluginPackage),
     createPluginRegistration(FormPluginPackage),
-    createPluginRegistration(SearchPluginPackage),
-    createPluginRegistration(BookmarkPluginPackage),
   ];
 }
 
@@ -119,12 +117,14 @@ function PdfPageLayers({
   width,
   height,
   renderThemeVersion,
+  search,
 }: {
   documentId: string;
   pageIndex: number;
   width: number;
   height: number;
   renderThemeVersion: number;
+  search: PdfSearch;
 }) {
   return (
     <Rotate documentId={documentId} pageIndex={pageIndex}>
@@ -154,7 +154,8 @@ function PdfPageLayers({
           pageIndex={pageIndex}
           className="pdf-page-tiling-layer"
         />
-        <SearchLayer
+        <PdfSearchLayer
+          search={search}
           documentId={documentId}
           pageIndex={pageIndex}
           highlightColor={SEARCH_HIGHLIGHT_COLOR}
@@ -183,12 +184,14 @@ function LoadedPdfDocument({
   documentId,
   panMode,
   renderThemeVersion,
+  search,
   resource,
   onResourceConsumed,
 }: {
   documentId: string;
   panMode: boolean;
   renderThemeVersion: number;
+  search: PdfSearch;
   resource?: ManagedResource;
   onResourceConsumed(resource?: ManagedResource): void;
 }) {
@@ -212,6 +215,7 @@ function LoadedPdfDocument({
                   width={width}
                   height={height}
                   renderThemeVersion={renderThemeVersion}
+                  search={search}
                 />
               )}
             />
@@ -228,6 +232,7 @@ export const PdfSurface = memo(function PdfSurface({
   registry,
   panMode,
   renderThemeVersion,
+  search,
   documentResource,
   onInitialized,
   onActiveDocumentChange,
@@ -238,6 +243,7 @@ export const PdfSurface = memo(function PdfSurface({
   registry?: PluginRegistry;
   panMode: boolean;
   renderThemeVersion: number;
+  search: PdfSearch;
   documentResource?: ManagedResource;
   onInitialized(registry: PluginRegistry): Promise<void>;
   onActiveDocumentChange(documentId: string | null): void;
@@ -268,6 +274,7 @@ export const PdfSurface = memo(function PdfSurface({
                       documentId={activeDocumentId}
                       panMode={panMode}
                       renderThemeVersion={renderThemeVersion}
+                      search={search}
                       resource={documentResource}
                       onResourceConsumed={onResourceConsumed}
                     />

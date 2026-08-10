@@ -4,10 +4,8 @@ import {
   PdfZoomMode,
   type PdfBookmarkObject,
 } from '@embedpdf/models';
-import {
-  type BookmarkCapability,
-} from '@embedpdf/plugin-bookmark';
 import { PanelContent, PanelState } from './components';
+import type { PdfiumCapability } from './pdf-engine';
 import {
   EMPTY_CLEANUP,
   getActiveDocumentId,
@@ -144,32 +142,27 @@ export function installPageTracker(
   };
 }
 
-function isCurrentLoadedDocument(registry: PluginRegistry, documentId: string) {
-  const state = registry.getStore().getState();
-  return state.core.activeDocumentId === documentId && Boolean(state.core.documents[documentId]?.document);
+function isCurrentLoadedDocument(pdfium: PdfiumCapability, documentId: string) {
+  return pdfium.getActiveDocumentId() === documentId && Boolean(pdfium.getDocument(documentId));
 }
 
-async function loadBookmarks(registry: PluginRegistry, requestedDocumentId?: string) {
-  const documentId = requestedDocumentId ?? getActiveDocumentId(registry);
-  const bookmark = getPluginCapability<BookmarkCapability>(registry, 'bookmark');
-
-  if (!bookmark) {
-    throw new Error('Bookmark plugin is not available.');
-  }
-
-  if (!documentId || !isCurrentLoadedDocument(registry, documentId)) {
+async function loadBookmarks(pdfium: PdfiumCapability, requestedDocumentId?: string) {
+  const documentId = requestedDocumentId ?? pdfium.getActiveDocumentId();
+  if (!documentId || !isCurrentLoadedDocument(pdfium, documentId)) {
     return [];
   }
 
-  return (await bookmark.forDocument(documentId).getBookmarks().toPromise()).bookmarks;
+  const task = pdfium.withDocument(documentId, (engine, document) => engine.getBookmarks(document));
+  return (await task.toPromise()).bookmarks;
 }
 
-async function loadOutline(registry: PluginRegistry, documentId?: string) {
-  return toOutlineCache(await loadBookmarks(registry, documentId));
+async function loadOutline(pdfium: PdfiumCapability, documentId?: string) {
+  return toOutlineCache(await loadBookmarks(pdfium, documentId));
 }
 
 export function installOutlinePrefetch(
   registry: PluginRegistry,
+  pdfium: PdfiumCapability,
   {
     cacheKey,
     onLoaded,
@@ -196,7 +189,7 @@ export function installOutlinePrefetch(
   const loadForDocument = (documentId: string) => {
     if (
       cancelled ||
-      !isCurrentLoadedDocument(registry, documentId) ||
+      !isCurrentLoadedDocument(pdfium, documentId) ||
       requestedDocumentId === documentId
     ) {
       return;
@@ -205,9 +198,9 @@ export function installOutlinePrefetch(
     requestedDocumentId = documentId;
     onLoaded({ status: 'loading', bookmarks: [] });
 
-    loadOutline(registry, documentId)
+    loadOutline(pdfium, documentId)
       .then((cache) => {
-        if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
+        if (cancelled || !isCurrentLoadedDocument(pdfium, documentId)) {
           requestedDocumentId = null;
           return;
         }
@@ -220,7 +213,7 @@ export function installOutlinePrefetch(
       })
       .catch((error) => {
         requestedDocumentId = null;
-        if (cancelled || !isCurrentLoadedDocument(registry, documentId)) {
+        if (cancelled || !isCurrentLoadedDocument(pdfium, documentId)) {
           return;
         }
         console.error('[pdf-ts] outline prefetch failed after initial layout', {
@@ -275,12 +268,14 @@ function getAncestorBookmarkKeys(bookmarkKey: string) {
 
 export function Outline({
   registry,
+  pdfium,
   open,
   cache,
   currentBookmarkKey,
   onCacheChange,
 }: {
   registry?: PluginRegistry;
+  pdfium: PdfiumCapability;
   open: boolean;
   cache: OutlineCache;
   currentBookmarkKey: string;
@@ -323,7 +318,7 @@ export function Outline({
     let cancelled = false;
     onCacheChange({ status: 'loading', bookmarks: [] });
 
-    loadOutline(registry)
+    loadOutline(pdfium)
       .then((nextCache) => {
         if (cancelled) {
           return;
@@ -342,7 +337,7 @@ export function Outline({
     return () => {
       cancelled = true;
     };
-  }, [cache.status, onCacheChange, open, registry]);
+  }, [cache.status, onCacheChange, open, pdfium, registry]);
 
   useEffect(() => {
     if (!open || cache.status !== 'ready') {

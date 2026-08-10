@@ -59,6 +59,7 @@ import {
   toggleViewerColorMode,
   useViewerTheme,
 } from './theme';
+import type { PdfSearch } from './pdf-search';
 import { Search } from './search';
 import styles from './toolbar.module.css';
 import {
@@ -98,6 +99,7 @@ interface ToolbarActions {
 
 interface ToolbarProps {
   registry?: PluginRegistry;
+  search: PdfSearch;
   state: ToolbarState;
   actions: ToolbarActions;
 }
@@ -245,6 +247,7 @@ function switchLayoutPreservingAnchor(
 
 export function Toolbar({
   registry,
+  search,
   state: {
     documentId,
     searchOpen,
@@ -678,7 +681,7 @@ export function Toolbar({
             onClick={returnToPrimaryToolbar}
           />
           <FloatingToolbarDivider />
-          <Search registry={registry} open />
+          <Search registry={registry} search={search} documentId={documentId} open />
           {renderPersistentControls()}
         </FloatingToolbar>
       ) : null}

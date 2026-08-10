@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { PluginRegistry } from '@embedpdf/core';
 import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
-import type { PdfEngine } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import notoSansVariableUrl from '#noto-sans-variable.ttf';
 import type { FormCapability } from '@embedpdf/plugin-form';
@@ -26,6 +25,7 @@ import {
 } from './outline';
 import { BottomNavigationControl } from './bottom-navigation';
 import { installSearchKeyboardShortcut } from './search';
+import { PdfSearch } from './pdf-search';
 import {
   initializeViewerTheme,
   setViewerScrollStrategyAttribute,
@@ -47,7 +47,7 @@ import { ThemeDialog } from './theme-dialog';
 import { ContextMenu } from './context-menu';
 import { Dialog, TooltipProvider } from './components';
 import { exportPdf } from './pdf-save';
-import { usePdfTsPdfiumEngine } from './pdf-engine';
+import { usePdfTsPdfiumEngine, type PdfiumCapability } from './pdf-engine';
 import { useDocumentPersistence } from './viewer-document-persistence';
 import { useRenderThemeVersion } from './viewer-render-theme';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
@@ -200,7 +200,7 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
 }
 
 interface AppProps {
-  engine: PdfEngine<Blob>;
+  pdfium: PdfiumCapability;
   sourceDocument?: PlatformDocument;
   onResourceConsumed(resource?: ManagedResource): void;
 }
@@ -221,10 +221,11 @@ const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
 const INITIAL_DOCUMENT_VIEW = { pageNumber: 1, totalPages: 0 };
 
 function App({
-  engine,
+  pdfium,
   sourceDocument,
   onResourceConsumed,
 }: AppProps) {
+  const engine = pdfium.engine;
   const documentResource = sourceDocument?.resource;
   const fileUrl = documentResource?.url;
   const documentKey = sourceDocument?.key;
@@ -243,6 +244,7 @@ function App({
     bookmarks: [],
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
+  const search = useMemo(() => new PdfSearch(pdfium), [pdfium]);
   const signatures = useDocumentSignatures(engine, registry, toolbarDocumentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
   const { saveDocument, setDirty } = useDocumentPersistence({
@@ -283,8 +285,9 @@ function App({
     return () => {
       registryCleanupRef.current?.();
       registryCleanupRef.current = null;
+      search.dispose();
     };
-  }, []);
+  }, [search]);
 
   const initializePlugins = useCallback(async (nextRegistry: PluginRegistry) => {
     registryCleanupRef.current?.();
@@ -297,9 +300,12 @@ function App({
     setActiveDialog(null);
     setTranslationRequest(null);
     setPanMode(false);
+    setSearchOpen(false);
+    search.clear();
     setDirty(false);
 
     const installers = [
+      () => pdfium.bindRegistry(nextRegistry),
       () => installPdfZoomKeyboardShortcuts(nextRegistry),
       () => installScrollStrategyAttribute(nextRegistry),
       () => installAnnotationUriNavigation(nextRegistry, platform.openExternal),
@@ -312,14 +318,14 @@ function App({
       () => installPlatformReadingHistory(nextRegistry, documentKey),
       () => installPageTracker(nextRegistry, setDocumentView),
       () => installSearchKeyboardShortcut(() => setSearchOpen(true)),
-      () => installOutlinePrefetch(nextRegistry, {
+      () => installOutlinePrefetch(nextRegistry, pdfium, {
         cacheKey: documentKey,
         onLoaded: setOutlineCache,
       }),
     ];
 
     registryCleanupRef.current = installAll(installers);
-  }, [documentKey, setDirty]);
+  }, [documentKey, pdfium, search, setDirty]);
 
   const toolbarState = {
     documentId: toolbarDocumentId,
@@ -358,6 +364,7 @@ function App({
         registry={registry}
         panMode={panMode}
         renderThemeVersion={renderThemeVersion}
+        search={search}
         documentResource={documentResource}
         onInitialized={initializePlugins}
         onActiveDocumentChange={setToolbarDocumentId}
@@ -365,6 +372,7 @@ function App({
       />
       <Toolbar
         registry={registry}
+        search={search}
         state={toolbarState}
         actions={toolbarActions}
       />
@@ -382,6 +390,7 @@ function App({
         />
         <Outline
           registry={registry}
+          pdfium={pdfium}
           open={documentPane === 'outline'}
           cache={outlineCache}
           currentBookmarkKey={currentBookmarkKey}
@@ -634,7 +643,7 @@ function ReadyViewer({
   trackResource(resource?: ManagedResource): void;
   releaseResource(resource?: ManagedResource): void;
 }) {
-  const { engine, isLoading, error } = usePdfTsPdfiumEngine({
+  const { pdfium, isLoading, error } = usePdfTsPdfiumEngine({
     wasmUrl: resources.wasm.url,
     fontFallback: PDFIUM_FONT_FALLBACK,
     defaultImageType: RENDER_IMAGE_TYPE,
@@ -660,7 +669,7 @@ function ReadyViewer({
     />;
   }
 
-  if (!engine) {
+  if (!pdfium) {
     if (isLoading) {
       return <LoadingStatus label="Starting PDF engine…" />;
     }
@@ -674,7 +683,7 @@ function ReadyViewer({
   return (
     <App
       key={resources.document?.resource.url}
-      engine={engine}
+      pdfium={pdfium}
       sourceDocument={resources.document}
       onResourceConsumed={releaseResource}
     />

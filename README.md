@@ -32,4 +32,17 @@ Extension directories are written to `release/chrome-extension` and
 `release/vscode-extension`; packaged `.zip` and `.vsix` files are written
 directly to `release`.
 
-<img src="./assets/screenshot.png" width="300" alt="PDF.ts Viewer screenshot" />
+<table>
+  <tr>
+    <td align="center">
+      <img src="./assets/gruvbox-screenshot.webp" width="700" />
+      <br />
+      Gruvbox
+    </td>
+    <td align="center">
+      <img src="./assets/light-screenshot.webp" width="700" />
+      <br />
+      Light
+    </td>
+  </tr>
+</table>

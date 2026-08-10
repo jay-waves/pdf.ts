@@ -37,9 +37,6 @@ importers:
       '@embedpdf/plugin-annotation':
         specifier: 2.14.4
         version: 2.14.4(4cecfe23036f4375a9afcae23298ad5d)
-      '@embedpdf/plugin-bookmark':
-        specifier: 2.14.4
-        version: 2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@embedpdf/plugin-document-manager':
         specifier: 2.14.4
         version: 2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -61,9 +58,6 @@ importers:
       '@embedpdf/plugin-scroll':
         specifier: 2.14.4
         version: 2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@embedpdf/plugin-viewport@2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@embedpdf/plugin-search':
-        specifier: 2.14.4
-        version: 2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@embedpdf/plugin-selection':
         specifier: 2.14.4
         version: 2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(@embedpdf/plugin-interaction-manager@2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -305,16 +299,6 @@ packages:
       svelte: '>=5 <6'
       vue: '>=3.2.0'
 
-  '@embedpdf/plugin-bookmark@2.14.4':
-    resolution: {integrity: sha512-SfFhVsqEA+5rJUQSVTP259+cgMqbWR93G/kK6GhDcXou4jNGKNfmiWLeWSMp8lsnGhbMkWxFYJKLuH44NEm63g==}
-    peerDependencies:
-      '@embedpdf/core': 2.14.4
-      preact: ^10.26.4
-      react: '>=16.8.0'
-      react-dom: '>=16.8.0'
-      svelte: '>=5 <6'
-      vue: '>=3.2.0'
-
   '@embedpdf/plugin-document-manager@2.14.4':
     resolution: {integrity: sha512-1qUKu/RAN9LV+Ih7geig0X/2i4jIn8P1D0I0nQUwSMM9hJmitcyDJ/9SK/eOSsdEs4SulIqt+a2W2IMZOY2Vew==}
     peerDependencies:
@@ -382,16 +366,6 @@ packages:
     peerDependencies:
       '@embedpdf/core': 2.14.4
       '@embedpdf/plugin-viewport': 2.14.4
-      preact: ^10.26.4
-      react: '>=16.8.0'
-      react-dom: '>=16.8.0'
-      svelte: '>=5 <6'
-      vue: '>=3.2.0'
-
-  '@embedpdf/plugin-search@2.14.4':
-    resolution: {integrity: sha512-ErRlg0MKLxZ0c4OKk5RjPOV8f8yCaqFi6zqUxBI49/3yN6wDINKvm8dxt5Q2QGUa740n/XylT5BTbjH6lAjCzQ==}
-    peerDependencies:
-      '@embedpdf/core': 2.14.4
       preact: ^10.26.4
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
@@ -3241,13 +3215,6 @@ snapshots:
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
-  '@embedpdf/plugin-bookmark@2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
-    dependencies:
-      '@embedpdf/core': 2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@embedpdf/models': 2.14.4
-      react: 19.2.5
-      react-dom: 19.2.5(react@19.2.5)
-
   '@embedpdf/plugin-document-manager@2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       '@embedpdf/core': 2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -3298,13 +3265,6 @@ snapshots:
       '@embedpdf/core': 2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@embedpdf/models': 2.14.4
       '@embedpdf/plugin-viewport': 2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      react: 19.2.5
-      react-dom: 19.2.5(react@19.2.5)
-
-  '@embedpdf/plugin-search@2.14.4(@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
-    dependencies:
-      '@embedpdf/core': 2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@embedpdf/models': 2.14.4
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
