@@ -9,8 +9,7 @@
   @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
 }
 
-.button:hover,
-.button:focus-visible { @apply border-accent shadow-control; }
+.button:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
 .button[data-active='true'] {
   background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
 }
@@ -26,5 +25,4 @@
 .form:focus-within .input { @apply shadow-[inset_0_0_0_1px_var(--pdf-border-strong)]; }
 .input::-webkit-search-cancel-button { display: none; }
 .clear { @apply absolute top-0.5 right-0.5 inline-grid size-5.5 cursor-pointer place-items-center rounded border-0 bg-transparent p-0 text-muted outline-none; }
-.clear:hover,
-.clear:focus-visible { @apply bg-hover text-foreground; }
+.clear:is(:hover, :focus-visible) { @apply bg-hover text-foreground; }

@@ -13,8 +13,7 @@
 }
 
 .bookmark[data-current='true'] { @apply bg-hover text-foreground; }
-.bookmark:hover { @apply border-accent text-accent; }
-.bookmark:focus-visible { @apply border-accent text-accent; }
+.bookmark:is(:hover, :focus-visible) { @apply border-accent text-accent; }
 .bookmark:disabled { @apply cursor-default opacity-48; }
 
 summary.bookmark { @apply list-none; }
@@ -24,5 +23,4 @@ summary.bookmark::-webkit-details-marker { display: none; }
 
 .page { @apply min-w-7.75 flex-none text-right text-[10.5px] leading-3.75 text-muted tabular-nums; }
 .bookmark[data-current='true'] .page { @apply text-secondary; }
-.bookmark:hover .page,
-.bookmark:focus-visible .page { @apply text-accent; }
+.bookmark:is(:hover, :focus-visible) .page { @apply text-accent; }

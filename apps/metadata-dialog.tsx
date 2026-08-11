@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfMetadataObject } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import { Button, DialogActions } from './components';
-import { getDocumentCapability } from './utils';
+import { getDocument } from './viewer-document';
 import styles from './document-dialogs.module.css';
-import { FlatDocumentDialog, getErrorMessage } from './document-dialog-shared';
+import { DocumentDialog, getErrorMessage } from './document-dialog-shared';
 
 function formatMetadataDate(value: Date | null) {
   if (!value || Number.isNaN(value.getTime())) return 'Not provided';
@@ -15,8 +14,9 @@ function formatMetadataDate(value: Date | null) {
   }).format(value);
 }
 
-export function MetadataDialog({ registry, open, fileName, pageCount, onClose }: {
+export function MetadataDialog({ registry, documentId, open, fileName, pageCount, onClose }: {
   registry?: PluginRegistry;
+  documentId?: string | null;
   open: boolean;
   fileName?: string;
   pageCount: number;
@@ -30,8 +30,7 @@ export function MetadataDialog({ registry, open, fileName, pageCount, onClose }:
     if (!open) return;
 
     let cancelled = false;
-    const scoped = getDocumentCapability<DocumentManagerCapability>(registry, 'document-manager');
-    const document = scoped?.capability.getDocument(scoped.documentId);
+    const document = getDocument(registry, documentId);
     const engine = registry?.getEngine();
 
     setMetadata(null);
@@ -54,12 +53,11 @@ export function MetadataDialog({ registry, open, fileName, pageCount, onClose }:
     return () => {
       cancelled = true;
     };
-  }, [open, registry]);
+  }, [documentId, open, registry]);
 
   const fields = metadata ? [
     ['File name', fileName],
     ['Pages', String(pageCount)],
-    ['PDF.ts', __PDF_TS_BUILD_INFO__],
     ['Title', metadata.title],
     ['Author', metadata.author],
     ['Creator', metadata.creator],
@@ -69,7 +67,7 @@ export function MetadataDialog({ registry, open, fileName, pageCount, onClose }:
   ] : [];
 
   return (
-    <FlatDocumentDialog open={open} onClose={onClose} title="Metadata">
+    <DocumentDialog open={open} onClose={onClose} title="Metadata">
       <div className={styles.metadataContent}>
         {loading ? <div className={styles.metadataStatus}>Loading metadata…</div> : null}
         {error ? <div className={styles.error} role="alert">{error}</div> : null}
@@ -89,6 +87,6 @@ export function MetadataDialog({ registry, open, fileName, pageCount, onClose }:
           </Button>
         </DialogActions>
       </div>
-    </FlatDocumentDialog>
+    </DocumentDialog>
   );
 }

@@ -4,8 +4,8 @@ import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { getAnnotationScope } from './annotations';
 import { downloadPdf } from './platform/browser-download';
 import { savePdfIncrementally } from './pdf-engine';
-import { getActiveDocumentId } from './utils';
 import type { PdfFileHandle } from './platform/types';
+import { getDocument } from './viewer-document';
 
 async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCapability['forDocument']>) {
   // commit() resolves immediately when an auto-commit is already running, so
@@ -20,13 +20,11 @@ async function commitPendingAnnotations(annotationScope: ReturnType<AnnotationCa
 
 async function getDocumentForSerialization(
   registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
 ) {
   if (!registry) return null;
 
-  const documentId = getActiveDocumentId(registry);
-  const document = documentId
-    ? registry.getStore().getState().core.documents[documentId]?.document
-    : undefined;
+  const document = getDocument(registry, documentId);
   if (!documentId || !document) return null;
 
   const annotation = getAnnotationScope(registry, documentId);
@@ -37,9 +35,10 @@ async function getDocumentForSerialization(
 export async function exportPdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
   fileName: string,
 ) {
-  const document = await getDocumentForSerialization(registry);
+  const document = await getDocumentForSerialization(registry, documentId);
   if (!document) return false;
 
   const data = await engine.saveAsCopy(document).toPromise();
@@ -52,6 +51,7 @@ export async function exportPdf(
 export async function savePdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
   fileHandle: PdfFileHandle | undefined,
   { forceFullSave = false }: { forceFullSave?: boolean } = {},
 ) {
@@ -62,7 +62,7 @@ export async function savePdf(
   const target = await fileHandle.prepareWrite();
   if (!target) return false;
 
-  const document = await getDocumentForSerialization(registry);
+  const document = await getDocumentForSerialization(registry, documentId);
   if (!document) return false;
 
   if (target.saveIncremental && !forceFullSave) {

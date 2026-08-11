@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
 import { EmbedPDF } from '@embedpdf/core/react';
 import { PdfErrorCode, Rotation, type PdfEngine } from '@embedpdf/models';
@@ -11,16 +11,16 @@ import {
   InteractionManagerPluginPackage,
   PagePointerProvider,
 } from '@embedpdf/plugin-interaction-manager/react';
-import { RenderLayer, RenderPluginPackage } from '@embedpdf/plugin-render/react';
+import { RenderPluginPackage } from '@embedpdf/plugin-render/react';
 import { Rotate, RotatePluginPackage } from '@embedpdf/plugin-rotate/react';
 import { Scroller, ScrollPluginPackage, ScrollStrategy } from '@embedpdf/plugin-scroll/react';
 import { SelectionLayer, SelectionPluginPackage } from '@embedpdf/plugin-selection/react';
 import { SpreadMode, SpreadPluginPackage } from '@embedpdf/plugin-spread/react';
-import { TilingLayer, TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
+import { TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
 import { ViewportPluginPackage } from '@embedpdf/plugin-viewport/react';
 import { ZoomMode, ZoomPluginPackage } from '@embedpdf/plugin-zoom/react';
 import { createAnnotationPluginConfig } from './annotations';
-import { OpenPasswordDialog } from './protection-dialogs';
+import { UnlockDialog } from './protection-dialogs';
 import { signatureWidgetRenderer } from './signatures';
 import { themeAnnotationColorRenderer } from './theme-annotation-color';
 import { themeCommentRenderer } from './theme-comment-renderer';
@@ -31,18 +31,19 @@ import {
 } from './theme-highlight-renderer';
 import type { ManagedResource } from './platform/types';
 import type { PdfSearch } from './pdf-search';
-import { PdfSearchLayer } from './search';
+import type { PdfScroll } from './pdf-scroll';
+import { SearchLayer } from './search';
 import { ViewerViewport } from './viewer-viewport';
 import { ViewportInput } from './viewer-viewport-input';
+import { PDF_TILE_SIZE_CSS_PX } from './viewer-diagnostics';
+import { RasterLayer, TileLayer } from './viewer-render-layers';
+import { DOCUMENT_ID } from './viewer-document';
 import './viewer-surface.css';
 import styles from './viewer.module.css';
 
 export const RENDER_IMAGE_TYPE = 'image/bmp';
-const TILING_TILE_SIZE = 768;
 const TILING_OVERLAP_PX = 2;
 const TILING_EXTRA_RINGS = 0;
-const SEARCH_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38%, transparent)';
-const SEARCH_ACTIVE_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-danger-primary) 62%, transparent)';
 export const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
 const ANNOTATION_RENDERERS = [
   themeHighlightRenderer,
@@ -63,10 +64,11 @@ export function LoadingStatus({ label }: { label: string }) {
   );
 }
 
-export function createViewerPlugins(fileUrl?: string) {
+function createPlugins(fileUrl?: string) {
   return [
     createPluginRegistration(DocumentManagerPluginPackage, {
-      initialDocuments: fileUrl ? [{ url: fileUrl }] : [],
+      maxDocuments: 1,
+      initialDocuments: fileUrl ? [{ url: fileUrl, documentId: DOCUMENT_ID }] : [],
     }),
     createPluginRegistration(ViewportPluginPackage, { viewportGap: 10 }),
     createPluginRegistration(ScrollPluginPackage, {
@@ -77,7 +79,7 @@ export function createViewerPlugins(fileUrl?: string) {
     createPluginRegistration(RenderPluginPackage, { defaultImageType: RENDER_IMAGE_TYPE }),
     createPluginRegistration(TilingPluginPackage, {
       defaultImageType: RENDER_IMAGE_TYPE,
-      tileSize: TILING_TILE_SIZE,
+      tileSize: PDF_TILE_SIZE_CSS_PX,
       overlapPx: TILING_OVERLAP_PX,
       extraRings: TILING_EXTRA_RINGS,
     }),
@@ -95,22 +97,6 @@ export function createViewerPlugins(fileUrl?: string) {
   ];
 }
 
-function ActiveDocumentTracker({ documentId, onChange }: {
-  documentId: string | null;
-  onChange(documentId: string | null): void;
-}) {
-  useEffect(() => onChange(documentId), [documentId, onChange]);
-  return null;
-}
-
-function ResourceConsumedNotifier({ resource, onConsumed }: {
-  resource?: ManagedResource;
-  onConsumed(resource?: ManagedResource): void;
-}) {
-  useEffect(() => onConsumed(resource), [onConsumed, resource]);
-  return null;
-}
-
 function PdfPageLayers({
   documentId,
   pageIndex,
@@ -118,6 +104,7 @@ function PdfPageLayers({
   height,
   renderThemeVersion,
   search,
+  renderDpr,
 }: {
   documentId: string;
   pageIndex: number;
@@ -125,6 +112,7 @@ function PdfPageLayers({
   height: number;
   renderThemeVersion: number;
   search: PdfSearch;
+  renderDpr: number;
 }) {
   return (
     <Rotate documentId={documentId} pageIndex={pageIndex}>
@@ -139,27 +127,27 @@ function PdfPageLayers({
           backgroundColor: 'var(--pdf-page-background)',
         }}
       >
-        <RenderLayer
+        <RasterLayer
           key={`render-${renderThemeVersion}`}
           documentId={documentId}
           pageIndex={pageIndex}
           scale={0.5}
+          dpr={renderDpr}
           className="pdf-page-render-image"
           draggable={false}
           style={{ pointerEvents: 'none' }}
         />
-        <TilingLayer
+        <TileLayer
           key={`tiles-${renderThemeVersion}`}
           documentId={documentId}
           pageIndex={pageIndex}
+          dpr={renderDpr}
           className="pdf-page-tiling-layer"
         />
-        <PdfSearchLayer
+        <SearchLayer
           search={search}
           documentId={documentId}
           pageIndex={pageIndex}
-          highlightColor={SEARCH_HIGHLIGHT_COLOR}
-          activeHighlightColor={SEARCH_ACTIVE_HIGHLIGHT_COLOR}
         />
         <div className="pdf-text-selection-layer">
           <SelectionLayer
@@ -185,107 +173,112 @@ function LoadedPdfDocument({
   panMode,
   renderThemeVersion,
   search,
+  scroll,
   resource,
   onResourceConsumed,
+  renderDpr,
 }: {
   documentId: string;
   panMode: boolean;
   renderThemeVersion: number;
   search: PdfSearch;
+  scroll?: PdfScroll | null;
   resource?: ManagedResource;
   onResourceConsumed(resource?: ManagedResource): void;
+  renderDpr: number;
 }) {
+  useEffect(() => onResourceConsumed(resource), [onResourceConsumed, resource]);
+
   return (
-    <>
-      <ResourceConsumedNotifier resource={resource} onConsumed={onResourceConsumed} />
-      <GlobalPointerProvider documentId={documentId}>
-        <ViewerViewport
-          documentId={documentId}
-          className={`viewer${panMode ? ' is-pan-mode' : ''}`}
-          onDragStart={(event) => event.preventDefault()}
-        >
-          <ViewportInput documentId={documentId} panMode={panMode}>
-            <Scroller
-              documentId={documentId}
-              className="pdf-scroller"
-              renderPage={({ pageIndex, width, height }) => (
-                <PdfPageLayers
-                  documentId={documentId}
-                  pageIndex={pageIndex}
-                  width={width}
-                  height={height}
-                  renderThemeVersion={renderThemeVersion}
-                  search={search}
-                />
-              )}
-            />
-          </ViewportInput>
-        </ViewerViewport>
-      </GlobalPointerProvider>
-    </>
+    <GlobalPointerProvider documentId={documentId}>
+      <ViewerViewport
+        documentId={documentId}
+        scroll={scroll}
+        className={`viewer${panMode ? ' is-pan-mode' : ''}`}
+        onDragStart={(event) => event.preventDefault()}
+      >
+        <ViewportInput documentId={documentId} panMode={panMode}>
+          <Scroller
+            documentId={documentId}
+            className="pdf-scroller"
+            renderPage={({ pageIndex, width, height }) => (
+              <PdfPageLayers
+                documentId={documentId}
+                pageIndex={pageIndex}
+                width={width}
+                height={height}
+                renderThemeVersion={renderThemeVersion}
+                search={search}
+                renderDpr={renderDpr}
+              />
+            )}
+          />
+        </ViewportInput>
+      </ViewerViewport>
+    </GlobalPointerProvider>
   );
 }
 
 export const PdfSurface = memo(function PdfSurface({
   engine,
-  plugins,
   registry,
   panMode,
   renderThemeVersion,
   search,
+  scroll,
   documentResource,
   onInitialized,
-  onActiveDocumentChange,
   onResourceConsumed,
+  renderDpr,
 }: {
   engine: PdfEngine<Blob>;
-  plugins: ReturnType<typeof createViewerPlugins>;
   registry?: PluginRegistry;
   panMode: boolean;
   renderThemeVersion: number;
   search: PdfSearch;
+  scroll?: PdfScroll | null;
   documentResource?: ManagedResource;
   onInitialized(registry: PluginRegistry): Promise<void>;
-  onActiveDocumentChange(documentId: string | null): void;
   onResourceConsumed(resource?: ManagedResource): void;
+  renderDpr: number;
 }) {
+  const fileUrl = documentResource?.url;
+  const plugins = useMemo(() => createPlugins(fileUrl), [fileUrl]);
+
   return (
     <EmbedPDF engine={engine} plugins={plugins} onInitialized={onInitialized}>
-      {({ activeDocumentId }) => (
-        <>
-          <ActiveDocumentTracker documentId={activeDocumentId} onChange={onActiveDocumentChange} />
-          {activeDocumentId ? (
-            <DocumentContent documentId={activeDocumentId}>
-              {({ documentState, isLoading, isError, isLoaded }) => (
-                <>
-                  {isLoading && <LoadingStatus label="Loading document…" />}
-                  {isError && documentState.errorCode === PdfErrorCode.Password ? (
-                    <OpenPasswordDialog
-                      registry={registry}
-                      documentId={activeDocumentId}
-                      incorrect={documentState.passwordProvided === true}
-                    />
-                  ) : null}
-                  {isError && documentState.errorCode !== PdfErrorCode.Password ? (
-                    <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>
-                  ) : null}
-                  {isLoaded ? (
-                    <LoadedPdfDocument
-                      documentId={activeDocumentId}
-                      panMode={panMode}
-                      renderThemeVersion={renderThemeVersion}
-                      search={search}
-                      resource={documentResource}
-                      onResourceConsumed={onResourceConsumed}
-                    />
-                  ) : null}
-                </>
-              )}
-            </DocumentContent>
-          ) : (
-            <div className={VIEWER_STATUS_CLASS}>No PDF document.</div>
+      {({ activeDocumentId: documentId }) => documentId ? (
+        <DocumentContent documentId={documentId}>
+          {({ documentState, isLoading, isError, isLoaded }) => (
+            <>
+              {isLoading && <LoadingStatus label="Loading document…" />}
+              {isError && documentState.errorCode === PdfErrorCode.Password ? (
+                <UnlockDialog
+                  registry={registry}
+                  documentId={documentId}
+                  incorrect={documentState.passwordProvided === true}
+                />
+              ) : null}
+              {isError && documentState.errorCode !== PdfErrorCode.Password ? (
+                <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>
+              ) : null}
+              {isLoaded ? (
+                <LoadedPdfDocument
+                  documentId={documentId}
+                  panMode={panMode}
+                  renderThemeVersion={renderThemeVersion}
+                  search={search}
+                  scroll={scroll}
+                  resource={documentResource}
+                  onResourceConsumed={onResourceConsumed}
+                  renderDpr={renderDpr}
+                />
+              ) : null}
+            </>
           )}
-        </>
+        </DocumentContent>
+      ) : (
+        <div className={VIEWER_STATUS_CLASS}>No PDF document.</div>
       )}
     </EmbedPDF>
   );

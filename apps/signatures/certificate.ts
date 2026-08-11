@@ -24,7 +24,7 @@ export interface SignatureCertificateInfo {
   validUntil: Date;
 }
 
-export type SignatureVerificationState = 'pending' | 'verified' | 'failed' | 'unsupported';
+type SignatureVerificationState = 'pending' | 'verified' | 'failed' | 'unsupported';
 
 export interface SignatureVerificationResult {
   state: SignatureVerificationState;

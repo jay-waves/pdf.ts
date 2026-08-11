@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { platform } from '#platform';
 import type { PdfRenderTheme } from './pdf-render-theme';
 
-export type ViewerColorMode = 'light' | 'dark';
+type ViewerColorMode = 'light' | 'dark';
 type ViewerThemeMetadata = {
   id: string;
   label: string;
@@ -94,9 +94,9 @@ type ViewerThemeForMode<Mode extends ViewerColorMode> = Extract<
   { colorMode: Mode }
 >['id'];
 export type ViewerTheme = ViewerThemeDefinition['id'];
-export type LightViewerTheme = ViewerThemeForMode<'light'>;
-export type DarkViewerTheme = ViewerThemeForMode<'dark'>;
-export type ViewerThemeSettings = {
+type LightViewerTheme = ViewerThemeForMode<'light'>;
+type DarkViewerTheme = ViewerThemeForMode<'dark'>;
+type ViewerThemeSettings = {
   light: LightViewerTheme;
   dark: DarkViewerTheme;
 };

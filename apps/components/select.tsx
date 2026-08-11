@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { Select as RadixSelect } from 'radix-ui';
+import { usePortalContainer } from './portal-container';
 import styles from './select.module.css';
 
 interface SelectOption {
@@ -24,6 +25,7 @@ export function Select({
   disabled?: boolean;
   onValueChange(value: string): void;
 }) {
+  const portalContainer = usePortalContainer();
   return (
     <RadixSelect.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <RadixSelect.Trigger className={className} aria-label={label}>
@@ -32,7 +34,7 @@ export function Select({
           <ChevronDown size={12} strokeWidth={2} />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
-      <RadixSelect.Portal>
+      <RadixSelect.Portal container={portalContainer ?? undefined}>
         <RadixSelect.Content
           className={styles.content}
           position="popper"

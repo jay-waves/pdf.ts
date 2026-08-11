@@ -11,22 +11,21 @@
 .icon { @apply block size-3.5 flex-none; }
 .searchModeIcon { @apply size-4; }
 
-.iconButton {
-  @apply inline-grid size-6.5 flex-none cursor-pointer place-items-center rounded-md border border-transparent bg-transparent p-0 leading-3.5 text-inherit outline-none;
+.iconButton,
+.modeButton {
+  @apply cursor-pointer rounded-md border border-transparent bg-transparent text-inherit outline-none;
   @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
 }
 
-.iconButton:hover,
-.iconButton:focus-visible { @apply border-accent shadow-control; }
+.iconButton { @apply inline-grid size-6.5 flex-none place-items-center p-0 leading-3.5; }
+.iconButton:is(:hover, :focus-visible),
+.modeButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
 .iconButton:disabled { @apply cursor-default opacity-46; }
 
 .modeButton {
-  @apply h-6.5 min-w-0 cursor-pointer items-center justify-center gap-1.25 rounded-md border border-transparent bg-transparent text-inherit leading-3.5 outline-none;
+  @apply h-6.5 min-w-0 items-center justify-center gap-1.25 leading-3.5;
   @apply inline-flex w-16 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
-  @apply transition-[border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
 }
-.modeButton:hover,
-.modeButton:focus-visible { @apply border-accent shadow-control; }
 .modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
 
 .zoomSelect {

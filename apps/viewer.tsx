@@ -10,10 +10,8 @@ import { ZoomMode, type ZoomCapability } from '@embedpdf/plugin-zoom/react';
 import './viewer.css';
 import {
   EMPTY_CLEANUP,
-  getActiveDocumentId,
-  getDocumentScrollStrategy,
+  getDocumentScope,
   getPluginCapability,
-  type ScrollCapability,
 } from './utils';
 import { getFileNameFromUrl } from './url';
 import {
@@ -23,9 +21,10 @@ import {
   installOutlinePrefetch,
   type OutlineCache,
 } from './outline';
-import { BottomNavigationControl } from './bottom-navigation';
-import { installSearchKeyboardShortcut } from './search';
+import { BottomNav } from './bottom-navigation';
+import { installSearchKey } from './search';
 import { PdfSearch } from './pdf-search';
+import { PdfScroll } from './pdf-scroll';
 import {
   initializeViewerTheme,
   setViewerScrollStrategyAttribute,
@@ -34,20 +33,21 @@ import { Toolbar } from './toolbar';
 import { Thumbnails } from './thumbnails';
 import { ColorPalette } from './color-palette';
 import {
-  installAnnotationAutoPreviewAttribute,
-  installAnnotationDirtyTracker,
-  installAnnotationUriNavigation,
-  installNewCommentEditor,
+  installAnnotationDirty,
+  installAnnotationLinks,
+  installAnnotationPreview,
+  installCommentEditor,
 } from './annotations';
 import { Comments } from './comments';
 import { MetadataDialog } from './metadata-dialog';
 import { PrintDialog } from './print-dialog';
 import { ProtectDialog } from './protection-dialogs';
 import { ThemeDialog } from './theme-dialog';
+import { DeveloperDialog } from './developer-dialog';
 import { ContextMenu } from './context-menu';
 import { Dialog, TooltipProvider } from './components';
 import { exportPdf } from './pdf-save';
-import { usePdfTsPdfiumEngine, type PdfiumCapability } from './pdf-engine';
+import { usePdfRuntime, type PdfRuntime } from './pdf-engine';
 import { useDocumentPersistence } from './viewer-document-persistence';
 import { useRenderThemeVersion } from './viewer-render-theme';
 import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
@@ -59,15 +59,22 @@ import {
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
 import {
-  createViewerPlugins,
   LoadingStatus,
   PdfSurface,
   RENDER_IMAGE_TYPE,
   VIEWER_STATUS_CLASS,
 } from './viewer-surface';
 import styles from './viewer.module.css';
+import {
+  getEffectiveRenderDpr,
+  getRenderDprMode,
+  installRenderDprOverride,
+  setRenderDprMode,
+  viewerDiagnostics,
+  type RenderDprMode,
+} from './viewer-diagnostics';
+import { DOCUMENT_ID } from './viewer-document';
 
-const MAX_RENDER_DPR = 1.75;
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 // The engine tracks fontFallback by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
@@ -97,73 +104,21 @@ function installAll(installers: Array<() => () => void>) {
   return cleanup;
 }
 
-function installScrollStrategyAttribute(registry: PluginRegistry) {
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  if (!scroll) {
-    return EMPTY_CLEANUP;
-  }
-
-  const sync = (strategy?: ScrollStrategy) => {
-    const documentId = getActiveDocumentId(registry);
-    const current = strategy ?? (
-      documentId
-        ? getDocumentScrollStrategy(registry, documentId)
-        : ScrollStrategy.Vertical
-    );
-    setViewerScrollStrategyAttribute(current === ScrollStrategy.Horizontal ? 'horizontal' : 'vertical');
+function installScrollAttribute(scroll: PdfScroll) {
+  const sync = (strategy = scroll.getStrategy()) => {
+    setViewerScrollStrategyAttribute(strategy === ScrollStrategy.Horizontal ? 'horizontal' : 'vertical');
   };
 
   sync();
-  return scroll.onStateChange((state) => sync(state.strategy));
+  return scroll.onStrategyChange(sync);
 }
 
-function installFormDirtyTracker(registry: PluginRegistry, onDirty: () => void) {
+function installFormDirty(registry: PluginRegistry, onDirty: () => void) {
   const form = getPluginCapability<FormCapability>(registry, 'form');
   return form?.onFieldValueChange(onDirty) ?? EMPTY_CLEANUP;
 }
 
-function installRenderDprCap() {
-  const descriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
-  const originalDpr = window.devicePixelRatio || 1;
-  let nativeDescriptor: PropertyDescriptor | undefined = descriptor;
-
-  let target = Object.getPrototypeOf(window);
-  while (!nativeDescriptor && target) {
-    nativeDescriptor = Object.getOwnPropertyDescriptor(target, 'devicePixelRatio');
-    target = Object.getPrototypeOf(target);
-  }
-
-  const getNativeDpr = () => {
-    if (nativeDescriptor?.get) {
-      return nativeDescriptor.get.call(window) || originalDpr;
-    }
-
-    return originalDpr;
-  };
-
-  try {
-    Object.defineProperty(window, 'devicePixelRatio', {
-      configurable: true,
-      get: () => Math.min(getNativeDpr(), MAX_RENDER_DPR),
-    });
-  } catch {
-    return EMPTY_CLEANUP;
-  }
-
-  return () => {
-    try {
-      if (descriptor) {
-        Object.defineProperty(window, 'devicePixelRatio', descriptor);
-      } else {
-        Reflect.deleteProperty(window, 'devicePixelRatio');
-      }
-    } catch {
-      // Leaving the capped DPR in place is safer than throwing during unmount.
-    }
-  };
-}
-
-function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
+function installZoomKeys(registry: PluginRegistry, documentId: string) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (!event.ctrlKey && !event.metaKey) {
       return;
@@ -176,19 +131,17 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
     event.preventDefault();
     event.stopPropagation();
 
-    const documentId = getActiveDocumentId(registry);
-    const zoom = getPluginCapability<ZoomCapability>(registry, 'zoom');
-    if (!documentId || !zoom) {
+    const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
+    if (!zoom) {
       return;
     }
 
-    const zoomScope = zoom.forDocument(documentId);
     if (event.key === '0') {
-      zoomScope.requestZoom(ZoomMode.FitPage);
+      zoom.requestZoom(ZoomMode.FitPage);
     } else if (event.key === '-' || event.key === '_') {
-      zoomScope.zoomOut();
+      zoom.zoomOut();
     } else {
-      zoomScope.zoomIn();
+      zoom.zoomIn();
     }
   };
 
@@ -200,7 +153,7 @@ function installPdfZoomKeyboardShortcuts(registry: PluginRegistry) {
 }
 
 interface AppProps {
-  pdfium: PdfiumCapability;
+  pdfium: PdfRuntime;
   sourceDocument?: PlatformDocument;
   onResourceConsumed(resource?: ManagedResource): void;
 }
@@ -210,7 +163,7 @@ type SidePanel =
   | { type: 'outline' | 'thumbnails' | 'colors' }
   | { type: 'comments'; target: CommentTarget | null }
   | null;
-type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | null;
+type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer' | null;
 type DocumentPane = Exclude<NonNullable<SidePanel>['type'], 'colors'>;
 const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
   thumbnails: 'PDF Thumbnails',
@@ -226,30 +179,35 @@ function App({
   onResourceConsumed,
 }: AppProps) {
   const engine = pdfium.engine;
-  const documentResource = sourceDocument?.resource;
+  const {
+    resource: documentResource,
+    key: documentKey,
+    name: documentName,
+    fileHandle,
+  } = sourceDocument ?? {};
   const fileUrl = documentResource?.url;
-  const documentKey = sourceDocument?.key;
-  const documentName = sourceDocument?.name;
-  const fileHandle = sourceDocument?.fileHandle;
   const resolvedDocumentName = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined);
+  const documentId = fileUrl ? DOCUMENT_ID : null;
   const [registry, setRegistry] = useState<PluginRegistry>();
-  const [toolbarDocumentId, setToolbarDocumentId] = useState<string | null>(null);
+  const [pdfScroll, setPdfScroll] = useState<PdfScroll | null>(null);
   const [panMode, setPanMode] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidePanel, setSidePanel] = useState<SidePanel>(null);
   const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
   const [translationRequest, setTranslationRequest] = useState<SelectionTranslationRequest | null>(null);
+  const [dprMode, setDprMode] = useState<RenderDprMode>(getRenderDprMode);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
     bookmarks: [],
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
   const search = useMemo(() => new PdfSearch(pdfium), [pdfium]);
-  const signatures = useDocumentSignatures(engine, registry, toolbarDocumentId);
+  const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
-  const { saveDocument, setDirty } = useDocumentPersistence({
+  const { isDirty, saveDocument, setDirty } = useDocumentPersistence({
     engine,
     registry,
+    documentId,
     fileHandle,
     title: resolvedDocumentName ?? 'PDF',
   });
@@ -279,8 +237,6 @@ function App({
     setSidePanel({ type });
   };
 
-  const plugins = useMemo(() => createViewerPlugins(fileUrl), [fileUrl]);
-
   useEffect(() => {
     return () => {
       registryCleanupRef.current?.();
@@ -293,7 +249,9 @@ function App({
     registryCleanupRef.current?.();
     registryCleanupRef.current = null;
 
+    const nextScroll = new PdfScroll(nextRegistry, DOCUMENT_ID);
     setRegistry(nextRegistry);
+    setPdfScroll(nextScroll);
     setOutlineCache({ status: 'idle', bookmarks: [] });
     setDocumentView(INITIAL_DOCUMENT_VIEW);
     setSidePanel(null);
@@ -301,24 +259,27 @@ function App({
     setTranslationRequest(null);
     setPanMode(false);
     setSearchOpen(false);
+    viewerDiagnostics.resetRendering();
     search.clear();
     setDirty(false);
 
     const installers = [
       () => pdfium.bindRegistry(nextRegistry),
-      () => installPdfZoomKeyboardShortcuts(nextRegistry),
-      () => installScrollStrategyAttribute(nextRegistry),
-      () => installAnnotationUriNavigation(nextRegistry, platform.openExternal),
-      () => installAnnotationAutoPreviewAttribute(nextRegistry),
-      () => installNewCommentEditor(nextRegistry, (annotationId) => {
+      () => installZoomKeys(nextRegistry, DOCUMENT_ID),
+      () => installScrollAttribute(nextScroll),
+      () => installAnnotationLinks(nextRegistry, platform.openExternal),
+      () => installAnnotationPreview(nextRegistry, DOCUMENT_ID),
+      () => installCommentEditor(nextRegistry, (annotationId) => {
         setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
       }),
-      () => installAnnotationDirtyTracker(nextRegistry, () => setDirty(true)),
-      () => installFormDirtyTracker(nextRegistry, () => setDirty(true)),
-      () => installPlatformReadingHistory(nextRegistry, documentKey),
-      () => installPageTracker(nextRegistry, setDocumentView),
-      () => installSearchKeyboardShortcut(() => setSearchOpen(true)),
-      () => installOutlinePrefetch(nextRegistry, pdfium, {
+      () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
+      () => installFormDirty(nextRegistry, () => setDirty(true)),
+      () => installPlatformReadingHistory(nextRegistry, nextScroll, documentKey),
+      () => installPageTracker(nextScroll, setDocumentView),
+      () => installSearchKey(() => setSearchOpen(true)),
+      () => installOutlinePrefetch(pdfium, {
+        documentId: DOCUMENT_ID,
+        scroll: nextScroll,
         cacheKey: documentKey,
         onLoaded: setOutlineCache,
       }),
@@ -328,12 +289,13 @@ function App({
   }, [documentKey, pdfium, search, setDirty]);
 
   const toolbarState = {
-    documentId: toolbarDocumentId,
+    documentId,
     searchOpen,
     thumbnailsOpen: sidePanel?.type === 'thumbnails',
     colorPaletteOpen: sidePanel?.type === 'colors',
     panMode,
     signatureCount: signatures.length,
+    canSave: isDirty,
   };
   const toolbarActions = {
     setPanMode,
@@ -347,9 +309,10 @@ function App({
     openProtect: () => openDialog('protect'),
     openMetadata: () => openDialog('metadata'),
     openTheme: () => openDialog('theme'),
+    openDeveloper: () => openDialog('developer'),
     openSignatures: () => setActiveDialog('signatures'),
     exportDocument: () => {
-      void exportPdf(engine, registry, resolvedDocumentName ?? 'document.pdf').catch((error) => {
+      void exportPdf(engine, registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
         console.error('[pdf-ts] failed to export PDF', error);
       });
     },
@@ -360,19 +323,20 @@ function App({
     <main ref={viewerRootRef} className="fixed inset-0 overflow-hidden">
       <PdfSurface
         engine={engine}
-        plugins={plugins}
         registry={registry}
         panMode={panMode}
         renderThemeVersion={renderThemeVersion}
         search={search}
+        scroll={pdfScroll}
         documentResource={documentResource}
         onInitialized={initializePlugins}
-        onActiveDocumentChange={setToolbarDocumentId}
         onResourceConsumed={onResourceConsumed}
+        renderDpr={getEffectiveRenderDpr(dprMode)}
       />
       <Toolbar
         registry={registry}
         search={search}
+        scroll={pdfScroll}
         state={toolbarState}
         actions={toolbarActions}
       />
@@ -383,6 +347,8 @@ function App({
       >
         <Thumbnails
           registry={registry}
+          documentId={documentId}
+          scroll={pdfScroll}
           open={documentPane === 'thumbnails'}
           totalPages={totalPages}
           currentPageNumber={currentPageNumber}
@@ -391,6 +357,8 @@ function App({
         <Outline
           registry={registry}
           pdfium={pdfium}
+          documentId={documentId}
+          scroll={pdfScroll}
           open={documentPane === 'outline'}
           cache={outlineCache}
           currentBookmarkKey={currentBookmarkKey}
@@ -399,6 +367,8 @@ function App({
         <Comments
           engine={engine}
           registry={registry}
+          documentId={documentId}
+          scroll={pdfScroll}
           open={documentPane === 'comments'}
           currentPageNumber={currentPageNumber}
           targetAnnotationId={commentTarget?.annotationId}
@@ -407,12 +377,15 @@ function App({
       </Dialog>
       <ColorPalette
         registry={registry}
+        documentId={documentId}
         open={sidePanel?.type === 'colors'}
         onClose={closeSidePanel}
       />
       <ContextMenu
         engine={engine}
         registry={registry}
+        documentId={documentId}
+        scroll={pdfScroll}
         container={viewerRootRef.current}
         onOpenComments={(annotationId, isNew) => setSidePanel({
           type: 'comments',
@@ -433,6 +406,7 @@ function App({
       ) : null}
       <PrintDialog
         registry={registry}
+        documentId={documentId}
         open={activeDialog === 'print'}
         currentPageNumber={currentPageNumber}
         totalPages={totalPages}
@@ -440,12 +414,14 @@ function App({
       />
       <ProtectDialog
         registry={registry}
+        documentId={documentId}
         open={activeDialog === 'protect'}
         onClose={closeDialog}
         onProtectionChanged={() => setDirty(true, true)}
       />
       <MetadataDialog
         registry={registry}
+        documentId={documentId}
         open={activeDialog === 'metadata'}
         fileName={resolvedDocumentName}
         pageCount={totalPages}
@@ -461,8 +437,17 @@ function App({
         open={activeDialog === 'theme'}
         onClose={closeDialog}
       />
-      <BottomNavigationControl
-        registry={registry}
+      <DeveloperDialog
+        open={activeDialog === 'developer'}
+        dprMode={dprMode}
+        onDprModeChange={(nextMode) => {
+          setRenderDprMode(nextMode);
+          setDprMode(nextMode);
+        }}
+        onClose={closeDialog}
+      />
+      <BottomNav
+        scroll={pdfScroll}
         title={currentTitle}
         pageNumber={currentPageNumber}
         totalPages={totalPages}
@@ -612,8 +597,6 @@ function useViewerResources() {
 function ViewerBootstrap() {
   const { resources, setResources, error, trackResource, releaseResource } = useViewerResources();
 
-  useEffect(installRenderDprCap, []);
-
   if (error) {
     return <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF resources: {error.message}</div>;
   }
@@ -643,7 +626,7 @@ function ReadyViewer({
   trackResource(resource?: ManagedResource): void;
   releaseResource(resource?: ManagedResource): void;
 }) {
-  const { pdfium, isLoading, error } = usePdfTsPdfiumEngine({
+  const { pdfium, isLoading, error } = usePdfRuntime({
     wasmUrl: resources.wasm.url,
     fontFallback: PDFIUM_FONT_FALLBACK,
     defaultImageType: RENDER_IMAGE_TYPE,
@@ -691,6 +674,7 @@ function ReadyViewer({
 }
 
 initializeViewerTheme();
+installRenderDprOverride();
 
 createRoot(document.getElementById('root')!).render(
   <TooltipProvider>

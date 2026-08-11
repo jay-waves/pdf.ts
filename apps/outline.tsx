@@ -5,13 +5,11 @@ import {
   type PdfBookmarkObject,
 } from '@embedpdf/models';
 import { PanelContent, PanelState } from './components';
-import type { PdfiumCapability } from './pdf-engine';
+import type { PdfRuntime } from './pdf-engine';
+import type { PdfScroll } from './pdf-scroll';
 import {
   EMPTY_CLEANUP,
-  getActiveDocumentId,
   getDestinationFromTarget,
-  getPluginCapability,
-  type ScrollCapability,
 } from './utils';
 import styles from './outline.module.css';
 
@@ -104,14 +102,9 @@ export function getCurrentBookmark(bookmarks: PdfBookmarkObject[], pageNumber: n
 }
 
 export function installPageTracker(
-  registry: PluginRegistry,
+  scroll: PdfScroll,
   onChange: (value: { pageNumber: number; totalPages: number }) => void,
 ) {
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  if (!scroll) {
-    return EMPTY_CLEANUP;
-  }
-
   let currentPageNumber = 1;
   let totalPages = 0;
 
@@ -122,15 +115,15 @@ export function installPageTracker(
     });
   };
 
-  const unsubscribePageChange = scroll.onPageChange((event) => {
-    currentPageNumber = event.pageNumber;
-    totalPages = event.totalPages;
+  const unsubscribePageChange = scroll.onPageChange((pageNumber, pageCount) => {
+    currentPageNumber = pageNumber;
+    totalPages = pageCount;
     refresh();
   });
 
-  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
-    currentPageNumber = scroll.forDocument(event.documentId).getCurrentPage();
-    totalPages = event.totalPages || scroll.forDocument(event.documentId).getTotalPages();
+  const unsubscribeLayoutReady = scroll.onLayoutReady((pageCount) => {
+    currentPageNumber = scroll.getCurrentPage();
+    totalPages = pageCount || scroll.getTotalPages();
     refresh();
   });
 
@@ -142,13 +135,12 @@ export function installPageTracker(
   };
 }
 
-function isCurrentLoadedDocument(pdfium: PdfiumCapability, documentId: string) {
-  return pdfium.getActiveDocumentId() === documentId && Boolean(pdfium.getDocument(documentId));
+function isCurrentLoadedDocument(pdfium: PdfRuntime, documentId: string) {
+  return Boolean(pdfium.getDocument(documentId));
 }
 
-async function loadBookmarks(pdfium: PdfiumCapability, requestedDocumentId?: string) {
-  const documentId = requestedDocumentId ?? pdfium.getActiveDocumentId();
-  if (!documentId || !isCurrentLoadedDocument(pdfium, documentId)) {
+async function loadBookmarks(pdfium: PdfRuntime, documentId: string) {
+  if (!isCurrentLoadedDocument(pdfium, documentId)) {
     return [];
   }
 
@@ -156,27 +148,24 @@ async function loadBookmarks(pdfium: PdfiumCapability, requestedDocumentId?: str
   return (await task.toPromise()).bookmarks;
 }
 
-async function loadOutline(pdfium: PdfiumCapability, documentId?: string) {
+async function loadOutline(pdfium: PdfRuntime, documentId: string) {
   return toOutlineCache(await loadBookmarks(pdfium, documentId));
 }
 
 export function installOutlinePrefetch(
-  registry: PluginRegistry,
-  pdfium: PdfiumCapability,
+  pdfium: PdfRuntime,
   {
+    documentId,
+    scroll,
     cacheKey,
     onLoaded,
   }: {
+    documentId: string;
+    scroll: PdfScroll;
     cacheKey?: string;
     onLoaded(cache: OutlineCache): void;
   },
 ) {
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  if (!scroll) {
-    onLoaded({ status: 'error', bookmarks: [] });
-    return EMPTY_CLEANUP;
-  }
-
   const cached = cacheKey ? outlinePrefetchCache.get(cacheKey) : undefined;
   if (cached) {
     onLoaded(cached);
@@ -224,16 +213,12 @@ export function installOutlinePrefetch(
       });
   };
 
-  const unsubscribeLayoutReady = scroll.onLayoutReady((event) => {
-    if (!event.isInitial) {
-      return;
-    }
-
-    loadForDocument(event.documentId);
+  const unsubscribeLayoutReady = scroll.onLayoutReady((_totalPages, initial) => {
+    if (!initial) return;
+    loadForDocument(documentId);
   });
 
-  const documentId = getActiveDocumentId(registry);
-  if (documentId) loadForDocument(documentId);
+  loadForDocument(documentId);
 
   return () => {
     cancelled = true;
@@ -241,41 +226,33 @@ export function installOutlinePrefetch(
   };
 }
 
-function scrollToBookmark(registry: PluginRegistry, bookmark: PdfBookmarkObject) {
+function scrollToBookmark(scroll: PdfScroll, bookmark: PdfBookmarkObject) {
   const destination = getDestinationFromTarget(bookmark.target);
   if (!destination) {
     return;
   }
 
-  const documentId = getActiveDocumentId(registry);
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  if (!documentId || !scroll) {
-    return;
-  }
-
   const xyzZoom = destination.zoom.mode === PdfZoomMode.XYZ ? destination.zoom : undefined;
-  scroll.forDocument(documentId).scrollToPage({
-    pageNumber: destination.pageIndex + 1,
-    pageCoordinates: xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : undefined,
-    behavior: 'instant',
-  });
-}
-
-function getAncestorBookmarkKeys(bookmarkKey: string) {
-  const parts = bookmarkKey.split('.');
-  return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('.'));
+  scroll.goToPosition(
+    destination.pageIndex,
+    xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : undefined,
+  );
 }
 
 export function Outline({
   registry,
   pdfium,
+  documentId,
+  scroll,
   open,
   cache,
   currentBookmarkKey,
   onCacheChange,
 }: {
   registry?: PluginRegistry;
-  pdfium: PdfiumCapability;
+  pdfium: PdfRuntime;
+  documentId?: string | null;
+  scroll?: PdfScroll | null;
   open: boolean;
   cache: OutlineCache;
   currentBookmarkKey: string;
@@ -284,25 +261,15 @@ export function Outline({
   const contentRef = useRef<HTMLDivElement>(null);
   const retriedOnOpenRef = useRef(false);
   const [selectedBookmarkKey, setSelectedBookmarkKey] = useState(currentBookmarkKey);
-  const [expandedBookmarkKeys, setExpandedBookmarkKeys] = useState<Set<string>>(
-    () => new Set(getAncestorBookmarkKeys(currentBookmarkKey)),
-  );
-  const [navigatedBookmarkKey, setNavigatedBookmarkKey] = useState(currentBookmarkKey);
+  const [expandedBookmarkKeys, setExpandedBookmarkKeys] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     setSelectedBookmarkKey(currentBookmarkKey);
-    setNavigatedBookmarkKey(currentBookmarkKey);
-    setExpandedBookmarkKeys((current) => {
-      const next = new Set(current);
-      getAncestorBookmarkKeys(currentBookmarkKey).forEach((key) => next.add(key));
-      return next;
-    });
   }, [currentBookmarkKey]);
 
   useEffect(() => {
     setSelectedBookmarkKey(currentBookmarkKey);
-    setExpandedBookmarkKeys(new Set(getAncestorBookmarkKeys(currentBookmarkKey)));
-    setNavigatedBookmarkKey(currentBookmarkKey);
+    setExpandedBookmarkKeys(new Set());
   }, [cache.bookmarks]);
 
   useEffect(() => {
@@ -310,7 +277,7 @@ export function Outline({
       retriedOnOpenRef.current = false;
       return;
     }
-    if (!registry || cache.status !== 'error' || retriedOnOpenRef.current) {
+    if (!registry || !documentId || cache.status !== 'error' || retriedOnOpenRef.current) {
       return;
     }
 
@@ -318,7 +285,7 @@ export function Outline({
     let cancelled = false;
     onCacheChange({ status: 'loading', bookmarks: [] });
 
-    loadOutline(pdfium)
+    loadOutline(pdfium, documentId)
       .then((nextCache) => {
         if (cancelled) {
           return;
@@ -337,7 +304,7 @@ export function Outline({
     return () => {
       cancelled = true;
     };
-  }, [cache.status, onCacheChange, open, pdfium, registry]);
+  }, [cache.status, documentId, onCacheChange, open, pdfium, registry]);
 
   useEffect(() => {
     if (!open || cache.status !== 'ready') {
@@ -367,27 +334,26 @@ export function Outline({
         expandedBookmarkKeys={expandedBookmarkKeys}
         path={[]}
         onSelect={(bookmark, bookmarkKey, hasChildren) => {
-          if (!registry) return;
+          if (!registry || !documentId || !scroll) return;
 
           const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
           const destination = getDestinationFromTarget(bookmark.target);
 
-          if (hasChildren && isExpanded && navigatedBookmarkKey === bookmarkKey) {
+          if (hasChildren && !isExpanded) {
+            setExpandedBookmarkKeys((current) => {
+              const next = new Set(current);
+              next.add(bookmarkKey);
+              return next;
+            });
+            return;
+          }
+
+          if (hasChildren && selectedBookmarkKey === bookmarkKey) {
             setExpandedBookmarkKeys((current) => {
               const next = new Set(current);
               next.delete(bookmarkKey);
               return next;
             });
-            setSelectedBookmarkKey(bookmarkKey);
-            return;
-          }
-
-          if (hasChildren && (!isExpanded || selectedBookmarkKey !== bookmarkKey)) {
-            setExpandedBookmarkKeys((current) => new Set(current).add(bookmarkKey));
-            setSelectedBookmarkKey(bookmarkKey);
-            if (navigatedBookmarkKey !== bookmarkKey) {
-              setNavigatedBookmarkKey('');
-            }
             return;
           }
 
@@ -396,8 +362,7 @@ export function Outline({
           }
 
           setSelectedBookmarkKey(bookmarkKey);
-          setNavigatedBookmarkKey(hasChildren ? bookmarkKey : '');
-          scrollToBookmark(registry, bookmark);
+          scrollToBookmark(scroll, bookmark);
         }}
       />
     );
@@ -405,14 +370,15 @@ export function Outline({
     cache.bookmarks,
     cache.status,
     expandedBookmarkKeys,
-    navigatedBookmarkKey,
+    documentId,
     registry,
+    scroll,
     selectedBookmarkKey,
   ]);
 
   return (
-    <PanelContent overflow="hidden" hidden={!open}>
-      <div ref={contentRef} className="h-full overflow-y-auto">{body}</div>
+    <PanelContent ref={contentRef} hidden={!open}>
+      {open ? body : null}
     </PanelContent>
   );
 }

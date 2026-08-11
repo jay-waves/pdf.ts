@@ -1,20 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import { PdfErrorCode } from '@embedpdf/models';
+import { PdfErrorCode, type PdfPageObject } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { PanelContent, PanelState } from './components';
-import { scrollToPagePreservingViewport } from './page-navigation';
-import {
-  getActiveDocumentId,
-  getPluginCapability,
-  type ScrollCapability,
-} from './utils';
+import type { PdfScroll } from './pdf-scroll';
+import { getDocumentScope } from './utils';
+import { getSystemDpr } from './viewer-diagnostics';
+import { getDocumentState } from './viewer-document';
 import styles from './thumbnails.module.css';
 
 const THUMBNAIL_RENDER_HEIGHT = 112;
 
-type DocumentPage = { index?: number; size: { width: number; height: number }; rotation?: number };
 type ThumbnailItem = { pageIndex: number; aspectRatio: number };
 const visibilityCallbacks = new Map<Element, (visible: boolean) => void>();
 let visibilityObserver: IntersectionObserver | undefined;
@@ -37,25 +34,8 @@ function observeVisibility(element: Element, onChange: (visible: boolean) => voi
   };
 }
 
-function getDocumentInfo(registry: PluginRegistry, documentId: string) {
-  const state = registry.getStore().getState() as {
-    core: {
-      documents: Record<string, {
-        document?: { pages: DocumentPage[] };
-        rotation?: number;
-      }>;
-    };
-  };
-  const documentState = state.core.documents[documentId];
-
-  return {
-    pages: documentState?.document?.pages ?? [],
-    rotation: documentState?.rotation ?? 0,
-  };
-}
-
 function getThumbnailItem(
-  page: DocumentPage | undefined,
+  page: PdfPageObject | undefined,
   pageIndex: number,
   documentRotation: number,
 ): ThumbnailItem {
@@ -79,7 +59,7 @@ function ThumbnailCard({
 }: {
   registry: PluginRegistry;
   documentId: string;
-  page: DocumentPage | undefined;
+  page: PdfPageObject | undefined;
   item: ThumbnailItem;
   documentRotation: number;
   current: boolean;
@@ -97,17 +77,17 @@ function ThumbnailCard({
 
   useEffect(() => {
     if (!page || !visible) return;
-    const render = getPluginCapability<RenderCapability>(registry, 'render');
+    const render = getDocumentScope<RenderCapability>(registry, 'render', documentId);
     if (!render) return;
     let objectUrl: string | undefined;
     const rotation = ((page.rotation ?? 0) + documentRotation) % 4;
     const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
-    const task = render.forDocument(documentId).renderPageRect({
+    const task = render.renderPageRect({
       pageIndex: page.index ?? item.pageIndex,
       rect: { origin: { x: 0, y: 0 }, size: page.size },
       options: {
         scaleFactor: THUMBNAIL_RENDER_HEIGHT / rotatedHeight,
-        dpr: Math.min(window.devicePixelRatio || 1, 1.5),
+        dpr: Math.min(getSystemDpr(), 1.5),
         rotation,
       },
     });
@@ -154,21 +134,23 @@ function ThumbnailCard({
 function ThumbnailFlow({
   registry,
   documentId,
+  scroll,
   pageCount,
   currentPageNumber,
   onClose,
 }: {
   registry: PluginRegistry;
   documentId: string;
+  scroll: PdfScroll;
   pageCount: number;
   currentPageNumber: number;
   onClose: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), pageCount - 1);
-  const documentInfo = getDocumentInfo(registry, documentId);
-  const pages = documentInfo.pages;
-  const [documentRotation, setDocumentRotation] = useState(documentInfo.rotation);
+  const documentState = getDocumentState(registry, documentId);
+  const pages = documentState?.document?.pages ?? [];
+  const [documentRotation, setDocumentRotation] = useState(documentState?.rotation ?? 0);
   const items = useMemo(
     () => Array.from(
       { length: pageCount },
@@ -178,11 +160,10 @@ function ThumbnailFlow({
   );
 
   useEffect(() => {
-    const rotate = getPluginCapability<RotateCapability>(registry, 'rotate');
-    const scope = rotate?.forDocument(documentId);
-    if (!scope) return;
-    setDocumentRotation(scope.getRotation());
-    return scope.onRotateChange((rotation) => setDocumentRotation(rotation));
+    const rotate = getDocumentScope<RotateCapability>(registry, 'rotate', documentId);
+    if (!rotate) return;
+    setDocumentRotation(rotate.getRotation());
+    return rotate.onRotateChange((rotation) => setDocumentRotation(rotation));
   }, [documentId, registry]);
 
   useLayoutEffect(() => {
@@ -192,8 +173,7 @@ function ThumbnailFlow({
   }, [currentPageIndex]);
 
   return (
-    <div className="h-full overflow-y-auto" ref={scrollRef}>
-      <div className={styles.grid}>
+    <div className={`h-full overflow-y-auto ${styles.grid}`} ref={scrollRef}>
         {items.map((item) => (
           <ThumbnailCard
             key={item.pageIndex}
@@ -204,41 +184,41 @@ function ThumbnailFlow({
             documentRotation={documentRotation}
             current={item.pageIndex === currentPageIndex}
             onSelect={() => {
-              scrollToPagePreservingViewport(registry, item.pageIndex + 1);
+              scroll.goToPage(item.pageIndex + 1);
               onClose();
             }}
           />
         ))}
-      </div>
     </div>
   );
 }
 
 export function Thumbnails({
   registry,
+  documentId,
+  scroll,
   open,
   totalPages,
   currentPageNumber,
   onClose,
 }: {
   registry: PluginRegistry | undefined;
+  documentId?: string | null;
+  scroll?: PdfScroll | null;
   open: boolean;
   totalPages: number;
   currentPageNumber: number;
   onClose: () => void;
 }) {
-  const documentId = registry ? getActiveDocumentId(registry) : null;
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  const pageCount = totalPages || (documentId && scroll
-    ? scroll.forDocument(documentId).getTotalPages()
-    : 0);
+  const pageCount = totalPages || scroll?.getTotalPages() || 0;
 
   return (
     <PanelContent overflow="hidden" hidden={!open}>
-      {open && registry && documentId && pageCount > 0 ? (
+      {open && registry && documentId && scroll && pageCount > 0 ? (
         <ThumbnailFlow
           registry={registry}
           documentId={documentId}
+          scroll={scroll}
           pageCount={pageCount}
           currentPageNumber={currentPageNumber}
           onClose={onClose}

@@ -18,7 +18,7 @@ import {
   type TrackedAnnotation,
 } from '@embedpdf/plugin-annotation';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
-import { EMPTY_CLEANUP, getDocumentCapability, getPluginCapability } from './utils';
+import { EMPTY_CLEANUP, getPluginCapability } from './utils';
 import { getCurrentViewerTheme, type ViewerTheme } from './theme';
 
 // Appearance and palette configuration
@@ -104,7 +104,7 @@ export type AnnotationColorFieldKey =
   | 'fontColor'
   | 'backgroundColor';
 
-export interface AnnotationColorField {
+interface AnnotationColorField {
   key: AnnotationColorFieldKey;
   label: string;
 }
@@ -190,16 +190,11 @@ export function getAnnotationCapability(registry: PluginRegistry | undefined) {
 
 export function getAnnotationScope(
   registry: PluginRegistry | undefined,
-  documentId?: string | null,
+  documentId: string | null | undefined,
 ) {
-  if (!registry || documentId === null) return null;
-  const scoped = getDocumentCapability<AnnotationCapability>(
-    registry,
-    'annotation',
-    documentId,
-  );
-  return scoped
-    ? { ...scoped, scope: scoped.capability.forDocument(scoped.documentId) }
+  const capability = getAnnotationCapability(registry);
+  return capability && documentId
+    ? { documentId, capability, scope: capability.forDocument(documentId) }
     : null;
 }
 
@@ -221,20 +216,6 @@ export function getAnnotationRects(annotation: PdfAnnotationObject): Rect[] {
   return isTextMarkupAnnotation(annotation) && annotation.segmentRects.length
     ? annotation.segmentRects
     : [annotation.rect];
-}
-
-export function getAnnotationFocusPosition(annotation: PdfAnnotationObject) {
-  const rects = getAnnotationRects(annotation);
-  const anchor = rects.reduce((topmost, rect) => (
-    rect.origin.y < topmost.origin.y ||
-    (rect.origin.y === topmost.origin.y && rect.origin.x < topmost.origin.x)
-      ? rect
-      : topmost
-  ));
-  return {
-    x: anchor.origin.x + anchor.size.width / 2,
-    y: anchor.origin.y + anchor.size.height / 2,
-  };
 }
 
 export function rectsIntersect(left: Rect, right: Rect) {
@@ -424,8 +405,8 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
   };
 }
 
-export function installAnnotationAutoPreviewAttribute(registry: PluginRegistry) {
-  const scoped = getAnnotationScope(registry);
+export function installAnnotationPreview(registry: PluginRegistry, documentId: string) {
+  const scoped = getAnnotationScope(registry, documentId);
   if (!scoped) return EMPTY_CLEANUP;
 
   const root = document.documentElement;
@@ -453,7 +434,7 @@ export function installAnnotationAutoPreviewAttribute(registry: PluginRegistry) 
   };
 }
 
-export function installAnnotationDirtyTracker(
+export function installAnnotationDirty(
   registry: PluginRegistry,
   onDirty: () => void,
 ) {
@@ -467,7 +448,7 @@ export function installAnnotationDirtyTracker(
   });
 }
 
-export function installAnnotationUriNavigation(
+export function installAnnotationLinks(
   registry: PluginRegistry,
   openExternal: (uri: string) => void,
 ) {
@@ -479,7 +460,7 @@ export function installAnnotationUriNavigation(
   });
 }
 
-export function installNewCommentEditor(
+export function installCommentEditor(
   registry: PluginRegistry,
   onCreate: (annotationId: string) => void,
 ) {

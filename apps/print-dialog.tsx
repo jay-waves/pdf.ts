@@ -1,13 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { getEffectivePermission, type PluginRegistry } from '@embedpdf/core';
 import { PdfPermissionFlag } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import { Check } from 'lucide-react';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { Button, DialogActions } from './components';
-import { getDocumentCapability } from './utils';
+import { getDocument } from './viewer-document';
 import styles from './document-dialogs.module.css';
-import { FlatDocumentDialog, getErrorMessage } from './document-dialog-shared';
+import { DocumentDialog, getErrorMessage } from './document-dialog-shared';
 
 type PrintMode = 'all' | 'current' | 'custom';
 
@@ -16,6 +15,18 @@ const PRINT_MODE_OPTIONS = [
   { value: 'current', label: 'Current page' },
   { value: 'custom', label: 'Pages' },
 ] as const;
+
+const PRINT_OPTION_CLASS = [
+  'grid min-h-8.25 w-full cursor-pointer',
+  'grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2',
+  'border-0 border-b border-border bg-transparent px-2 py-1.25',
+  'text-left text-inherit outline-none last:border-b-0',
+  'transition-[background-color,box-shadow] duration-150 ease-control',
+  'hover:bg-hover data-[state=checked]:bg-selected',
+  'focus-visible:relative focus-visible:z-1',
+  'focus-visible:shadow-[inset_0_0_0_1px_var(--pdf-accent-primary)]',
+  'motion-reduce:transition-none',
+].join(' ');
 
 function validatePageRange(value: string, totalPages: number) {
   const compact = value.replace(/\s+/g, '');
@@ -76,17 +87,17 @@ function openBrowserPrintDialog(data: ArrayBuffer) {
 
 async function printDocument(
   registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
   pageRange?: string,
 ) {
-  const scoped = getDocumentCapability<DocumentManagerCapability>(registry, 'document-manager');
-  const document = scoped?.capability.getDocument(scoped.documentId);
+  const document = getDocument(registry, documentId);
   const engine = registry?.getEngine();
-  if (!registry || !scoped || !document || !engine) {
+  if (!registry || !documentId || !document || !engine) {
     throw new Error('Printing is not available.');
   }
   if (!getEffectivePermission(
     registry.getStore().getState().core,
-    scoped.documentId,
+    documentId,
     PdfPermissionFlag.Print,
   )) {
     throw new Error('This document does not allow printing.');
@@ -99,8 +110,9 @@ async function printDocument(
   await openBrowserPrintDialog(data);
 }
 
-export function PrintDialog({ registry, open, currentPageNumber, totalPages, onClose }: {
+export function PrintDialog({ registry, documentId, open, currentPageNumber, totalPages, onClose }: {
   registry?: PluginRegistry;
+  documentId?: string | null;
   open: boolean;
   currentPageNumber: number;
   totalPages: number;
@@ -135,7 +147,7 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
     setBusy(true);
     setError('');
     try {
-      await printDocument(registry, selectedRange);
+      await printDocument(registry, documentId, selectedRange);
       onClose();
     } catch (nextError) {
       setError(getErrorMessage(nextError, 'Failed to prepare the document for printing.'));
@@ -145,7 +157,7 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
   };
 
   return (
-    <FlatDocumentDialog open={open} onClose={onClose} preventClose={busy} title="Print">
+    <DocumentDialog open={open} onClose={onClose} preventClose={busy} title="Print">
       <form className={styles.form} onSubmit={submit}>
         <RadixRadioGroup.Root
           className={styles.optionGroup}
@@ -159,17 +171,7 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
             <RadixRadioGroup.Item
               key={option.value}
               value={option.value}
-              className={[
-                'grid min-h-8.25 w-full cursor-pointer',
-                'grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2',
-                'border-0 border-b border-border bg-transparent px-2 py-1.25',
-                'text-left text-inherit outline-none last:border-b-0',
-                'transition-[background-color,box-shadow] duration-150 ease-control',
-                'hover:bg-hover data-[state=checked]:bg-selected',
-                'focus-visible:relative focus-visible:z-1',
-                'focus-visible:shadow-[inset_0_0_0_1px_var(--pdf-accent-primary)]',
-                'motion-reduce:transition-none',
-              ].join(' ')}
+              className={PRINT_OPTION_CLASS}
             >
               <span className="grid size-4 shrink-0 place-items-center rounded border border-border-strong bg-input">
                 <RadixRadioGroup.Indicator className="grid size-full place-items-center text-accent">
@@ -208,6 +210,6 @@ export function PrintDialog({ registry, open, currentPageNumber, totalPages, onC
           </Button>
         </DialogActions>
       </form>
-    </FlatDocumentDialog>
+    </DocumentDialog>
   );
 }

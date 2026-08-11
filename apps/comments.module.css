@@ -43,8 +43,7 @@
 
 .editableBody { @apply cursor-text text-left outline-none; }
 
-.editableBody:hover,
-.editableBody:focus-visible { @apply text-foreground; }
+.editableBody:is(:hover, :focus-visible) { @apply text-foreground; }
 .readonlyBody { @apply pointer-events-none text-muted; }
 .editor { @apply relative z-1 mt-1 ml-6.25 grid gap-1.5; }
 

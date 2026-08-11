@@ -39,11 +39,12 @@ export function SelectionTranslate({
   useEffect(() => {
     setResult(null);
     const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
+    const scope = selection?.forDocument(request.documentId);
     const translate = platform.translate;
-    if (!selection) return;
+    if (!selection || !scope) return;
 
     let cancelled = false;
-    selection.forDocument(request.documentId).getSelectedText().toPromise()
+    scope.getSelectedText().toPromise()
       .then((parts) => translate(normalizeText(parts)))
       .then((translation) => {
         if (cancelled) return;

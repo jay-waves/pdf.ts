@@ -11,8 +11,6 @@ import {
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { SelectionPlugin, type SelectionCapability } from '@embedpdf/plugin-selection';
-import type { ScrollCapability } from '@embedpdf/plugin-scroll';
-import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import {
   createCommentAnnotation,
   createTextMarkupAnnotations,
@@ -39,9 +37,11 @@ import {
   Underline,
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from './components';
-import { getActiveDocumentId, getPluginCapability, normalizePdfText } from './utils';
+import { getPluginCapability, normalizePdfText } from './utils';
 import { getExternalUrl, getSelectedExternalUrl } from './url';
 import { platform } from '#platform';
+import { getDocument } from './viewer-document';
+import type { PdfScroll } from './pdf-scroll';
 import styles from './context-menu.module.css';
 
 type ContextMenuState = {
@@ -191,23 +191,20 @@ function copyAnnotationImage(
 }
 
 function getMenuAnchor(
-  registry: PluginRegistry,
+  scroll: PdfScroll,
   container: HTMLElement,
-  documentId: string,
   pageIndex: number,
   rect: Rect,
 ) {
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  const viewport = getPluginCapability<ViewportCapability>(registry, 'viewport');
-  const positionedRect = scroll?.forDocument(documentId).getRectPositionForPage(pageIndex, rect);
+  const positionedRect = scroll.getRectPosition(pageIndex, rect);
   const scrollerElement = container.querySelector<HTMLElement>('.pdf-scroller');
-  if (!positionedRect || !viewport || !scrollerElement) return null;
+  if (!positionedRect || !scrollerElement) return null;
 
   // The scroll plugin returns coordinates relative to the PDF content. Use the
   // actual centered scroller as the viewport-space origin so wide VS Code
   // webviews do not introduce an unaccounted horizontal offset.
   const scrollerRect = scrollerElement.getBoundingClientRect();
-  const viewportGap = viewport.getViewportGap();
+  const viewportGap = scroll.getViewportGap();
 
   return {
     x: scrollerRect.left + positionedRect.origin.x + viewportGap + positionedRect.size.width * 0.65,
@@ -218,13 +215,17 @@ function getMenuAnchor(
 export function ContextMenu({
   engine,
   registry,
+  documentId,
+  scroll,
   container,
   onOpenComments,
   onOpenColorPalette,
   onTranslate,
 }: {
-  engine?: PdfEngine<Blob> | null;
+  engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
+  documentId?: string | null;
+  scroll?: PdfScroll | null;
   container: HTMLElement | null;
   onOpenComments(annotationId: string, isNew: boolean): void;
   onOpenColorPalette(): void;
@@ -233,11 +234,9 @@ export function ContextMenu({
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
 
   useEffect(() => {
-    if (!registry || !container) return;
-    const documentId = getActiveDocumentId(registry);
+    if (!registry || !documentId || !scroll || !container) return;
     const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
     const annotation = getAnnotationScope(registry, documentId)?.scope;
-    if (!documentId) return;
     let annotationMenuFrame = 0;
 
     const isViewerEvent = (event: Event) => event.composedPath().some((target) => (
@@ -267,7 +266,7 @@ export function ContextMenu({
         setMenu((current) => current?.kind === 'selection' ? null : current);
         return;
       }
-      const anchor = getMenuAnchor(registry, container, documentId, placement.pageIndex, placement.rect);
+      const anchor = getMenuAnchor(scroll, container, placement.pageIndex, placement.rect);
       if (anchor) setMenu({ kind: 'selection', ...anchor });
     });
 
@@ -279,7 +278,7 @@ export function ContextMenu({
       container.removeEventListener('contextmenu', preventContextMenu, { capture: true });
       container.removeEventListener('pointerup', openAnnotationMenu, { capture: true });
     };
-  }, [container, registry]);
+  }, [container, documentId, registry, scroll]);
 
   useEffect(() => {
     if (!menu) return;
@@ -294,16 +293,13 @@ export function ContextMenu({
     };
   }, [menu]);
 
-  if (!menu || !registry) return null;
-
-  const documentId = getActiveDocumentId(registry);
-  if (!documentId) return null;
+  if (!menu || !registry || !documentId) return null;
 
   const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
+  const selectionScope = selection?.forDocument(documentId);
   const annotation = getAnnotationScope(registry, documentId)?.scope;
 
   const addTextMarkup = (type: TextMarkupSubtype) => {
-    const selectionScope = selection?.forDocument(documentId);
     if (!selectionScope || !annotation) return;
 
     createTextMarkupAnnotations(annotation, selectionScope, type);
@@ -312,7 +308,7 @@ export function ContextMenu({
 
   const selectionItems = [
     { label: 'Copy', icon: Copy, action: () => {
-      const selectedText = selection?.forDocument(documentId).getSelectedText();
+      const selectedText = selectionScope?.getSelectedText();
       setMenu(null);
       selectedText?.toPromise()
         .then((parts) => copyText(parts.join('\n')))
@@ -323,7 +319,7 @@ export function ContextMenu({
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
     { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
     { label: 'Search', icon: ExternalLink, action: () => {
-      const selectedText = selection?.forDocument(documentId).getSelectedText();
+      const selectedText = selectionScope?.getSelectedText();
       setMenu(null);
       selectedText?.toPromise()
         .then((parts) => normalizePdfText(parts.join(' ')).replace(/\s+/g, ' ').trim())
@@ -348,9 +344,9 @@ export function ContextMenu({
   const selectedCaptureAnnotation = selectedAnnotations.length === 1 && isCaptureAnnotation(commentTarget)
     ? commentTarget
     : null;
+  const document = getDocument(registry, documentId);
   const annotationItems = [
-    ...(selectedTextMarkup && engine ? [{ label: 'Copy', icon: Copy, action: () => {
-      const document = registry.getStore().getState().core.documents[documentId]?.document;
+    ...(selectedTextMarkup ? [{ label: 'Copy', icon: Copy, action: () => {
       setMenu(null);
       if (!document) return;
       getTextMarkupText(engine, document, selectedTextMarkup)
@@ -358,7 +354,6 @@ export function ContextMenu({
         .catch((error) => console.error('[pdf-ts] failed to copy text markup', error));
     } }] : []),
     ...(selectedCaptureAnnotation ? [{ label: 'Copy image', icon: ImageIcon, action: () => {
-      const document = registry.getStore().getState().core.documents[documentId]?.document;
       setMenu(null);
       if (!document) return;
       copyAnnotationImage(registry, documentId, document, selectedCaptureAnnotation)

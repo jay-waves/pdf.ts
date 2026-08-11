@@ -8,12 +8,11 @@ import {
   type PdfSignatureObject,
   type PdfWidgetAnnoObject,
 } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import { createRenderer } from '@embedpdf/plugin-annotation/react';
 import { ShieldCheck } from 'lucide-react';
 import { Button, Dialog, DialogActions } from '../components';
 import type { ManagedResource } from '../platform/types';
-import { getPluginCapability } from '../utils';
+import { onDocumentLoaded } from '../viewer-document';
 import type { SignatureCertificateInfo, SignatureVerificationResult } from './certificate';
 import styles from './signatures.module.css';
 
@@ -139,23 +138,17 @@ export function useDocumentSignatures(
     if (!registry || !documentId) return;
 
     let active = true;
-    const documents = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
-    const refresh = () => {
-      const document = documents?.getDocument(documentId);
-      if (!document) return;
+    const unsubscribe = onDocumentLoaded(registry, documentId, (document) => {
       engine.getSignatures(document).wait(
         (next) => {
           if (active) setSignatures(next);
         },
         (error) => console.error('[pdf-ts] failed to read digital signatures', error),
       );
-    };
-
-    refresh();
-    const unsubscribe = documents?.onDocumentOpened(refresh);
+    });
     return () => {
       active = false;
-      unsubscribe?.();
+      unsubscribe();
     };
   }, [documentId, engine, registry]);
 

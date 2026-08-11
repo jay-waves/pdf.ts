@@ -7,5 +7,4 @@
   box-shadow: none;
 }
 
-.button[data-active='true']:hover,
-.button[data-active='true']:focus-visible { @apply border-accent shadow-control; }
+.button[data-active='true']:is(:hover, :focus-visible) { @apply border-accent shadow-control; }

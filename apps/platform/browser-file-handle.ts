@@ -12,7 +12,7 @@ export async function readStoredFileHandle(key: string, legacyStoreKey?: string)
   return (await get<LegacyFileHandleStore>(legacyStoreKey))?.[key]?.handle;
 }
 
-export async function storeFileHandle(key: string, handle: FileSystemFileHandle) {
+async function storeFileHandle(key: string, handle: FileSystemFileHandle) {
   await update<FileHandleStore>(FILE_HANDLES_KEY, (store) => ({
     ...(store && typeof store === 'object' ? store : {}),
     [key]: handle,

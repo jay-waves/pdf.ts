@@ -63,13 +63,11 @@
   transform: scaleX(1.35);
 }
 
-.viewer.is-pan-mode,
-.viewer.is-pan-mode * {
+:is(.viewer.is-pan-mode, .viewer.is-pan-mode *) {
   cursor: grab !important;
 }
 
-.viewer[data-pdf-panning="true"],
-.viewer[data-pdf-panning="true"] * {
+:is(.viewer[data-pdf-panning="true"], .viewer[data-pdf-panning="true"] *) {
   cursor: grabbing !important;
 }
 
@@ -108,12 +106,7 @@
   filter: brightness(0.76) contrast(1.22) saturate(1);
 }
 
-.pdf-page-tiling-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
+.pdf-page-tiling-layer,
 .pdf-text-selection-layer {
   position: absolute;
   inset: 0;
@@ -155,5 +148,11 @@
 }
 
 :root[data-viewer-color-mode="dark"] .pdf-text-selection-layer > div {
+  mix-blend-mode: normal !important;
+}
+
+/* Multiply preserves the printed-page look in light mode, but muddies both
+   ordinary and current search matches against dark-mode page rendering. */
+:root[data-viewer-color-mode="dark"] .pdf-search-highlight {
   mix-blend-mode: normal !important;
 }

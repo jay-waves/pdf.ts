@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Tooltip as RadixTooltip } from 'radix-ui';
+import { usePortalContainer } from './portal-container';
 import styles from './tooltip.module.css';
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
@@ -17,10 +18,11 @@ export function Tooltip({
   content: ReactNode;
   children: ReactElement;
 }) {
+  const portalContainer = usePortalContainer();
   return (
     <RadixTooltip.Root>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
-      <RadixTooltip.Portal>
+      <RadixTooltip.Portal container={portalContainer ?? undefined}>
         <RadixTooltip.Content
           className={styles.content}
           side="bottom"

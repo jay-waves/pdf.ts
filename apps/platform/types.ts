@@ -4,7 +4,7 @@ export interface ReadingProgress {
   spreadMode?: string;
 }
 
-export interface PdfFileWriter {
+interface PdfFileWriter {
   save(data: ArrayBuffer): Promise<boolean>;
   saveIncremental?(revision: {
     baseSize: number;

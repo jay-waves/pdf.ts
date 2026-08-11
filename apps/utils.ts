@@ -17,21 +17,19 @@ export function isEditableTarget(target: EventTarget | null) {
   return target.matches('input, textarea, select, [contenteditable="true"]') || target.isContentEditable;
 }
 
-export function getActiveDocumentId(registry: PluginRegistry) {
-  return registry.getStore().getState().core.activeDocumentId;
-}
-
 export function getPluginCapability<T>(registry: PluginRegistry | undefined, pluginId: string) {
   return registry?.getPlugin(pluginId)?.provides?.() as T | undefined;
 }
 
-export function getDocumentCapability<T>(
+export function getDocumentScope<T extends { forDocument(documentId: string): unknown }>(
   registry: PluginRegistry | undefined,
   pluginId: string,
-  documentId = registry ? getActiveDocumentId(registry) : undefined,
+  documentId: string | null | undefined,
 ) {
   const capability = getPluginCapability<T>(registry, pluginId);
-  return documentId && capability ? { documentId, capability } : null;
+  return documentId && capability
+    ? capability.forDocument(documentId) as ReturnType<T['forDocument']>
+    : null;
 }
 
 export function getDocumentScrollStrategy(registry: PluginRegistry, documentId: string) {
@@ -58,5 +56,3 @@ export function getDestinationFromTarget(target?: PdfLinkTarget): PdfDestination
 
   return undefined;
 }
-
-export type { ScrollCapability } from '@embedpdf/plugin-scroll';

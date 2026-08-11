@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { HistoryCapability } from '@embedpdf/plugin-history';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
@@ -40,16 +40,14 @@ import {
   Type,
   Underline,
   Undo2,
+  Wrench,
 } from 'lucide-react';
 import { getAnnotationScope } from './annotations';
-import { getCurrentScrollAnchor, restoreScrollAnchor } from './page-navigation';
+import type { PdfScroll } from './pdf-scroll';
 import {
-  getActiveDocumentId,
-  getDocumentCapability,
-  getDocumentScrollStrategy,
+  getDocumentScope,
   getPluginCapability,
   isEditableTarget,
-  type ScrollCapability,
 } from './utils';
 import {
   getStoredToolbarPinned,
@@ -67,6 +65,7 @@ import {
   FloatingToolbarDivider,
   FloatingToolbarGroup,
   IconButton,
+  PortalProvider,
   Select,
   Tooltip,
 } from './components';
@@ -81,6 +80,7 @@ interface ToolbarState {
   colorPaletteOpen: boolean;
   panMode: boolean;
   signatureCount: number;
+  canSave: boolean;
 }
 
 interface ToolbarActions {
@@ -92,6 +92,7 @@ interface ToolbarActions {
   openProtect(): void;
   openMetadata(): void;
   openTheme(): void;
+  openDeveloper(): void;
   openSignatures(): void;
   exportDocument(): void;
   saveDocument(): void;
@@ -100,6 +101,7 @@ interface ToolbarActions {
 interface ToolbarProps {
   registry?: PluginRegistry;
   search: PdfSearch;
+  scroll?: PdfScroll | null;
   state: ToolbarState;
   actions: ToolbarActions;
 }
@@ -169,7 +171,11 @@ function ToolbarButton({
   );
 }
 
-function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?: string | null) {
+function useToolbarState(
+  registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
+  scroll: PdfScroll | null | undefined,
+) {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -177,12 +183,11 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
   const [scrollStrategy, setScrollStrategy] = useState(ScrollStrategy.Vertical);
 
   useEffect(() => {
-    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom', activeDocumentId);
-    if (!scopeInfo) {
+    const zoomScope = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
+    if (!zoomScope) {
       return;
     }
 
-    const zoomScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     const syncZoom = (state = zoomScope.getState()) => {
       setZoomPercent(Math.round((state.currentZoomLevel ?? 1) * 100));
       setZoomLevel(state.zoomLevel);
@@ -190,64 +195,42 @@ function useToolbarState(registry: PluginRegistry | undefined, activeDocumentId?
 
     syncZoom();
     return zoomScope.onStateChange(syncZoom);
-  }, [activeDocumentId, registry]);
+  }, [documentId, registry]);
 
   useEffect(() => {
-    const scopeInfo = getAnnotationScope(registry, activeDocumentId);
-    if (!scopeInfo) {
+    const annotation = getAnnotationScope(registry, documentId);
+    if (!annotation) {
       return;
     }
 
-    setActiveTool(scopeInfo.scope.getActiveTool()?.id ?? null);
-    return scopeInfo.scope.onActiveToolChange((tool) => setActiveTool(tool?.id ?? null));
-  }, [activeDocumentId, registry]);
+    setActiveTool(annotation.scope.getActiveTool()?.id ?? null);
+    return annotation.scope.onActiveToolChange((tool) => setActiveTool(tool?.id ?? null));
+  }, [documentId, registry]);
 
   useEffect(() => {
     const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-    if (!spread || !activeDocumentId) {
+    if (!spread || !documentId) {
       return;
     }
 
-    const spreadScope = spread.forDocument(activeDocumentId);
+    const spreadScope = spread.forDocument(documentId);
     setSpreadMode(spreadScope.getSpreadMode());
     return spreadScope.onSpreadChange(setSpreadMode);
-  }, [activeDocumentId, registry]);
+  }, [documentId, registry]);
 
   useEffect(() => {
-    const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-    if (!registry || !scroll || !activeDocumentId) {
-      return;
-    }
-
-    setScrollStrategy(getDocumentScrollStrategy(registry, activeDocumentId));
-
-    return scroll.onStateChange((state) => setScrollStrategy(state.strategy ?? ScrollStrategy.Vertical));
-  }, [activeDocumentId, registry]);
+    if (!scroll) return;
+    setScrollStrategy(scroll.getStrategy());
+    return scroll.onStrategyChange(setScrollStrategy);
+  }, [scroll]);
 
   return { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy };
-}
-
-function switchLayoutPreservingAnchor(
-  registry: PluginRegistry | undefined,
-  updateLayout: (documentId: string) => void,
-) {
-  if (!registry) {
-    return;
-  }
-
-  const documentId = getActiveDocumentId(registry);
-  if (!documentId) {
-    return;
-  }
-
-  const anchor = getCurrentScrollAnchor(registry);
-  updateLayout(documentId);
-  restoreScrollAnchor(registry, anchor);
 }
 
 export function Toolbar({
   registry,
   search,
+  scroll,
   state: {
     documentId,
     searchOpen,
@@ -255,6 +238,7 @@ export function Toolbar({
     colorPaletteOpen,
     panMode,
     signatureCount,
+    canSave,
   },
   actions: {
     setPanMode,
@@ -265,6 +249,7 @@ export function Toolbar({
     openProtect,
     openMetadata,
     openTheme,
+    openDeveloper,
     openSignatures,
     exportDocument,
     saveDocument,
@@ -272,8 +257,9 @@ export function Toolbar({
 }: ToolbarProps) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const searchWasOpenRef = useRef(false);
   const viewerTheme = useViewerTheme();
-  const toolbarRef = useRef<HTMLDivElement>(null);
   const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const {
     zoomPercent,
@@ -281,8 +267,8 @@ export function Toolbar({
     activeTool,
     spreadMode,
     scrollStrategy,
-  } = useToolbarState(registry, documentId);
-  const canUseRegistry = Boolean(registry && documentId);
+  } = useToolbarState(registry, documentId, scroll);
+  const canUseDocument = Boolean(registry && documentId);
   const canConfigureTheme = supportsViewerThemeSettings();
   const darkAppearance = isDarkViewerTheme(viewerTheme);
 
@@ -295,15 +281,15 @@ export function Toolbar({
 
   const showToolbar = () => {
     clearToolbarHideTimer();
-    if (toolbarRef.current?.getAttribute('data-visible') !== 'true') {
-      toolbarRef.current?.setAttribute('data-visible', 'true');
+    if (portalContainer?.getAttribute('data-visible') !== 'true') {
+      portalContainer?.setAttribute('data-visible', 'true');
     }
   };
 
   const hideToolbar = () => {
     clearToolbarHideTimer();
-    if (!pinned && !toolbarRef.current?.matches(':hover, :focus-within')) {
-      toolbarRef.current?.removeAttribute('data-visible');
+    if (!pinned && !portalContainer?.matches(':hover, :focus-within')) {
+      portalContainer?.removeAttribute('data-visible');
     }
   };
 
@@ -330,12 +316,26 @@ export function Toolbar({
     });
   }, [searchOpen]);
 
+  useEffect(() => {
+    const searchWasOpen = searchWasOpenRef.current;
+    if (!searchOpen && searchWasOpen && pinned) {
+      setPinned(false);
+      setStoredToolbarPinned(false);
+    }
+    searchWasOpenRef.current = searchOpen;
+  }, [pinned, searchOpen]);
+
+  useEffect(() => {
+    if (searchOpen) showToolbar();
+    else scheduleToolbarHide();
+  }, [searchOpen]);
+
   const closeSearch = () => setSearchOpen(false);
   const openSection = (section: ToolbarSection) => {
     setActiveSection(section);
 
     if (section !== 'draw' && section !== 'document') {
-      getAnnotationScope(registry)?.scope.setActiveTool(null);
+      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
     }
 
     if (section === 'search') {
@@ -354,7 +354,7 @@ export function Toolbar({
   const togglePan = () => {
     const nextPanMode = !panMode;
     if (nextPanMode) {
-      getAnnotationScope(registry)?.scope.setActiveTool(null);
+      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
     }
     setPanMode(nextPanMode);
   };
@@ -365,13 +365,18 @@ export function Toolbar({
     setStoredToolbarPinned(nextPinned);
   };
 
+  const pinForSearch = () => {
+    if (pinned) return;
+    setPinned(true);
+    setStoredToolbarPinned(true);
+  };
+
   const zoomByButton = (direction: 1 | -1) => {
-    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom');
-    if (!scopeInfo) {
+    const zoomScope = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
+    if (!zoomScope) {
       return;
     }
 
-    const zoomScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     if (direction > 0) {
       zoomScope.zoomIn();
     } else {
@@ -382,26 +387,27 @@ export function Toolbar({
   const selectDrawTool = (toolId: string) => {
     closeSearch();
     setPanMode(false);
-    const scopeInfo = getAnnotationScope(registry);
-    if (!scopeInfo) {
+    const annotation = getAnnotationScope(registry, documentId);
+    if (!annotation) {
       return;
     }
 
-    scopeInfo.scope.setActiveTool(activeTool === toolId ? null : toolId);
+    annotation.scope.setActiveTool(activeTool === toolId ? null : toolId);
   };
 
   const selectZoom = (value: string) => {
     const level = ZOOM_LEVELS.get(value);
-    const scopeInfo = getDocumentCapability<ZoomCapability>(registry, 'zoom');
-    if (level === undefined || !scopeInfo) return;
-    scopeInfo.capability.forDocument(scopeInfo.documentId).requestZoom(level);
+    const zoomScope = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
+    if (level === undefined || !zoomScope) return;
+    zoomScope.requestZoom(level);
   };
 
   const toggleSpread = () => {
     const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
     if (!spread) return;
     const nextMode = spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd;
-    switchLayoutPreservingAnchor(registry, () => spread.setSpreadMode(nextMode));
+    if (scroll) scroll.preserveView(() => spread.setSpreadMode(nextMode));
+    else spread.setSpreadMode(nextMode);
   };
 
   const rotateForward = () => {
@@ -409,21 +415,15 @@ export function Toolbar({
   };
 
   const setScroll = (nextStrategy: ScrollStrategy) => {
-    const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-    if (!scroll) {
-      return;
-    }
-
-    switchLayoutPreservingAnchor(registry, (documentId) => scroll.setScrollStrategy(nextStrategy, documentId));
+    scroll?.setStrategy(nextStrategy);
   };
 
   const runAnnotationHistory = (direction: 'undo' | 'redo') => {
-    const scopeInfo = getDocumentCapability<HistoryCapability>(registry, 'history');
-    if (!scopeInfo) {
+    const historyScope = getDocumentScope<HistoryCapability>(registry, 'history', documentId);
+    if (!historyScope) {
       return;
     }
 
-    const historyScope = scopeInfo.capability.forDocument(scopeInfo.documentId);
     if (direction === 'undo') {
       historyScope.undo();
     } else {
@@ -464,7 +464,7 @@ export function Toolbar({
       if (pinned || event.clientY <= 40) {
         showToolbar();
       } else if (toolbarHideTimerRef.current === undefined
-        && !toolbarRef.current?.matches(':hover, :focus-within')) {
+        && !portalContainer?.matches(':hover, :focus-within')) {
         scheduleToolbarHide();
       }
     };
@@ -474,12 +474,18 @@ export function Toolbar({
       window.removeEventListener('pointermove', onPointerMove);
       clearToolbarHideTimer();
     };
-  }, [pinned]);
+  }, [pinned, portalContainer]);
 
   const renderPersistentControls = () => (
     <>
       <FloatingToolbarDivider />
       <FloatingToolbarGroup>
+        <ToolbarButton
+          label="Save"
+          icon={Save}
+          disabled={!canSave}
+          onClick={saveDocument}
+        />
         {canConfigureTheme ? (
           <ToolbarButton
             label={darkAppearance ? 'Light theme' : 'Dark theme'}
@@ -492,7 +498,7 @@ export function Toolbar({
           label="Pan"
           icon={Hand}
           active={panMode}
-          disabled={!canUseRegistry}
+          disabled={!canUseDocument}
           onClick={togglePan}
         />
         <ToolbarButton
@@ -505,76 +511,73 @@ export function Toolbar({
     </>
   );
 
+  const renderSection = (label: string, children: ReactNode, overflow = false) => (
+    <FloatingToolbar label={label} overflow={overflow}>
+      <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+      <FloatingToolbarDivider />
+      {children}
+      {renderPersistentControls()}
+    </FloatingToolbar>
+  );
+
   return (
     <div
-      ref={toolbarRef}
+      ref={setPortalContainer}
       className={styles.root}
       data-visible={pinned ? 'true' : undefined}
       onMouseEnter={showToolbar}
       onMouseLeave={scheduleToolbarHide}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {activeSection === null ? (
-        <FloatingToolbar label="PDF toolbar">
-          <FloatingToolbarGroup>
-            {PRIMARY_ITEMS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={styles.modeButton}
-                onClick={() => openSection(id)}
-                aria-label={label}
-              >
-                <Icon
-                  className={`${styles.icon} ${id === 'search' ? styles.searchModeIcon : ''}`}
-                  size={id === 'search' ? 16 : 14}
-                  strokeWidth={2}
-                />
-                <span className={styles.modeLabel}>{label}</span>
-              </button>
-            ))}
-          </FloatingToolbarGroup>
-          {renderPersistentControls()}
-        </FloatingToolbar>
-      ) : null}
+      <PortalProvider container={portalContainer}>
+        {activeSection === null ? (
+          <FloatingToolbar label="PDF toolbar">
+            <FloatingToolbarGroup>
+              {PRIMARY_ITEMS.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={styles.modeButton}
+                  onClick={() => openSection(id)}
+                  aria-label={label}
+                >
+                  <Icon
+                    className={`${styles.icon} ${id === 'search' ? styles.searchModeIcon : ''}`}
+                    size={id === 'search' ? 16 : 14}
+                    strokeWidth={2}
+                  />
+                  <span className={styles.modeLabel}>{label}</span>
+                </button>
+              ))}
+            </FloatingToolbarGroup>
+            {renderPersistentControls()}
+          </FloatingToolbar>
+        ) : null}
 
-      {activeSection === 'document' ? (
-        <FloatingToolbar label="Document toolbar">
-          <ToolbarButton
-            label="Back"
-            icon={ArrowLeft}
-            onClick={returnToPrimaryToolbar}
-          />
-          <FloatingToolbarDivider />
+        {activeSection === 'document' ? renderSection('Document toolbar', (
           <FloatingToolbarGroup>
             <ToolbarButton
               label="Print"
               icon={Printer}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={openPrint}
             />
             <ToolbarButton
               label="Security"
               icon={ShieldCheck}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={openProtect}
             />
             <ToolbarButton
               label="Export"
               icon={Download}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={exportDocument}
-            />
-            <ToolbarButton
-              label="Save"
-              icon={Save}
-              disabled={!canUseRegistry}
-              onClick={saveDocument}
             />
             <ToolbarButton
               label="Metadata"
               icon={Info}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={openMetadata}
             />
             {canConfigureTheme ? (
@@ -584,6 +587,11 @@ export function Toolbar({
                 onClick={openTheme}
               />
             ) : null}
+            <ToolbarButton
+              label="Developer"
+              icon={Wrench}
+              onClick={openDeveloper}
+            />
             {signatureCount > 0 ? (
               <Tooltip content={`Signatures (${signatureCount})`}>
                 <button
@@ -597,103 +605,84 @@ export function Toolbar({
               </Tooltip>
             ) : null}
           </FloatingToolbarGroup>
-          {renderPersistentControls()}
-        </FloatingToolbar>
-      ) : null}
+        )) : null}
 
-      {activeSection === 'page' ? (
-        <FloatingToolbar label="Page toolbar" overflow>
-          <ToolbarButton
-            label="Back"
-            icon={ArrowLeft}
-            onClick={returnToPrimaryToolbar}
-          />
-          <FloatingToolbarDivider />
-          <FloatingToolbarGroup>
-            <ToolbarButton
-              label="Zoom out"
-              icon={Minus}
-              disabled={!canUseRegistry}
-              onClick={() => zoomByButton(-1)}
-            />
-            <Select
-              className={styles.zoomSelect}
-              value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}
-              displayValue={`${zoomPercent}%`}
-              options={ZOOM_SELECT_OPTIONS}
-              onValueChange={selectZoom}
-              label="Zoom"
-              disabled={!canUseRegistry}
-            />
-            <ToolbarButton
-              label="Zoom in"
-              icon={Plus}
-              disabled={!canUseRegistry}
-              onClick={() => zoomByButton(1)}
-            />
-          </FloatingToolbarGroup>
-          <FloatingToolbarDivider />
-          <FloatingToolbarGroup>
-            <ToolbarButton
-              label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'}
-              icon={GalleryHorizontal}
-              active={spreadMode === SpreadMode.Odd}
-              disabled={!canUseRegistry}
-              onClick={toggleSpread}
-            />
-            <ToolbarButton
-              label="Vertical scroll"
-              icon={ArrowDownUp}
-              active={scrollStrategy === ScrollStrategy.Vertical}
-              disabled={!canUseRegistry}
-              onClick={() => setScroll(ScrollStrategy.Vertical)}
-            />
-            <ToolbarButton
-              label="Horizontal scroll"
-              icon={ArrowLeftRight}
-              active={scrollStrategy === ScrollStrategy.Horizontal}
-              disabled={!canUseRegistry}
-              onClick={() => setScroll(ScrollStrategy.Horizontal)}
-            />
-            <ToolbarButton
-              label="Rotate"
-              icon={RotateCw}
-              disabled={!canUseRegistry}
-              onClick={rotateForward}
-            />
-            <ToolbarButton
-              label="Thumbnails"
-              icon={BookImage}
-              active={thumbnailsOpen}
-              disabled={!canUseRegistry}
-              onClick={toggleThumbnails}
-            />
-          </FloatingToolbarGroup>
-          {renderPersistentControls()}
-        </FloatingToolbar>
-      ) : null}
+        {activeSection === 'page' ? renderSection('Page toolbar', (
+          <>
+            <FloatingToolbarGroup>
+              <ToolbarButton
+                label="Zoom out"
+                icon={Minus}
+                disabled={!canUseDocument}
+                onClick={() => zoomByButton(-1)}
+              />
+              <Select
+                className={styles.zoomSelect}
+                value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}
+                displayValue={`${zoomPercent}%`}
+                options={ZOOM_SELECT_OPTIONS}
+                onValueChange={selectZoom}
+                label="Zoom"
+                disabled={!canUseDocument}
+              />
+              <ToolbarButton
+                label="Zoom in"
+                icon={Plus}
+                disabled={!canUseDocument}
+                onClick={() => zoomByButton(1)}
+              />
+            </FloatingToolbarGroup>
+            <FloatingToolbarDivider />
+            <FloatingToolbarGroup>
+              <ToolbarButton
+                label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'}
+                icon={GalleryHorizontal}
+                active={spreadMode === SpreadMode.Odd}
+                disabled={!canUseDocument}
+                onClick={toggleSpread}
+              />
+              <ToolbarButton
+                label="Vertical scroll"
+                icon={ArrowDownUp}
+                active={scrollStrategy === ScrollStrategy.Vertical}
+                disabled={!canUseDocument}
+                onClick={() => setScroll(ScrollStrategy.Vertical)}
+              />
+              <ToolbarButton
+                label="Horizontal scroll"
+                icon={ArrowLeftRight}
+                active={scrollStrategy === ScrollStrategy.Horizontal}
+                disabled={!canUseDocument}
+                onClick={() => setScroll(ScrollStrategy.Horizontal)}
+              />
+              <ToolbarButton
+                label="Rotate"
+                icon={RotateCw}
+                disabled={!canUseDocument}
+                onClick={rotateForward}
+              />
+              <ToolbarButton
+                label="Thumbnails"
+                icon={BookImage}
+                active={thumbnailsOpen}
+                disabled={!canUseDocument}
+                onClick={toggleThumbnails}
+              />
+            </FloatingToolbarGroup>
+          </>
+        ), true) : null}
 
-      {activeSection === 'search' ? (
-        <FloatingToolbar label="Search toolbar" overflow>
-          <ToolbarButton
-            label="Back"
-            icon={ArrowLeft}
-            onClick={returnToPrimaryToolbar}
+        {activeSection === 'search' ? renderSection('Search toolbar', (
+          <Search
+            search={search}
+            scroll={scroll}
+            documentId={documentId}
+            open
+            onSearch={pinForSearch}
           />
-          <FloatingToolbarDivider />
-          <Search registry={registry} search={search} documentId={documentId} open />
-          {renderPersistentControls()}
-        </FloatingToolbar>
-      ) : null}
+        ), true) : null}
 
-      {activeSection === 'draw' ? (
-        <FloatingToolbar label="Draw toolbar" overflow>
-          <ToolbarButton
-            label="Back"
-            icon={ArrowLeft}
-            onClick={returnToPrimaryToolbar}
-          />
-          <FloatingToolbarDivider />
+        {activeSection === 'draw' ? renderSection('Draw toolbar', (
           <div className={styles.drawTools}>
             {DRAW_TOOLS.map(({ id, label, icon }) => (
               <ToolbarButton
@@ -701,7 +690,7 @@ export function Toolbar({
                 label={label}
                 icon={icon}
                 active={activeTool === id}
-                disabled={!canUseRegistry}
+                disabled={!canUseDocument}
                 onClick={() => selectDrawTool(id)}
               />
             ))}
@@ -710,25 +699,24 @@ export function Toolbar({
               label="Colors"
               icon={PaintBucket}
               active={colorPaletteOpen}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={toggleColorPalette}
             />
             <ToolbarButton
               label="Undo"
               icon={Undo2}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={() => runAnnotationHistory('undo')}
             />
             <ToolbarButton
               label="Redo"
               icon={Redo2}
-              disabled={!canUseRegistry}
+              disabled={!canUseDocument}
               onClick={() => runAnnotationHistory('redo')}
             />
           </div>
-          {renderPersistentControls()}
-        </FloatingToolbar>
-      ) : null}
+        ), true) : null}
+      </PortalProvider>
     </div>
   );
 }

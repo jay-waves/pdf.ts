@@ -7,7 +7,7 @@ import {
   setViewerThemeSettings,
 } from './theme';
 import styles from './document-dialogs.module.css';
-import { FlatDocumentDialog } from './document-dialog-shared';
+import { DocumentDialog } from './document-dialog-shared';
 
 const LIGHT_THEME_OPTIONS = getViewerThemeOptions('light');
 const DARK_THEME_OPTIONS = getViewerThemeOptions('dark');
@@ -59,7 +59,7 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
   };
 
   return (
-    <FlatDocumentDialog open={open} onClose={onClose} title="Themes">
+    <DocumentDialog open={open} onClose={onClose} title="Themes">
       <form className={`${styles.form} ${styles.themeForm}`} onSubmit={submit}>
         <ThemeOptionRow
           label="Light"
@@ -78,6 +78,6 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
           <Button className={styles.flatButton} type="submit" variant="primary">Save</Button>
         </DialogActions>
       </form>
-    </FlatDocumentDialog>
+    </DocumentDialog>
   );
 }

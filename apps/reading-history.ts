@@ -1,15 +1,11 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
-import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import { platform } from '#platform';
-import { restoreScrollAnchor } from './page-navigation';
+import type { PdfScroll } from './pdf-scroll';
 import {
   EMPTY_CLEANUP,
-  getActiveDocumentId,
-  getDocumentScrollStrategy,
   getPluginCapability,
-  type ScrollCapability,
 } from './utils';
 
 function isScrollStrategy(value: unknown): value is ScrollStrategy {
@@ -24,41 +20,38 @@ function isValidPageNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
-export function installReadingHistory(registry: PluginRegistry, documentKey?: string) {
+export function installReadingHistory(
+  registry: PluginRegistry,
+  scroll: PdfScroll,
+  documentKey?: string,
+) {
   if (!documentKey) return EMPTY_CLEANUP;
 
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  if (!scroll) return EMPTY_CLEANUP;
-
   const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-  const viewport = getPluginCapability<ViewportCapability>(registry, 'viewport');
+  const spreadScope = spread?.forDocument(scroll.documentId);
   let historyReady = false;
   let disposed = false;
   let pendingWriteId = 0;
   let finalWrite: Promise<void> | null = null;
-  const initialDocumentId = getActiveDocumentId(registry);
-  let lastScrollStrategy = initialDocumentId
-    ? getDocumentScrollStrategy(registry, initialDocumentId)
-    : undefined;
+  let lastScrollStrategy = scroll.getStrategy();
 
-  const getProgress = (documentId: string) => {
-    const strategy = getDocumentScrollStrategy(registry, documentId);
-    const spreadMode = spread?.forDocument(documentId).getSpreadMode();
+  const getProgress = () => {
+    const strategy = scroll.getStrategy();
+    const spreadMode = spreadScope?.getSpreadMode();
     return {
-      pageNumber: scroll.forDocument(documentId).getCurrentPage(),
+      pageNumber: scroll.getCurrentPage(),
       scrollStrategy: strategy,
       spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
     };
   };
 
-  const getViewSnapshot = (documentId: string) => {
-    const metrics = viewport?.forDocument(documentId).getMetrics();
+  const getViewSnapshot = () => {
+    const position = scroll.getPosition();
     return {
-      pageNumber: scroll.forDocument(documentId).getCurrentPage(),
-      scrollStrategy: getDocumentScrollStrategy(registry, documentId),
-      spreadMode: spread?.forDocument(documentId).getSpreadMode(),
-      scrollLeft: metrics?.scrollLeft,
-      scrollTop: metrics?.scrollTop,
+      pageNumber: scroll.getCurrentPage(),
+      scrollStrategy: scroll.getStrategy(),
+      spreadMode: spreadScope?.getSpreadMode(),
+      ...position,
     };
   };
 
@@ -83,10 +76,7 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
 
   const flushPendingWrite = () => {
     pendingWriteId = 0;
-    const documentId = getActiveDocumentId(registry);
-    return documentId
-      ? platform.writeReadingProgress(documentKey, getProgress(documentId))
-      : Promise.resolve();
+    return platform.writeReadingProgress(documentKey, getProgress());
   };
 
   const scheduleHistoryWrite = () => {
@@ -99,32 +89,32 @@ export function installReadingHistory(registry: PluginRegistry, documentKey?: st
 
   const unsubscribePageChange = scroll.onPageChange(scheduleHistoryWrite);
   const unsubscribeSpreadChange = spread?.onSpreadChange(scheduleHistoryWrite);
-  const unsubscribeScrollStateChange = scroll.onStateChange((state) => {
-    if (!isScrollStrategy(state.strategy) || state.strategy === lastScrollStrategy) return;
-    lastScrollStrategy = state.strategy;
+  const unsubscribeScrollStateChange = scroll.onStrategyChange((strategy) => {
+    if (strategy === lastScrollStrategy) return;
+    lastScrollStrategy = strategy;
     scheduleHistoryWrite();
   });
 
   let layoutReadyHandled = false;
   let unsubscribeLayoutReady: (() => void) | null = null;
-  const handleLayoutReady = (event: { documentId: string }) => {
-    if (layoutReadyHandled || event.documentId !== getActiveDocumentId(registry)) return;
+  const handleLayoutReady = () => {
+    if (layoutReadyHandled) return;
     layoutReadyHandled = true;
     unsubscribeLayoutReady?.();
     unsubscribeLayoutReady = null;
-    const initialView = getViewSnapshot(event.documentId);
+    const initialView = getViewSnapshot();
 
     platform.readReadingProgress(documentKey)
       .then((saved) => {
         if (disposed) return;
         const viewChangedWhileReading = hasViewChanged(
           initialView,
-          getViewSnapshot(event.documentId),
+          getViewSnapshot(),
         );
         if (!viewChangedWhileReading && saved && isValidPageNumber(saved.pageNumber)) {
-          if (isSpreadMode(saved.spreadMode)) spread?.forDocument(event.documentId).setSpreadMode(saved.spreadMode);
-          if (isScrollStrategy(saved.scrollStrategy)) scroll.setScrollStrategy(saved.scrollStrategy, event.documentId);
-          restoreScrollAnchor(registry, { documentId: event.documentId, pageNumber: saved.pageNumber });
+          if (isSpreadMode(saved.spreadMode)) spreadScope?.setSpreadMode(saved.spreadMode);
+          if (isScrollStrategy(saved.scrollStrategy)) scroll.setStrategy(saved.scrollStrategy);
+          scroll.restorePage(saved.pageNumber);
         }
         historyReady = true;
         if (viewChangedWhileReading) scheduleHistoryWrite();

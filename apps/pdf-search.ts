@@ -6,9 +6,9 @@ import {
   type SearchAllPagesResult,
   type SearchResult,
 } from '@embedpdf/models';
-import type { PdfiumCapability } from './pdf-engine';
+import type { PdfRuntime } from './pdf-engine';
 
-export interface PdfSearchState {
+interface PdfSearchState {
   documentId: string | null;
   query: string;
   flags: MatchFlag[];
@@ -32,7 +32,7 @@ export class PdfSearch {
   private task: PdfTask<SearchAllPagesResult, PdfPageSearchProgress> | null = null;
   private listeners = new Set<() => void>();
 
-  constructor(private readonly pdfium: PdfiumCapability) {}
+  constructor(private readonly pdfium: PdfRuntime) {}
 
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);

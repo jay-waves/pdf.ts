@@ -14,7 +14,6 @@ import type {
   PdfTask,
   Task,
 } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import type { PdfRenderTheme } from './pdf-render-theme';
 import { getCurrentViewerTheme, getPdfRenderTheme } from './theme';
 
@@ -26,59 +25,46 @@ interface PdfIncrementalRevision {
 const executors = new WeakMap<PdfEngine<Blob>, RemoteExecutor>();
 
 /**
- * Project-owned access to the live PDFium engine and the documents managed by
- * EmbedPDF. The React engine hook remains the sole owner of the worker and
- * engine lifetime; consumers borrow document handles through this capability
- * and must never open, close, or destroy them directly.
+ * Project-owned access to the live PDFium engine and the viewer's sole PDF.
+ * The React engine hook remains the sole owner of the worker and engine
+ * lifetime; consumers borrow the document handle from EmbedPDF's core state.
  */
-export class PdfiumCapability {
-  private documents: DocumentManagerCapability | null = null;
+export class PdfRuntime {
+  private registry: PluginRegistry | null = null;
 
   constructor(readonly engine: PdfEngine<Blob>) {}
 
   bindRegistry(registry: PluginRegistry) {
-    const documents = registry.getPlugin('document-manager')?.provides?.() as
-      | DocumentManagerCapability
-      | undefined;
-    if (!documents) {
-      throw new Error('The PDFium capability requires the document-manager plugin.');
-    }
-
-    this.documents = documents;
+    this.registry = registry;
     return () => {
       // A stale registry cleanup must not detach a newer binding.
-      if (this.documents === documents) this.documents = null;
+      if (this.registry === registry) this.registry = null;
     };
   }
 
-  getActiveDocumentId() {
-    return this.documents?.getActiveDocumentId() ?? null;
-  }
-
-  getDocument(documentId?: string | null) {
-    const id = documentId ?? this.getActiveDocumentId();
-    return id ? this.documents?.getDocument(id) ?? null : null;
+  getDocument(documentId: string) {
+    return this.registry?.getStore().getState().core.documents[documentId]?.document ?? null;
   }
 
   withDocument<T>(
-    documentId: string | null | undefined,
+    documentId: string,
     operation: (engine: PdfEngine<Blob>, document: PdfDocumentObject) => T,
   ): T {
     const document = this.getDocument(documentId);
     if (!document) {
-      throw new Error(`PDFium document is not available${documentId ? `: ${documentId}` : ''}.`);
+      throw new Error(`PDFium document is not available: ${documentId}.`);
     }
     return operation(this.engine, document);
   }
 }
 
-export function usePdfTsPdfiumEngine(options: {
+export function usePdfRuntime(options: {
   wasmUrl: string;
   fontFallback: FontFallbackConfig | null;
   defaultImageType: ImageConversionTypes;
 }) {
   const [state, setState] = useState<{
-    pdfium: PdfiumCapability | null;
+    pdfium: PdfRuntime | null;
     isLoading: boolean;
     error: Error | null;
   }>({ pdfium: null, isLoading: true, error: null });
@@ -93,7 +79,7 @@ export function usePdfTsPdfiumEngine(options: {
         quality,
       ),
     });
-    const pdfium = new PdfiumCapability(engine);
+    const pdfium = new PdfRuntime(engine);
     executors.set(engine, executor);
 
     const readyTask = (executor as unknown as {

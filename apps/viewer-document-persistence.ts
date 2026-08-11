@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfEngine } from '@embedpdf/models';
 import { platform } from '#platform';
@@ -17,16 +17,19 @@ function isAbortError(error: unknown) {
 export function useDocumentPersistence({
   engine,
   registry,
+  documentId,
   fileHandle,
   title,
 }: {
   engine: PdfEngine<Blob>;
   registry: PluginRegistry | undefined;
+  documentId: string | null;
   fileHandle?: PdfFileHandle;
   title: string;
 }) {
   const saveInProgressRef = useRef<Promise<boolean> | null>(null);
   const changesRef = useRef({ dirty: false, version: 0, forceFullSave: false });
+  const [isDirty, setIsDirty] = useState(false);
   const titleRef = useRef(title);
 
   const renderTitle = useCallback(() => {
@@ -43,6 +46,7 @@ export function useDocumentPersistence({
       changes.forceFullSave = false;
     }
     changes.dirty = dirty;
+    setIsDirty(dirty);
 
     if (dirtyStateChanged) {
       if (dirty) {
@@ -71,7 +75,7 @@ export function useDocumentPersistence({
       if (saveInProgressRef.current) return saveInProgressRef.current;
 
       const versionAtStart = changes.version;
-      const save = savePdf(engine, registry, fileHandle, {
+      const save = savePdf(engine, registry, documentId, fileHandle, {
         forceFullSave: changes.forceFullSave,
       })
         .then((saved) => {
@@ -93,7 +97,7 @@ export function useDocumentPersistence({
       saveInProgressRef.current = save;
       return save;
     },
-    [engine, fileHandle, registry, setDirty],
+    [documentId, engine, fileHandle, registry, setDirty],
   );
 
   useEffect(() => {
@@ -117,7 +121,7 @@ export function useDocumentPersistence({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  return { saveDocument, setDirty };
+  return { isDirty, saveDocument, setDirty };
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {

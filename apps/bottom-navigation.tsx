@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
 import { BookImage, CornerDownLeft, CornerUpRight, ListTree } from 'lucide-react';
 import { FloatingSurface } from './components';
-import {
-  installPageNavigationInput,
-  moveByPages,
-  scrollToPagePreservingViewport,
-} from './page-navigation';
+import type { PdfScroll } from './pdf-scroll';
 import type { OutlineCache } from './outline';
 import styles from './bottom-navigation.module.css';
 
 const NAVIGATION_AUTO_HIDE_DELAY_MS = 900;
 
-export function BottomNavigationControl({
-  registry,
+export function BottomNav({
+  scroll,
   title,
   pageNumber,
   totalPages,
@@ -21,7 +16,7 @@ export function BottomNavigationControl({
   onOpenOutline,
   onOpenThumbnails,
 }: {
-  registry?: PluginRegistry;
+  scroll?: PdfScroll | null;
   title: string;
   pageNumber: number;
   totalPages: number;
@@ -33,7 +28,7 @@ export function BottomNavigationControl({
   const [visible, setVisible] = useState(false);
   const hideTimerRef = useRef(0);
   const interactingRef = useRef(false);
-  const canNavigate = Boolean(registry && totalPages > 0);
+  const canNavigate = Boolean(scroll && totalPages > 0);
   const canGoPrevious = canNavigate && pageNumber > 1;
   const canGoNext = canNavigate && pageNumber < totalPages;
   const outlineTitle = title.trim();
@@ -68,9 +63,8 @@ export function BottomNavigationControl({
   }, []);
 
   useEffect(() => {
-    if (!registry) return;
-    return installPageNavigationInput(registry, reveal);
-  }, [registry, reveal]);
+    return scroll?.installInput(reveal);
+  }, [reveal, scroll]);
 
   useEffect(() => {
     let wasAtBottomEdge = false;
@@ -88,10 +82,10 @@ export function BottomNavigationControl({
 
   const scrollToPage = (nextPageNumber: number) => {
     reveal();
-    if (!registry || !totalPages) return;
+    if (!scroll || !totalPages) return;
 
     const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
-    scrollToPagePreservingViewport(registry, clampedPageNumber);
+    scroll.goToPage(clampedPageNumber);
     setPageInput(String(clampedPageNumber));
   };
 
@@ -107,7 +101,7 @@ export function BottomNavigationControl({
 
   const scrollByPage = (direction: -1 | 1) => {
     reveal();
-    if (registry) moveByPages(registry, direction);
+    scroll?.movePages(direction);
   };
 
   return (

@@ -3,11 +3,11 @@ interface PdfRenderThemeBase {
   background: number;
 }
 
-export interface PdfBackgroundRenderTheme extends PdfRenderThemeBase {
+interface PdfBackgroundRenderTheme extends PdfRenderThemeBase {
   mode: 'background';
 }
 
-export interface PdfForcedColorRenderTheme extends PdfRenderThemeBase {
+interface PdfForcedColorRenderTheme extends PdfRenderThemeBase {
   mode: 'forced-colors';
   pathFill: number;
   pathStroke: number;

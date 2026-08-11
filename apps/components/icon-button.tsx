@@ -24,11 +24,7 @@ export function IconButton({
   const button = (
     <button
       type="button"
-      className={[
-        'cursor-pointer border border-transparent bg-transparent text-inherit',
-        styles.button,
-        className,
-      ].join(' ')}
+      className={`cursor-pointer border border-transparent bg-transparent text-inherit ${styles.button} ${className}`.trim()}
       onClick={onClick}
       disabled={disabled}
       aria-label={label}

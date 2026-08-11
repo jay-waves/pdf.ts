@@ -1,6 +1,6 @@
-import type { HTMLAttributes } from 'react';
+import type { ComponentPropsWithRef, HTMLAttributes } from 'react';
 
-export function PanelContent({ overflow = 'auto', padding = 'default', className = '', ...props }: HTMLAttributes<HTMLDivElement> & {
+export function PanelContent({ overflow = 'auto', padding = 'default', className = '', ...props }: ComponentPropsWithRef<'div'> & {
   overflow?: 'auto' | 'hidden';
   padding?: 'default' | 'compact';
 }) {

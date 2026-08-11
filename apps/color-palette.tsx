@@ -48,10 +48,12 @@ function getAnnotationValues(
 
 export function ColorPalette({
   registry,
+  documentId,
   open,
   onClose,
 }: {
   registry?: PluginRegistry;
+  documentId?: string | null;
   open: boolean;
   onClose(): void;
 }) {
@@ -61,7 +63,7 @@ export function ColorPalette({
   const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;
 
   useEffect(() => {
-    const scoped = open ? getAnnotationScope(registry) : null;
+    const scoped = open ? getAnnotationScope(registry, documentId) : null;
     if (!scoped) {
       setSnapshot(EMPTY_SNAPSHOT);
       return;
@@ -98,7 +100,7 @@ export function ColorPalette({
       unsubscribeState();
       unsubscribeTools();
     };
-  }, [open, registry]);
+  }, [documentId, open, registry]);
 
   const colors = useMemo(() => {
     const presets = capability?.getColorPresets() ?? [];
@@ -125,7 +127,7 @@ export function ColorPalette({
   const autoColor = getAnnotationAutoColor(toolId, selectedField);
 
   const applyPatch = (patch: Record<string, unknown>) => {
-    const scoped = getAnnotationScope(registry);
+    const scoped = getAnnotationScope(registry, documentId);
     if (!scoped) return;
 
     if (activeTool?.id) {

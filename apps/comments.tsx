@@ -12,13 +12,13 @@ import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, U
 import { Button, PanelContent, PanelState } from './components';
 import {
   TEXT_MARKUP_TYPES,
-  getAnnotationFocusPosition,
   getAnnotationLabel,
   getAnnotationRects,
   getAnnotationScope,
   rectsIntersect,
 } from './annotations';
-import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
+import type { PdfScroll } from './pdf-scroll';
+import { getDocument } from './viewer-document';
 import styles from './comments.module.css';
 
 type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
@@ -69,8 +69,8 @@ function getPageTextRuns(
   return pending;
 }
 
-function getEntries(registry: PluginRegistry | undefined) {
-  const scoped = getAnnotationScope(registry);
+function getEntries(registry: PluginRegistry | undefined, documentId: string | null | undefined) {
+  const scoped = getAnnotationScope(registry, documentId);
   if (!scoped) return [];
 
   return scoped.scope.getAnnotations()
@@ -95,19 +95,17 @@ function getEntryIcon(annotation: PdfAnnotationObject) {
   }
 }
 
-function navigateToAnnotation(registry: PluginRegistry, annotation: PdfAnnotationObject) {
-  const scoped = getAnnotationScope(registry);
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  if (!scoped || !scroll) return;
+function navigateToAnnotation(
+  registry: PluginRegistry,
+  documentId: string,
+  scroll: PdfScroll | null | undefined,
+  annotation: PdfAnnotationObject,
+) {
+  const scoped = getAnnotationScope(registry, documentId);
+  if (!scoped) return;
 
   scoped.scope.selectAnnotation(annotation.pageIndex, annotation.id);
-  scroll.forDocument(scoped.documentId).scrollToPage({
-    pageNumber: annotation.pageIndex + 1,
-    pageCoordinates: getAnnotationFocusPosition(annotation),
-    behavior: 'instant',
-    alignX: 50,
-    alignY: 50,
-  });
+  scroll?.reveal(annotation.pageIndex, getAnnotationRects(annotation));
 }
 
 function scrollCommentItemIntoView(root: HTMLElement, item: HTMLElement) {
@@ -133,17 +131,24 @@ function scrollCommentItemIntoView(root: HTMLElement, item: HTMLElement) {
   }
 }
 
-function deleteAnnotation(registry: PluginRegistry | undefined, pageIndex: number, annotationId: string) {
-  const scoped = getAnnotationScope(registry);
+function deleteAnnotation(
+  registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
+  pageIndex: number,
+  annotationId: string,
+) {
+  const scoped = getAnnotationScope(registry, documentId);
   scoped?.scope.deleteAnnotations([{
     pageIndex,
     id: annotationId,
   }]);
 }
 
-export function Comments({ engine, registry, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew }: {
-  engine?: PdfEngine<Blob> | null;
+export function Comments({ engine, registry, documentId, scroll, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew }: {
+  engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
+  documentId?: string | null;
+  scroll?: PdfScroll | null;
   open: boolean;
   currentPageNumber: number;
   targetAnnotationId?: string | null;
@@ -158,7 +163,10 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   const summaryCacheRef = useRef(new Map<string, string>());
   const invalidSummaryIdsRef = useRef(new Set<string>());
   const editingAnnotationId = editingComment?.annotationId;
-  const entries = useMemo(() => open ? getEntries(registry) : [], [open, registry, revision]);
+  const entries = useMemo(
+    () => open ? getEntries(registry, documentId) : [],
+    [documentId, open, registry, revision],
+  );
   const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, annotation) => {
     const lastGroup = groups.at(-1);
     if (lastGroup?.pageIndex === annotation.pageIndex) {
@@ -173,10 +181,10 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
     summaryCacheRef.current.clear();
     invalidSummaryIdsRef.current.clear();
     setSummaryRevision((value) => value + 1);
-  }, [registry]);
+  }, [documentId, registry]);
 
   useEffect(() => {
-    const scoped = getAnnotationScope(registry);
+    const scoped = getAnnotationScope(registry, documentId);
     if (!scoped) return;
     return scoped.scope.onAnnotationEvent((event) => {
       if (event.documentId !== scoped.documentId) return;
@@ -198,17 +206,14 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
 
       setRevision((value) => value + 1);
     });
-  }, [registry]);
+  }, [documentId, registry]);
 
   useEffect(() => {
-    if (!open || !engine || !registry) {
+    if (!open || !registry) {
       return;
     }
 
-    const documentId = getActiveDocumentId(registry);
-    const document = documentId
-      ? registry.getStore().getState().core.documents[documentId]?.document
-      : null;
+    const document = getDocument(registry, documentId);
     if (!document) return;
 
     let cancelled = false;
@@ -264,13 +269,13 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
     return () => {
       cancelled = true;
     };
-  }, [engine, entries, open, registry]);
+  }, [documentId, engine, entries, open, registry]);
 
   useEffect(() => {
     if (!open) {
       const pendingCreation = pendingCreationRef.current;
       if (pendingCreation) {
-        deleteAnnotation(registry, pendingCreation.pageIndex, pendingCreation.annotationId);
+        deleteAnnotation(registry, documentId, pendingCreation.pageIndex, pendingCreation.annotationId);
       }
       consumedTargetIdRef.current = null;
       pendingCreationRef.current = null;
@@ -287,7 +292,7 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
       annotationId: target.id,
       draft: target.contents?.trim() ?? '',
     });
-  }, [entries, open, targetAnnotationId, targetAnnotationIsNew]);
+  }, [documentId, entries, open, targetAnnotationId, targetAnnotationIsNew]);
 
   useLayoutEffect(() => {
     if (!open) {
@@ -330,11 +335,11 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
   }, [editingAnnotationId, open, summaryRevision]);
 
   const saveComment = (annotation: PdfAnnotationObject) => {
-    const scoped = getAnnotationScope(registry);
+    const scoped = getAnnotationScope(registry, documentId);
     if (!scoped) return;
     const contents = editingComment?.draft.trim() ?? '';
     if (!contents && pendingCreationRef.current?.annotationId === annotation.id) {
-      deleteAnnotation(registry, annotation.pageIndex, annotation.id);
+      deleteAnnotation(registry, documentId, annotation.pageIndex, annotation.id);
       pendingCreationRef.current = null;
       setEditingComment(null);
       return;
@@ -346,15 +351,16 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
 
   const cancelComment = (annotation: PdfAnnotationObject) => {
     if (pendingCreationRef.current?.annotationId === annotation.id) {
-      deleteAnnotation(registry, annotation.pageIndex, annotation.id);
+      deleteAnnotation(registry, documentId, annotation.pageIndex, annotation.id);
       pendingCreationRef.current = null;
     }
     setEditingComment(null);
   };
 
   return (
-    <PanelContent padding="compact" overflow="hidden" className={styles.panel} hidden={!open}>
-      <div ref={contentRef} className="h-full overflow-y-auto">
+    <PanelContent ref={contentRef} padding="compact" className={styles.panel} hidden={!open}>
+      {open ? (
+      <>
       {!registry ? <PanelState>Loading comments...</PanelState> : null}
       {registry && !entries.length ? <div className={styles.empty}>
         <span className={styles.emptyIcon}><MessageSquareMore size={20} strokeWidth={1.6} /></span>
@@ -364,7 +370,7 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
       {pageGroups.length ? <ol className={styles.list}>
         {pageGroups.map((group) => <li key={group.pageIndex} className={styles.pageGroup} data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
           <div className={styles.pageHeader}>
-            <span>Page {group.pageIndex + 1}</span>
+            Page {group.pageIndex + 1}
           </div>
           <ol className={styles.entries}>
             {group.entries.map((annotation) => {
@@ -387,7 +393,7 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
                 {!isEditing ? <button
                   type="button"
                   className={styles.cardTarget}
-                  onClick={() => registry && navigateToAnnotation(registry, annotation)}
+                  onClick={() => registry && documentId && navigateToAnnotation(registry, documentId, scroll, annotation)}
                   aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
                 /> : null}
                 <div className={styles.heading}>
@@ -418,7 +424,8 @@ export function Comments({ engine, registry, open, currentPageNumber, targetAnno
           </ol>
         </li>)}
       </ol> : null}
-      </div>
+      </>
+      ) : null}
     </PanelContent>
   );
 }

@@ -6,7 +6,7 @@ export function FloatingSurface({
   className = '',
   ...props
 }: HTMLAttributes<HTMLElement> & { as?: 'div' | 'nav' }) {
-  return <Component className={[styles.surface, className].filter(Boolean).join(' ')} {...props} />;
+  return <Component className={`${styles.surface} ${className}`.trim()} {...props} />;
 }
 
 export function FloatingToolbar({
@@ -22,7 +22,7 @@ export function FloatingToolbar({
 }) {
   return (
     <FloatingSurface
-      className={[styles.toolbar, className].filter(Boolean).join(' ')}
+      className={`${styles.toolbar} ${className}`.trim()}
       role="toolbar"
       aria-label={label}
       data-overflow={overflow ? 'true' : undefined}

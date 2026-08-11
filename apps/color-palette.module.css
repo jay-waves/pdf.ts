@@ -17,8 +17,7 @@
   @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
 }
 
-.target:hover,
-.target:focus-visible {
+.target:is(:hover, :focus-visible) {
   @apply border-accent shadow-control;
 }
 
@@ -45,12 +44,7 @@
   color: color-mix(in srgb, var(--pdf-swatch-color) 16%, #111827);
 }
 
-.swatch:hover,
-.swatch:focus-visible {
-  @apply border-accent shadow-control;
-}
-
-.swatch[data-active='true'] {
+.swatch:is(:hover, :focus-visible, [data-active='true']) {
   @apply border-accent shadow-control;
 }
 

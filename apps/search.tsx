@@ -5,29 +5,27 @@ import {
   useSyncExternalStore,
   type HTMLAttributes,
 } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
 import { useDocumentState } from '@embedpdf/core/react';
 import { MatchFlag, type SearchResult } from '@embedpdf/models';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react';
 import { Tooltip } from './components';
 import type { PdfSearch } from './pdf-search';
+import type { PdfScroll } from './pdf-scroll';
 import styles from './search.module.css';
-import { getActiveDocumentId, getPluginCapability, type ScrollCapability } from './utils';
 
-export function PdfSearchLayer({
+const HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38%, transparent)';
+const ACTIVE_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-danger-primary) 62%, transparent)';
+
+export function SearchLayer({
   search,
   documentId,
   pageIndex,
-  highlightColor,
-  activeHighlightColor,
   style,
   ...props
 }: HTMLAttributes<HTMLDivElement> & {
   search: PdfSearch;
   documentId: string;
   pageIndex: number;
-  highlightColor: string;
-  activeHighlightColor: string;
 }) {
   const state = useSyncExternalStore(search.subscribe, search.getSnapshot);
   const scale = useDocumentState(documentId)?.scale ?? 1;
@@ -40,6 +38,7 @@ export function PdfSearchLayer({
           ? result.rects.map((rect, rectIndex) => (
             <div
               key={`${resultIndex}-${rectIndex}`}
+              className="pdf-search-highlight"
               style={{
                 position: 'absolute',
                 top: rect.origin.y * scale,
@@ -47,8 +46,8 @@ export function PdfSearchLayer({
                 width: rect.size.width * scale,
                 height: rect.size.height * scale,
                 backgroundColor: resultIndex === state.activeResultIndex
-                  ? activeHighlightColor
-                  : highlightColor,
+                  ? ACTIVE_HIGHLIGHT_COLOR
+                  : HIGHLIGHT_COLOR,
                 mixBlendMode: 'multiply',
                 transform: 'scale(1.02)',
                 transformOrigin: 'center',
@@ -61,31 +60,29 @@ export function PdfSearchLayer({
   );
 }
 
-function getScroll(registry?: PluginRegistry) {
-  const documentId = registry ? getActiveDocumentId(registry) : null;
-  const scroll = getPluginCapability<ScrollCapability>(registry, 'scroll');
-  return documentId && scroll ? scroll.forDocument(documentId) : null;
-}
-
-function getCurrentPageIndex(registry?: PluginRegistry) {
-  return Math.max(0, (getScroll(registry)?.getCurrentPage() ?? 1) - 1);
-}
-
-function scrollToResult(registry: PluginRegistry | undefined, result?: SearchResult) {
-  if (!result) return;
-  getScroll(registry)?.scrollToPage({ pageNumber: result.pageIndex + 1, behavior: 'instant' });
+function scrollToResult(
+  scroll: PdfScroll | null | undefined,
+  result?: SearchResult,
+) {
+  if (!scroll || !result) return;
+  scroll.reveal(result.pageIndex, result.rects, {
+    behavior: 'smooth',
+    insets: { top: 64 },
+  });
 }
 
 export function Search({
-  registry,
   search,
+  scroll,
   documentId,
   open,
+  onSearch,
 }: {
-  registry?: PluginRegistry;
   search: PdfSearch;
+  scroll?: PdfScroll | null;
   documentId?: string | null;
   open: boolean;
+  onSearch(): void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -110,19 +107,23 @@ export function Search({
   }, [canSearch, open]);
 
   useEffect(() => {
-    if (open) scrollToResult(registry, state.results[state.activeResultIndex]);
-  }, [open, registry, state.activeResultIndex, state.results]);
+    if (open) scrollToResult(scroll, state.results[state.activeResultIndex]);
+  }, [open, scroll, state.activeResultIndex, state.results]);
 
   if (!open) return null;
 
-  const runSearch = () => search.run(query, state.flags, getCurrentPageIndex(registry));
+  const runSearch = () => {
+    if (canSearch && query.trim()) onSearch();
+    search.run(query, state.flags, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
+  };
   const clearSearch = () => {
     setQuery('');
     search.clear();
     inputRef.current?.focus();
   };
   const toggleFlag = (flag: MatchFlag) => {
-    search.toggleFlag(flag, query, getCurrentPageIndex(registry));
+    if (canSearch && query.trim()) onSearch();
+    search.toggleFlag(flag, query, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
   };
 
   return (
@@ -229,7 +230,7 @@ function SearchFlagButton({
   );
 }
 
-export function installSearchKeyboardShortcut(onOpen: () => void) {
+export function installSearchKey(onOpen: () => void) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (
       event.defaultPrevented

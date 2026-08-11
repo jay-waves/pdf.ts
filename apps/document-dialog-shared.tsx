@@ -15,7 +15,7 @@ export function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-export function FlatDocumentDialog(props: ComponentProps<typeof Dialog>) {
+export function DocumentDialog(props: ComponentProps<typeof Dialog>) {
   return (
     <Dialog
       {...props}
