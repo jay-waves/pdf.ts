@@ -7,7 +7,7 @@ interface SelectOption {
   value: string;
 }
 
-const TRIGGER_CLASSES = 'inline-flex h-6.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5 outline-none focus-visible:border-accent disabled:opacity-50';
+const TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5 outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control hover:border-accent hover:shadow-control focus-visible:border-accent focus-visible:shadow-control disabled:opacity-50 disabled:hover:border-border-subtle disabled:hover:shadow-none';
 
 export function Select({
   value,
@@ -16,6 +16,8 @@ export function Select({
   label,
   className,
   disabled,
+  iconOnly = false,
+  sideOffset = 5,
   onValueChange,
 }: {
   value: string;
@@ -24,6 +26,8 @@ export function Select({
   label: string;
   className?: string;
   disabled?: boolean;
+  iconOnly?: boolean;
+  sideOffset?: number;
   onValueChange(value: string): void;
 }) {
   const portalContainer = usePortalContainer();
@@ -33,16 +37,16 @@ export function Select({
         className={`${TRIGGER_CLASSES} ${className ?? ''}`.trim()}
         aria-label={label}
       >
-        <RadixSelect.Value>{displayValue}</RadixSelect.Value>
-        <RadixSelect.Icon className="inline-flex text-muted">
+        {iconOnly ? null : <RadixSelect.Value>{displayValue}</RadixSelect.Value>}
+        <RadixSelect.Icon className="inline-flex text-muted transition-[color,transform] duration-150 group-hover:text-foreground group-data-[state=open]:rotate-180">
           <ChevronDown size={12} strokeWidth={2} />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
       <RadixSelect.Portal container={portalContainer ?? undefined}>
         <RadixSelect.Content
-          className="z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground shadow-popover"
+          className="pdf-select-content z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground shadow-popover"
           position="popper"
-          sideOffset={5}
+          sideOffset={sideOffset}
           collisionPadding={6}
         >
           <RadixSelect.Viewport className="p-1">

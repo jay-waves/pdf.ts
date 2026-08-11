@@ -1,7 +1,7 @@
 @reference './tailwind.css';
 
-.dialog { @apply flex max-h-[calc(100vh-32px)] flex-col; }
-.content { @apply min-h-0 flex-1 content-start gap-4 overflow-auto text-[11px]; height: auto; display: grid; }
+.dialog { @apply flex flex-col; }
+.content { @apply min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 text-[11px]; display: grid; }
 .section { @apply grid gap-2; }
 .sectionTitle { @apply m-0 text-[11px] font-semibold text-foreground; }
 .stats { @apply m-0 grid overflow-hidden rounded-md border border-border-subtle bg-surface-alt; }
@@ -12,5 +12,5 @@
 .controlGroup { @apply grid gap-1; }
 .select { @apply w-full text-foreground; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
-.detailsLabel { @apply grid gap-1.5 text-secondary; }
-.details { @apply min-h-29 resize-none rounded-md border border-border bg-input p-2.5 font-mono text-[10.5px] leading-4 text-foreground outline-none focus:border-accent; }
+.detailsLabel { @apply grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5 text-secondary; }
+.details { @apply h-full min-h-29 resize-none rounded-md border border-border bg-input p-2.5 font-mono text-[10.5px] leading-4 text-foreground outline-none focus:border-accent; }

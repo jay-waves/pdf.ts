@@ -15,7 +15,7 @@
 .flatDialog .input { @apply border-border-subtle bg-surface-alt; }
 .input:focus { @apply border-accent; }
 .error { @apply leading-3.75 text-danger; }
-.metadataContent { @apply grid gap-3 bg-surface px-3.25 pt-3 pb-3.25; }
+.metadataContent { @apply grid gap-3 bg-surface px-3.25 pt-3 pb-5; }
 .metadataStatus { @apply text-secondary; }
 .metadataDetails { @apply m-0 grid overflow-hidden rounded bg-surface-alt text-[11px]; }
 .metadataDetails > div { @apply grid grid-cols-[76px_minmax(0,1fr)] gap-2 border-b border-border-subtle px-2.5 py-2; }
@@ -23,7 +23,7 @@
 .metadataDetails dt { @apply text-secondary; }
 .metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
 .optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
-.themeForm { @apply gap-3 pt-2.5; }
+.themeForm { @apply gap-3 pt-2.5 pb-5; }
 .themeGroup { @apply m-0 min-w-0 border-0 p-0; }
 .themeGroup:disabled { @apply opacity-40 grayscale; }
 .themeGroupLabel { @apply mb-1.5 p-0 text-[11px] font-medium text-secondary; }

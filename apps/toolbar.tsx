@@ -150,6 +150,78 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
 const ZOOM_SELECT_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
 const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), value]));
 
+function ZoomControl({
+  disabled,
+  zoomLevel,
+  zoomPercent,
+  onPresetChange,
+  onPercentChange,
+}: {
+  disabled: boolean;
+  zoomLevel: ZoomLevel;
+  zoomPercent: number;
+  onPresetChange(value: string): void;
+  onPercentChange(value: number): void;
+}) {
+  const [draft, setDraft] = useState(`${zoomPercent}%`);
+  const [editing, setEditing] = useState(false);
+  const cancelBlurRef = useRef(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(`${zoomPercent}%`);
+  }, [editing, zoomPercent]);
+
+  const commit = () => {
+    setEditing(false);
+    if (cancelBlurRef.current) {
+      cancelBlurRef.current = false;
+      setDraft(`${zoomPercent}%`);
+      return;
+    }
+    const percent = Number(draft.trim().replace(/%$/, ''));
+    if (!Number.isFinite(percent) || percent <= 0) {
+      setDraft(`${zoomPercent}%`);
+      return;
+    }
+    onPercentChange(percent);
+  };
+
+  return (
+    <div className={styles.zoomControl}>
+      <input
+        className={styles.zoomInput}
+        aria-label="Zoom percentage"
+        disabled={disabled}
+        inputMode="decimal"
+        value={draft}
+        onChange={(event) => setDraft(event.currentTarget.value)}
+        onFocus={(event) => {
+          setEditing(true);
+          event.currentTarget.select();
+        }}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+          if (event.key === 'Escape') {
+            cancelBlurRef.current = true;
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <Select
+        className={styles.zoomMenu}
+        value={String(zoomLevel)}
+        options={ZOOM_SELECT_OPTIONS}
+        onValueChange={onPresetChange}
+        label="Zoom presets"
+        disabled={disabled}
+        iconOnly
+        sideOffset={7}
+      />
+    </div>
+  );
+}
+
 function ToolbarButton({
   label,
   icon: Icon,
@@ -381,6 +453,10 @@ export function Toolbar({
     zoomScope.requestZoom(level);
   };
 
+  const enterZoom = (percent: number) => {
+    getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(percent / 100);
+  };
+
   const toggleSpread = () => {
     const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
     if (!spread) return;
@@ -596,14 +672,12 @@ export function Toolbar({
                 disabled={!canUseDocument}
                 onClick={() => zoomByButton(-1)}
               />
-              <Select
-                className={styles.zoomSelect}
-                value={typeof zoomLevel === 'number' ? String(zoomLevel) : zoomLevel}
-                displayValue={`${zoomPercent}%`}
-                options={ZOOM_SELECT_OPTIONS}
-                onValueChange={selectZoom}
-                label="Zoom"
+              <ZoomControl
                 disabled={!canUseDocument}
+                zoomLevel={zoomLevel}
+                zoomPercent={zoomPercent}
+                onPresetChange={selectZoom}
+                onPercentChange={enterZoom}
               />
               <ToolbarButton
                 label="Zoom in"

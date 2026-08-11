@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfMetadataObject } from '@embedpdf/models';
-import { Button, DialogActions } from './components';
 import { getDocument } from './viewer-document';
 import styles from './document-dialogs.module.css';
 import { DocumentDialog, getErrorMessage } from './document-dialog-shared';
@@ -81,11 +80,6 @@ export function MetadataDialog({ registry, documentId, open, fileName, pageCount
             ))}
           </dl>
         ) : null}
-        <DialogActions className={styles.flatActions}>
-          <Button appearance="flat" variant="primary" onClick={onClose}>
-            Close
-          </Button>
-        </DialogActions>
       </div>
     </DocumentDialog>
   );

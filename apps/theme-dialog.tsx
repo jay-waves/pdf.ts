@@ -1,6 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
-import { Button, DialogActions } from './components';
 import {
   getViewerThemeOptions,
   getViewerThemeSettings,
@@ -77,34 +76,30 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
     if (open) setSettings(getViewerThemeSettings());
   }, [open]);
 
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setViewerThemeSettings(settings);
-    onClose();
+  const selectTheme = <Key extends keyof typeof settings>(key: Key, value: typeof settings[Key]) => {
+    const nextSettings = { ...settings, [key]: value };
+    setSettings(nextSettings);
+    setViewerThemeSettings(nextSettings);
   };
 
   return (
     <DocumentDialog open={open} onClose={onClose} title="Themes">
-      <form className={`${styles.form} ${styles.themeForm}`} onSubmit={submit}>
+      <div className={`${styles.form} ${styles.themeForm}`}>
         <ThemeOptionRow
           label="Light"
           value={settings.light}
           options={LIGHT_THEME_OPTIONS}
           disabled={darkMode}
-          onValueChange={(light) => setSettings((current) => ({ ...current, light }))}
+          onValueChange={(light) => selectTheme('light', light)}
         />
         <ThemeOptionRow
           label="Dark"
           value={settings.dark}
           options={DARK_THEME_OPTIONS}
           disabled={!darkMode}
-          onValueChange={(dark) => setSettings((current) => ({ ...current, dark }))}
+          onValueChange={(dark) => selectTheme('dark', dark)}
         />
-        <DialogActions className={styles.flatActions}>
-          <Button appearance="flat" onClick={onClose}>Cancel</Button>
-          <Button appearance="flat" type="submit" variant="primary">Save</Button>
-        </DialogActions>
-      </form>
+      </div>
     </DocumentDialog>
   );
 }

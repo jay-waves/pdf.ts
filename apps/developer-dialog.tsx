@@ -101,7 +101,6 @@ export function DeveloperDialog({
       open={open}
       onClose={onClose}
       title="Developer"
-      variant="popupWide"
       titleVariant="popup"
       contentClassName={styles.dialog}
     >
@@ -153,7 +152,7 @@ export function DeveloperDialog({
 
         <label className={styles.detailsLabel}>
           <span>Details</span>
-          <textarea className={styles.details} value={details} readOnly rows={8} />
+          <textarea className={styles.details} value={details} readOnly />
         </label>
       </PanelContent>
     </Dialog>

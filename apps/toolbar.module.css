@@ -32,6 +32,14 @@
 }
 .modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
 
-.zoomSelect {
-  @apply w-18.5;
+.zoomControl {
+  @apply inline-flex h-6.5 w-18.5 items-stretch overflow-hidden rounded-md border border-border-subtle bg-input;
+  @apply transition-[border-color,box-shadow] duration-150 ease-control focus-within:border-accent focus-within:shadow-control;
 }
+.zoomControl:hover { @apply border-accent shadow-control; }
+.zoomInput { @apply min-w-0 flex-1 border-0 bg-transparent px-1.5 text-center text-inherit outline-none tabular-nums; }
+.zoomInput:disabled { @apply opacity-50; }
+.zoomMenu {
+  @apply h-auto w-5.5 flex-none justify-center rounded-none border-0 border-l border-border-subtle bg-transparent p-0 shadow-none;
+}
+.zoomMenu:hover { @apply border-border-subtle bg-hover shadow-none; }
