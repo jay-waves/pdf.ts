@@ -1,12 +1,13 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { Select as RadixSelect } from 'radix-ui';
 import { usePortalContainer } from './portal-container';
-import styles from './select.module.css';
 
 interface SelectOption {
   label: string;
   value: string;
 }
+
+const TRIGGER_CLASSES = 'inline-flex h-6.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5 outline-none focus-visible:border-accent disabled:opacity-50';
 
 export function Select({
   value,
@@ -28,7 +29,10 @@ export function Select({
   const portalContainer = usePortalContainer();
   return (
     <RadixSelect.Root value={value} onValueChange={onValueChange} disabled={disabled}>
-      <RadixSelect.Trigger className={className} aria-label={label}>
+      <RadixSelect.Trigger
+        className={`${TRIGGER_CLASSES} ${className ?? ''}`.trim()}
+        aria-label={label}
+      >
         <RadixSelect.Value>{displayValue}</RadixSelect.Value>
         <RadixSelect.Icon className="inline-flex text-muted">
           <ChevronDown size={12} strokeWidth={2} />
@@ -36,7 +40,7 @@ export function Select({
       </RadixSelect.Trigger>
       <RadixSelect.Portal container={portalContainer ?? undefined}>
         <RadixSelect.Content
-          className={styles.content}
+          className="z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground shadow-popover"
           position="popper"
           sideOffset={5}
           collisionPadding={6}

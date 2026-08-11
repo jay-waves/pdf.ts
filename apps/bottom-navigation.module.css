@@ -10,22 +10,19 @@
 .navigationButtons { @apply flex min-w-0 items-center gap-1.25 max-[640px]:gap-0.75; }
 .navigationContent { @apply flex min-w-0 max-w-[min(430px,calc(100vw-136px))] items-center justify-end gap-1.5 max-[640px]:max-w-[calc(100vw-86px)] max-[640px]:gap-1.25; }
 
-.navigationButton {
-  @apply grid size-6.5 min-w-0 cursor-pointer place-items-center rounded-md border border-transparent bg-transparent p-0 text-inherit leading-none outline-none;
-}
 .outlineButton {
   @apply inline-flex h-6.5 min-w-0 max-w-[min(320px,calc(100vw-236px))] flex-[0_1_auto] cursor-pointer items-center justify-center gap-1.25 rounded-md border border-transparent bg-transparent px-2 text-left text-inherit outline-none;
   @apply max-[640px]:size-6.5 max-[640px]:max-w-6.5 max-[640px]:flex-none max-[640px]:p-0;
 }
-:is(.navigationButton, .outlineButton):is(:hover, :focus-visible) { @apply border-accent shadow-control; }
-:is(.navigationButton, .outlineButton):disabled { @apply cursor-default opacity-48; }
+.outlineButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
+.outlineButton:disabled { @apply cursor-default opacity-48; }
 .thumbnailButton { @apply size-6.5 max-w-6.5 flex-none p-0; }
 .navigationTitleIcon { @apply hidden flex-none max-[640px]:block; }
 .navigationTitle { @apply inline-flex h-3.5 items-center overflow-hidden text-[12px] leading-3.5 text-ellipsis whitespace-nowrap max-[640px]:hidden; }
 
 .pageForm {
-  @apply flex h-6.5 min-w-15.5 flex-none items-center justify-center gap-1 rounded-md border border-transparent px-1.5 text-[12px] whitespace-nowrap text-secondary tabular-nums;
+  @apply flex h-6.5 min-w-0 flex-none cursor-pointer items-center justify-center gap-[0.6em] rounded-md border border-transparent px-[0.5em] text-[12px] whitespace-nowrap text-secondary tabular-nums;
 }
-.pageForm:focus-within { @apply border-border-subtle bg-hover; }
-.pageInput { @apply h-4.75 w-6.5 min-w-0 border-0 bg-transparent px-0.5 text-right text-[12px] leading-4.5 text-foreground tabular-nums outline-none disabled:text-muted; }
-.pageTotal { @apply text-muted; }
+.pageForm:is(:hover, :focus-within) { @apply border-border-subtle bg-hover; }
+.pageInput { @apply h-4.75 min-w-[1ch] cursor-text border-0 bg-transparent px-0 text-left text-[12px] leading-4.5 text-foreground tabular-nums outline-none disabled:text-muted; }
+.pageTotal { @apply inline-flex items-center gap-[0.4em] text-muted; }

@@ -101,8 +101,8 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
           onValueChange={(dark) => setSettings((current) => ({ ...current, dark }))}
         />
         <DialogActions className={styles.flatActions}>
-          <Button className={styles.flatButton} onClick={onClose}>Cancel</Button>
-          <Button className={styles.flatButton} type="submit" variant="primary">Save</Button>
+          <Button appearance="flat" onClick={onClose}>Cancel</Button>
+          <Button appearance="flat" type="submit" variant="primary">Save</Button>
         </DialogActions>
       </form>
     </DocumentDialog>

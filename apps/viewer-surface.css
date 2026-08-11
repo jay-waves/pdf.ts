@@ -7,6 +7,8 @@
      the viewport a second time during a large scale change. */
   overflow-anchor: none;
   background: var(--pdf-background-app);
+  /* The viewer owns touch selection: swipe pans, long press selects text. */
+  -webkit-touch-callout: none;
 }
 
 .pdf-viewer-scroll-area {

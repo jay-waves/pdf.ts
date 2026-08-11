@@ -254,7 +254,3 @@ export function initializeViewerTheme() {
     attributeFilter: ['class'],
   });
 }
-
-export function setViewerScrollStrategyAttribute(strategy: 'vertical' | 'horizontal') {
-  document.documentElement.dataset.pdfScrollStrategy = strategy;
-}

@@ -18,6 +18,7 @@ import {
   Info,
   LayoutTemplate,
   LineSquiggle,
+  Lock,
   MessageSquareMore,
   Minus,
   MoveUpRight,
@@ -31,7 +32,6 @@ import {
   Redo2,
   RotateCw,
   Save,
-  ShieldCheck,
   Signature,
   Square,
   Strikethrough,
@@ -59,6 +59,8 @@ import {
 } from './theme';
 import type { PdfSearch } from './pdf-search';
 import { Search } from './search';
+import { usesTouchControls } from './viewer-diagnostics';
+import { useAutoHide } from './components/use-auto-hide';
 import styles from './toolbar.module.css';
 import {
   FloatingToolbar,
@@ -67,11 +69,9 @@ import {
   IconButton,
   PortalProvider,
   Select,
-  Tooltip,
 } from './components';
 
 type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
-const TOOLBAR_HIDE_DELAY_MS = 900;
 
 interface ToolbarState {
   documentId?: string | null;
@@ -160,7 +160,6 @@ function ToolbarButton({
 }: ToolbarButtonProps) {
   return (
     <IconButton
-      className={styles.iconButton}
       label={label}
       icon={Icon}
       active={active}
@@ -260,7 +259,6 @@ export function Toolbar({
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const searchWasOpenRef = useRef(false);
   const viewerTheme = useViewerTheme();
-  const toolbarHideTimerRef = useRef<number | undefined>(undefined);
   const {
     zoomPercent,
     zoomLevel,
@@ -271,36 +269,13 @@ export function Toolbar({
   const canUseDocument = Boolean(registry && documentId);
   const canConfigureTheme = supportsViewerThemeSettings();
   const darkAppearance = isDarkViewerTheme(viewerTheme);
-
-  const clearToolbarHideTimer = () => {
-    if (toolbarHideTimerRef.current !== undefined) {
-      window.clearTimeout(toolbarHideTimerRef.current);
-      toolbarHideTimerRef.current = undefined;
-    }
-  };
-
-  const showToolbar = () => {
-    clearToolbarHideTimer();
-    if (portalContainer?.getAttribute('data-visible') !== 'true') {
-      portalContainer?.setAttribute('data-visible', 'true');
-    }
-  };
-
-  const hideToolbar = () => {
-    clearToolbarHideTimer();
-    if (!pinned && !portalContainer?.matches(':hover, :focus-within')) {
-      portalContainer?.removeAttribute('data-visible');
-    }
-  };
-
-  const scheduleToolbarHide = () => {
-    if (pinned) {
-      return;
-    }
-
-    if (toolbarHideTimerRef.current !== undefined) return;
-    toolbarHideTimerRef.current = window.setTimeout(hideToolbar, TOOLBAR_HIDE_DELAY_MS);
-  };
+  const {
+    visible: toolbarVisible,
+    reveal: showToolbar,
+    scheduleHide: scheduleToolbarHide,
+  } = useAutoHide(
+    () => !pinned && !portalContainer?.matches(':hover, :focus-within'),
+  );
 
   useEffect(() => {
     if (activeTool && !searchOpen) {
@@ -329,6 +304,10 @@ export function Toolbar({
     if (searchOpen) showToolbar();
     else scheduleToolbarHide();
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!pinned) scheduleToolbarHide();
+  }, [pinned, scheduleToolbarHide]);
 
   const closeSearch = () => setSearchOpen(false);
   const openSection = (section: ToolbarSection) => {
@@ -461,10 +440,10 @@ export function Toolbar({
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
+      if (usesTouchControls()) return;
       if (pinned || event.clientY <= 40) {
         showToolbar();
-      } else if (toolbarHideTimerRef.current === undefined
-        && !portalContainer?.matches(':hover, :focus-within')) {
+      } else if (!portalContainer?.matches(':hover, :focus-within')) {
         scheduleToolbarHide();
       }
     };
@@ -472,12 +451,17 @@ export function Toolbar({
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
-      clearToolbarHideTimer();
     };
   }, [pinned, portalContainer]);
 
+  useEffect(() => scroll?.onInteraction((source) => {
+    if (source === 'touch' && !usesTouchControls()) return;
+    showToolbar();
+    scheduleToolbarHide();
+  }), [pinned, portalContainer, scroll]);
+
   const renderPersistentControls = () => (
-    <>
+    <div className={styles.persistentControls}>
       <FloatingToolbarDivider />
       <FloatingToolbarGroup>
         <ToolbarButton
@@ -508,7 +492,7 @@ export function Toolbar({
           onClick={togglePinned}
         />
       </FloatingToolbarGroup>
-    </>
+    </div>
   );
 
   const renderSection = (label: string, children: ReactNode, overflow = false) => (
@@ -524,7 +508,8 @@ export function Toolbar({
     <div
       ref={setPortalContainer}
       className={styles.root}
-      data-visible={pinned ? 'true' : undefined}
+      data-toolbar-level={activeSection === null ? 'primary' : 'secondary'}
+      data-visible={pinned || toolbarVisible ? 'true' : undefined}
       onMouseEnter={showToolbar}
       onMouseLeave={scheduleToolbarHide}
       onContextMenu={(event) => event.preventDefault()}
@@ -564,7 +549,7 @@ export function Toolbar({
             />
             <ToolbarButton
               label="Security"
-              icon={ShieldCheck}
+              icon={Lock}
               disabled={!canUseDocument}
               onClick={openProtect}
             />
@@ -593,16 +578,11 @@ export function Toolbar({
               onClick={openDeveloper}
             />
             {signatureCount > 0 ? (
-              <Tooltip content={`Signatures (${signatureCount})`}>
-                <button
-                  type="button"
-                  className={styles.iconButton}
-                  aria-label={`Digital signatures (${signatureCount})`}
-                  onClick={openSignatures}
-                >
-                  <Signature size={14} strokeWidth={2} />
-                </button>
-              </Tooltip>
+              <ToolbarButton
+                label={`Digital signatures (${signatureCount})`}
+                icon={Signature}
+                onClick={openSignatures}
+              />
             ) : null}
           </FloatingToolbarGroup>
         )) : null}

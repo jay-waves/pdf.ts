@@ -51,8 +51,7 @@ export interface ViewerPlatform {
   /** Host-controlled viewers derive their appearance externally and hide local theme controls. */
   viewerThemePolicy?: 'host';
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
-  openLocalDocument?(file: File): PlatformDocument;
-  pickLocalDocument?(): Promise<PlatformDocument | undefined>;
+  openLocalDocument?(file?: File): Promise<PlatformDocument | undefined>;
   requestDocumentSave?(): void;
   onDocumentSaveRequested?(
     handler: (preserveDirty: boolean) => Promise<boolean>,

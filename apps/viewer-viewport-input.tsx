@@ -1,7 +1,10 @@
 import { type ReactNode, useLayoutEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { useViewportCapability, useViewportElement } from '@embedpdf/plugin-viewport/react';
+import { useInteractionManagerCapability } from '@embedpdf/plugin-interaction-manager/react';
+import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { ZoomGestureWrapper, useZoomCapability } from '@embedpdf/plugin-zoom/react';
+import type { PdfScroll } from './pdf-scroll';
 
 const WHEEL_DELTA_LIMIT_PX = 50;
 const WHEEL_ZOOM_SENSITIVITY = 0.0012;
@@ -10,6 +13,8 @@ const WHEEL_SCROLL_COMPRESSION_RATIO = 0.25;
 const MIN_ZOOM_LEVEL = 0.2;
 const MAX_ZOOM_LEVEL = 60;
 const PAN_DRAG_THRESHOLD_PX = 4;
+const TOUCH_LONG_PRESS_DELAY_MS = 500;
+const TOUCH_PAN_THRESHOLD_PX = 8;
 
 function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -49,9 +54,18 @@ function touchCenter(touches: TouchList) {
   };
 }
 
-function ViewportInputPipeline({ documentId, panMode }: { documentId: string; panMode: boolean }) {
+function ViewportInputPipeline({
+  documentId,
+  panMode,
+  scroll,
+}: {
+  documentId: string;
+  panMode: boolean;
+  scroll?: PdfScroll | null;
+}) {
   const { provides: zoom } = useZoomCapability();
   const { provides: viewportCapability } = useViewportCapability();
+  const { provides: interactionManager } = useInteractionManagerCapability();
   const viewportElementRef = useViewportElement();
 
   useLayoutEffect(() => {
@@ -67,6 +81,19 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
     let pendingScroll: { left: number; top: number } | null = null;
     let zoomAnchor = { vx: 0, vy: 0 };
     let pinchStart: { distance: number; zoom: number } | null = null;
+    const replayedTouchEvents = new WeakSet<Event>();
+    let touchGesture: {
+      pointerId: number;
+      pointerX: number;
+      pointerY: number;
+      target: Element;
+      timer: number;
+      selecting: boolean;
+      dragging: boolean;
+      interactionPaused: boolean;
+      scrollLeft: number;
+      scrollTop: number;
+    } | null = null;
     let panGesture: {
       pointerId: number;
       pointerX: number;
@@ -164,9 +191,7 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
 
       flushPendingZoom();
       flushPendingScroll();
-      const horizontalLayout = (
-        document.documentElement.dataset.pdfScrollStrategy === 'horizontal'
-      );
+      const horizontalLayout = scroll?.getStrategy() === ScrollStrategy.Horizontal;
       // This axis is visible, so retain the browser's native Shift + wheel.
       if (event.shiftKey && horizontalLayout) return;
 
@@ -193,6 +218,13 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
 
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 2) return;
+      if (touchGesture) {
+        window.clearTimeout(touchGesture.timer);
+        if (touchGesture.interactionPaused) {
+          interactionManager?.forDocument(documentId).resume();
+        }
+        touchGesture = null;
+      }
       event.preventDefault();
       flushPendingInput();
       pendingZoomDelta = 0;
@@ -219,8 +251,71 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
     };
 
     const startPan = (event: PointerEvent) => {
+      if (replayedTouchEvents.has(event)) return;
+
+      if (event.pointerType === 'touch') {
+        if (event.button !== 0 || touchGesture || pinchStart) return;
+        const interactionScope = interactionManager?.forDocument(documentId);
+        // Exclusive modes (ink, shapes, comments, etc.) own raw touch input.
+        // In the default pointer mode, defer selection until a long press so a
+        // normal one-finger gesture can drive the viewer's pan pipeline.
+        if (interactionScope?.activeModeIsExclusive()) return;
+
+        const target = event.target instanceof Element ? event.target : viewport;
+        const interactionPaused = Boolean(interactionScope && !interactionScope.isPaused());
+        if (interactionPaused) interactionScope?.pause();
+        flushPendingInput();
+        const scrollPosition = pendingScroll ?? { left: viewport.scrollLeft, top: viewport.scrollTop };
+        touchGesture = {
+          pointerId: event.pointerId,
+          pointerX: event.clientX,
+          pointerY: event.clientY,
+          target,
+          timer: 0,
+          selecting: false,
+          dragging: false,
+          interactionPaused,
+          scrollLeft: scrollPosition.left,
+          scrollTop: scrollPosition.top,
+        };
+        touchGesture.timer = window.setTimeout(() => {
+          const gesture = touchGesture;
+          if (!gesture || gesture.pointerId !== event.pointerId) return;
+          if (!gesture.target.isConnected) {
+            touchGesture = null;
+            if (gesture.interactionPaused) interactionScope?.resume();
+            return;
+          }
+          gesture.selecting = true;
+          if (gesture.interactionPaused) {
+            interactionScope?.resume();
+            gesture.interactionPaused = false;
+          }
+
+          const init: PointerEventInit = {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: gesture.pointerId,
+            pointerType: 'touch',
+            isPrimary: true,
+            button: 0,
+            buttons: 1,
+            clientX: gesture.pointerX,
+            clientY: gesture.pointerY,
+          };
+          const pointerDown = new PointerEvent('pointerdown', init);
+          replayedTouchEvents.add(pointerDown);
+          gesture.target.dispatchEvent(pointerDown);
+          // A long press selects the word immediately. The replayed pointerdown
+          // also leaves an anchor in place so dragging can extend that selection.
+          gesture.target.dispatchEvent(new MouseEvent('dblclick', init));
+        }, TOUCH_LONG_PRESS_DELAY_MS);
+        return;
+      }
+
       const startedByMiddleMouse = event.button === 1;
-      const startedByToolbarPan = panMode && event.button === 0 && event.pointerType !== 'touch';
+      const startedByToolbarPan = panMode && event.button === 0;
       if ((!startedByMiddleMouse && !startedByToolbarPan) || panGesture) return;
       event.preventDefault();
       event.stopPropagation();
@@ -239,6 +334,26 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
     };
 
     const updatePan = (event: PointerEvent) => {
+      if (touchGesture && event.pointerId === touchGesture.pointerId) {
+        if (!touchGesture.selecting) {
+          const deltaX = event.clientX - touchGesture.pointerX;
+          const deltaY = event.clientY - touchGesture.pointerY;
+          if (deltaX * deltaX + deltaY * deltaY >= TOUCH_PAN_THRESHOLD_PX ** 2) {
+            window.clearTimeout(touchGesture.timer);
+            touchGesture.dragging = true;
+          }
+        }
+        if (touchGesture.dragging) {
+          event.preventDefault();
+          event.stopPropagation();
+          scroll?.notifyInteraction('touch');
+          scrollTo(
+            touchGesture.scrollLeft - (event.clientX - touchGesture.pointerX),
+            touchGesture.scrollTop - (event.clientY - touchGesture.pointerY),
+          );
+        }
+        return;
+      }
       if (!panGesture || event.pointerId !== panGesture.pointerId) return;
       event.preventDefault();
       event.stopPropagation();
@@ -251,6 +366,15 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
     };
 
     const finishPan = (event?: PointerEvent) => {
+      if (touchGesture && (!event || event.pointerId === touchGesture.pointerId)) {
+        const completedTouch = touchGesture;
+        touchGesture = null;
+        window.clearTimeout(completedTouch.timer);
+        if (completedTouch.dragging) scroll?.notifyInteraction('touch');
+        if (completedTouch.interactionPaused) {
+          interactionManager?.forDocument(documentId).resume();
+        }
+      }
       if (!panGesture || (event && event.pointerId !== panGesture.pointerId)) return;
       if (event) updatePan(event);
       const completed = panGesture;
@@ -296,10 +420,17 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
       viewport.removeEventListener('auxclick', stopMiddleMouseDefault, { capture: true });
       window.removeEventListener('blur', cancelPan);
       delete viewport.dataset.pdfPanning;
+      if (touchGesture) {
+        window.clearTimeout(touchGesture.timer);
+        if (touchGesture.interactionPaused) {
+          interactionManager?.forDocument(documentId).resume();
+        }
+        touchGesture = null;
+      }
       if (zoomFrame) window.cancelAnimationFrame(zoomFrame);
       if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
     };
-  }, [documentId, panMode, viewportCapability, viewportElementRef, zoom]);
+  }, [documentId, interactionManager, panMode, scroll, viewportCapability, viewportElementRef, zoom]);
 
   return null;
 }
@@ -307,10 +438,12 @@ function ViewportInputPipeline({ documentId, panMode }: { documentId: string; pa
 export function ViewportInput({
   documentId,
   panMode,
+  scroll,
   children,
 }: {
   documentId: string;
   panMode: boolean;
+  scroll?: PdfScroll | null;
   children: ReactNode;
 }) {
   return (
@@ -319,7 +452,7 @@ export function ViewportInput({
       enablePinch={false}
       enableWheel={false}
     >
-      <ViewportInputPipeline documentId={documentId} panMode={panMode} />
+      <ViewportInputPipeline documentId={documentId} panMode={panMode} scroll={scroll} />
       {children}
     </ZoomGestureWrapper>
   );

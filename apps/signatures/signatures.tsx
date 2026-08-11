@@ -83,7 +83,7 @@ export function SignatureDialog({ signatures, resource, open, onClose }: {
       onClose={onClose}
       variant="popupWide"
       title={`Digital Signatures (${signatures.length})`}
-      titleClassName={styles.title}
+      titleVariant="panel"
     >
       <div className={styles.list}>
         {signatures.map((signature, index) => {

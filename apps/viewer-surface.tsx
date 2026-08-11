@@ -197,7 +197,7 @@ function LoadedPdfDocument({
         className={`viewer${panMode ? ' is-pan-mode' : ''}`}
         onDragStart={(event) => event.preventDefault()}
       >
-        <ViewportInput documentId={documentId} panMode={panMode}>
+        <ViewportInput documentId={documentId} panMode={panMode} scroll={scroll}>
           <Scroller
             documentId={documentId}
             className="pdf-scroller"

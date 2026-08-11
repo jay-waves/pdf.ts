@@ -5,15 +5,11 @@
 }
 
 .button {
-  @apply inline-grid size-6.5 flex-none cursor-pointer place-items-center rounded-md border border-transparent bg-transparent p-0 text-inherit outline-none;
-  @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
+  @apply leading-none;
 }
-
-.button:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
 .button[data-active='true'] {
   background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
 }
-.button:disabled { @apply cursor-default opacity-48; }
 .matchIcon {
   @apply block w-4 text-center text-[12.5px] font-medium leading-none tracking-[-0.06em];
 }

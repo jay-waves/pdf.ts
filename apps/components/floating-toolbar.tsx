@@ -1,12 +1,13 @@
 import type { HTMLAttributes, ReactNode } from 'react';
-import styles from './floating-toolbar.module.css';
+
+const SURFACE_CLASS = 'min-h-8.5 w-fit max-w-[calc(100vw-32px)] rounded-lg border border-border bg-surface p-1 max-[640px]:max-w-[calc(100vw-16px)]';
 
 export function FloatingSurface({
   as: Component = 'div',
   className = '',
   ...props
 }: HTMLAttributes<HTMLElement> & { as?: 'div' | 'nav' }) {
-  return <Component className={`${styles.surface} ${className}`.trim()} {...props} />;
+  return <Component className={`${SURFACE_CLASS} ${className}`.trim()} {...props} />;
 }
 
 export function FloatingToolbar({
@@ -22,7 +23,7 @@ export function FloatingToolbar({
 }) {
   return (
     <FloatingSurface
-      className={`${styles.toolbar} ${className}`.trim()}
+      className={`flex items-center justify-center gap-1.25 data-[overflow=true]:overflow-x-auto ${className}`.trim()}
       role="toolbar"
       aria-label={label}
       data-overflow={overflow ? 'true' : undefined}
@@ -33,9 +34,9 @@ export function FloatingToolbar({
 }
 
 export function FloatingToolbarGroup({ children }: { children: ReactNode }) {
-  return <div className={styles.group}>{children}</div>;
+  return <div className="inline-flex min-w-0 items-center gap-0.75">{children}</div>;
 }
 
 export function FloatingToolbarDivider() {
-  return <div className={styles.divider} aria-hidden="true" />;
+  return <div className="h-4.5 w-px flex-none bg-border" aria-hidden="true" />;
 }

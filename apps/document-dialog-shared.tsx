@@ -20,7 +20,7 @@ export function DocumentDialog(props: ComponentProps<typeof Dialog>) {
     <Dialog
       {...props}
       variant="popup"
-      titleClassName={styles.flatTitle}
+      titleVariant="popup"
       contentClassName={styles.flatDialog}
       overlayClassName={styles.flatOverlay}
     />

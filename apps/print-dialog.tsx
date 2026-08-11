@@ -199,9 +199,9 @@ export function PrintDialog({ registry, documentId, open, currentPageNumber, tot
         ) : null}
         {error ? <div className={styles.error} role="alert">{error}</div> : null}
         <DialogActions className={styles.flatActions}>
-          <Button className={styles.flatButton} disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button appearance="flat" disabled={busy} onClick={onClose}>Cancel</Button>
           <Button
-            className={styles.flatButton}
+            appearance="flat"
             type="submit"
             variant="primary"
             disabled={busy}

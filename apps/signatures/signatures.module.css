@@ -1,6 +1,5 @@
 @reference '../tailwind.css';
 
-.title { @apply m-0 bg-surface-alt px-3.25 py-2.5 text-xs font-semibold; }
 .list { @apply mx-3.25 mt-3 grid max-h-[min(55vh,440px)] gap-2.5 overflow-auto; }
 .card { @apply rounded-md border border-border-subtle bg-app p-3; }
 .cardTitle { @apply mt-0 mb-2.5 text-xs text-foreground; }

@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary';
+type ButtonAppearance = 'raised' | 'flat';
 
 const BASE_CLASSES = [
   'inline-flex h-7 min-w-16 cursor-pointer items-center justify-center rounded',
@@ -28,16 +29,22 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   ].join(' '),
 };
 
+const FLAT_CLASSES = 'shadow-none hover:translate-y-0 hover:shadow-none active:translate-y-0 active:shadow-none';
+
 export function Button({
   variant = 'secondary',
+  appearance = 'raised',
   className = '',
   type = 'button',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: ButtonVariant;
+  appearance?: ButtonAppearance;
+}) {
   return (
     <button
       type={type}
-      className={`${BASE_CLASSES} ${VARIANT_CLASSES[variant]} ${className}`.trim()}
+      className={`${BASE_CLASSES} ${VARIANT_CLASSES[variant]} ${appearance === 'flat' ? FLAT_CLASSES : ''} ${className}`.trim()}
       {...props}
     />
   );

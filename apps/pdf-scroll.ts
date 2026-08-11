@@ -29,6 +29,7 @@ type ScrollAnchor = {
   pageNumber: number;
   pageCoordinates?: { x: number; y: number };
 };
+type ViewerInteractionSource = 'keyboard' | 'pointer' | 'touch';
 
 function landingPosition(
   vertical: boolean,
@@ -63,6 +64,7 @@ function restorePagePosition(
 export class PdfScroll {
   private viewportElement: HTMLElement | null = null;
   private settleFrame = 0;
+  private readonly interactionListeners = new Set<(source: ViewerInteractionSource) => void>();
   private readonly capability: ScrollCapability | undefined;
   private readonly viewportCapability: ViewportCapability | undefined;
 
@@ -124,6 +126,17 @@ export class PdfScroll {
     return this.capability?.onLayoutReady((event) => {
       if (event.documentId === this.documentId) listener(event.totalPages, event.isInitial);
     }) ?? (() => undefined);
+  }
+
+  onInteraction(listener: (source: ViewerInteractionSource) => void) {
+    this.interactionListeners.add(listener);
+    return () => {
+      this.interactionListeners.delete(listener);
+    };
+  }
+
+  notifyInteraction(source: ViewerInteractionSource) {
+    this.interactionListeners.forEach((listener) => listener(source));
   }
 
   reveal(
@@ -364,11 +377,11 @@ export class PdfScroll {
     });
   }
 
-  installInput(onNavigate: () => void) {
+  installInput() {
     let sideButtonPress: { button: 3 | 4; startedAt: number } | null = null;
-    const navigate = (delta: number) => {
+    const navigate = (delta: number, source: 'keyboard' | 'pointer') => {
       this.movePages(delta);
-      onNavigate();
+      this.notifyInteraction(source);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -376,7 +389,7 @@ export class PdfScroll {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       event.stopPropagation();
-      navigate(event.key === 'ArrowLeft' ? -1 : 1);
+      navigate(event.key === 'ArrowLeft' ? -1 : 1, 'keyboard');
     };
     const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
       if (event.button !== 3 && event.button !== 4) return;
@@ -397,7 +410,10 @@ export class PdfScroll {
         ? performance.now() - sideButtonPress.startedAt
         : 0;
       sideButtonPress = null;
-      navigate((event.button === 3 ? -1 : 1) * (duration >= SIDE_BUTTON_LONG_PRESS_MS ? 2 : 1));
+      navigate(
+        (event.button === 3 ? -1 : 1) * (duration >= SIDE_BUTTON_LONG_PRESS_MS ? 2 : 1),
+        'pointer',
+      );
     };
     const onPointerMove = (event: PointerEvent) => {
       if (!(event.buttons & 24)) return;

@@ -2,12 +2,19 @@ import type { HTMLAttributes, ReactNode } from 'react';
 import { Dialog as RadixDialog } from 'radix-ui';
 
 type DialogVariant = 'panel' | 'panelCompact' | 'popup' | 'popupWide';
+type DialogTitleVariant = 'hidden' | 'panel' | 'popup';
 
 const VARIANT_CLASSES: Record<DialogVariant, string> = {
   panel: 'h-[min(720px,calc(100vh-42px))] w-[min(720px,calc(100vw-42px))] shadow-dialog max-[640px]:h-[min(640px,calc(100vh-22px))] max-[640px]:w-[calc(100vw-22px)]',
   panelCompact: 'w-[min(332px,calc(100vw-42px))] shadow-dialog',
   popup: 'w-[min(360px,calc(100vw-32px))] shadow-popup',
   popupWide: 'w-[min(520px,calc(100vw-32px))] shadow-popup',
+};
+
+const TITLE_VARIANT_CLASSES: Record<DialogTitleVariant, string> = {
+  hidden: 'sr-only',
+  panel: 'm-0 bg-surface-alt px-3.25 py-2.5 text-xs font-semibold',
+  popup: 'm-0 border-b border-border-subtle bg-surface px-3.25 py-2.5 text-xs font-semibold text-foreground',
 };
 
 export function Dialog({
@@ -19,7 +26,7 @@ export function Dialog({
   contentClassName = '',
   overlayClassName = 'bg-black/50',
   variant = 'panel',
-  titleClassName = 'sr-only',
+  titleVariant = 'hidden',
 }: {
   open: boolean;
   onClose(): void;
@@ -29,7 +36,7 @@ export function Dialog({
   contentClassName?: string;
   overlayClassName?: string;
   variant?: DialogVariant;
-  titleClassName?: string;
+  titleVariant?: DialogTitleVariant;
 }) {
   return (
     <RadixDialog.Root open={open} onOpenChange={(nextOpen) => {
@@ -41,7 +48,7 @@ export function Dialog({
           className={`fixed top-1/2 left-1/2 z-21 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border border-border bg-surface ${VARIANT_CLASSES[variant]} ${contentClassName}`.trim()}
           aria-describedby={undefined}
         >
-          <RadixDialog.Title className={titleClassName}>{title}</RadixDialog.Title>
+          <RadixDialog.Title className={TITLE_VARIANT_CLASSES[titleVariant]}>{title}</RadixDialog.Title>
           {children}
         </RadixDialog.Content>
       </RadixDialog.Portal>

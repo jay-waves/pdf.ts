@@ -82,7 +82,7 @@ export function MetadataDialog({ registry, documentId, open, fileName, pageCount
           </dl>
         ) : null}
         <DialogActions className={styles.flatActions}>
-          <Button className={styles.flatButton} variant="primary" onClick={onClose}>
+          <Button appearance="flat" variant="primary" onClick={onClose}>
             Close
           </Button>
         </DialogActions>

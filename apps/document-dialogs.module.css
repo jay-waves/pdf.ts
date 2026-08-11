@@ -1,6 +1,5 @@
 @reference './tailwind.css';
 
-.title { @apply m-0 bg-surface-alt px-3.25 py-2.5 text-xs font-semibold; }
 .flatOverlay {
   background: rgb(15 23 42 / 28%);
   backdrop-filter: blur(1.5px);
@@ -9,9 +8,6 @@
   border-color: var(--pdf-border-subtle);
   background: var(--pdf-background-surface);
   box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
-}
-.flatTitle {
-  @apply m-0 border-b border-border-subtle bg-surface px-3.25 py-2.5 text-xs font-semibold text-foreground;
 }
 .form { @apply m-0 grid gap-2.5 bg-surface px-3.25 pt-3 pb-3.25; }
 .field { @apply grid gap-1.25 text-secondary; }
@@ -41,9 +37,3 @@
 .themePreview > span { @apply flex-1; }
 .themeOptionLabel { @apply overflow-hidden text-center text-[10px] leading-3.5 text-ellipsis whitespace-nowrap; }
 .flatActions { @apply border-t border-border-subtle pt-2.5; }
-.flatButton,
-.flatButton:hover,
-.flatButton:active {
-  box-shadow: none;
-  transform: none;
-}

@@ -172,9 +172,9 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
         ) : null}
         {error ? <div className={styles.error} role="alert">{error}</div> : null}
         <DialogActions className={styles.flatActions}>
-          <Button className={styles.flatButton} disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button appearance="flat" disabled={busy} onClick={onClose}>Cancel</Button>
           <Button
-            className={styles.flatButton}
+            appearance="flat"
             type="submit"
             variant="primary"
             disabled={busy}
@@ -228,7 +228,7 @@ export function UnlockDialog({ registry, documentId, incorrect }: {
       variant="popup"
       preventClose
       title="Password required"
-      titleClassName={styles.title}
+      titleVariant="panel"
     >
       <form className={styles.form} onSubmit={submit}>
         <label className={styles.field}>

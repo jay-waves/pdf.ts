@@ -8,7 +8,7 @@ import {
 import { useDocumentState } from '@embedpdf/core/react';
 import { MatchFlag, type SearchResult } from '@embedpdf/models';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react';
-import { Tooltip } from './components';
+import { ControlButton, Tooltip } from './components';
 import type { PdfSearch } from './pdf-search';
 import type { PdfScroll } from './pdf-scroll';
 import styles from './search.module.css';
@@ -129,29 +129,27 @@ export function Search({
   return (
     <div className={styles.bar} role="search" aria-label="PDF search">
       <Tooltip content="Previous result">
-        <button
-          type="button"
+        <ControlButton
           className={styles.button}
           onClick={() => search.move(-1)}
           disabled={!total}
           aria-label="Previous result"
         >
           <ChevronLeft size={16} strokeWidth={2} />
-        </button>
+        </ControlButton>
       </Tooltip>
       <div className={styles.status}>
         {state.loading ? 'Searching...' : `${state.activeResultIndex >= 0 ? state.activeResultIndex + 1 : 0} / ${total}`}
       </div>
       <Tooltip content="Next result">
-        <button
-          type="button"
+        <ControlButton
           className={styles.button}
           onClick={() => search.move(1)}
           disabled={!total}
           aria-label="Next result"
         >
           <ChevronRight size={16} strokeWidth={2} />
-        </button>
+        </ControlButton>
       </Tooltip>
       <form
         className={styles.form}
@@ -177,9 +175,9 @@ export function Search({
           ) : null}
         </div>
         <Tooltip content="Search">
-          <button type="submit" className={styles.button} disabled={!canSearch} aria-label="Search">
+          <ControlButton type="submit" className={styles.button} disabled={!canSearch} aria-label="Search">
             <SearchIcon size={15} strokeWidth={2} />
-          </button>
+          </ControlButton>
         </Tooltip>
       </form>
       <SearchFlagButton
@@ -215,8 +213,7 @@ function SearchFlagButton({
 }) {
   return (
     <Tooltip content={label}>
-      <button
-        type="button"
+      <ControlButton
         className={styles.button}
         data-active={active ? 'true' : undefined}
         onClick={onClick}
@@ -225,7 +222,7 @@ function SearchFlagButton({
         aria-pressed={active}
       >
         <span className={styles.matchIcon} aria-hidden="true">{icon}</span>
-      </button>
+      </ControlButton>
     </Tooltip>
   );
 }

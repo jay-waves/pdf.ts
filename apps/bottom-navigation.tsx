@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { BookImage, CornerDownLeft, CornerUpRight, ListTree } from 'lucide-react';
-import { FloatingSurface } from './components';
+import { ControlButton, FloatingSurface } from './components';
 import type { PdfScroll } from './pdf-scroll';
 import type { OutlineCache } from './outline';
+import { usesTouchControls } from './viewer-diagnostics';
+import { useAutoHide } from './components/use-auto-hide';
 import styles from './bottom-navigation.module.css';
-
-const NAVIGATION_AUTO_HIDE_DELAY_MS = 900;
 
 export function BottomNav({
   scroll,
@@ -25,63 +25,48 @@ export function BottomNav({
   onOpenThumbnails: () => void;
 }) {
   const [pageInput, setPageInput] = useState(String(pageNumber || 1));
-  const [visible, setVisible] = useState(false);
-  const hideTimerRef = useRef(0);
   const interactingRef = useRef(false);
+  const pageInputRef = useRef<HTMLInputElement>(null);
   const canNavigate = Boolean(scroll && totalPages > 0);
   const canGoPrevious = canNavigate && pageNumber > 1;
   const canGoNext = canNavigate && pageNumber < totalPages;
   const outlineTitle = title.trim();
   const shouldShowOutlineTitle = outlineStatus === 'ready' && outlineTitle.length > 0;
   const shouldShowThumbnails = outlineStatus === 'empty';
+  const pageInputDigits = Math.max(pageInput.length, 1);
 
   useEffect(() => {
     setPageInput(String(pageNumber || 1));
   }, [pageNumber]);
 
-  const clearHideTimer = useCallback(() => {
-    if (!hideTimerRef.current) return;
-    window.clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = 0;
-  }, []);
+  const { visible, reveal, scheduleHide } = useAutoHide(
+    () => !interactingRef.current,
+  );
+  const revealTemporarily = useCallback(() => {
+    reveal();
+    scheduleHide();
+  }, [reveal, scheduleHide]);
 
-  const reveal = useCallback(() => {
-    setVisible(true);
-    clearHideTimer();
-    hideTimerRef.current = window.setTimeout(() => {
-      if (!interactingRef.current) setVisible(false);
-      hideTimerRef.current = 0;
-    }, NAVIGATION_AUTO_HIDE_DELAY_MS);
-  }, [clearHideTimer]);
-
-  const scheduleHide = useCallback(() => {
-    if (hideTimerRef.current || interactingRef.current) return;
-    hideTimerRef.current = window.setTimeout(() => {
-      if (!interactingRef.current) setVisible(false);
-      hideTimerRef.current = 0;
-    }, NAVIGATION_AUTO_HIDE_DELAY_MS);
-  }, []);
-
-  useEffect(() => {
-    return scroll?.installInput(reveal);
-  }, [reveal, scroll]);
+  useEffect(() => scroll?.onInteraction((source) => {
+    if (source !== 'touch' || usesTouchControls()) revealTemporarily();
+  }), [revealTemporarily, scroll]);
 
   useEffect(() => {
     let wasAtBottomEdge = false;
     const onPointerMove = (event: PointerEvent) => {
+      if (usesTouchControls()) return;
       const atBottomEdge = window.innerHeight - event.clientY <= 96;
-      if (atBottomEdge && !wasAtBottomEdge) reveal();
+      if (atBottomEdge && !wasAtBottomEdge) revealTemporarily();
       wasAtBottomEdge = atBottomEdge;
     };
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
-      clearHideTimer();
     };
-  }, [clearHideTimer, reveal]);
+  }, [revealTemporarily]);
 
   const scrollToPage = (nextPageNumber: number) => {
-    reveal();
+    revealTemporarily();
     if (!scroll || !totalPages) return;
 
     const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
@@ -92,7 +77,12 @@ export function BottomNav({
   const handlePageSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextPageNumber = Number(pageInput);
-    if (!Number.isInteger(nextPageNumber)) {
+    if (
+      pageInput.length === 0
+      || !Number.isInteger(nextPageNumber)
+      || nextPageNumber < 1
+      || nextPageNumber > totalPages
+    ) {
       setPageInput(String(pageNumber || 1));
       return;
     }
@@ -100,7 +90,7 @@ export function BottomNav({
   };
 
   const scrollByPage = (direction: -1 | 1) => {
-    reveal();
+    revealTemporarily();
     scroll?.movePages(direction);
   };
 
@@ -129,24 +119,22 @@ export function BottomNav({
       }}
     >
       <div className={styles.navigationButtons}>
-        <button
-          type="button"
-          className={styles.navigationButton}
+        <ControlButton
+          className="min-w-0 leading-none"
           onClick={() => scrollByPage(-1)}
           disabled={!canGoPrevious}
           aria-label="Previous page"
         >
           <CornerDownLeft size={16} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className={styles.navigationButton}
+        </ControlButton>
+        <ControlButton
+          className="min-w-0 leading-none"
           onClick={() => scrollByPage(1)}
           disabled={!canGoNext}
           aria-label="Next page"
         >
           <CornerUpRight size={16} strokeWidth={1.8} aria-hidden="true" />
-        </button>
+        </ControlButton>
       </div>
       <div className={styles.navigationContent}>
         {shouldShowOutlineTitle ? (
@@ -190,14 +178,21 @@ export function BottomNav({
           className={styles.pageForm}
           aria-label="Page jump"
           onSubmit={handlePageSubmit}
+          onClick={(event) => {
+            reveal();
+            if (event.target === pageInputRef.current) return;
+            pageInputRef.current?.focus();
+            pageInputRef.current?.select();
+          }}
         >
           <input
+            ref={pageInputRef}
             className={styles.pageInput}
+            style={{ width: `${pageInputDigits}ch` }}
             value={pageInput}
             type="text"
             inputMode="numeric"
             enterKeyHint="go"
-            required
             aria-label="Current page"
             disabled={!canNavigate}
             onChange={(event) => {
@@ -207,7 +202,10 @@ export function BottomNav({
             onFocus={reveal}
             onBlur={() => setPageInput(String(pageNumber || 1))}
           />
-          <span className={styles.pageTotal}>/ {totalPages || '-'}</span>
+          <span className={styles.pageTotal}>
+            <span>/</span>
+            <span>{totalPages || '-'}</span>
+          </span>
         </form>
       </div>
     </FloatingSurface>

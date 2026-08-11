@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { PluginRegistry } from '@embedpdf/core';
 import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
@@ -25,10 +25,7 @@ import { BottomNav } from './bottom-navigation';
 import { installSearchKey } from './search';
 import { PdfSearch } from './pdf-search';
 import { PdfScroll } from './pdf-scroll';
-import {
-  initializeViewerTheme,
-  setViewerScrollStrategyAttribute,
-} from './theme';
+import { initializeViewerTheme } from './theme';
 import { Toolbar } from './toolbar';
 import { Thumbnails } from './thumbnails';
 import { ColorPalette } from './color-palette';
@@ -68,6 +65,8 @@ import styles from './viewer.module.css';
 import {
   getEffectiveRenderDpr,
   getRenderDprMode,
+  installErrorDiagnostics,
+  installInputEnvironmentSampling,
   installRenderDprOverride,
   setRenderDprMode,
   viewerDiagnostics,
@@ -106,7 +105,9 @@ function installAll(installers: Array<() => () => void>) {
 
 function installScrollAttribute(scroll: PdfScroll) {
   const sync = (strategy = scroll.getStrategy()) => {
-    setViewerScrollStrategyAttribute(strategy === ScrollStrategy.Horizontal ? 'horizontal' : 'vertical');
+    document.documentElement.dataset.pdfScrollStrategy = (
+      strategy === ScrollStrategy.Horizontal ? 'horizontal' : 'vertical'
+    );
   };
 
   sync();
@@ -161,10 +162,28 @@ interface AppProps {
 type CommentTarget = { annotationId: string; isNew: boolean };
 type SidePanel =
   | { type: 'outline' | 'thumbnails' | 'colors' }
-  | { type: 'comments'; target: CommentTarget | null }
+  | { type: 'comments'; target: CommentTarget | null };
+type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer';
+type ViewerOverlay =
+  | { type: 'side-panel'; panel: SidePanel }
+  | { type: 'dialog'; dialog: ActiveDialog }
+  | { type: 'translation'; request: SelectionTranslationRequest }
   | null;
-type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer' | null;
-type DocumentPane = Exclude<NonNullable<SidePanel>['type'], 'colors'>;
+type ViewerUiState = {
+  panMode: boolean;
+  searchOpen: boolean;
+  overlay: ViewerOverlay;
+};
+type ViewerUiAction =
+  | { type: 'reset' }
+  | { type: 'set-pan'; enabled: boolean }
+  | { type: 'set-search'; open: boolean }
+  | { type: 'toggle-side-panel'; panel: 'thumbnails' | 'colors' }
+  | { type: 'open-side-panel'; panel: SidePanel }
+  | { type: 'open-dialog'; dialog: ActiveDialog }
+  | { type: 'open-translation'; request: SelectionTranslationRequest }
+  | { type: 'close-overlay' };
+type DocumentPane = Exclude<SidePanel['type'], 'colors'>;
 const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
   thumbnails: 'PDF Thumbnails',
   outline: 'PDF Outline',
@@ -172,6 +191,45 @@ const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
 };
 
 const INITIAL_DOCUMENT_VIEW = { pageNumber: 1, totalPages: 0 };
+const INITIAL_VIEWER_UI: ViewerUiState = { panMode: false, searchOpen: false, overlay: null };
+
+function viewerUiReducer(state: ViewerUiState, action: ViewerUiAction): ViewerUiState {
+  switch (action.type) {
+    case 'reset': return INITIAL_VIEWER_UI;
+    case 'set-pan': return { ...state, panMode: action.enabled };
+    case 'set-search': return {
+      ...state,
+      searchOpen: action.open,
+      overlay: action.open ? null : state.overlay,
+    };
+    case 'toggle-side-panel': {
+      const current = state.overlay?.type === 'side-panel' ? state.overlay.panel : null;
+      return {
+        ...state,
+        searchOpen: false,
+        overlay: current?.type === action.panel
+          ? null
+          : { type: 'side-panel', panel: { type: action.panel } },
+      };
+    }
+    case 'open-side-panel': return {
+      ...state,
+      searchOpen: false,
+      overlay: { type: 'side-panel', panel: action.panel },
+    };
+    case 'open-dialog': return {
+      ...state,
+      searchOpen: false,
+      overlay: { type: 'dialog', dialog: action.dialog },
+    };
+    case 'open-translation': return {
+      ...state,
+      searchOpen: false,
+      overlay: { type: 'translation', request: action.request },
+    };
+    case 'close-overlay': return { ...state, overlay: null };
+  }
+}
 
 function App({
   pdfium,
@@ -190,11 +248,7 @@ function App({
   const documentId = fileUrl ? DOCUMENT_ID : null;
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [pdfScroll, setPdfScroll] = useState<PdfScroll | null>(null);
-  const [panMode, setPanMode] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [sidePanel, setSidePanel] = useState<SidePanel>(null);
-  const [activeDialog, setActiveDialog] = useState<ActiveDialog>(null);
-  const [translationRequest, setTranslationRequest] = useState<SelectionTranslationRequest | null>(null);
+  const [viewerUi, dispatchViewerUi] = useReducer(viewerUiReducer, INITIAL_VIEWER_UI);
   const [dprMode, setDprMode] = useState<RenderDprMode>(getRenderDprMode);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
@@ -212,6 +266,12 @@ function App({
     title: resolvedDocumentName ?? 'PDF',
   });
   const { pageNumber: currentPageNumber, totalPages } = documentView;
+  const { panMode, searchOpen } = viewerUi;
+  const sidePanel = viewerUi.overlay?.type === 'side-panel' ? viewerUi.overlay.panel : null;
+  const activeDialog = viewerUi.overlay?.type === 'dialog' ? viewerUi.overlay.dialog : null;
+  const translationRequest = viewerUi.overlay?.type === 'translation'
+    ? viewerUi.overlay.request
+    : null;
   const currentBookmark = useMemo(
     () => getCurrentBookmark(outlineCache.bookmarks, currentPageNumber),
     [currentPageNumber, outlineCache.bookmarks],
@@ -222,19 +282,15 @@ function App({
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const registryCleanupRef = useRef<(() => void) | null>(null);
-  const closeSidePanel = () => setSidePanel(null);
-  const closeDialog = () => setActiveDialog(null);
+  const closeOverlay = () => dispatchViewerUi({ type: 'close-overlay' });
   const toggleSidePanel = (type: 'thumbnails' | 'colors') => {
-    setSidePanel((current) => current?.type === type ? null : { type });
+    dispatchViewerUi({ type: 'toggle-side-panel', panel: type });
   };
-  const openDialog = (dialog: Exclude<ActiveDialog, null>) => {
-    setSearchOpen(false);
-    closeSidePanel();
-    setActiveDialog(dialog);
+  const openDialog = (dialog: ActiveDialog) => {
+    dispatchViewerUi({ type: 'open-dialog', dialog });
   };
   const openNavigationPanel = (type: 'outline' | 'thumbnails') => {
-    setSearchOpen(false);
-    setSidePanel({ type });
+    dispatchViewerUi({ type: 'open-side-panel', panel: { type } });
   };
 
   useEffect(() => {
@@ -254,11 +310,7 @@ function App({
     setPdfScroll(nextScroll);
     setOutlineCache({ status: 'idle', bookmarks: [] });
     setDocumentView(INITIAL_DOCUMENT_VIEW);
-    setSidePanel(null);
-    setActiveDialog(null);
-    setTranslationRequest(null);
-    setPanMode(false);
-    setSearchOpen(false);
+    dispatchViewerUi({ type: 'reset' });
     viewerDiagnostics.resetRendering();
     search.clear();
     setDirty(false);
@@ -266,17 +318,21 @@ function App({
     const installers = [
       () => pdfium.bindRegistry(nextRegistry),
       () => installZoomKeys(nextRegistry, DOCUMENT_ID),
+      () => nextScroll.installInput(),
       () => installScrollAttribute(nextScroll),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
       () => installAnnotationPreview(nextRegistry, DOCUMENT_ID),
       () => installCommentEditor(nextRegistry, (annotationId) => {
-        setSidePanel({ type: 'comments', target: { annotationId, isNew: true } });
+        dispatchViewerUi({
+          type: 'open-side-panel',
+          panel: { type: 'comments', target: { annotationId, isNew: true } },
+        });
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
       () => installFormDirty(nextRegistry, () => setDirty(true)),
       () => installPlatformReadingHistory(nextRegistry, nextScroll, documentKey),
       () => installPageTracker(nextScroll, setDocumentView),
-      () => installSearchKey(() => setSearchOpen(true)),
+      () => installSearchKey(() => dispatchViewerUi({ type: 'set-search', open: true })),
       () => installOutlinePrefetch(pdfium, {
         documentId: DOCUMENT_ID,
         scroll: nextScroll,
@@ -298,10 +354,9 @@ function App({
     canSave: isDirty,
   };
   const toolbarActions = {
-    setPanMode,
-    setSearchOpen,
+    setPanMode: (enabled: boolean) => dispatchViewerUi({ type: 'set-pan', enabled }),
+    setSearchOpen: (open: boolean) => dispatchViewerUi({ type: 'set-search', open }),
     toggleThumbnails: () => {
-      setSearchOpen(false);
       toggleSidePanel('thumbnails');
     },
     toggleColorPalette: () => toggleSidePanel('colors'),
@@ -310,7 +365,7 @@ function App({
     openMetadata: () => openDialog('metadata'),
     openTheme: () => openDialog('theme'),
     openDeveloper: () => openDialog('developer'),
-    openSignatures: () => setActiveDialog('signatures'),
+    openSignatures: () => openDialog('signatures'),
     exportDocument: () => {
       void exportPdf(engine, registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
         console.error('[pdf-ts] failed to export PDF', error);
@@ -342,7 +397,7 @@ function App({
       />
       <Dialog
         open={documentPane !== null}
-        onClose={closeSidePanel}
+        onClose={closeOverlay}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
       >
         <Thumbnails
@@ -352,7 +407,7 @@ function App({
           open={documentPane === 'thumbnails'}
           totalPages={totalPages}
           currentPageNumber={currentPageNumber}
-          onClose={closeSidePanel}
+          onClose={closeOverlay}
         />
         <Outline
           registry={registry}
@@ -379,7 +434,7 @@ function App({
         registry={registry}
         documentId={documentId}
         open={sidePanel?.type === 'colors'}
-        onClose={closeSidePanel}
+        onClose={closeOverlay}
       />
       <ContextMenu
         engine={engine}
@@ -387,21 +442,24 @@ function App({
         documentId={documentId}
         scroll={pdfScroll}
         container={viewerRootRef.current}
-        onOpenComments={(annotationId, isNew) => setSidePanel({
-          type: 'comments',
-          target: { annotationId, isNew },
+        onOpenComments={(annotationId, isNew) => dispatchViewerUi({
+          type: 'open-side-panel',
+          panel: { type: 'comments', target: { annotationId, isNew } },
         })}
-        onOpenColorPalette={() => setSidePanel({ type: 'colors' })}
-        onTranslate={(documentId, anchor) => setTranslationRequest({
-          documentId,
-          anchor,
+        onOpenColorPalette={() => dispatchViewerUi({
+          type: 'open-side-panel',
+          panel: { type: 'colors' },
+        })}
+        onTranslate={(documentId, anchor) => dispatchViewerUi({
+          type: 'open-translation',
+          request: { documentId, anchor },
         })}
       />
       {translationRequest ? (
         <SelectionTranslate
           registry={registry}
           request={translationRequest}
-          onClose={() => setTranslationRequest(null)}
+          onClose={() => dispatchViewerUi({ type: 'close-overlay' })}
         />
       ) : null}
       <PrintDialog
@@ -410,13 +468,13 @@ function App({
         open={activeDialog === 'print'}
         currentPageNumber={currentPageNumber}
         totalPages={totalPages}
-        onClose={closeDialog}
+        onClose={closeOverlay}
       />
       <ProtectDialog
         registry={registry}
         documentId={documentId}
         open={activeDialog === 'protect'}
-        onClose={closeDialog}
+        onClose={closeOverlay}
         onProtectionChanged={() => setDirty(true, true)}
       />
       <MetadataDialog
@@ -425,17 +483,17 @@ function App({
         open={activeDialog === 'metadata'}
         fileName={resolvedDocumentName}
         pageCount={totalPages}
-        onClose={closeDialog}
+        onClose={closeOverlay}
       />
       <SignatureDialog
         signatures={signatures}
         resource={documentResource}
         open={activeDialog === 'signatures'}
-        onClose={closeDialog}
+        onClose={closeOverlay}
       />
       <ThemeDialog
         open={activeDialog === 'theme'}
-        onClose={closeDialog}
+        onClose={closeOverlay}
       />
       <DeveloperDialog
         open={activeDialog === 'developer'}
@@ -444,7 +502,7 @@ function App({
           setRenderDprMode(nextMode);
           setDprMode(nextMode);
         }}
-        onClose={closeDialog}
+        onClose={closeOverlay}
       />
       <BottomNav
         scroll={pdfScroll}
@@ -466,28 +524,17 @@ const WEB_FILE_CONTROL_CLASS = [
 ].join(' ');
 
 function WebDocumentPicker({
-  onSelect,
-  onPick,
+  onOpen,
 }: {
-  onSelect(file: File): void;
-  onPick?(): Promise<void>;
+  onOpen(file?: File): Promise<void>;
 }) {
   const [dragging, setDragging] = useState(false);
   const [selectionError, setSelectionError] = useState('');
 
-  const selectFile = (file?: File) => {
-    if (!file) return;
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-      setSelectionError('Please select a PDF file.');
-      return;
-    }
-    setSelectionError('');
-    onSelect(file);
-  };
-
-  const pickFile = async () => {
+  const openDocument = async (file?: File) => {
     try {
-      await onPick?.();
+      await onOpen(file);
+      setSelectionError('');
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setSelectionError(error instanceof Error ? error.message : 'Unable to open PDF.');
@@ -514,30 +561,18 @@ function WebDocumentPicker({
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
-          selectFile(event.dataTransfer.files[0]);
+          void openDocument(event.dataTransfer.files[0]);
         }}
       >
         <img className="size-13.5" src="./icon.png" alt="" />
         <h1 className="mt-4.5 mb-6.5 text-[25px]">PDF.ts Web Viewer</h1>
-        {onPick ? (
-          <button
-            className={WEB_FILE_CONTROL_CLASS}
-            type="button"
-            onClick={() => void pickFile()}
-          >
-            Choose a PDF file
-          </button>
-        ) : (
-          <label className={WEB_FILE_CONTROL_CLASS}>
-            Choose a PDF file
-            <input
-              className="sr-only"
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(event) => selectFile(event.target.files?.[0])}
-            />
-          </label>
-        )}
+        <button
+          className={WEB_FILE_CONTROL_CLASS}
+          type="button"
+          onClick={() => void openDocument()}
+        >
+          Choose a PDF file
+        </button>
         <span className="mt-2.5 mb-6.5 block text-[11px] text-muted">or drop a PDF here</span>
         {selectionError ? (
           <p className="mt-3 mb-0 text-xs text-danger" role="alert">
@@ -638,17 +673,15 @@ function ReadyViewer({
 
   if (platform.openLocalDocument && !resources.document) {
     const openLocalDocument = platform.openLocalDocument;
-    const pickLocalDocument = platform.pickLocalDocument;
     const useDocument = (document: NonNullable<ViewerResources['document']>) => {
       trackResource(document.resource);
       setResources({ ...resources, document });
     };
     return <WebDocumentPicker
-      onSelect={(file) => useDocument(openLocalDocument(file))}
-      onPick={pickLocalDocument ? async () => {
-        const document = await pickLocalDocument();
+      onOpen={async (file) => {
+        const document = await openLocalDocument(file);
         if (document) useDocument(document);
-      } : undefined}
+      }}
     />;
   }
 
@@ -674,6 +707,8 @@ function ReadyViewer({
 }
 
 initializeViewerTheme();
+installErrorDiagnostics();
+installInputEnvironmentSampling();
 installRenderDprOverride();
 
 createRoot(document.getElementById('root')!).render(

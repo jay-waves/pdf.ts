@@ -42,7 +42,6 @@ import { getExternalUrl, getSelectedExternalUrl } from './url';
 import { platform } from '#platform';
 import { getDocument } from './viewer-document';
 import type { PdfScroll } from './pdf-scroll';
-import styles from './context-menu.module.css';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
@@ -397,7 +396,7 @@ export function ContextMenu({
       {items.map(({ label, icon, action }) => (
         <IconButton
           key={label}
-          className={styles.button}
+          className="size-6 rounded active:bg-selected active:shadow-none"
           label={label}
           icon={icon}
           iconSize={13}
