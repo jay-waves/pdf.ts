@@ -27,17 +27,19 @@
 .metadataDetails dt { @apply text-secondary; }
 .metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
 .optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
-.themeForm { @apply gap-1.5 pt-2.5; }
-.themeRow { @apply grid grid-cols-[42px_1fr] items-center gap-2 text-secondary; }
-.themeOptions {
-  @apply grid overflow-hidden rounded border border-border-subtle;
-  grid-template-columns: repeat(var(--theme-option-count), minmax(0, 1fr));
-}
+.themeForm { @apply gap-3 pt-2.5; }
+.themeGroup { @apply m-0 min-w-0 border-0 p-0; }
+.themeGroup:disabled { @apply opacity-40 grayscale; }
+.themeGroupLabel { @apply mb-1.5 p-0 text-[11px] font-medium text-secondary; }
+.themeOptions { @apply grid grid-cols-4 gap-1.5; }
 .themeOption {
-  @apply h-7 cursor-pointer whitespace-nowrap border-0 border-r border-border-subtle bg-transparent px-2 text-secondary outline-none last:border-r-0;
-  @apply hover:bg-hover focus-visible:relative focus-visible:z-1 focus-visible:shadow-[inset_0_0_0_1px_var(--pdf-accent-primary)];
+  @apply relative grid min-w-0 cursor-pointer gap-1 rounded border border-transparent bg-transparent p-1 text-secondary outline-none;
+  @apply hover:bg-hover focus-visible:border-accent disabled:cursor-default disabled:hover:bg-transparent;
 }
-.themeOption[data-state='checked'] { @apply bg-selected text-foreground; }
+.themeOption[data-state='checked'] { @apply border-accent text-foreground; }
+.themePreview { @apply relative flex h-5.5 overflow-hidden rounded-sm; }
+.themePreview > span { @apply flex-1; }
+.themeOptionLabel { @apply overflow-hidden text-center text-[10px] leading-3.5 text-ellipsis whitespace-nowrap; }
 .flatActions { @apply border-t border-border-subtle pt-2.5; }
 .flatButton,
 .flatButton:hover,
