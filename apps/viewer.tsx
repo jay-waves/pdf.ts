@@ -79,6 +79,7 @@ import {
   useViewerController,
 } from './viewer-controller';
 import { PDFIUM_FONT_FALLBACK } from './fonts';
+import { StartupLogScreen, startupLog } from './startup-log';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 // The worker configuration is tracked by reference. Keep it module-stable so
@@ -483,6 +484,7 @@ function useViewerResources() {
 
   useEffect(() => {
     let cancelled = false;
+    startupLog.once('viewer-resources', 'Loading viewer resources');
     platform.loadViewerResources(BUNDLED_PDFIUM_WASM_URL).then((loaded) => {
       trackResource(loaded.wasm);
       trackResource(loaded.document?.resource);
@@ -490,10 +492,18 @@ function useViewerResources() {
         releaseResource(loaded.wasm);
         releaseResource(loaded.document?.resource);
       } else {
+        startupLog.info(
+          'Viewer resources ready',
+          loaded.document ? 'PDF source attached' : 'waiting for a document',
+        );
         setResources(loaded);
       }
     }).catch((reason: unknown) => {
-      if (!cancelled) setError(reason instanceof Error ? reason : new Error(String(reason)));
+      if (!cancelled) {
+        const nextError = reason instanceof Error ? reason : new Error(String(reason));
+        startupLog.error('Unable to load viewer resources', nextError.message);
+        setError(nextError);
+      }
     });
 
     return () => {
@@ -551,9 +561,17 @@ function ReadyViewer({
     if (!isLoading) releaseResource(resources.wasm);
   }, [isLoading, releaseResource, resources.wasm]);
 
+  useEffect(() => {
+    if (pdfium && platform.openLocalDocument && !resources.document) {
+      startupLog.complete('Viewer ready', 'choose a PDF document');
+    }
+  }, [pdfium, resources.document]);
+
   if (platform.openLocalDocument && !resources.document) {
     const openLocalDocument = platform.openLocalDocument;
     const useDocument = (document: NonNullable<ViewerResources['document']>) => {
+      startupLog.begin(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
+      startupLog.info('Local document selected', document.name ?? 'PDF document');
       trackResource(document.resource);
       setResources({ ...resources, document });
     };
@@ -589,9 +607,12 @@ function ReadyViewer({
 initializeViewerTheme();
 installErrorDiagnostics();
 installRenderDprOverride();
+startupLog.begin(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
+startupLog.info('Viewer environment ready', navigator.platform || 'Web');
 
 createRoot(document.getElementById('root')!).render(
   <TooltipProvider>
     <ViewerBootstrap />
+    <StartupLogScreen />
   </TooltipProvider>,
 );

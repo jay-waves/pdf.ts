@@ -40,6 +40,7 @@ import { RasterLayer, TileLayer } from './viewer-render-layers';
 import { DOCUMENT_ID } from './viewer-document';
 import './viewer-surface.css';
 import styles from './viewer.module.css';
+import { startupLog } from './startup-log';
 
 export const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_OVERLAP_PX = 2;
@@ -52,6 +53,33 @@ const ANNOTATION_RENDERERS = [
   themeCommentRenderer,
   signatureWidgetRenderer,
 ];
+
+function StartupDocumentStatus({
+  status,
+  pageCount,
+  errorCode,
+}: {
+  status: 'loading' | 'loaded' | 'error';
+  pageCount?: number;
+  errorCode?: PdfErrorCode;
+}) {
+  useEffect(() => {
+    if (status === 'loading') {
+      startupLog.once('document-loading', 'Opening PDF document');
+    } else if (status === 'loaded') {
+      startupLog.once(
+        'document-opened',
+        'Document opened',
+        pageCount ? `${pageCount} pages` : undefined,
+      );
+    } else if (errorCode === PdfErrorCode.Password) {
+      startupLog.complete('Document requires a password');
+    } else {
+      startupLog.error('Unable to open PDF document');
+    }
+  }, [errorCode, pageCount, status]);
+  return null;
+}
 
 export function LoadingStatus({ label }: { label: string }) {
   return (
@@ -250,6 +278,11 @@ export const PdfSurface = memo(function PdfSurface({
         <DocumentContent documentId={documentId}>
           {({ documentState, isLoading, isError, isLoaded }) => (
             <>
+              <StartupDocumentStatus
+                status={documentState.status}
+                pageCount={documentState.document?.pageCount}
+                errorCode={documentState.errorCode}
+              />
               {isLoading && <LoadingStatus label="Loading document…" />}
               {isError && documentState.errorCode === PdfErrorCode.Password ? (
                 <UnlockDialog

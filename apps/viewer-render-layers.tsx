@@ -12,6 +12,7 @@ import {
   type ImgHTMLAttributes,
 } from 'react';
 import { viewerDiagnostics } from './viewer-diagnostics';
+import { startupLog } from './startup-log';
 
 function recordRenderTime(kind: 'base' | 'tile', startedAt: number) {
   viewerDiagnostics.record(kind, performance.now() - startedAt);
@@ -40,7 +41,11 @@ function useRenderUrl(
     let settled = false;
     task.wait((blob) => {
       settled = true;
+      const elapsed = performance.now() - startedAt;
       recordRenderTime(kind, startedAt);
+      if (kind === 'base') {
+        startupLog.once('first-raster-generated', 'Page raster generated', `${elapsed.toFixed(0)} ms`);
+      }
       const nextUrl = URL.createObjectURL(blob);
       urlRef.current = nextUrl;
       setUrl(nextUrl);
@@ -63,6 +68,7 @@ export function RasterLayer({
   scale,
   dpr,
   style,
+  onLoad,
   ...props
 }: ImgHTMLAttributes<HTMLImageElement> & {
   documentId: string;
@@ -82,13 +88,25 @@ export function RasterLayer({
   );
   const [imageUrl, releaseImage] = useRenderUrl(start, 'base', 'Raster layer changed');
 
+  useEffect(() => {
+    startupLog.once(
+      'first-raster',
+      'Rendering first visible page',
+      `page ${pageIndex + 1} · DPR ${dpr}`,
+    );
+  }, [dpr, pageIndex]);
+
   if (!imageUrl) return null;
   return (
     <img
       {...props}
       src={imageUrl}
       style={{ width: '100%', height: '100%', ...style }}
-      onLoad={releaseImage}
+      onLoad={(event) => {
+        releaseImage();
+        onLoad?.(event);
+        startupLog.complete('First page ready', `page ${pageIndex + 1}`);
+      }}
     />
   );
 }

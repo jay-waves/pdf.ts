@@ -35,6 +35,7 @@ type FontMatch = {
 };
 
 type PdfiumHeap = WrappedPdfiumModule['pdfium'] & { HEAPU8: Uint8Array };
+type FontLog = (message: string, detail?: string, level?: 'info' | 'warn' | 'error') => void;
 
 function normalizeFaceName(value: string) {
   return value
@@ -71,6 +72,7 @@ export function classifyPdfFontFamily(
  */
 export class PdfiumFontFallbackManager {
   private readonly config: PdfFontFallbackConfig;
+  private readonly log: FontLog;
   private readonly handles = new Map<number, FontHandle>();
   private readonly fontCache = new Map<string, Uint8Array>();
   private diagnostics: PdfFontDiagnostic[] = [];
@@ -78,10 +80,12 @@ export class PdfiumFontFallbackManager {
   private nextHandleId = 1;
   private structPtr = 0;
   private callbackPtrs: number[] = [];
+  private reportedLogs = new Set<string>();
   private enabled = false;
 
-  constructor(config: PdfFontFallbackConfig) {
+  constructor(config: PdfFontFallbackConfig, log: FontLog = () => undefined) {
     this.config = config;
+    this.log = log;
   }
 
   initialize(module: WrappedPdfiumModule) {
@@ -167,6 +171,7 @@ export class PdfiumFontFallbackManager {
 
   resetDiagnostics() {
     this.diagnostics = [];
+    this.reportedLogs.clear();
   }
 
   getDiagnostics() {
@@ -207,6 +212,11 @@ export class PdfiumFontFallbackManager {
       url: match.url,
     };
     this.handles.set(handle.id, handle);
+    this.logOnce(
+      `mapped\0${match.url}`,
+      'Font fallback mapped',
+      `${this.fontName(match.url)} · ${match.family} · requested by ${face || '(unspecified)'}`,
+    );
     this.upsertDiagnostic({
       face: face || '(unspecified)',
       charset,
@@ -229,6 +239,11 @@ export class PdfiumFontFallbackManager {
       const cached = this.fontCache.get(handle.url);
       if (cached) {
         handle.data = cached;
+        this.logOnce(
+          `cached\0${handle.url}`,
+          'Fallback font ready',
+          `${this.fontName(handle.url)} · HTTP cache · ${this.formatBytes(cached.byteLength)}`,
+        );
         this.updateUrlStatus(handle.url, 'cached', { bytes: cached.byteLength });
       } else {
         handle.data = this.fetchFontSync(handle.url);
@@ -245,6 +260,7 @@ export class PdfiumFontFallbackManager {
   }
 
   private fetchFontSync(url: string) {
+    this.logOnce(`loading\0${url}`, 'Loading fallback font', this.fontName(url));
     this.updateUrlStatus(url, 'loading');
     try {
       const xhr = new XMLHttpRequest();
@@ -252,6 +268,7 @@ export class PdfiumFontFallbackManager {
       xhr.responseType = 'arraybuffer';
       xhr.send();
       if (xhr.status !== 200 || !(xhr.response instanceof ArrayBuffer)) {
+        this.log('Fallback font failed', `${this.fontName(url)} · HTTP ${xhr.status}`, 'error');
         this.updateUrlStatus(url, 'failed', {
           httpStatus: xhr.status,
           error: `HTTP ${xhr.status}`,
@@ -260,6 +277,11 @@ export class PdfiumFontFallbackManager {
       }
       const data = new Uint8Array(xhr.response);
       this.fontCache.set(url, data);
+      this.logOnce(
+        `loaded\0${url}`,
+        'Fallback font ready',
+        `${this.fontName(url)} · ${this.formatBytes(data.byteLength)} · HTTP ${xhr.status}`,
+      );
       this.updateUrlStatus(url, 'loaded', {
         bytes: data.byteLength,
         httpStatus: xhr.status,
@@ -267,6 +289,11 @@ export class PdfiumFontFallbackManager {
       });
       return data;
     } catch (error) {
+      this.log(
+        'Fallback font failed',
+        `${this.fontName(url)} · ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      );
       this.updateUrlStatus(url, 'failed', {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -361,5 +388,21 @@ export class PdfiumFontFallbackManager {
   ) {
     this.diagnostics = this.diagnostics.map((diagnostic) =>
       diagnostic.url === url ? { ...diagnostic, ...details, status } : diagnostic);
+  }
+
+  private logOnce(key: string, message: string, detail?: string) {
+    if (this.reportedLogs.has(key)) return;
+    this.reportedLogs.add(key);
+    this.log(message, detail);
+  }
+
+  private fontName(url: string) {
+    return decodeURIComponent(url.split('/').pop() ?? url)
+      .replace(/\.(?:otf|ttf|woff2?)$/i, '')
+      .replaceAll('-', ' ');
+  }
+
+  private formatBytes(bytes: number) {
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 }

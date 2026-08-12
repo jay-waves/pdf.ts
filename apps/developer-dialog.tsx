@@ -63,10 +63,6 @@ export function DeveloperDialog({
   );
   const dpr = getEffectiveRenderDpr(dprMode);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
-  const fallbackNames = [...new Set(fontDiagnostics.map((font) => describeFallbackFont(font.url)))];
-  const fontStatus = fallbackNames.length
-    ? fallbackNames.join(', ')
-    : 'PDF embedded / built-in';
 
   useEffect(() => {
     if (!open) return;
@@ -140,10 +136,6 @@ export function DeveloperDialog({
             <div><dt>Raster memory</dt><dd>{formatBytes(totalPixels * 4)}</dd></div>
             <div><dt>Base last / avg</dt><dd>{formatTiming(snapshot.baseTiming)}</dd></div>
             <div><dt>Tiles last / avg</dt><dd>{formatTiming(snapshot.tileTiming)}</dd></div>
-            <div>
-              <dt>Font fallback</dt>
-              <dd>{fontStatus}</dd>
-            </div>
           </dl>
         </section>
 

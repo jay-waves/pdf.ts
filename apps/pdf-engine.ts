@@ -14,6 +14,7 @@ import type {
 import type { PdfRenderTheme } from './pdf-render-theme';
 import type { PdfFontDiagnostic, PdfFontFallbackConfig } from './fonts';
 import { getCurrentViewerTheme, getPdfRenderTheme } from './theme';
+import { startupLog, type StartupLogLevel } from './startup-log';
 
 interface PdfIncrementalRevision {
   baseSize: number;
@@ -76,7 +77,19 @@ export function usePdfRuntime(options: {
   }>({ pdfium: null, isLoading: true, error: null });
 
   useEffect(() => {
+    startupLog.once('pdf-worker', 'Starting PDF worker');
     const worker = new Worker(new URL('./pdfium-worker.ts', import.meta.url), { type: 'module' });
+    const handleStartupLog = (event: MessageEvent<unknown>) => {
+      const message = event.data as {
+        type?: string;
+        level?: StartupLogLevel;
+        message?: string;
+        detail?: string;
+      };
+      if (message.type !== 'startupLog' || !message.message) return;
+      startupLog.write(message.level ?? 'info', message.message, message.detail);
+    };
+    worker.addEventListener('message', handleStartupLog);
     const executor = new RemoteExecutor(worker, options);
     const engine = new PdfiumEngine<Blob>(executor as unknown as IPdfiumExecutor, {
       imageConverter: (getImageData, imageType, quality) => browserImageDataToBlobConverter(
@@ -94,6 +107,7 @@ export function usePdfRuntime(options: {
     let active = true;
     const fail: Parameters<typeof readyTask.wait>[1] = (failure) => {
       if (!active) return;
+      startupLog.error('Unable to initialize PDF engine', failure.reason.message);
       setState({
         pdfium: null,
         isLoading: false,
@@ -101,7 +115,10 @@ export function usePdfRuntime(options: {
       });
     };
     const finish = () => {
-      if (active) setState({ pdfium, isLoading: false, error: null });
+      if (active) {
+        startupLog.info('PDF engine ready');
+        setState({ pdfium, isLoading: false, error: null });
+      }
     };
 
     readyTask.wait(
@@ -111,6 +128,7 @@ export function usePdfRuntime(options: {
 
     return () => {
       active = false;
+      worker.removeEventListener('message', handleStartupLog);
       executors.delete(engine);
       void engine.destroy().toPromise().catch(() => worker.terminate());
     };

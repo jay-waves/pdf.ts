@@ -155,6 +155,14 @@ let native: PdfiumNative | null = null;
 let renderTheme: PdfRenderTheme | null = null;
 let fontFallbackManager: PdfiumFontFallbackManager | null = null;
 
+function postStartupLog(
+  message: string,
+  detail?: string,
+  level: 'info' | 'warn' | 'error' = 'info',
+) {
+  workerScope.postMessage({ type: 'startupLog', level, message, detail });
+}
+
 function taskError(message: string, code = PdfErrorCode.Unknown) {
   return {
     type: 'reject' as const,
@@ -309,12 +317,15 @@ workerScope.onmessage = (event) => {
 
   void (async () => {
     try {
+      postStartupLog('Loading PDFium WASM');
       const response = await fetch(request.wasmUrl);
       if (!response.ok) throw new Error(`Could not load PDFium (${response.status}).`);
-      const module = await init({ wasmBinary: await response.arrayBuffer() });
+      const wasmBinary = await response.arrayBuffer();
+      postStartupLog('PDFium WASM ready', `${(wasmBinary.byteLength / 1024 / 1024).toFixed(1)} MB`);
+      const module = await init({ wasmBinary });
       native = new PdfiumNative(module);
       if (request.fontFallback) {
-        fontFallbackManager = new PdfiumFontFallbackManager(request.fontFallback);
+        fontFallbackManager = new PdfiumFontFallbackManager(request.fontFallback, postStartupLog);
         fontFallbackManager.initialize(module);
       }
       installThemeRenderer(module, () => renderTheme);
