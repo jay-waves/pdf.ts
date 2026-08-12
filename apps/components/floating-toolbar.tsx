@@ -14,16 +14,14 @@ export function FloatingToolbar({
   label,
   children,
   overflow = false,
-  className = '',
 }: {
   label: string;
   children: ReactNode;
   overflow?: boolean;
-  className?: string;
 }) {
   return (
     <FloatingSurface
-      className={`flex items-center justify-center gap-1.25 data-[overflow=true]:overflow-x-auto ${className}`.trim()}
+      className="flex items-center justify-center gap-1.25 data-[overflow=true]:overflow-x-auto"
       role="toolbar"
       aria-label={label}
       data-overflow={overflow ? 'true' : undefined}

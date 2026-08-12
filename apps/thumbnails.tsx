@@ -4,7 +4,7 @@ import { PdfErrorCode, type PdfPageObject } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { PanelContent, PanelState } from './components';
-import type { PdfScroll } from './pdf-scroll';
+import type { ViewerCommandDispatch } from './viewer-controller';
 import { getDocumentScope } from './utils';
 import { getSystemDpr } from './viewer-diagnostics';
 import { getDocumentState } from './viewer-document';
@@ -134,14 +134,14 @@ function ThumbnailCard({
 function ThumbnailFlow({
   registry,
   documentId,
-  scroll,
+  dispatch,
   pageCount,
   currentPageNumber,
   onClose,
 }: {
   registry: PluginRegistry;
   documentId: string;
-  scroll: PdfScroll;
+  dispatch: ViewerCommandDispatch;
   pageCount: number;
   currentPageNumber: number;
   onClose: () => void;
@@ -184,7 +184,7 @@ function ThumbnailFlow({
             documentRotation={documentRotation}
             current={item.pageIndex === currentPageIndex}
             onSelect={() => {
-              scroll.goToPage(item.pageIndex + 1);
+              dispatch({ type: 'navigation/go-to-page', pageNumber: item.pageIndex + 1 });
               onClose();
             }}
           />
@@ -196,7 +196,7 @@ function ThumbnailFlow({
 export function Thumbnails({
   registry,
   documentId,
-  scroll,
+  dispatch,
   open,
   totalPages,
   currentPageNumber,
@@ -204,22 +204,20 @@ export function Thumbnails({
 }: {
   registry: PluginRegistry | undefined;
   documentId?: string | null;
-  scroll?: PdfScroll | null;
+  dispatch: ViewerCommandDispatch;
   open: boolean;
   totalPages: number;
   currentPageNumber: number;
   onClose: () => void;
 }) {
-  const pageCount = totalPages || scroll?.getTotalPages() || 0;
-
   return (
     <PanelContent overflow="hidden" hidden={!open}>
-      {open && registry && documentId && scroll && pageCount > 0 ? (
+      {open && registry && documentId && totalPages > 0 ? (
         <ThumbnailFlow
           registry={registry}
           documentId={documentId}
-          scroll={scroll}
-          pageCount={pageCount}
+          dispatch={dispatch}
+          pageCount={totalPages}
           currentPageNumber={currentPageNumber}
           onClose={onClose}
         />

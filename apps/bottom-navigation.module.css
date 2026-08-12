@@ -5,7 +5,7 @@
   @apply transition-opacity duration-200 ease-out motion-reduce:transition-none;
   bottom: 2.5vh;
 }
-.navigation:is(:hover, :focus-within, [data-visible='true']) { @apply pointer-events-auto opacity-100; }
+.navigation:is(:focus-within, [data-visible='true']) { @apply pointer-events-auto opacity-100; }
 
 .navigationButtons { @apply flex min-w-0 items-center gap-1.25 max-[640px]:gap-0.75; }
 .navigationContent { @apply flex min-w-0 max-w-[min(430px,calc(100vw-136px))] items-center justify-end gap-1.5 max-[640px]:max-w-[calc(100vw-86px)] max-[640px]:gap-1.25; }

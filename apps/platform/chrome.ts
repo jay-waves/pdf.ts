@@ -1,10 +1,5 @@
 import { getFileNameFromUrl, parseUrl } from '../url';
-import {
-  getPreference,
-  readReadingHistoryStore,
-  setPreference,
-  writeReadingProgress,
-} from './browser-storage';
+import { browserPersistence } from './browser-storage';
 import {
   BrowserPdfFileHandle,
   readStoredFileHandle,
@@ -144,10 +139,5 @@ export const platform: ViewerPlatform = {
     void (globalThis as ChromeGlobal).chrome.tabs.create({ url: target.href });
   },
   translate: translateWithModelDownload,
-  getPreference,
-  setPreference,
-  async readReadingProgress(documentKey) {
-    return (await readReadingHistoryStore())?.[documentKey];
-  },
-  writeReadingProgress,
+  ...browserPersistence,
 };

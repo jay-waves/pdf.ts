@@ -4,6 +4,7 @@ import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from './components';
 import { platform } from '#platform';
 import { getPluginCapability, normalizePdfText } from './utils';
+import type { ViewerTranslationRequest } from './viewer-controller';
 import styles from './selection-translate.module.css';
 
 const MAX_TEXT_LENGTH = 4000;
@@ -11,11 +12,6 @@ const MAX_TEXT_LENGTH = 4000;
 interface TranslationState {
   text: string;
   status: 'success' | 'error';
-}
-
-export interface SelectionTranslationRequest {
-  documentId: string;
-  anchor: { x: number; y: number };
 }
 
 function normalizeText(parts: string[]) {
@@ -31,7 +27,7 @@ export function SelectionTranslate({
   onClose,
 }: {
   registry?: PluginRegistry;
-  request: SelectionTranslationRequest;
+  request: ViewerTranslationRequest;
   onClose(): void;
 }) {
   const [result, setResult] = useState<TranslationState | null>(null);
@@ -81,8 +77,7 @@ export function SelectionTranslate({
       onClose={onClose}
       anchor={request.anchor}
       sideOffset={10}
-      className={styles.panel}
-      data-error={result?.status === 'error' ? 'true' : undefined}
+      className={`${styles.panel} ${result?.status === 'error' ? 'text-danger' : ''}`.trim()}
       label="Translation"
       role="status"
     >

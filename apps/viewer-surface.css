@@ -8,6 +8,7 @@
   overflow-anchor: none;
   background: var(--pdf-background-app);
   /* The viewer owns touch selection: swipe pans, long press selects text. */
+  touch-action: none;
   -webkit-touch-callout: none;
 }
 

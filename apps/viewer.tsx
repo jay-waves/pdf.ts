@@ -6,11 +6,9 @@ import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import notoSansVariableUrl from '#noto-sans-variable.ttf';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
-import { ZoomMode, type ZoomCapability } from '@embedpdf/plugin-zoom/react';
 import './viewer.css';
 import {
   EMPTY_CLEANUP,
-  getDocumentScope,
   getPluginCapability,
 } from './utils';
 import { getFileNameFromUrl } from './url';
@@ -22,10 +20,14 @@ import {
   type OutlineCache,
 } from './outline';
 import { BottomNav } from './bottom-navigation';
-import { installSearchKey } from './search';
 import { PdfSearch } from './pdf-search';
 import { PdfScroll } from './pdf-scroll';
-import { initializeViewerTheme } from './theme';
+import {
+  initializeViewerTheme,
+  isDarkViewerTheme,
+  supportsViewerThemeSettings,
+  useViewerTheme,
+} from './theme';
 import { Toolbar } from './toolbar';
 import { Thumbnails } from './thumbnails';
 import { ColorPalette } from './color-palette';
@@ -47,7 +49,7 @@ import { exportPdf } from './pdf-save';
 import { usePdfRuntime, type PdfRuntime } from './pdf-engine';
 import { useDocumentPersistence } from './viewer-document-persistence';
 import { useRenderThemeVersion } from './viewer-render-theme';
-import { SelectionTranslate, type SelectionTranslationRequest } from './selection-translate';
+import { SelectionTranslate } from './selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
 import {
   SignatureDialog,
@@ -66,13 +68,18 @@ import {
   getEffectiveRenderDpr,
   getRenderDprMode,
   installErrorDiagnostics,
-  installInputEnvironmentSampling,
   installRenderDprOverride,
   setRenderDprMode,
   viewerDiagnostics,
   type RenderDprMode,
 } from './viewer-diagnostics';
 import { DOCUMENT_ID } from './viewer-document';
+import {
+  INITIAL_VIEWER_UI,
+  installViewerCommandKeys,
+  reduceViewerUi,
+  useViewerController,
+} from './viewer-controller';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 // The engine tracks fontFallback by reference. Keep it module-stable so
@@ -119,71 +126,13 @@ function installFormDirty(registry: PluginRegistry, onDirty: () => void) {
   return form?.onFieldValueChange(onDirty) ?? EMPTY_CLEANUP;
 }
 
-function installZoomKeys(registry: PluginRegistry, documentId: string) {
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (!event.ctrlKey && !event.metaKey) {
-      return;
-    }
-
-    if (event.key !== '+' && event.key !== '=' && event.key !== '-' && event.key !== '_' && event.key !== '0') {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
-    if (!zoom) {
-      return;
-    }
-
-    if (event.key === '0') {
-      zoom.requestZoom(ZoomMode.FitPage);
-    } else if (event.key === '-' || event.key === '_') {
-      zoom.zoomOut();
-    } else {
-      zoom.zoomIn();
-    }
-  };
-
-  window.addEventListener('keydown', onKeyDown, { capture: true });
-
-  return () => {
-    window.removeEventListener('keydown', onKeyDown, { capture: true });
-  };
-}
-
 interface AppProps {
   pdfium: PdfRuntime;
   sourceDocument?: PlatformDocument;
   onResourceConsumed(resource?: ManagedResource): void;
 }
 
-type CommentTarget = { annotationId: string; isNew: boolean };
-type SidePanel =
-  | { type: 'outline' | 'thumbnails' | 'colors' }
-  | { type: 'comments'; target: CommentTarget | null };
-type ActiveDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer';
-type ViewerOverlay =
-  | { type: 'side-panel'; panel: SidePanel }
-  | { type: 'dialog'; dialog: ActiveDialog }
-  | { type: 'translation'; request: SelectionTranslationRequest }
-  | null;
-type ViewerUiState = {
-  panMode: boolean;
-  searchOpen: boolean;
-  overlay: ViewerOverlay;
-};
-type ViewerUiAction =
-  | { type: 'reset' }
-  | { type: 'set-pan'; enabled: boolean }
-  | { type: 'set-search'; open: boolean }
-  | { type: 'toggle-side-panel'; panel: 'thumbnails' | 'colors' }
-  | { type: 'open-side-panel'; panel: SidePanel }
-  | { type: 'open-dialog'; dialog: ActiveDialog }
-  | { type: 'open-translation'; request: SelectionTranslationRequest }
-  | { type: 'close-overlay' };
-type DocumentPane = Exclude<SidePanel['type'], 'colors'>;
+type DocumentPane = 'outline' | 'thumbnails' | 'comments';
 const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
   thumbnails: 'PDF Thumbnails',
   outline: 'PDF Outline',
@@ -191,45 +140,6 @@ const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
 };
 
 const INITIAL_DOCUMENT_VIEW = { pageNumber: 1, totalPages: 0 };
-const INITIAL_VIEWER_UI: ViewerUiState = { panMode: false, searchOpen: false, overlay: null };
-
-function viewerUiReducer(state: ViewerUiState, action: ViewerUiAction): ViewerUiState {
-  switch (action.type) {
-    case 'reset': return INITIAL_VIEWER_UI;
-    case 'set-pan': return { ...state, panMode: action.enabled };
-    case 'set-search': return {
-      ...state,
-      searchOpen: action.open,
-      overlay: action.open ? null : state.overlay,
-    };
-    case 'toggle-side-panel': {
-      const current = state.overlay?.type === 'side-panel' ? state.overlay.panel : null;
-      return {
-        ...state,
-        searchOpen: false,
-        overlay: current?.type === action.panel
-          ? null
-          : { type: 'side-panel', panel: { type: action.panel } },
-      };
-    }
-    case 'open-side-panel': return {
-      ...state,
-      searchOpen: false,
-      overlay: { type: 'side-panel', panel: action.panel },
-    };
-    case 'open-dialog': return {
-      ...state,
-      searchOpen: false,
-      overlay: { type: 'dialog', dialog: action.dialog },
-    };
-    case 'open-translation': return {
-      ...state,
-      searchOpen: false,
-      overlay: { type: 'translation', request: action.request },
-    };
-    case 'close-overlay': return { ...state, overlay: null };
-  }
-}
 
 function App({
   pdfium,
@@ -248,7 +158,7 @@ function App({
   const documentId = fileUrl ? DOCUMENT_ID : null;
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [pdfScroll, setPdfScroll] = useState<PdfScroll | null>(null);
-  const [viewerUi, dispatchViewerUi] = useReducer(viewerUiReducer, INITIAL_VIEWER_UI);
+  const [viewerUi, dispatchViewerUi] = useReducer(reduceViewerUi, INITIAL_VIEWER_UI);
   const [dprMode, setDprMode] = useState<RenderDprMode>(getRenderDprMode);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
@@ -258,12 +168,25 @@ function App({
   const search = useMemo(() => new PdfSearch(pdfium), [pdfium]);
   const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
+  const viewerTheme = useViewerTheme();
   const { isDirty, saveDocument, setDirty } = useDocumentPersistence({
     engine,
     registry,
     documentId,
     fileHandle,
     title: resolvedDocumentName ?? 'PDF',
+  });
+  const { dispatch: dispatchCommand, feedback: capabilityFeedback } = useViewerController({
+    registry,
+    documentId,
+    scroll: pdfScroll,
+    updateUi: dispatchViewerUi,
+    saveDocument: () => void saveDocument(),
+    exportDocument: () => {
+      void exportPdf(engine, registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
+        console.error('[pdf-ts] failed to export PDF', error);
+      });
+    },
   });
   const { pageNumber: currentPageNumber, totalPages } = documentView;
   const { panMode, searchOpen } = viewerUi;
@@ -282,16 +205,9 @@ function App({
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const registryCleanupRef = useRef<(() => void) | null>(null);
-  const closeOverlay = () => dispatchViewerUi({ type: 'close-overlay' });
-  const toggleSidePanel = (type: 'thumbnails' | 'colors') => {
-    dispatchViewerUi({ type: 'toggle-side-panel', panel: type });
-  };
-  const openDialog = (dialog: ActiveDialog) => {
-    dispatchViewerUi({ type: 'open-dialog', dialog });
-  };
-  const openNavigationPanel = (type: 'outline' | 'thumbnails') => {
-    dispatchViewerUi({ type: 'open-side-panel', panel: { type } });
-  };
+  const closeOverlay = () => dispatchCommand({ type: 'ui/close-overlay' });
+
+  useEffect(() => installViewerCommandKeys(dispatchCommand), [dispatchCommand]);
 
   useEffect(() => {
     return () => {
@@ -310,29 +226,26 @@ function App({
     setPdfScroll(nextScroll);
     setOutlineCache({ status: 'idle', bookmarks: [] });
     setDocumentView(INITIAL_DOCUMENT_VIEW);
-    dispatchViewerUi({ type: 'reset' });
+    dispatchViewerUi({ type: 'ui/reset' });
     viewerDiagnostics.resetRendering();
     search.clear();
     setDirty(false);
 
     const installers = [
       () => pdfium.bindRegistry(nextRegistry),
-      () => installZoomKeys(nextRegistry, DOCUMENT_ID),
-      () => nextScroll.installInput(),
+      () => nextScroll.installNavigationInput((delta, source) => {
+        dispatchCommand({ type: 'navigation/move-pages', delta, source });
+      }),
       () => installScrollAttribute(nextScroll),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
       () => installAnnotationPreview(nextRegistry, DOCUMENT_ID),
       () => installCommentEditor(nextRegistry, (annotationId) => {
-        dispatchViewerUi({
-          type: 'open-side-panel',
-          panel: { type: 'comments', target: { annotationId, isNew: true } },
-        });
+        dispatchCommand({ type: 'ui/open-comments', annotationId, isNew: true });
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
       () => installFormDirty(nextRegistry, () => setDirty(true)),
       () => installPlatformReadingHistory(nextRegistry, nextScroll, documentKey),
       () => installPageTracker(nextScroll, setDocumentView),
-      () => installSearchKey(() => dispatchViewerUi({ type: 'set-search', open: true })),
       () => installOutlinePrefetch(pdfium, {
         documentId: DOCUMENT_ID,
         scroll: nextScroll,
@@ -342,9 +255,10 @@ function App({
     ];
 
     registryCleanupRef.current = installAll(installers);
-  }, [documentKey, pdfium, search, setDirty]);
+  }, [dispatchCommand, documentKey, pdfium, search, setDirty]);
 
-  const toolbarState = {
+  const toolbarFeedback = {
+    ...capabilityFeedback,
     documentId,
     searchOpen,
     thumbnailsOpen: sidePanel?.type === 'thumbnails',
@@ -352,26 +266,8 @@ function App({
     panMode,
     signatureCount: signatures.length,
     canSave: isDirty,
-  };
-  const toolbarActions = {
-    setPanMode: (enabled: boolean) => dispatchViewerUi({ type: 'set-pan', enabled }),
-    setSearchOpen: (open: boolean) => dispatchViewerUi({ type: 'set-search', open }),
-    toggleThumbnails: () => {
-      toggleSidePanel('thumbnails');
-    },
-    toggleColorPalette: () => toggleSidePanel('colors'),
-    openPrint: () => openDialog('print'),
-    openProtect: () => openDialog('protect'),
-    openMetadata: () => openDialog('metadata'),
-    openTheme: () => openDialog('theme'),
-    openDeveloper: () => openDialog('developer'),
-    openSignatures: () => openDialog('signatures'),
-    exportDocument: () => {
-      void exportPdf(engine, registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
-        console.error('[pdf-ts] failed to export PDF', error);
-      });
-    },
-    saveDocument: () => void saveDocument(),
+    canConfigureTheme: supportsViewerThemeSettings(),
+    darkAppearance: isDarkViewerTheme(viewerTheme),
   };
 
   return (
@@ -389,11 +285,10 @@ function App({
         renderDpr={getEffectiveRenderDpr(dprMode)}
       />
       <Toolbar
-        registry={registry}
         search={search}
         scroll={pdfScroll}
-        state={toolbarState}
-        actions={toolbarActions}
+        feedback={toolbarFeedback}
+        dispatch={dispatchCommand}
       />
       <Dialog
         open={documentPane !== null}
@@ -403,7 +298,7 @@ function App({
         <Thumbnails
           registry={registry}
           documentId={documentId}
-          scroll={pdfScroll}
+          dispatch={dispatchCommand}
           open={documentPane === 'thumbnails'}
           totalPages={totalPages}
           currentPageNumber={currentPageNumber}
@@ -442,24 +337,19 @@ function App({
         documentId={documentId}
         scroll={pdfScroll}
         container={viewerRootRef.current}
-        onOpenComments={(annotationId, isNew) => dispatchViewerUi({
-          type: 'open-side-panel',
-          panel: { type: 'comments', target: { annotationId, isNew } },
+        onOpenComments={(annotationId, isNew) => dispatchCommand({
+          type: 'ui/open-comments', annotationId, isNew,
         })}
-        onOpenColorPalette={() => dispatchViewerUi({
-          type: 'open-side-panel',
-          panel: { type: 'colors' },
-        })}
-        onTranslate={(documentId, anchor) => dispatchViewerUi({
-          type: 'open-translation',
-          request: { documentId, anchor },
+        onOpenColorPalette={() => dispatchCommand({ type: 'ui/open-panel', panel: 'colors' })}
+        onTranslate={(nextDocumentId, anchor) => dispatchCommand({
+          type: 'ui/open-translation', documentId: nextDocumentId, anchor,
         })}
       />
       {translationRequest ? (
         <SelectionTranslate
           registry={registry}
           request={translationRequest}
-          onClose={() => dispatchViewerUi({ type: 'close-overlay' })}
+          onClose={closeOverlay}
         />
       ) : null}
       <PrintDialog
@@ -505,13 +395,13 @@ function App({
         onClose={closeOverlay}
       />
       <BottomNav
-        scroll={pdfScroll}
+        dispatch={dispatchCommand}
         title={currentTitle}
         pageNumber={currentPageNumber}
         totalPages={totalPages}
         outlineStatus={outlineCache.status}
-        onOpenOutline={() => openNavigationPanel('outline')}
-        onOpenThumbnails={() => openNavigationPanel('thumbnails')}
+        onOpenOutline={() => dispatchCommand({ type: 'ui/open-panel', panel: 'outline' })}
+        onOpenThumbnails={() => dispatchCommand({ type: 'ui/open-panel', panel: 'thumbnails' })}
       />
     </main>
   );
@@ -708,7 +598,6 @@ function ReadyViewer({
 
 initializeViewerTheme();
 installErrorDiagnostics();
-installInputEnvironmentSampling();
 installRenderDprOverride();
 
 createRoot(document.getElementById('root')!).render(

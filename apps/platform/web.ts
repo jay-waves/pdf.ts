@@ -1,9 +1,4 @@
-import {
-  getPreference,
-  readReadingHistoryStore,
-  setPreference,
-  writeReadingProgress,
-} from './browser-storage';
+import { browserPersistence } from './browser-storage';
 import {
   BrowserPdfFileHandle,
   createDownloadWriter,
@@ -85,10 +80,5 @@ export const platform: ViewerPlatform = {
     if (target) window.open(target, '_blank', 'noopener,noreferrer');
   },
   translate: translateWithInstalledModel,
-  getPreference,
-  setPreference,
-  async readReadingProgress(documentKey) {
-    return (await readReadingHistoryStore())?.[documentKey];
-  },
-  writeReadingProgress,
+  ...browserPersistence,
 };

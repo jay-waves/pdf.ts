@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { BookImage, CornerDownLeft, CornerUpRight, ListTree } from 'lucide-react';
 import { ControlButton, FloatingSurface } from './components';
-import type { PdfScroll } from './pdf-scroll';
 import type { OutlineCache } from './outline';
-import { usesTouchControls } from './viewer-diagnostics';
-import { useAutoHide } from './components/use-auto-hide';
+import { useViewerActivityAutoHide } from './components/use-auto-hide';
+import type { ViewerCommandDispatch } from './viewer-controller';
 import styles from './bottom-navigation.module.css';
 
 export function BottomNav({
-  scroll,
+  dispatch,
   title,
   pageNumber,
   totalPages,
@@ -16,7 +15,7 @@ export function BottomNav({
   onOpenOutline,
   onOpenThumbnails,
 }: {
-  scroll?: PdfScroll | null;
+  dispatch: ViewerCommandDispatch;
   title: string;
   pageNumber: number;
   totalPages: number;
@@ -27,7 +26,7 @@ export function BottomNav({
   const [pageInput, setPageInput] = useState(String(pageNumber || 1));
   const interactingRef = useRef(false);
   const pageInputRef = useRef<HTMLInputElement>(null);
-  const canNavigate = Boolean(scroll && totalPages > 0);
+  const canNavigate = totalPages > 0;
   const canGoPrevious = canNavigate && pageNumber > 1;
   const canGoNext = canNavigate && pageNumber < totalPages;
   const outlineTitle = title.trim();
@@ -39,7 +38,8 @@ export function BottomNav({
     setPageInput(String(pageNumber || 1));
   }, [pageNumber]);
 
-  const { visible, reveal, scheduleHide } = useAutoHide(
+  const { visible, reveal, scheduleHide } = useViewerActivityAutoHide(
+    'navigation',
     () => !interactingRef.current,
   );
   const revealTemporarily = useCallback(() => {
@@ -47,14 +47,10 @@ export function BottomNav({
     scheduleHide();
   }, [reveal, scheduleHide]);
 
-  useEffect(() => scroll?.onInteraction((source) => {
-    if (source !== 'touch' || usesTouchControls()) revealTemporarily();
-  }), [revealTemporarily, scroll]);
-
   useEffect(() => {
     let wasAtBottomEdge = false;
     const onPointerMove = (event: PointerEvent) => {
-      if (usesTouchControls()) return;
+      if (event.pointerType !== 'mouse') return;
       const atBottomEdge = window.innerHeight - event.clientY <= 96;
       if (atBottomEdge && !wasAtBottomEdge) revealTemporarily();
       wasAtBottomEdge = atBottomEdge;
@@ -66,11 +62,10 @@ export function BottomNav({
   }, [revealTemporarily]);
 
   const scrollToPage = (nextPageNumber: number) => {
-    revealTemporarily();
-    if (!scroll || !totalPages) return;
+    if (!totalPages) return;
 
     const clampedPageNumber = Math.min(Math.max(1, nextPageNumber), totalPages);
-    scroll.goToPage(clampedPageNumber);
+    dispatch({ type: 'navigation/go-to-page', pageNumber: clampedPageNumber });
     setPageInput(String(clampedPageNumber));
   };
 
@@ -90,8 +85,7 @@ export function BottomNav({
   };
 
   const scrollByPage = (direction: -1 | 1) => {
-    revealTemporarily();
-    scroll?.movePages(direction);
+    dispatch({ type: 'navigation/move-pages', delta: direction });
   };
 
   return (
@@ -100,11 +94,13 @@ export function BottomNav({
       className={styles.navigation}
       data-visible={visible ? 'true' : undefined}
       aria-label="PDF navigation"
-      onMouseEnter={() => {
+      onPointerEnter={(event) => {
+        if (event.pointerType !== 'mouse') return;
         interactingRef.current = true;
         reveal();
       }}
-      onMouseLeave={() => {
+      onPointerLeave={(event) => {
+        if (event.pointerType !== 'mouse') return;
         interactingRef.current = false;
         scheduleHide();
       }}

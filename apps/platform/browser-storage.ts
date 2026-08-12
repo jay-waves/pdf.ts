@@ -1,21 +1,17 @@
 import { get, update } from 'idb-keyval';
-import type { ReadingProgress } from './types';
+import type { ReadingProgress, ViewerPlatform } from './types';
 
 const READING_HISTORY_KEY = 'embedpdf-reading-history-v1';
 type ReadingHistoryStore = Record<string, ReadingProgress>;
 
-export async function readReadingHistoryStore() {
-  return get<ReadingHistoryStore>(READING_HISTORY_KEY);
-}
-
-export async function writeReadingProgress(documentKey: string, progress: ReadingProgress) {
+async function writeReadingProgress(documentKey: string, progress: ReadingProgress) {
   await update<ReadingHistoryStore>(READING_HISTORY_KEY, (store) => ({
     ...store,
     [documentKey]: progress,
   }));
 }
 
-export function getPreference(key: string) {
+function getPreference(key: string) {
   try {
     return window.localStorage.getItem(key);
   } catch {
@@ -23,10 +19,22 @@ export function getPreference(key: string) {
   }
 }
 
-export function setPreference(key: string, value: string) {
+function setPreference(key: string, value: string) {
   try {
     window.localStorage.setItem(key, value);
   } catch {
     // Preferences remain effective for the current React state.
   }
 }
+
+export const browserPersistence = {
+  getPreference,
+  setPreference,
+  async readReadingProgress(documentKey: string) {
+    return (await get<ReadingHistoryStore>(READING_HISTORY_KEY))?.[documentKey];
+  },
+  writeReadingProgress,
+} satisfies Pick<
+  ViewerPlatform,
+  'getPreference' | 'setPreference' | 'readReadingProgress' | 'writeReadingProgress'
+>;

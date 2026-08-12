@@ -3,13 +3,12 @@ import { Dialog, PanelContent, Select } from './components';
 import {
   getEffectiveRenderDpr,
   getSystemDpr,
-  inputEnvironment,
   PDF_TILE_SIZE_CSS_PX,
   sampleRasterPixels,
   viewerDiagnostics,
   type RenderDprMode,
-  type InputMode,
 } from './viewer-diagnostics';
+import { viewerActivity } from './viewer-activity';
 import styles from './developer-dialog.module.css';
 
 const NO_SUBSCRIBE = () => () => undefined;
@@ -20,12 +19,6 @@ const DPR_OPTIONS: Array<{ value: RenderDprMode; label: string }> = [
   { value: '1.5', label: 'Balanced (1.5x)' },
   { value: '1.75', label: 'Quality (1.75x)' },
   { value: 'system', label: `System (${getSystemDpr()}x, native)` },
-];
-
-const INPUT_OPTIONS: Array<{ value: InputMode; label: string }> = [
-  { value: 'auto', label: 'Auto detect' },
-  { value: 'pointer', label: 'Mouse / trackpad' },
-  { value: 'touch', label: 'Touch screen' },
 ];
 
 function formatPixels(value: number) {
@@ -59,19 +52,12 @@ export function DeveloperDialog({
     open ? viewerDiagnostics.subscribe : NO_SUBSCRIBE,
     viewerDiagnostics.getSnapshot,
   );
-  const inputSnapshot = useSyncExternalStore(
-    open ? inputEnvironment.subscribe : NO_SUBSCRIBE,
-    inputEnvironment.getSnapshot,
+  const activity = useSyncExternalStore(
+    open ? viewerActivity.subscribe : NO_SUBSCRIBE,
+    viewerActivity.getSnapshot,
   );
   const dpr = getEffectiveRenderDpr(dprMode);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
-  const detectedInput = inputSnapshot.detected
-    ?? (inputSnapshot.touchSamples > inputSnapshot.pointerSamples ? 'touch' : 'pointer');
-  const inputStatus = inputSnapshot.mode === 'auto'
-    ? inputSnapshot.detected
-      ? `Auto (${inputSnapshot.detected})`
-      : `Sampling (${inputSnapshot.pointerSamples + inputSnapshot.touchSamples}/${inputSnapshot.sampleTarget}, leaning ${detectedInput})`
-    : `Forced ${inputSnapshot.mode}`;
 
   useEffect(() => {
     if (!open) return;
@@ -88,7 +74,6 @@ export function DeveloperDialog({
     `Estimated RGBA raster memory is ${formatBytes(totalPixels * 4)}.`,
     `Base render last / average: ${formatTiming(snapshot.baseTiming)} across ${snapshot.baseTiming.count} completed tasks.`,
     `Tile render last / average: ${formatTiming(snapshot.tileTiming)} across ${snapshot.tileTiming.count} completed tasks.`,
-    `Input environment: ${inputStatus}.`,
     'Timing is end-to-end task latency; averages cover completed tasks since the last rendering reset.',
     'Raster memory is an estimate and excludes PDFium WASM and GPU copies.',
     snapshot.errors.length
@@ -114,7 +99,7 @@ export function DeveloperDialog({
             <div><dt>Raster memory</dt><dd>{formatBytes(totalPixels * 4)}</dd></div>
             <div><dt>Base last / avg</dt><dd>{formatTiming(snapshot.baseTiming)}</dd></div>
             <div><dt>Tiles last / avg</dt><dd>{formatTiming(snapshot.tileTiming)}</dd></div>
-            <div><dt>Input</dt><dd>{inputStatus}</dd></div>
+            <div><dt>Activity</dt><dd>{activity.label}</dd></div>
           </dl>
         </section>
 
@@ -133,21 +118,6 @@ export function DeveloperDialog({
           <p className={styles.hint}>
             DPR profiles adjust tile raster scale; tile edges follow a fixed {PDF_TILE_SIZE_CSS_PX} CSS px × DPR ratio.
           </p>
-          <div className={styles.controlGroup}>
-            <div className={styles.control}>
-              <span>Input environment</span>
-              <Select
-                className={styles.select}
-                value={inputSnapshot.mode}
-                options={INPUT_OPTIONS}
-                label="Input environment"
-                onValueChange={(value) => inputEnvironment.setMode(value as InputMode)}
-              />
-            </div>
-            <p className={styles.hint}>
-              Controls how gestures are interpreted. Auto detect samples the first {inputSnapshot.sampleTarget} distinct actions and then uses touch controls or mouse / trackpad controls accordingly. Choose an explicit mode only when automatic detection is incorrect.
-            </p>
-          </div>
         </section>
 
         <label className={styles.detailsLabel}>

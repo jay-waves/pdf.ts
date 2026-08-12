@@ -59,8 +59,8 @@ export async function savePdf(
 ) {
   if (!registry || !fileHandle) return false;
 
-  // Browser-backed handles must acquire permission while the Ctrl+S user
-  // activation is still live, before PDF serialization yields to the engine.
+  // Browser-backed handles must acquire permission while the save gesture is
+  // still active, before PDF serialization yields to the engine.
   const target = await fileHandle.prepareWrite();
   if (!target) return false;
 

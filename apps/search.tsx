@@ -226,24 +226,3 @@ function SearchFlagButton({
     </Tooltip>
   );
 }
-
-export function installSearchKey(onOpen: () => void) {
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (
-      event.defaultPrevented
-      || event.altKey
-      || event.shiftKey
-      || (!event.ctrlKey && !event.metaKey)
-      || event.key.toLowerCase() !== 'f'
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    onOpen();
-  };
-
-  window.addEventListener('keydown', onKeyDown, { capture: true });
-  return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-}

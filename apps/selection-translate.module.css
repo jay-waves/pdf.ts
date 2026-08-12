@@ -6,7 +6,3 @@
   @apply shadow-popover select-text;
   overflow-wrap: anywhere;
 }
-
-.panel[data-error='true'] {
-  @apply text-danger;
-}

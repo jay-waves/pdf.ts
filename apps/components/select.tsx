@@ -11,7 +11,6 @@ const TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between ga
 
 export function Select({
   value,
-  displayValue,
   options,
   label,
   className,
@@ -21,7 +20,6 @@ export function Select({
   onValueChange,
 }: {
   value: string;
-  displayValue?: string;
   options: SelectOption[];
   label: string;
   className?: string;
@@ -37,7 +35,7 @@ export function Select({
         className={`${TRIGGER_CLASSES} ${className ?? ''}`.trim()}
         aria-label={label}
       >
-        {iconOnly ? null : <RadixSelect.Value>{displayValue}</RadixSelect.Value>}
+        {iconOnly ? null : <RadixSelect.Value />}
         <RadixSelect.Icon className="inline-flex text-muted transition-[color,transform] duration-150 group-hover:text-foreground group-data-[state=open]:rotate-180">
           <ChevronDown size={12} strokeWidth={2} />
         </RadixSelect.Icon>

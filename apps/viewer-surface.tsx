@@ -197,23 +197,22 @@ function LoadedPdfDocument({
         className={`viewer${panMode ? ' is-pan-mode' : ''}`}
         onDragStart={(event) => event.preventDefault()}
       >
-        <ViewportInput documentId={documentId} panMode={panMode} scroll={scroll}>
-          <Scroller
-            documentId={documentId}
-            className="pdf-scroller"
-            renderPage={({ pageIndex, width, height }) => (
-              <PdfPageLayers
-                documentId={documentId}
-                pageIndex={pageIndex}
-                width={width}
-                height={height}
-                renderThemeVersion={renderThemeVersion}
-                search={search}
-                renderDpr={renderDpr}
-              />
-            )}
-          />
-        </ViewportInput>
+        <ViewportInput documentId={documentId} panMode={panMode} scroll={scroll} />
+        <Scroller
+          documentId={documentId}
+          className="pdf-scroller"
+          renderPage={({ pageIndex, width, height }) => (
+            <PdfPageLayers
+              documentId={documentId}
+              pageIndex={pageIndex}
+              width={width}
+              height={height}
+              renderThemeVersion={renderThemeVersion}
+              search={search}
+              renderDpr={renderDpr}
+            />
+          )}
+        />
       </ViewerViewport>
     </GlobalPointerProvider>
   );

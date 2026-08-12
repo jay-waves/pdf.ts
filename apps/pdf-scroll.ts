@@ -14,6 +14,7 @@ import {
 import type { ViewportCapability, ViewportMetrics } from '@embedpdf/plugin-viewport';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { getDocumentScrollStrategy, getPluginCapability, isEditableTarget } from './utils';
+import type { ViewerInputSource } from './viewer-activity';
 
 const SIDE_BUTTON_LONG_PRESS_MS = 450;
 const TARGET_INSET = 12;
@@ -29,7 +30,6 @@ type ScrollAnchor = {
   pageNumber: number;
   pageCoordinates?: { x: number; y: number };
 };
-type ViewerInteractionSource = 'keyboard' | 'pointer' | 'touch';
 
 function landingPosition(
   vertical: boolean,
@@ -64,7 +64,6 @@ function restorePagePosition(
 export class PdfScroll {
   private viewportElement: HTMLElement | null = null;
   private settleFrame = 0;
-  private readonly interactionListeners = new Set<(source: ViewerInteractionSource) => void>();
   private readonly capability: ScrollCapability | undefined;
   private readonly viewportCapability: ViewportCapability | undefined;
 
@@ -126,17 +125,6 @@ export class PdfScroll {
     return this.capability?.onLayoutReady((event) => {
       if (event.documentId === this.documentId) listener(event.totalPages, event.isInitial);
     }) ?? (() => undefined);
-  }
-
-  onInteraction(listener: (source: ViewerInteractionSource) => void) {
-    this.interactionListeners.add(listener);
-    return () => {
-      this.interactionListeners.delete(listener);
-    };
-  }
-
-  notifyInteraction(source: ViewerInteractionSource) {
-    this.interactionListeners.forEach((listener) => listener(source));
   }
 
   reveal(
@@ -377,19 +365,15 @@ export class PdfScroll {
     });
   }
 
-  installInput() {
+  installNavigationInput(onNavigate: (delta: number, source: ViewerInputSource) => void) {
     let sideButtonPress: { button: 3 | 4; startedAt: number } | null = null;
-    const navigate = (delta: number, source: 'keyboard' | 'pointer') => {
-      this.movePages(delta);
-      this.notifyInteraction(source);
-    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (isEditableTarget(event.target)) return;
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       event.stopPropagation();
-      navigate(event.key === 'ArrowLeft' ? -1 : 1, 'keyboard');
+      onNavigate(event.key === 'ArrowLeft' ? -1 : 1, 'Keyboard');
     };
     const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
       if (event.button !== 3 && event.button !== 4) return;
@@ -410,9 +394,9 @@ export class PdfScroll {
         ? performance.now() - sideButtonPress.startedAt
         : 0;
       sideButtonPress = null;
-      navigate(
+      onNavigate(
         (event.button === 3 ? -1 : 1) * (duration >= SIDE_BUTTON_LONG_PRESS_MS ? 2 : 1),
-        'pointer',
+        'Mouse',
       );
     };
     const onPointerMove = (event: PointerEvent) => {

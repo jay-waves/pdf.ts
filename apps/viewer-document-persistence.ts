@@ -101,17 +101,6 @@ export function useDocumentPersistence({
   );
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        void saveDocument();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [saveDocument]);
-
-  useEffect(() => {
     return platform.onDocumentSaveRequested?.(
       (preserveDirty) => saveDocument({ fromHost: true, preserveDirty }),
     );

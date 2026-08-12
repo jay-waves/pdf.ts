@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { HistoryCapability } from '@embedpdf/plugin-history';
-import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
-import { ZoomMode, type ZoomCapability, type ZoomLevel } from '@embedpdf/plugin-zoom';
+import { SpreadMode } from '@embedpdf/plugin-spread';
+import { ZoomMode, type ZoomLevel } from '@embedpdf/plugin-zoom';
 import {
   ArrowDownUp,
   ArrowLeft,
@@ -42,25 +39,18 @@ import {
   Undo2,
   Wrench,
 } from 'lucide-react';
-import { getAnnotationScope } from './annotations';
 import type { PdfScroll } from './pdf-scroll';
 import {
-  getDocumentScope,
-  getPluginCapability,
-  isEditableTarget,
-} from './utils';
-import {
   getStoredToolbarPinned,
-  isDarkViewerTheme,
   setStoredToolbarPinned,
-  supportsViewerThemeSettings,
-  toggleViewerColorMode,
-  useViewerTheme,
 } from './theme';
 import type { PdfSearch } from './pdf-search';
 import { Search } from './search';
-import { usesTouchControls } from './viewer-diagnostics';
-import { useAutoHide } from './components/use-auto-hide';
+import { useViewerActivityAutoHide } from './components/use-auto-hide';
+import type {
+  ViewerCapabilityFeedback,
+  ViewerCommandDispatch,
+} from './viewer-controller';
 import styles from './toolbar.module.css';
 import {
   FloatingToolbar,
@@ -73,7 +63,7 @@ import {
 
 type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 
-interface ToolbarState {
+interface ToolbarFeedback extends ViewerCapabilityFeedback {
   documentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
@@ -81,38 +71,15 @@ interface ToolbarState {
   panMode: boolean;
   signatureCount: number;
   canSave: boolean;
-}
-
-interface ToolbarActions {
-  setPanMode(enabled: boolean): void;
-  setSearchOpen(open: boolean): void;
-  toggleThumbnails(): void;
-  toggleColorPalette(): void;
-  openPrint(): void;
-  openProtect(): void;
-  openMetadata(): void;
-  openTheme(): void;
-  openDeveloper(): void;
-  openSignatures(): void;
-  exportDocument(): void;
-  saveDocument(): void;
+  canConfigureTheme: boolean;
+  darkAppearance: boolean;
 }
 
 interface ToolbarProps {
-  registry?: PluginRegistry;
   search: PdfSearch;
   scroll?: PdfScroll | null;
-  state: ToolbarState;
-  actions: ToolbarActions;
-}
-
-interface ToolbarButtonProps {
-  label: string;
-  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
-  active?: boolean;
-  disabled?: boolean;
-  iconSize?: number;
-  onClick(): void;
+  feedback: ToolbarFeedback;
+  dispatch: ViewerCommandDispatch;
 }
 
 const PRIMARY_ITEMS: Array<{
@@ -222,87 +189,12 @@ function ZoomControl({
   );
 }
 
-function ToolbarButton({
-  label,
-  icon: Icon,
-  active,
-  disabled,
-  iconSize,
-  onClick,
-}: ToolbarButtonProps) {
-  return (
-    <IconButton
-      label={label}
-      icon={Icon}
-      active={active}
-      disabled={disabled}
-      iconSize={iconSize}
-      onClick={onClick}
-    />
-  );
-}
-
-function useToolbarState(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-  scroll: PdfScroll | null | undefined,
-) {
-  const [zoomPercent, setZoomPercent] = useState(100);
-  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
-  const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [spreadMode, setSpreadMode] = useState(SpreadMode.None);
-  const [scrollStrategy, setScrollStrategy] = useState(ScrollStrategy.Vertical);
-
-  useEffect(() => {
-    const zoomScope = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
-    if (!zoomScope) {
-      return;
-    }
-
-    const syncZoom = (state = zoomScope.getState()) => {
-      setZoomPercent(Math.round((state.currentZoomLevel ?? 1) * 100));
-      setZoomLevel(state.zoomLevel);
-    };
-
-    syncZoom();
-    return zoomScope.onStateChange(syncZoom);
-  }, [documentId, registry]);
-
-  useEffect(() => {
-    const annotation = getAnnotationScope(registry, documentId);
-    if (!annotation) {
-      return;
-    }
-
-    setActiveTool(annotation.scope.getActiveTool()?.id ?? null);
-    return annotation.scope.onActiveToolChange((tool) => setActiveTool(tool?.id ?? null));
-  }, [documentId, registry]);
-
-  useEffect(() => {
-    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-    if (!spread || !documentId) {
-      return;
-    }
-
-    const spreadScope = spread.forDocument(documentId);
-    setSpreadMode(spreadScope.getSpreadMode());
-    return spreadScope.onSpreadChange(setSpreadMode);
-  }, [documentId, registry]);
-
-  useEffect(() => {
-    if (!scroll) return;
-    setScrollStrategy(scroll.getStrategy());
-    return scroll.onStrategyChange(setScrollStrategy);
-  }, [scroll]);
-
-  return { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy };
-}
+const ToolbarButton = IconButton;
 
 export function Toolbar({
-  registry,
   search,
   scroll,
-  state: {
+  feedback: {
     documentId,
     searchOpen,
     thumbnailsOpen,
@@ -310,51 +202,36 @@ export function Toolbar({
     panMode,
     signatureCount,
     canSave,
-  },
-  actions: {
-    setPanMode,
-    setSearchOpen,
-    toggleThumbnails,
-    toggleColorPalette,
-    openPrint,
-    openProtect,
-    openMetadata,
-    openTheme,
-    openDeveloper,
-    openSignatures,
-    exportDocument,
-    saveDocument,
-  },
-}: ToolbarProps) {
-  const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
-  const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
-  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
-  const searchWasOpenRef = useRef(false);
-  const viewerTheme = useViewerTheme();
-  const {
+    canConfigureTheme,
+    darkAppearance,
     zoomPercent,
     zoomLevel,
     activeTool,
     spreadMode,
     scrollStrategy,
-  } = useToolbarState(registry, documentId, scroll);
-  const canUseDocument = Boolean(registry && documentId);
-  const canConfigureTheme = supportsViewerThemeSettings();
-  const darkAppearance = isDarkViewerTheme(viewerTheme);
+  },
+  dispatch,
+}: ToolbarProps) {
+  const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
+  const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const searchWasOpenRef = useRef(false);
+  const pointerHoveringRef = useRef(false);
+  const canUseDocument = Boolean(documentId);
   const {
     visible: toolbarVisible,
     reveal: showToolbar,
     scheduleHide: scheduleToolbarHide,
-  } = useAutoHide(
-    () => !pinned && !portalContainer?.matches(':hover, :focus-within'),
+  } = useViewerActivityAutoHide(
+    'toolbar',
+    () => !pinned && !pointerHoveringRef.current && !portalContainer?.matches(':focus-within'),
   );
 
   useEffect(() => {
     if (activeTool && !searchOpen) {
-      setPanMode(false);
       setActiveSection('draw');
     }
-  }, [activeTool, searchOpen, setPanMode]);
+  }, [activeTool, searchOpen]);
 
   useEffect(() => {
     setActiveSection((current) => {
@@ -381,19 +258,16 @@ export function Toolbar({
     if (!pinned) scheduleToolbarHide();
   }, [pinned, scheduleToolbarHide]);
 
-  const closeSearch = () => setSearchOpen(false);
+  const closeSearch = () => dispatch({ type: 'ui/set-search', open: false });
   const openSection = (section: ToolbarSection) => {
     setActiveSection(section);
 
-    if (section !== 'draw' && section !== 'document') {
-      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
-    }
-
     if (section === 'search') {
-      setSearchOpen(true);
+      dispatch({ type: 'ui/set-search', open: true });
       return;
     }
 
+    if (section === 'page') dispatch({ type: 'annotation/clear-tool' });
     if (section !== 'document') closeSearch();
   };
 
@@ -403,11 +277,7 @@ export function Toolbar({
   };
 
   const togglePan = () => {
-    const nextPanMode = !panMode;
-    if (nextPanMode) {
-      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
-    }
-    setPanMode(nextPanMode);
+    dispatch({ type: 'ui/set-pan', enabled: !panMode });
   };
 
   const togglePinned = () => {
@@ -422,104 +292,25 @@ export function Toolbar({
     setStoredToolbarPinned(true);
   };
 
-  const zoomByButton = (direction: 1 | -1) => {
-    const zoomScope = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
-    if (!zoomScope) {
-      return;
-    }
-
-    if (direction > 0) {
-      zoomScope.zoomIn();
-    } else {
-      zoomScope.zoomOut();
-    }
-  };
-
   const selectDrawTool = (toolId: string) => {
-    closeSearch();
-    setPanMode(false);
-    const annotation = getAnnotationScope(registry, documentId);
-    if (!annotation) {
-      return;
-    }
-
-    annotation.scope.setActiveTool(activeTool === toolId ? null : toolId);
+    dispatch({ type: 'annotation/toggle-tool', toolId });
   };
 
   const selectZoom = (value: string) => {
     const level = ZOOM_LEVELS.get(value);
-    const zoomScope = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
-    if (level === undefined || !zoomScope) return;
-    zoomScope.requestZoom(level);
+    if (level !== undefined) dispatch({ type: 'view/set-zoom', level });
   };
 
   const enterZoom = (percent: number) => {
-    getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(percent / 100);
+    dispatch({ type: 'view/set-zoom', level: percent / 100 });
   };
-
-  const toggleSpread = () => {
-    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-    if (!spread) return;
-    const nextMode = spreadMode === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd;
-    if (scroll) scroll.preserveView(() => spread.setSpreadMode(nextMode));
-    else spread.setSpreadMode(nextMode);
-  };
-
-  const rotateForward = () => {
-    getPluginCapability<RotateCapability>(registry, 'rotate')?.rotateForward();
-  };
-
-  const setScroll = (nextStrategy: ScrollStrategy) => {
-    scroll?.setStrategy(nextStrategy);
-  };
-
-  const runAnnotationHistory = (direction: 'undo' | 'redo') => {
-    const historyScope = getDocumentScope<HistoryCapability>(registry, 'history', documentId);
-    if (!historyScope) {
-      return;
-    }
-
-    if (direction === 'undo') {
-      historyScope.undo();
-    } else {
-      historyScope.redo();
-    }
-  };
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((!event.ctrlKey && !event.metaKey) || event.altKey) {
-        return;
-      }
-
-      if (isEditableTarget(event.target)) return;
-
-      const key = event.key.toLowerCase();
-      let direction: 'undo' | 'redo' | null = null;
-      if (key === 'y' || (key === 'z' && event.shiftKey)) {
-        direction = 'redo';
-      } else if (key === 'z') {
-        direction = 'undo';
-      }
-      if (!direction) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      runAnnotationHistory(direction);
-    };
-
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  }, [registry]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
-      if (usesTouchControls()) return;
+      if (event.pointerType !== 'mouse') return;
       if (pinned || event.clientY <= 40) {
         showToolbar();
-      } else if (!portalContainer?.matches(':hover, :focus-within')) {
+      } else if (!pointerHoveringRef.current && !portalContainer?.matches(':focus-within')) {
         scheduleToolbarHide();
       }
     };
@@ -530,12 +321,6 @@ export function Toolbar({
     };
   }, [pinned, portalContainer]);
 
-  useEffect(() => scroll?.onInteraction((source) => {
-    if (source === 'touch' && !usesTouchControls()) return;
-    showToolbar();
-    scheduleToolbarHide();
-  }), [pinned, portalContainer, scroll]);
-
   const renderPersistentControls = () => (
     <div className={styles.persistentControls}>
       <FloatingToolbarDivider />
@@ -544,14 +329,14 @@ export function Toolbar({
           label="Save"
           icon={Save}
           disabled={!canSave}
-          onClick={saveDocument}
+          onClick={() => dispatch({ type: 'document/save' })}
         />
         {canConfigureTheme ? (
           <ToolbarButton
             label={darkAppearance ? 'Light theme' : 'Dark theme'}
             icon={darkAppearance ? Sun : Moon}
             iconSize={15.5}
-            onClick={toggleViewerColorMode}
+            onClick={() => dispatch({ type: 'theme/toggle' })}
           />
         ) : null}
         <ToolbarButton
@@ -586,8 +371,16 @@ export function Toolbar({
       className={styles.root}
       data-toolbar-level={activeSection === null ? 'primary' : 'secondary'}
       data-visible={pinned || toolbarVisible ? 'true' : undefined}
-      onMouseEnter={showToolbar}
-      onMouseLeave={scheduleToolbarHide}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        pointerHoveringRef.current = true;
+        showToolbar();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        pointerHoveringRef.current = false;
+        scheduleToolbarHide();
+      }}
       onContextMenu={(event) => event.preventDefault()}
     >
       <PortalProvider container={portalContainer}>
@@ -621,43 +414,43 @@ export function Toolbar({
               label="Print"
               icon={Printer}
               disabled={!canUseDocument}
-              onClick={openPrint}
+              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'print' })}
             />
             <ToolbarButton
               label="Security"
               icon={Lock}
               disabled={!canUseDocument}
-              onClick={openProtect}
+              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'protect' })}
             />
             <ToolbarButton
               label="Export"
               icon={Download}
               disabled={!canUseDocument}
-              onClick={exportDocument}
+              onClick={() => dispatch({ type: 'document/export' })}
             />
             <ToolbarButton
               label="Metadata"
               icon={Info}
               disabled={!canUseDocument}
-              onClick={openMetadata}
+              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'metadata' })}
             />
             {canConfigureTheme ? (
               <ToolbarButton
                 label="Themes"
                 icon={Palette}
-                onClick={openTheme}
+                onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'theme' })}
               />
             ) : null}
             <ToolbarButton
               label="Developer"
               icon={Wrench}
-              onClick={openDeveloper}
+              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'developer' })}
             />
             {signatureCount > 0 ? (
               <ToolbarButton
                 label={`Digital signatures (${signatureCount})`}
                 icon={Signature}
-                onClick={openSignatures}
+                onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'signatures' })}
               />
             ) : null}
           </FloatingToolbarGroup>
@@ -670,7 +463,7 @@ export function Toolbar({
                 label="Zoom out"
                 icon={Minus}
                 disabled={!canUseDocument}
-                onClick={() => zoomByButton(-1)}
+                onClick={() => dispatch({ type: 'view/zoom-step', direction: -1 })}
               />
               <ZoomControl
                 disabled={!canUseDocument}
@@ -683,7 +476,7 @@ export function Toolbar({
                 label="Zoom in"
                 icon={Plus}
                 disabled={!canUseDocument}
-                onClick={() => zoomByButton(1)}
+                onClick={() => dispatch({ type: 'view/zoom-step', direction: 1 })}
               />
             </FloatingToolbarGroup>
             <FloatingToolbarDivider />
@@ -693,34 +486,34 @@ export function Toolbar({
                 icon={GalleryHorizontal}
                 active={spreadMode === SpreadMode.Odd}
                 disabled={!canUseDocument}
-                onClick={toggleSpread}
+                onClick={() => dispatch({ type: 'view/toggle-spread' })}
               />
               <ToolbarButton
                 label="Vertical scroll"
                 icon={ArrowDownUp}
                 active={scrollStrategy === ScrollStrategy.Vertical}
                 disabled={!canUseDocument}
-                onClick={() => setScroll(ScrollStrategy.Vertical)}
+                onClick={() => dispatch({ type: 'view/set-scroll', strategy: ScrollStrategy.Vertical })}
               />
               <ToolbarButton
                 label="Horizontal scroll"
                 icon={ArrowLeftRight}
                 active={scrollStrategy === ScrollStrategy.Horizontal}
                 disabled={!canUseDocument}
-                onClick={() => setScroll(ScrollStrategy.Horizontal)}
+                onClick={() => dispatch({ type: 'view/set-scroll', strategy: ScrollStrategy.Horizontal })}
               />
               <ToolbarButton
                 label="Rotate"
                 icon={RotateCw}
                 disabled={!canUseDocument}
-                onClick={rotateForward}
+                onClick={() => dispatch({ type: 'view/rotate' })}
               />
               <ToolbarButton
                 label="Thumbnails"
                 icon={BookImage}
                 active={thumbnailsOpen}
                 disabled={!canUseDocument}
-                onClick={toggleThumbnails}
+                onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'thumbnails' })}
               />
             </FloatingToolbarGroup>
           </>
@@ -754,19 +547,19 @@ export function Toolbar({
               icon={PaintBucket}
               active={colorPaletteOpen}
               disabled={!canUseDocument}
-              onClick={toggleColorPalette}
+              onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'colors' })}
             />
             <ToolbarButton
               label="Undo"
               icon={Undo2}
               disabled={!canUseDocument}
-              onClick={() => runAnnotationHistory('undo')}
+              onClick={() => dispatch({ type: 'annotation/history', direction: 'undo' })}
             />
             <ToolbarButton
               label="Redo"
               icon={Redo2}
               disabled={!canUseDocument}
-              onClick={() => runAnnotationHistory('redo')}
+              onClick={() => dispatch({ type: 'annotation/history', direction: 'redo' })}
             />
           </div>
         ), true) : null}

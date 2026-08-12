@@ -60,14 +60,14 @@ function useRenderUrl(
 export function RasterLayer({
   documentId,
   pageIndex,
-  scale = 1,
+  scale,
   dpr,
   style,
   ...props
 }: ImgHTMLAttributes<HTMLImageElement> & {
   documentId: string;
   pageIndex: number;
-  scale?: number;
+  scale: number;
   dpr: number;
 }) {
   const { provides: render } = useRenderCapability();
@@ -143,18 +143,16 @@ export function TileLayer({
   documentId,
   pageIndex,
   dpr,
-  scale: scaleOverride,
   ...props
 }: HTMLAttributes<HTMLDivElement> & {
   documentId: string;
   pageIndex: number;
   dpr: number;
-  scale?: number;
 }) {
   const { provides: tiling } = useTilingCapability();
   const documentState = useDocumentState(documentId);
   const [tiles, setTiles] = useState<Tile[]>([]);
-  const scale = scaleOverride ?? documentState?.scale ?? 1;
+  const scale = documentState?.scale ?? 1;
 
   useEffect(() => {
     if (!tiling) return;

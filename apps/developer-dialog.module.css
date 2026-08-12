@@ -9,7 +9,6 @@
 .stats dt { @apply text-secondary; }
 .stats dd { @apply m-0 text-right text-foreground tabular-nums; }
 .control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,220px)] items-center gap-4; }
-.controlGroup { @apply grid gap-1; }
 .select { @apply w-full text-foreground; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
 .detailsLabel { @apply grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5 text-secondary; }
