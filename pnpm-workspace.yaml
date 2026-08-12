@@ -25,5 +25,6 @@ allowBuilds:
   '@vscode/vsce-sign': false
   esbuild: false
   keytar: false
+
 patchedDependencies:
   '@embedpdf/engines@2.14.4': patches/@embedpdf__engines@2.14.4.patch

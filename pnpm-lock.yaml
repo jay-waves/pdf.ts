@@ -16,7 +16,7 @@ overrides:
 packageExtensionsChecksum: sha256-ULrwTwUMEKFfvEibJQ6qES0qFwzNudDsk+kRqXTIxtc=
 
 patchedDependencies:
-  '@embedpdf/engines@2.14.4': c2a9d1b9f015dedc678097fd8fd594fd9702b97786c4c5fca47a1c0c0d16ab10
+  '@embedpdf/engines@2.14.4': 4e4e81190fa82c98c4b59452b8c88492b4293ac8298d095bc83f73bbfa116278
 
 importers:
 
@@ -27,7 +27,7 @@ importers:
         version: 2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@embedpdf/engines':
         specifier: 2.14.4
-        version: 2.14.4(patch_hash=c2a9d1b9f015dedc678097fd8fd594fd9702b97786c4c5fca47a1c0c0d16ab10)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+        version: 2.14.4(patch_hash=4e4e81190fa82c98c4b59452b8c88492b4293ac8298d095bc83f73bbfa116278)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@embedpdf/models':
         specifier: 2.14.4
         version: 2.14.4
@@ -3198,12 +3198,12 @@ snapshots:
 
   '@embedpdf/core@2.14.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
-      '@embedpdf/engines': 2.14.4(patch_hash=c2a9d1b9f015dedc678097fd8fd594fd9702b97786c4c5fca47a1c0c0d16ab10)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@embedpdf/engines': 2.14.4(patch_hash=4e4e81190fa82c98c4b59452b8c88492b4293ac8298d095bc83f73bbfa116278)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@embedpdf/models': 2.14.4
       react: 19.2.5
       react-dom: 19.2.5(react@19.2.5)
 
-  '@embedpdf/engines@2.14.4(patch_hash=c2a9d1b9f015dedc678097fd8fd594fd9702b97786c4c5fca47a1c0c0d16ab10)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
+  '@embedpdf/engines@2.14.4(patch_hash=4e4e81190fa82c98c4b59452b8c88492b4293ac8298d095bc83f73bbfa116278)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)':
     dependencies:
       '@embedpdf/models': 2.14.4
       '@embedpdf/pdfium': 2.14.4

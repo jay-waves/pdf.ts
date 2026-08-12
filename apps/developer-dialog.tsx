@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Dialog, PanelContent, Select } from './components';
 import {
   getEffectiveRenderDpr,
@@ -8,7 +8,13 @@ import {
   viewerDiagnostics,
   type RenderDprMode,
 } from './viewer-diagnostics';
-import { viewerActivity } from './viewer-activity';
+import {
+  describeFallbackFont,
+  describeFontCharset,
+  PDFIUM_FONT_FALLBACK_INFO,
+  type PdfFontDiagnostic,
+} from './fonts';
+import type { PdfRuntime } from './pdf-engine';
 import styles from './developer-dialog.module.css';
 
 const NO_SUBSCRIBE = () => () => undefined;
@@ -39,36 +45,71 @@ function formatTiming({ count, last, average }: {
 
 export function DeveloperDialog({
   open,
+  pdfium,
   dprMode,
   onDprModeChange,
   onClose,
 }: {
   open: boolean;
+  pdfium: PdfRuntime;
   dprMode: RenderDprMode;
   onDprModeChange(mode: RenderDprMode): void;
   onClose(): void;
 }) {
+  const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
   const snapshot = useSyncExternalStore(
     open ? viewerDiagnostics.subscribe : NO_SUBSCRIBE,
     viewerDiagnostics.getSnapshot,
   );
-  const activity = useSyncExternalStore(
-    open ? viewerActivity.subscribe : NO_SUBSCRIBE,
-    viewerActivity.getSnapshot,
-  );
   const dpr = getEffectiveRenderDpr(dprMode);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
+  const fallbackNames = [...new Set(fontDiagnostics.map((font) => describeFallbackFont(font.url)))];
+  const fontStatus = fallbackNames.length
+    ? fallbackNames.join(', ')
+    : 'PDF embedded / built-in';
 
   useEffect(() => {
     if (!open) return;
-    sampleRasterPixels();
-    const timer = window.setInterval(sampleRasterPixels, 500);
-    return () => window.clearInterval(timer);
-  }, [open]);
+    let active = true;
+    const sample = () => {
+      sampleRasterPixels();
+      void pdfium.getFontDiagnostics().then((diagnostics) => {
+        if (active) setFontDiagnostics(diagnostics);
+      });
+    };
+    sample();
+    const timer = window.setInterval(sample, 500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [open, pdfium]);
+
+  const fontRequestDetails = fontDiagnostics.length
+    ? fontDiagnostics.map((font) => {
+        const status = [
+          font.selectedFamily,
+          font.status,
+          font.bytes ? `${(font.bytes / 1024 / 1024).toFixed(1)} MB` : '',
+          font.httpStatus ? `HTTP ${font.httpStatus}` : '',
+        ].filter(Boolean).join(', ');
+        return [
+          `- ${font.face}: ${describeFontCharset(font.charset)}, requested ${font.family}`,
+          `${font.weight}${font.italic ? ' italic' : ''}`,
+          `→ ${describeFallbackFont(font.url)} (${status})`,
+          font.error ? `\n  Error: ${font.error}` : '',
+          `\n  ${font.url}`,
+        ].join(' ');
+      }).join('\n')
+    : '- No PDFium fallback request recorded for this document.';
 
   const details = [
     `PDF.ts version: ${__PDF_TS_BUILD_INFO__}.`,
     `PDF pages render at ${dpr}x DPR; the system DPR is ${getSystemDpr()}x.`,
+    `Fallback catalog: ${PDFIUM_FONT_FALLBACK_INFO.family} (${PDFIUM_FONT_FALLBACK_INFO.coverage}).`,
+    `Font source: ${PDFIUM_FONT_FALLBACK_INFO.source}.`,
+    `Font cache: ${PDFIUM_FONT_FALLBACK_INFO.cache}.`,
+    `PDFium fallback requests:\n${fontRequestDetails}`,
     `Base raster uses ${formatPixels(snapshot.basePixels)} and active tiles use ${formatPixels(snapshot.tilePixels)}.`,
     `${snapshot.activeTiles} tile images are currently attached to mounted PDF pages.`,
     `Estimated RGBA raster memory is ${formatBytes(totalPixels * 4)}.`,
@@ -99,7 +140,10 @@ export function DeveloperDialog({
             <div><dt>Raster memory</dt><dd>{formatBytes(totalPixels * 4)}</dd></div>
             <div><dt>Base last / avg</dt><dd>{formatTiming(snapshot.baseTiming)}</dd></div>
             <div><dt>Tiles last / avg</dt><dd>{formatTiming(snapshot.tileTiming)}</dd></div>
-            <div><dt>Activity</dt><dd>{activity.label}</dd></div>
+            <div>
+              <dt>Font fallback</dt>
+              <dd>{fontStatus}</dd>
+            </div>
           </dl>
         </section>
 

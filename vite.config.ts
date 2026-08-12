@@ -37,13 +37,6 @@ export default defineConfig({
               : 'apps/platform/chrome.ts',
           ),
       },
-      {
-        find: '#noto-sans-variable.ttf',
-        replacement: resolve(
-          __dirname,
-          'assets/NotoSans-VariableFont_wdth,wght.ttf',
-        ),
-      },
     ],
   },
   plugins: [

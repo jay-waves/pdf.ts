@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { PluginRegistry } from '@embedpdf/core';
-import { FontCharset, type FontFallbackConfig } from '@embedpdf/engines/pdfium';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
-import notoSansVariableUrl from '#noto-sans-variable.ttf';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
 import './viewer.css';
@@ -80,20 +78,11 @@ import {
   reduceViewerUi,
   useViewerController,
 } from './viewer-controller';
+import { PDFIUM_FONT_FALLBACK } from './fonts';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
-// The engine tracks fontFallback by reference. Keep it module-stable so
+// The worker configuration is tracked by reference. Keep it module-stable so
 // ordinary React re-renders cannot tear down and recreate the WASM engine.
-const PDFIUM_FONT_FALLBACK: FontFallbackConfig = {
-  fonts: {
-    [FontCharset.ANSI]: notoSansVariableUrl,
-    [FontCharset.DEFAULT]: notoSansVariableUrl,
-    [FontCharset.CYRILLIC]: notoSansVariableUrl,
-    [FontCharset.GREEK]: notoSansVariableUrl,
-    [FontCharset.VIETNAMESE]: notoSansVariableUrl,
-    [FontCharset.EASTERNEUROPEAN]: notoSansVariableUrl,
-  },
-};
 function installAll(installers: Array<() => () => void>) {
   const cleanups: Array<() => void> = [];
   const cleanup = () => {
@@ -387,6 +376,7 @@ function App({
       />
       <DeveloperDialog
         open={activeDialog === 'developer'}
+        pdfium={pdfium}
         dprMode={dprMode}
         onDprModeChange={(nextMode) => {
           setRenderDprMode(nextMode);

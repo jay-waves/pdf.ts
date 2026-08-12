@@ -10,8 +10,10 @@ type ViewerActivityEvent = {
   audience: ViewerActivityAudience;
 };
 
-type ViewerActivitySnapshot = {
-  label: string;
+export type ViewerActivitySnapshot = {
+  source: ViewerInputSource | null;
+  path: ViewerActivityPath;
+  active: boolean;
 };
 
 export type ViewerActivitySession = {
@@ -19,12 +21,8 @@ export type ViewerActivitySession = {
   end(): void;
 };
 
-function formatActivity(source: ViewerInputSource, path: ViewerActivityPath) {
-  return `${source} · ${path.join(' / ')}`;
-}
-
 class ViewerActivityStore {
-  private snapshot: ViewerActivitySnapshot = { label: '—' };
+  private snapshot: ViewerActivitySnapshot = { source: null, path: [], active: false };
   private readonly snapshotListeners = new Set<() => void>();
   private readonly eventListeners = new Set<(event: ViewerActivityEvent) => void>();
   private readonly activeSessions = new Map<number, {
@@ -93,7 +91,9 @@ class ViewerActivityStore {
     const latestActive = Array.from(this.activeSessions.values()).at(-1);
     const displayed = latestActive ?? event;
     this.snapshot = {
-      label: formatActivity(displayed.source, displayed.path),
+      source: displayed.source,
+      path: displayed.path,
+      active: Boolean(latestActive),
     };
     this.snapshotListeners.forEach((listener) => listener());
     this.eventListeners.forEach((listener) => listener(event));

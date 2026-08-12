@@ -1,5 +1,5 @@
 diff --git a/dist/lib/pdfium/index.js b/dist/lib/pdfium/index.js
-index 223849764e96d821859d3b6e332ae55b5e9b5137..0c5368bcbd31049fcad16b46ed08f709abce225b 100644
+index 223849764e96d821859d3b6e332ae55b5e9b5137..d3fe75ad015291c289aaed1adadbe06c400a556f 100644
 --- a/dist/lib/pdfium/index.js
 +++ b/dist/lib/pdfium/index.js
 @@ -3,13 +3,14 @@ import { I, b as b2, c as c2, a as a2 } from "../../browser-BKLM0ThC.js";
@@ -13,7 +13,7 @@ index 223849764e96d821859d3b6e332ae55b5e9b5137..0c5368bcbd31049fcad16b46ed08f709
 -import { fonts as fonts$2 } from "@embedpdf/fonts-arabic";
 -import { fonts as fonts$1 } from "@embedpdf/fonts-hebrew";
 -import { fonts } from "@embedpdf/fonts-latin";
-+// Built-in CDN fallback is disabled; the application supplies local fonts.
++// Built-in fallback imports are disabled; the application supplies its own font catalog.
 +const fonts$6 = [];
 +const fonts$5 = [];
 +const fonts$4 = [];
@@ -59,10 +59,10 @@ index 1c40ef8dd3aa8050f3a23242d23258dbd04b3604..7d361228c9583e38b1f0823b5d61cb3d
  };
  //# sourceMappingURL=worker-engine.js.map
 diff --git a/dist/pdf-engine-D9v0RfKe.js b/dist/pdf-engine-D9v0RfKe.js
-index 62b75719296e3ca997de0227311efcb5c79528d5..69c4fcfc082218bab36b58dafc0c4f70ca47bb78 100644
+index e8b3af0b0fc72a142cc69ce6db55935c44cd4fc7..57c2ad5a48a4b48b5addad60c27934f006527478 100644
 --- a/dist/pdf-engine-D9v0RfKe.js
 +++ b/dist/pdf-engine-D9v0RfKe.js
-@@ -547,7 +547,7 @@ class PdfEngine extends PdfEngineBase {
+@@ -547,7 +547,7 @@ class PdfEngine {
      const imageType = (options == null ? void 0 : options.imageType) ?? "image/png";
      const quality = options == null ? void 0 : options.quality;
      const plainImageData = {

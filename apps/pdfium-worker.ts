@@ -1,5 +1,4 @@
 import { PdfiumNative } from '@embedpdf/engines/pdfium';
-import type { FontFallbackConfig } from '@embedpdf/engines/pdfium';
 import {
   PdfErrorCode,
   type PdfDocumentObject,
@@ -12,6 +11,10 @@ import {
   toReverseByteOrderBitmapColor,
   type PdfRenderTheme,
 } from './pdf-render-theme';
+import {
+  PdfiumFontFallbackManager,
+  type PdfFontFallbackConfig,
+} from './fonts';
 
 type WorkerRequest =
   | {
@@ -24,7 +27,7 @@ type WorkerRequest =
       id: string;
       type: 'wasmInit';
       wasmUrl: string;
-      fontFallback: FontFallbackConfig | null;
+      fontFallback: PdfFontFallbackConfig | null;
     };
 type ExecuteRequest = Extract<WorkerRequest, { type: 'execute' }>;
 type WorkerTask = Task<unknown, PdfErrorReason, unknown>;
@@ -150,6 +153,7 @@ const activeTasks = new Map<string, WorkerTask>();
 const originalSizes = new Map<string, number>();
 let native: PdfiumNative | null = null;
 let renderTheme: PdfRenderTheme | null = null;
+let fontFallbackManager: PdfiumFontFallbackManager | null = null;
 
 function taskError(message: string, code = PdfErrorCode.Unknown) {
   return {
@@ -234,11 +238,19 @@ function invoke(engine: PdfiumNative, request: ExecuteRequest) {
     return true;
   }
 
+  if (request.method === 'getFontDiagnostics') {
+    return fontFallbackManager?.getDiagnostics() ?? [];
+  }
+
   if (request.method === 'openDocumentBuffer') {
+    fontFallbackManager?.resetDiagnostics();
     const file = request.args[0] as { id: string; content: ArrayBuffer };
     originalSizes.set(file.id, file.content.byteLength);
   } else if (request.method === 'saveIncremental') {
     return saveIncremental(engine, request.args[0] as PdfDocumentObject);
+  } else if (request.method === 'destroy') {
+    fontFallbackManager?.disable();
+    fontFallbackManager = null;
   }
 
   const method = (engine as unknown as Record<string, unknown>)[request.method];
@@ -300,9 +312,11 @@ workerScope.onmessage = (event) => {
       const response = await fetch(request.wasmUrl);
       if (!response.ok) throw new Error(`Could not load PDFium (${response.status}).`);
       const module = await init({ wasmBinary: await response.arrayBuffer() });
-      native = new PdfiumNative(module, {
-        fontFallback: request.fontFallback === null ? undefined : request.fontFallback,
-      });
+      native = new PdfiumNative(module);
+      if (request.fontFallback) {
+        fontFallbackManager = new PdfiumFontFallbackManager(request.fontFallback);
+        fontFallbackManager.initialize(module);
+      }
       installThemeRenderer(module, () => renderTheme);
       workerScope.postMessage({ id: request.id, type: 'ready' });
     } catch (error) {

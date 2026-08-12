@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import { browserImageDataToBlobConverter } from '@embedpdf/engines/converters';
-import {
-  PdfEngine as PdfiumEngine,
-  type FontFallbackConfig,
-} from '@embedpdf/engines/pdfium';
+import { PdfEngine as PdfiumEngine } from '@embedpdf/engines/pdfium';
 import { RemoteExecutor } from '@embedpdf/engines/pdfium-worker-engine';
 import type {
   ImageConversionTypes,
@@ -15,6 +12,7 @@ import type {
   Task,
 } from '@embedpdf/models';
 import type { PdfRenderTheme } from './pdf-render-theme';
+import type { PdfFontDiagnostic, PdfFontFallbackConfig } from './fonts';
 import { getCurrentViewerTheme, getPdfRenderTheme } from './theme';
 
 interface PdfIncrementalRevision {
@@ -56,11 +54,19 @@ export class PdfRuntime {
     }
     return operation(this.engine, document);
   }
+
+  async getFontDiagnostics(): Promise<PdfFontDiagnostic[]> {
+    const executor = executors.get(this.engine);
+    if (!executor) return [];
+    return (executor as unknown as {
+      send(method: string, args: unknown[]): PdfTask<PdfFontDiagnostic[]>;
+    }).send('getFontDiagnostics', []).toPromise();
+  }
 }
 
 export function usePdfRuntime(options: {
   wasmUrl: string;
-  fontFallback: FontFallbackConfig | null;
+  fontFallback: PdfFontFallbackConfig | null;
   defaultImageType: ImageConversionTypes;
 }) {
   const [state, setState] = useState<{
