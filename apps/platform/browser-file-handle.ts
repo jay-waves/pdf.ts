@@ -4,12 +4,9 @@ import type { PdfFileHandle } from './types';
 
 const FILE_HANDLES_KEY = 'pdf-ts-file-handles-v3';
 type FileHandleStore = Record<string, FileSystemFileHandle>;
-type LegacyFileHandleStore = Record<string, { handle?: FileSystemFileHandle }>;
 
-export async function readStoredFileHandle(key: string, legacyStoreKey?: string) {
-  const current = (await get<FileHandleStore>(FILE_HANDLES_KEY))?.[key];
-  if (current || !legacyStoreKey) return current;
-  return (await get<LegacyFileHandleStore>(legacyStoreKey))?.[key]?.handle;
+export async function readStoredFileHandle(key: string) {
+  return (await get<FileHandleStore>(FILE_HANDLES_KEY))?.[key];
 }
 
 async function storeFileHandle(key: string, handle: FileSystemFileHandle) {

@@ -9,7 +9,6 @@ import {
 import { translateWithModelDownload } from './browser-translation';
 import type { PdfFileHandle, ViewerPlatform } from './types';
 
-const LEGACY_FILE_HANDLES_KEY = 'embedpdf-file-handles-v2';
 let activeDocumentUrl: string | undefined;
 let googleTranslateTabId: number | undefined;
 interface ChromeTab {
@@ -74,7 +73,7 @@ class ChromePdfFileHandle implements PdfFileHandle {
       return this.nativeHandle;
     }
 
-    const storedHandle = await readStoredFileHandle(this.sourceUrl, LEGACY_FILE_HANDLES_KEY);
+    const storedHandle = await readStoredFileHandle(this.sourceUrl);
     if (storedHandle && await verifyFilePermission(storedHandle, 'readwrite', true)) {
       this.nativeHandle = storedHandle;
       return storedHandle;

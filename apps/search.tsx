@@ -2,14 +2,14 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
   type HTMLAttributes,
 } from 'react';
 import { useDocumentState } from '@embedpdf/core/react';
 import { MatchFlag, type SearchResult } from '@embedpdf/models';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react';
+import { useStore } from 'zustand';
 import { ControlButton, Tooltip } from './components';
-import type { PdfSearch } from './pdf-search';
+import { pdfSearchStore } from './pdf-search';
 import type { PdfScroll } from './pdf-scroll';
 import styles from './search.module.css';
 
@@ -17,17 +17,15 @@ const HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38
 const ACTIVE_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-danger-primary) 62%, transparent)';
 
 export function SearchLayer({
-  search,
   documentId,
   pageIndex,
   style,
   ...props
 }: HTMLAttributes<HTMLDivElement> & {
-  search: PdfSearch;
   documentId: string;
   pageIndex: number;
 }) {
-  const state = useSyncExternalStore(search.subscribe, search.getSnapshot);
+  const state = useStore(pdfSearchStore);
   const scale = useDocumentState(documentId)?.scale ?? 1;
   if (state.documentId !== documentId || !state.results.length) return null;
 
@@ -72,28 +70,27 @@ function scrollToResult(
 }
 
 export function Search({
-  search,
   scroll,
   documentId,
   onSearch,
 }: {
-  search: PdfSearch;
   scroll?: PdfScroll | null;
   documentId?: string | null;
   onSearch(): void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
-  const state = useSyncExternalStore(search.subscribe, search.getSnapshot);
+  const state = useStore(pdfSearchStore);
+  const { clear, move, run, setDocument, toggleFlag: toggleSearchFlag } = state;
   const canSearch = Boolean(documentId);
   const total = state.results.length;
 
   useEffect(() => {
     if (!documentId) return;
-    search.setDocument(documentId);
-    setQuery(search.getSnapshot().query);
-    return () => search.clear();
-  }, [documentId, search]);
+    setDocument(documentId);
+    setQuery(pdfSearchStore.getState().query);
+    return clear;
+  }, [clear, documentId, setDocument]);
 
   useEffect(() => {
     if (!canSearch) return;
@@ -110,16 +107,16 @@ export function Search({
 
   const runSearch = () => {
     if (canSearch && query.trim()) onSearch();
-    search.run(query, state.flags, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
+    run(query, state.flags, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
   };
   const clearSearch = () => {
     setQuery('');
-    search.clear();
+    clear();
     inputRef.current?.focus();
   };
   const toggleFlag = (flag: MatchFlag) => {
     if (canSearch && query.trim()) onSearch();
-    search.toggleFlag(flag, query, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
+    toggleSearchFlag(flag, query, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
   };
 
   return (
@@ -127,7 +124,7 @@ export function Search({
       <Tooltip content="Previous result">
         <ControlButton
           className={styles.button}
-          onClick={() => search.move(-1)}
+          onClick={() => move(-1)}
           disabled={!total}
           aria-label="Previous result"
         >
@@ -140,7 +137,7 @@ export function Search({
       <Tooltip content="Next result">
         <ControlButton
           className={styles.button}
-          onClick={() => search.move(1)}
+          onClick={() => move(1)}
           disabled={!total}
           aria-label="Next result"
         >

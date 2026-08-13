@@ -11,8 +11,8 @@ import {
   type HTMLAttributes,
   type ImgHTMLAttributes,
 } from 'react';
-import { viewerDiagnostics } from './viewer-diagnostics';
-import { startupLog } from './startup-log';
+import { recordRenderTiming } from './viewer-diagnostics';
+import { completeStartupLog, writeStartupLogOnce } from './startup-log';
 
 function useRenderUrl(
   start: () => PdfTask<Blob> | null,
@@ -38,9 +38,9 @@ function useRenderUrl(
     task.wait((blob) => {
       settled = true;
       const elapsed = performance.now() - startedAt;
-      viewerDiagnostics.record(kind, elapsed);
+      recordRenderTiming(kind, elapsed);
       if (kind === 'base') {
-        startupLog.once('first-raster-generated', 'Page raster generated', `${elapsed.toFixed(0)} ms`);
+        writeStartupLogOnce('first-raster-generated', 'Page raster generated', `${elapsed.toFixed(0)} ms`);
       }
       const nextUrl = URL.createObjectURL(blob);
       urlRef.current = nextUrl;
@@ -85,7 +85,7 @@ export function RasterLayer({
   const [imageUrl, releaseImage] = useRenderUrl(start, 'base', 'Raster layer changed');
 
   useEffect(() => {
-    startupLog.once(
+    writeStartupLogOnce(
       'first-raster',
       'Rendering first visible page',
       `page ${pageIndex + 1} · DPR ${dpr}`,
@@ -101,7 +101,7 @@ export function RasterLayer({
       onLoad={(event) => {
         releaseImage();
         onLoad?.(event);
-        startupLog.complete('First page ready', `page ${pageIndex + 1}`);
+        completeStartupLog('First page ready', `page ${pageIndex + 1}`);
       }}
     />
   );

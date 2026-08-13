@@ -44,7 +44,6 @@ import {
   getStoredToolbarPinned,
   setStoredToolbarPinned,
 } from './theme';
-import type { PdfSearch } from './pdf-search';
 import { Search } from './search';
 import { useViewerActivityAutoHide } from './components/use-auto-hide';
 import type {
@@ -76,7 +75,6 @@ interface ToolbarFeedback extends ViewerCapabilityFeedback {
 }
 
 interface ToolbarProps {
-  search: PdfSearch;
   scroll?: PdfScroll | null;
   feedback: ToolbarFeedback;
   dispatch: ViewerCommandDispatch;
@@ -190,7 +188,6 @@ function ZoomControl({
 }
 
 export function Toolbar({
-  search,
   scroll,
   feedback: {
     documentId,
@@ -519,7 +516,6 @@ export function Toolbar({
 
         {activeSection === 'search' ? renderSection('Search toolbar', (
           <Search
-            search={search}
             scroll={scroll}
             documentId={documentId}
             onSearch={pinForSearch}

@@ -1,11 +1,13 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
+import { useStore } from 'zustand';
 import { Dialog, PanelContent, Select } from './components';
 import {
   getEffectiveRenderDpr,
   getSystemDpr,
   PDF_TILE_SIZE_CSS_PX,
   sampleRasterPixels,
-  viewerDiagnostics,
+  setRenderDprMode,
+  viewerDiagnosticsStore,
   type RenderDprMode,
 } from './viewer-diagnostics';
 import {
@@ -17,7 +19,6 @@ import {
 import type { PdfRuntime } from './pdf-engine';
 import styles from './developer-dialog.module.css';
 
-const NO_SUBSCRIBE = () => () => undefined;
 
 const DPR_OPTIONS: Array<{ value: RenderDprMode; label: string }> = [
   { value: 'auto', label: 'Auto (max 1.75x)' },
@@ -46,21 +47,15 @@ function formatTiming({ count, last, average }: {
 export function DeveloperDialog({
   open,
   pdfium,
-  dprMode,
-  onDprModeChange,
   onClose,
 }: {
   open: boolean;
   pdfium: PdfRuntime;
-  dprMode: RenderDprMode;
-  onDprModeChange(mode: RenderDprMode): void;
   onClose(): void;
 }) {
   const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
-  const snapshot = useSyncExternalStore(
-    open ? viewerDiagnostics.subscribe : NO_SUBSCRIBE,
-    viewerDiagnostics.getSnapshot,
-  );
+  const snapshot = useStore(viewerDiagnosticsStore);
+  const dprMode = snapshot.renderDprMode;
   const dpr = getEffectiveRenderDpr(dprMode);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
 
@@ -148,7 +143,7 @@ export function DeveloperDialog({
               value={dprMode}
               options={DPR_OPTIONS}
               label="Device Pixel Ratio"
-              onValueChange={(value) => onDprModeChange(value as RenderDprMode)}
+              onValueChange={(value) => setRenderDprMode(value as RenderDprMode)}
             />
           </div>
           <p className={styles.hint}>

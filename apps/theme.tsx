@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createStore } from 'zustand/vanilla';
 import { platform } from '#platform';
 import type { PdfRenderTheme } from './pdf-render-theme';
 
@@ -101,13 +101,9 @@ type ViewerThemeSettings = {
   dark: DarkViewerTheme;
 };
 
-const THEME_STORAGE_KEY = 'pdf-viewer-theme-v1';
 const LIGHT_THEME_STORAGE_KEY = 'pdf-viewer-light-theme-v2';
 const DARK_THEME_STORAGE_KEY = 'pdf-viewer-dark-theme-v2';
 const TOOLBAR_PIN_STORAGE_KEY = 'pdf-toolbar-pinned-v1';
-export const VIEWER_THEME_CHANGE_EVENT = 'pdf-ts-viewer-theme-change';
-let viewerThemeSettings: ViewerThemeSettings | null = null;
-let manualColorMode: ViewerColorMode | null = null;
 
 function findViewerTheme(value: unknown) {
   return typeof value === 'string'
@@ -145,28 +141,26 @@ function loadViewerThemeSettings(): ViewerThemeSettings {
     return { light: 'light', dark: 'dark' };
   }
 
-  const legacyTheme = findViewerTheme(platform.getPreference(THEME_STORAGE_KEY))?.id ?? 'light';
   const storedLight = platform.getPreference(LIGHT_THEME_STORAGE_KEY);
   const storedDark = platform.getPreference(DARK_THEME_STORAGE_KEY);
-  const light = isLightViewerTheme(storedLight)
-    ? storedLight
-    : isLightViewerTheme(legacyTheme) ? legacyTheme : 'light';
-  const dark = isDarkViewerThemeValue(storedDark)
-    ? storedDark
-    : isDarkViewerThemeValue(legacyTheme) ? legacyTheme : 'dark';
+  const light = isLightViewerTheme(storedLight) ? storedLight : 'light';
+  const dark = isDarkViewerThemeValue(storedDark) ? storedDark : 'dark';
   return { light, dark };
 }
 
-function getThemeSettings() {
-  if (!viewerThemeSettings) {
-    viewerThemeSettings = loadViewerThemeSettings();
-  }
-  return viewerThemeSettings;
+function getInitialViewerTheme(): ViewerTheme {
+  return findViewerTheme(document.documentElement.dataset.viewerTheme)?.id ?? 'light';
 }
 
-export function getViewerThemeSettings(): ViewerThemeSettings {
-  return { ...getThemeSettings() };
-}
+export const viewerThemeStore = createStore<{
+  theme: ViewerTheme;
+  settings: ViewerThemeSettings;
+  manualColorMode: ViewerColorMode | null;
+}>(() => ({
+  theme: getInitialViewerTheme(),
+  settings: loadViewerThemeSettings(),
+  manualColorMode: null,
+}));
 
 export function supportsViewerThemeSettings() {
   return platform.viewerThemePolicy !== 'host';
@@ -176,26 +170,8 @@ export function getPdfRenderTheme(theme: ViewerTheme): PdfRenderTheme | null {
   return findViewerTheme(theme)?.renderTheme ?? null;
 }
 
-export function getCurrentViewerTheme(): ViewerTheme {
-  return findViewerTheme(document.documentElement.dataset.viewerTheme)?.id ?? 'light';
-}
-
 export function isDarkViewerTheme(theme: ViewerTheme) {
   return findViewerTheme(theme)?.colorMode === 'dark';
-}
-
-export function useViewerTheme() {
-  const [theme, setTheme] = useState(getCurrentViewerTheme);
-
-  useEffect(() => {
-    const sync = (event: Event) => {
-      setTheme((event as CustomEvent<{ theme: ViewerTheme }>).detail.theme);
-    };
-    window.addEventListener(VIEWER_THEME_CHANGE_EVENT, sync);
-    return () => window.removeEventListener(VIEWER_THEME_CHANGE_EVENT, sync);
-  }, []);
-
-  return theme;
 }
 
 function getSystemColorMode(media: MediaQueryList): ViewerColorMode {
@@ -212,31 +188,29 @@ function getSystemColorMode(media: MediaQueryList): ViewerColorMode {
 
 function applyViewerTheme(theme: ViewerTheme) {
   const metadata = findViewerTheme(theme);
-  const changed = document.documentElement.dataset.viewerTheme !== theme;
   document.documentElement.dataset.viewerTheme = theme;
   document.documentElement.dataset.viewerColorMode = metadata?.colorMode ?? 'light';
-  if (changed) {
-    window.dispatchEvent(new CustomEvent(VIEWER_THEME_CHANGE_EVENT, { detail: { theme } }));
-  }
+  viewerThemeStore.setState({ theme });
 }
 
 function applyViewerColorMode(mode: ViewerColorMode) {
-  applyViewerTheme(getThemeSettings()[mode]);
+  applyViewerTheme(viewerThemeStore.getState().settings[mode]);
 }
 
 export function setViewerThemeSettings(settings: ViewerThemeSettings) {
   if (!supportsViewerThemeSettings()) return;
-  viewerThemeSettings = { ...settings };
+  viewerThemeStore.setState({ settings: { ...settings } });
   platform.setPreference(LIGHT_THEME_STORAGE_KEY, settings.light);
   platform.setPreference(DARK_THEME_STORAGE_KEY, settings.dark);
 
   const media = window.matchMedia('(prefers-color-scheme: dark)');
-  applyViewerColorMode(manualColorMode ?? getSystemColorMode(media));
+  applyViewerColorMode(viewerThemeStore.getState().manualColorMode ?? getSystemColorMode(media));
 }
 
 export function toggleViewerColorMode() {
   if (!supportsViewerThemeSettings()) return;
-  manualColorMode = isDarkViewerTheme(getCurrentViewerTheme()) ? 'light' : 'dark';
+  const manualColorMode = isDarkViewerTheme(viewerThemeStore.getState().theme) ? 'light' : 'dark';
+  viewerThemeStore.setState({ manualColorMode });
   applyViewerColorMode(manualColorMode);
 }
 
@@ -245,7 +219,7 @@ export function initializeViewerTheme() {
   applyViewerColorMode(getSystemColorMode(media));
 
   const syncAutomaticTheme = () => {
-    manualColorMode = null;
+    viewerThemeStore.setState({ manualColorMode: null });
     applyViewerColorMode(getSystemColorMode(media));
   };
   media.addEventListener('change', syncAutomaticTheme);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { useStore } from 'zustand';
 import type { PluginRegistry } from '@embedpdf/core';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import type { FormCapability } from '@embedpdf/plugin-form';
@@ -15,13 +16,13 @@ import {
   type OutlineCache,
 } from './outline';
 import { BottomNav } from './bottom-navigation';
-import { PdfSearch } from './pdf-search';
+import { pdfSearchStore } from './pdf-search';
 import { PdfScroll } from './pdf-scroll';
 import {
   initializeViewerTheme,
   isDarkViewerTheme,
   supportsViewerThemeSettings,
-  useViewerTheme,
+  viewerThemeStore,
 } from './theme';
 import { Toolbar } from './toolbar';
 import { Thumbnails } from './thumbnails';
@@ -61,12 +62,10 @@ import {
 import styles from './viewer.module.css';
 import {
   getEffectiveRenderDpr,
-  getRenderDprMode,
   installErrorDiagnostics,
   installRenderDprOverride,
-  setRenderDprMode,
-  viewerDiagnostics,
-  type RenderDprMode,
+  resetViewerDiagnostics,
+  viewerDiagnosticsStore,
 } from './viewer-diagnostics';
 import { DOCUMENT_ID } from './viewer-document';
 import {
@@ -76,7 +75,14 @@ import {
   useViewerController,
 } from './viewer-controller';
 import { PDFIUM_FONT_FALLBACK } from './fonts';
-import { StartupLogScreen, startupLog } from './startup-log';
+import {
+  beginStartupLog,
+  completeStartupLog,
+  failStartupLog,
+  StartupLogScreen,
+  writeStartupInfo,
+  writeStartupLogOnce,
+} from './startup-log';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 
@@ -148,16 +154,15 @@ function App({
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [pdfScroll, setPdfScroll] = useState<PdfScroll | null>(null);
   const [viewerUi, dispatchViewerUi] = useReducer(reduceViewerUi, INITIAL_VIEWER_UI);
-  const [dprMode, setDprMode] = useState<RenderDprMode>(getRenderDprMode);
+  const dprMode = useStore(viewerDiagnosticsStore, (state) => state.renderDprMode);
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
     bookmarks: [],
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
-  const search = useMemo(() => new PdfSearch(pdfium), [pdfium]);
   const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
-  const viewerTheme = useViewerTheme();
+  const viewerTheme = useStore(viewerThemeStore, (state) => state.theme);
   const { isDirty, saveDocument, setDirty } = useDocumentPersistence({
     engine,
     registry,
@@ -204,9 +209,13 @@ function App({
     return () => {
       registryCleanupRef.current?.();
       registryCleanupRef.current = null;
-      search.dispose();
+      pdfSearchStore.getState().dispose();
     };
-  }, [search]);
+  }, []);
+
+  useEffect(() => {
+    pdfSearchStore.getState().attach(pdfium);
+  }, [pdfium]);
 
   const initializePlugins = useCallback(async (nextRegistry: PluginRegistry) => {
     registryCleanupRef.current?.();
@@ -218,8 +227,8 @@ function App({
     setOutlineCache({ status: 'idle', bookmarks: [] });
     setDocumentView(INITIAL_DOCUMENT_VIEW);
     dispatchViewerUi({ type: 'ui/reset' });
-    viewerDiagnostics.resetRendering();
-    search.clear();
+    resetViewerDiagnostics();
+    pdfSearchStore.getState().clear();
     setDirty(false);
 
     const installers = [
@@ -246,7 +255,7 @@ function App({
     ];
 
     registryCleanupRef.current = installAll(installers);
-  }, [dispatchCommand, documentKey, pdfium, search, setDirty]);
+  }, [dispatchCommand, documentKey, pdfium, setDirty]);
 
   const toolbarFeedback = {
     ...capabilityFeedback,
@@ -268,7 +277,6 @@ function App({
         registry={registry}
         panMode={panMode}
         renderThemeVersion={renderThemeVersion}
-        search={search}
         scroll={pdfScroll}
         documentResource={documentResource}
         onInitialized={initializePlugins}
@@ -276,7 +284,6 @@ function App({
         renderDpr={getEffectiveRenderDpr(dprMode)}
       />
       <Toolbar
-        search={search}
         scroll={pdfScroll}
         feedback={toolbarFeedback}
         dispatch={dispatchCommand}
@@ -374,11 +381,6 @@ function App({
       <DeveloperDialog
         open={activeDialog === 'developer'}
         pdfium={pdfium}
-        dprMode={dprMode}
-        onDprModeChange={(nextMode) => {
-          setRenderDprMode(nextMode);
-          setDprMode(nextMode);
-        }}
         onClose={closeOverlay}
       />
       <BottomNav
@@ -478,7 +480,7 @@ function useViewerResources() {
 
   useEffect(() => {
     let cancelled = false;
-    startupLog.once('viewer-resources', 'Loading viewer resources');
+    writeStartupLogOnce('viewer-resources', 'Loading viewer resources');
     platform.loadViewerResources(BUNDLED_PDFIUM_WASM_URL).then((loaded) => {
       trackResource(loaded.wasm);
       trackResource(loaded.document?.resource);
@@ -486,7 +488,7 @@ function useViewerResources() {
         releaseResource(loaded.wasm);
         releaseResource(loaded.document?.resource);
       } else {
-        startupLog.info(
+        writeStartupInfo(
           'Viewer resources ready',
           loaded.document ? 'PDF source attached' : 'waiting for a document',
         );
@@ -495,7 +497,7 @@ function useViewerResources() {
     }).catch((reason: unknown) => {
       if (!cancelled) {
         const nextError = reason instanceof Error ? reason : new Error(String(reason));
-        startupLog.error('Unable to load viewer resources', nextError.message);
+        failStartupLog('Unable to load viewer resources', nextError.message);
         setError(nextError);
       }
     });
@@ -557,15 +559,15 @@ function ReadyViewer({
 
   useEffect(() => {
     if (pdfium && platform.openLocalDocument && !resources.document) {
-      startupLog.complete('Viewer ready', 'choose a PDF document');
+      completeStartupLog('Viewer ready', 'choose a PDF document');
     }
   }, [pdfium, resources.document]);
 
   if (platform.openLocalDocument && !resources.document) {
     const openLocalDocument = platform.openLocalDocument;
     const useDocument = (document: NonNullable<ViewerResources['document']>) => {
-      startupLog.begin(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
-      startupLog.info('Local document selected', document.name ?? 'PDF document');
+      beginStartupLog(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
+      writeStartupInfo('Local document selected', document.name ?? 'PDF document');
       trackResource(document.resource);
       setResources({ ...resources, document });
     };
@@ -601,8 +603,8 @@ function ReadyViewer({
 initializeViewerTheme();
 installErrorDiagnostics();
 installRenderDprOverride();
-startupLog.begin(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
-startupLog.info('Viewer environment ready', navigator.platform || 'Web');
+beginStartupLog(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
+writeStartupInfo('Viewer environment ready', navigator.platform || 'Web');
 
 createRoot(document.getElementById('root')!).render(
   <TooltipProvider>

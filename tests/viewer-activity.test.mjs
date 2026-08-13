@@ -2,31 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { viewerActivity } from '../apps/viewer-activity.ts';
 
-test('viewer activity exposes structured current and last activity', () => {
-  assert.deepEqual(viewerActivity.getSnapshot(), {
-    source: null,
-    path: [],
-    active: false,
-  });
-
+test('viewer activity emits a structured session event stream', () => {
+  const events = [];
+  const unsubscribe = viewerActivity.onEvent((event) => events.push(event));
   const session = viewerActivity.begin('Mouse', ['Viewport', 'Pan']);
-  assert.deepEqual(viewerActivity.getSnapshot(), {
-    source: 'Mouse',
-    path: ['Viewport', 'Pan'],
-    active: true,
-  });
-
   session.update(['Viewport', 'Pan', 'Inertia']);
-  assert.deepEqual(viewerActivity.getSnapshot(), {
-    source: 'Mouse',
-    path: ['Viewport', 'Pan', 'Inertia'],
-    active: true,
-  });
-
   session.end();
-  assert.deepEqual(viewerActivity.getSnapshot(), {
-    source: 'Mouse',
-    path: ['Viewport', 'Pan', 'Inertia'],
-    active: false,
-  });
+  unsubscribe();
+
+  assert.deepEqual(events.map(({ id: _id, ...event }) => event), [
+    { phase: 'start', source: 'Mouse', path: ['Viewport', 'Pan'], audience: 'all' },
+    { phase: 'update', source: 'Mouse', path: ['Viewport', 'Pan', 'Inertia'], audience: 'all' },
+    { phase: 'end', source: 'Mouse', path: ['Viewport', 'Pan', 'Inertia'], audience: 'all' },
+  ]);
 });

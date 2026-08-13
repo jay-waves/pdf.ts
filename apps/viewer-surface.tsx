@@ -30,7 +30,6 @@ import {
   themeUnderlineRenderer,
 } from './theme-highlight-renderer';
 import type { ManagedResource } from './platform/types';
-import type { PdfSearch } from './pdf-search';
 import type { PdfScroll } from './pdf-scroll';
 import { SearchLayer } from './search';
 import { ViewerViewport } from './viewer-viewport';
@@ -40,7 +39,7 @@ import { RasterLayer, TileLayer } from './viewer-render-layers';
 import { DOCUMENT_ID } from './viewer-document';
 import './viewer-surface.css';
 import styles from './viewer.module.css';
-import { startupLog } from './startup-log';
+import { completeStartupLog, failStartupLog, writeStartupLogOnce } from './startup-log';
 
 export const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_OVERLAP_PX = 2;
@@ -65,17 +64,17 @@ function StartupDocumentStatus({
 }) {
   useEffect(() => {
     if (status === 'loading') {
-      startupLog.once('document-loading', 'Opening PDF document');
+      writeStartupLogOnce('document-loading', 'Opening PDF document');
     } else if (status === 'loaded') {
-      startupLog.once(
+      writeStartupLogOnce(
         'document-opened',
         'Document opened',
         pageCount ? `${pageCount} pages` : undefined,
       );
     } else if (errorCode === PdfErrorCode.Password) {
-      startupLog.complete('Document requires a password');
+      completeStartupLog('Document requires a password');
     } else {
-      startupLog.error('Unable to open PDF document');
+      failStartupLog('Unable to open PDF document');
     }
   }, [errorCode, pageCount, status]);
   return null;
@@ -131,7 +130,6 @@ function PdfPageLayers({
   width,
   height,
   renderThemeVersion,
-  search,
   renderDpr,
 }: {
   documentId: string;
@@ -139,7 +137,6 @@ function PdfPageLayers({
   width: number;
   height: number;
   renderThemeVersion: number;
-  search: PdfSearch;
   renderDpr: number;
 }) {
   return (
@@ -173,7 +170,6 @@ function PdfPageLayers({
           className="pdf-page-tiling-layer"
         />
         <SearchLayer
-          search={search}
           documentId={documentId}
           pageIndex={pageIndex}
         />
@@ -200,7 +196,6 @@ function LoadedPdfDocument({
   documentId,
   panMode,
   renderThemeVersion,
-  search,
   scroll,
   resource,
   onResourceConsumed,
@@ -209,7 +204,6 @@ function LoadedPdfDocument({
   documentId: string;
   panMode: boolean;
   renderThemeVersion: number;
-  search: PdfSearch;
   scroll?: PdfScroll | null;
   resource?: ManagedResource;
   onResourceConsumed(resource?: ManagedResource): void;
@@ -236,7 +230,6 @@ function LoadedPdfDocument({
               width={width}
               height={height}
               renderThemeVersion={renderThemeVersion}
-              search={search}
               renderDpr={renderDpr}
             />
           )}
@@ -251,7 +244,6 @@ export const PdfSurface = memo(function PdfSurface({
   registry,
   panMode,
   renderThemeVersion,
-  search,
   scroll,
   documentResource,
   onInitialized,
@@ -262,7 +254,6 @@ export const PdfSurface = memo(function PdfSurface({
   registry?: PluginRegistry;
   panMode: boolean;
   renderThemeVersion: number;
-  search: PdfSearch;
   scroll?: PdfScroll | null;
   documentResource?: ManagedResource;
   onInitialized(registry: PluginRegistry): Promise<void>;
@@ -299,7 +290,6 @@ export const PdfSurface = memo(function PdfSurface({
                   documentId={documentId}
                   panMode={panMode}
                   renderThemeVersion={renderThemeVersion}
-                  search={search}
                   scroll={scroll}
                   resource={documentResource}
                   onResourceConsumed={onResourceConsumed}

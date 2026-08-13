@@ -6,143 +6,134 @@ import {
   type SearchAllPagesResult,
   type SearchResult,
 } from '@embedpdf/models';
+import { createStore } from 'zustand/vanilla';
 import type { PdfRuntime } from './pdf-engine';
 
-interface PdfSearchState {
+export interface PdfSearchState {
   documentId: string | null;
   query: string;
   flags: MatchFlag[];
   results: SearchResult[];
   activeResultIndex: number;
   loading: boolean;
+  attach(pdfium: PdfRuntime): void;
+  setDocument(documentId: string | null): void;
+  clear(): void;
+  run(query: string, flags?: MatchFlag[], nearPage?: number): void;
+  toggleFlag(flag: MatchFlag, query?: string, nearPage?: number): void;
+  move(direction: -1 | 1): void;
+  dispose(): void;
 }
 
-const EMPTY_SEARCH: PdfSearchState = {
+const EMPTY_SEARCH = {
   documentId: null,
   query: '',
-  flags: [],
-  results: [],
+  flags: [] as MatchFlag[],
+  results: [] as SearchResult[],
   activeResultIndex: -1,
   loading: false,
 };
 
-/** A small observable around PDFium's search task, shared by the toolbar and page layers. */
-export class PdfSearch {
-  private state = EMPTY_SEARCH;
-  private task: PdfTask<SearchAllPagesResult, PdfPageSearchProgress> | null = null;
-  private listeners = new Set<() => void>();
+export function createPdfSearchStore() {
+  let pdfium: PdfRuntime | null = null;
+  let task: PdfTask<SearchAllPagesResult, PdfPageSearchProgress> | null = null;
 
-  constructor(private readonly pdfium: PdfRuntime) {}
-
-  readonly subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+  const cancel = (message: string) => {
+    const current = task;
+    task = null;
+    current?.abort({ code: PdfErrorCode.Cancelled, message });
   };
 
-  readonly getSnapshot = () => this.state;
+  return createStore<PdfSearchState>((set, get) => {
+    const clear = () => {
+      cancel('search cleared');
+      const { documentId, flags } = get();
+      set({ ...EMPTY_SEARCH, documentId, flags });
+    };
 
-  setDocument(documentId: string | null) {
-    if (this.state.documentId === documentId) return;
-    this.cancel('document changed');
-    this.publish({ ...EMPTY_SEARCH, documentId, flags: this.state.flags });
-  }
+    const run: PdfSearchState['run'] = (query, flags = get().flags, nearPage = 0) => {
+      const { documentId } = get();
+      const keyword = query.trim();
+      if (!pdfium || !documentId || !keyword) {
+        clear();
+        return;
+      }
 
-  clear() {
-    this.cancel('search cleared');
-    this.publish({
-      ...EMPTY_SEARCH,
-      documentId: this.state.documentId,
-      flags: this.state.flags,
-    });
-  }
+      cancel('new search');
+      set({ query: keyword, flags, results: [], activeResultIndex: -1, loading: true });
 
-  run(query: string, flags = this.state.flags, nearPage = 0) {
-    const documentId = this.state.documentId;
-    const keyword = query.trim();
-    if (!documentId || !keyword) {
-      this.clear();
-      return;
-    }
-
-    this.cancel('new search');
-    this.publish({
-      ...this.state,
-      query: keyword,
-      flags,
-      results: [],
-      activeResultIndex: -1,
-      loading: true,
-    });
-
-    try {
-      const task = this.pdfium.withDocument(documentId, (engine, document) => (
-        engine.searchAllPages(document, keyword, { flags })
-      ));
-      this.task = task;
-      task.onProgress(({ results }) => {
-        if (this.task === task && results.length) {
-          this.publish({ ...this.state, results: [...this.state.results, ...results] });
-        }
-      });
-      task.wait(
-        ({ results }) => {
-          if (this.task !== task) return;
-          this.task = null;
-          this.publish({
-            ...this.state,
-            results,
-            activeResultIndex: findNearestResult(results, nearPage),
-            loading: false,
-          });
-        },
-        (error) => {
-          if (this.task !== task) return;
-          this.task = null;
-          if (error.reason.code !== PdfErrorCode.Cancelled) {
-            console.error('[pdf-ts] PDF search failed', error);
-            this.publish({ ...this.state, results: [], activeResultIndex: -1, loading: false });
+      try {
+        const current = pdfium.withDocument(documentId, (engine, document) => (
+          engine.searchAllPages(document, keyword, { flags })
+        ));
+        task = current;
+        current.onProgress(({ results }) => {
+          if (task === current && results.length) {
+            set((state) => ({ results: [...state.results, ...results] }));
           }
-        },
-      );
-    } catch (error) {
-      console.error('[pdf-ts] failed to start PDF search', error);
-      this.publish({ ...this.state, loading: false });
-    }
-  }
+        });
+        current.wait(
+          ({ results }) => {
+            if (task !== current) return;
+            task = null;
+            set({ results, activeResultIndex: findNearestResult(results, nearPage), loading: false });
+          },
+          (error) => {
+            if (task !== current) return;
+            task = null;
+            if (error.reason.code !== PdfErrorCode.Cancelled) {
+              console.error('[pdf-ts] PDF search failed', error);
+              set({ results: [], activeResultIndex: -1, loading: false });
+            }
+          },
+        );
+      } catch (error) {
+        console.error('[pdf-ts] failed to start PDF search', error);
+        set({ loading: false });
+      }
+    };
 
-  toggleFlag(flag: MatchFlag, query = this.state.query, nearPage = 0) {
-    const flags = this.state.flags.includes(flag)
-      ? this.state.flags.filter((item) => item !== flag)
-      : [...this.state.flags, flag];
-    if (query.trim()) this.run(query, flags, nearPage);
-    else this.publish({ ...this.state, flags });
-  }
-
-  move(direction: -1 | 1) {
-    const { results, activeResultIndex } = this.state;
-    if (!results.length) return;
-    const index = direction > 0
-      ? (activeResultIndex + 1) % results.length
-      : (activeResultIndex <= 0 ? results.length : activeResultIndex) - 1;
-    this.publish({ ...this.state, activeResultIndex: index });
-  }
-
-  dispose() {
-    this.cancel('search disposed');
-    this.listeners.clear();
-  }
-
-  private cancel(message: string) {
-    const task = this.task;
-    this.task = null;
-    task?.abort({ code: PdfErrorCode.Cancelled, message });
-  }
-
-  private publish(state: PdfSearchState) {
-    this.state = state;
-    for (const listener of this.listeners) listener();
-  }
+    return {
+      ...EMPTY_SEARCH,
+      attach(nextPdfium) {
+        if (pdfium === nextPdfium) return;
+        cancel('PDF runtime changed');
+        pdfium = nextPdfium;
+        set(EMPTY_SEARCH);
+      },
+      setDocument(documentId) {
+        if (get().documentId === documentId) return;
+        cancel('document changed');
+        set({ ...EMPTY_SEARCH, documentId, flags: get().flags });
+      },
+      clear,
+      run,
+      toggleFlag(flag, query = get().query, nearPage = 0) {
+        const flags = get().flags.includes(flag)
+          ? get().flags.filter((item) => item !== flag)
+          : [...get().flags, flag];
+        if (query.trim()) run(query, flags, nearPage);
+        else set({ flags });
+      },
+      move(direction) {
+        const { results, activeResultIndex } = get();
+        if (!results.length) return;
+        set({
+          activeResultIndex: direction > 0
+            ? (activeResultIndex + 1) % results.length
+            : (activeResultIndex <= 0 ? results.length : activeResultIndex) - 1,
+        });
+      },
+      dispose() {
+        cancel('search disposed');
+        pdfium = null;
+        set(EMPTY_SEARCH);
+      },
+    };
+  });
 }
+
+export const pdfSearchStore = createPdfSearchStore();
 
 function findNearestResult(results: SearchResult[], pageIndex: number) {
   if (!results.length) return -1;

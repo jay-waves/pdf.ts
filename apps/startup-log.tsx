@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useStore } from 'zustand';
+import { createStore } from 'zustand/vanilla';
 import { Dialog } from './components';
 
 export type StartupLogLevel = 'info' | 'warn' | 'error';
@@ -22,92 +24,71 @@ const REVEAL_DELAY_MS = 1000;
 const STARTUP_LOG_DEFAULT_OPEN = false;
 const MAX_ENTRIES = 24;
 
-class StartupLogger {
-  private listeners = new Set<() => void>();
-  private startedAt = performance.now();
-  private nextEntryId = 1;
-  private onceKeys = new Set<string>();
-  private snapshot: StartupLogSnapshot = {
-    session: 0,
-    title: 'PDF.ts',
-    state: 'ready',
-    entries: [],
-  };
+export const startupLogStore = createStore<StartupLogSnapshot>(() => ({
+  session: 0,
+  title: 'PDF.ts',
+  state: 'ready',
+  entries: [],
+}));
 
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
+let startedAt = performance.now();
+let nextEntryId = 1;
+const onceKeys = new Set<string>();
 
-  getSnapshot = () => this.snapshot;
-
-  begin(title = 'PDF.ts') {
-    this.startedAt = performance.now();
-    this.onceKeys.clear();
-    this.snapshot = {
-      session: this.snapshot.session + 1,
-      title,
-      state: 'running',
-      entries: [],
-    };
-    console.log(`[pdf-ts] ${title}`);
-    this.emit();
-  }
-
-  info(message: string, detail?: string) {
-    this.write('info', message, detail);
-  }
-
-  error(message: string, detail?: string) {
-    if (this.snapshot.state !== 'running') return;
-    this.append('error', message, detail);
-    this.snapshot = { ...this.snapshot, state: 'error' };
-    this.emit();
-  }
-
-  once(key: string, message: string, detail?: string, level: StartupLogLevel = 'info') {
-    if (this.snapshot.state !== 'running' || this.onceKeys.has(key)) return;
-    this.onceKeys.add(key);
-    this.write(level, message, detail);
-  }
-
-  complete(message: string, detail?: string) {
-    if (this.snapshot.state !== 'running') return;
-    this.append('info', message, detail);
-    this.snapshot = { ...this.snapshot, state: 'ready' };
-    this.emit();
-  }
-
-  write(level: StartupLogLevel, message: string, detail?: string) {
-    if (this.snapshot.state !== 'running') return;
-    this.append(level, message, detail);
-    this.emit();
-  }
-
-  private append(level: StartupLogLevel, message: string, detail?: string) {
-    const entry = {
-      id: this.nextEntryId++,
-      elapsed: performance.now() - this.startedAt,
-      level,
-      message,
-      detail,
-    };
-    const consoleMessage = detail ? `${message} · ${detail}` : message;
-    if (level === 'error') console.error('[pdf-ts]', consoleMessage);
-    else if (level === 'warn') console.warn('[pdf-ts]', consoleMessage);
-    else console.log('[pdf-ts]', consoleMessage);
-    this.snapshot = {
-      ...this.snapshot,
-      entries: [...this.snapshot.entries, entry].slice(-MAX_ENTRIES),
-    };
-  }
-
-  private emit() {
-    for (const listener of this.listeners) listener();
-  }
+function appendStartupLog(level: StartupLogLevel, message: string, detail?: string) {
+  const entry = { id: nextEntryId++, elapsed: performance.now() - startedAt, level, message, detail };
+  const consoleMessage = detail ? `${message} · ${detail}` : message;
+  if (level === 'error') console.error('[pdf-ts]', consoleMessage);
+  else if (level === 'warn') console.warn('[pdf-ts]', consoleMessage);
+  else console.log('[pdf-ts]', consoleMessage);
+  startupLogStore.setState((state) => ({
+    entries: [...state.entries, entry].slice(-MAX_ENTRIES),
+  }));
 }
 
-export const startupLog = new StartupLogger();
+export function beginStartupLog(title = 'PDF.ts') {
+  startedAt = performance.now();
+  onceKeys.clear();
+  startupLogStore.setState((state) => ({
+    session: state.session + 1,
+    title,
+    state: 'running',
+    entries: [],
+  }));
+  console.log(`[pdf-ts] ${title}`);
+}
+
+export function writeStartupLog(level: StartupLogLevel, message: string, detail?: string) {
+  if (startupLogStore.getState().state !== 'running') return;
+  appendStartupLog(level, message, detail);
+}
+
+export function writeStartupInfo(message: string, detail?: string) {
+  writeStartupLog('info', message, detail);
+}
+
+export function writeStartupLogOnce(
+  key: string,
+  message: string,
+  detail?: string,
+  level: StartupLogLevel = 'info',
+) {
+  if (startupLogStore.getState().state !== 'running' || onceKeys.has(key)) return;
+  onceKeys.add(key);
+  writeStartupLog(level, message, detail);
+}
+
+export function failStartupLog(message: string, detail?: string) {
+  if (startupLogStore.getState().state !== 'running') return;
+  appendStartupLog('error', message, detail);
+  startupLogStore.setState({ state: 'error' });
+}
+
+export function completeStartupLog(message: string, detail?: string) {
+  if (startupLogStore.getState().state !== 'running') return;
+  appendStartupLog('info', message, detail);
+  startupLogStore.setState({ state: 'ready' });
+}
 
 function formatEntry(entry: StartupLogEntry) {
   const prefix = entry.level === 'info' ? '' : `[${entry.level}] `;
@@ -115,7 +96,7 @@ function formatEntry(entry: StartupLogEntry) {
 }
 
 export function StartupLogScreen() {
-  const snapshot = useSyncExternalStore(startupLog.subscribe, startupLog.getSnapshot);
+  const snapshot = useStore(startupLogStore);
   const [visible, setVisible] = useState(STARTUP_LOG_DEFAULT_OPEN);
   const [dismissed, setDismissed] = useState(false);
   const detailsRef = useRef<HTMLTextAreaElement>(null);

@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
+import { useStore } from 'zustand';
 import {
   getViewerThemeOptions,
-  getViewerThemeSettings,
   isDarkViewerTheme,
   setViewerThemeSettings,
   type ViewerTheme,
-  useViewerTheme,
+  viewerThemeStore,
 } from './theme';
 import styles from './document-dialogs.module.css';
 import { DocumentDialog } from './document-dialog-shared';
@@ -69,16 +68,11 @@ function ThemeOptionRow<Option extends ViewerTheme>({
 }
 
 export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void }) {
-  const [settings, setSettings] = useState(getViewerThemeSettings);
-  const darkMode = isDarkViewerTheme(useViewerTheme());
-
-  useEffect(() => {
-    if (open) setSettings(getViewerThemeSettings());
-  }, [open]);
+  const { settings, theme } = useStore(viewerThemeStore);
+  const darkMode = isDarkViewerTheme(theme);
 
   const selectTheme = <Key extends keyof typeof settings>(key: Key, value: typeof settings[Key]) => {
     const nextSettings = { ...settings, [key]: value };
-    setSettings(nextSettings);
     setViewerThemeSettings(nextSettings);
   };
 

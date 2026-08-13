@@ -12,8 +12,14 @@ import type {
 } from '@embedpdf/models';
 import type { PdfRenderTheme } from './pdf-render-theme';
 import type { PdfFontDiagnostic, PdfFontFallbackConfig } from './fonts';
-import { getCurrentViewerTheme, getPdfRenderTheme } from './theme';
-import { startupLog, type StartupLogLevel } from './startup-log';
+import { getPdfRenderTheme, viewerThemeStore } from './theme';
+import {
+  failStartupLog,
+  writeStartupInfo,
+  writeStartupLog,
+  writeStartupLogOnce,
+  type StartupLogLevel,
+} from './startup-log';
 
 interface PdfIncrementalRevision {
   baseSize: number;
@@ -80,7 +86,7 @@ export function usePdfRuntime(options: {
   }>({ pdfium: null, isLoading: true, error: null });
 
   useEffect(() => {
-    startupLog.once('pdf-worker', 'Starting PDF worker');
+    writeStartupLogOnce('pdf-worker', 'Starting PDF worker');
     const worker = new Worker(new URL('./pdfium-worker.ts', import.meta.url), { type: 'module' });
     const handleStartupLog = (event: MessageEvent<unknown>) => {
       const message = event.data as {
@@ -90,7 +96,7 @@ export function usePdfRuntime(options: {
         detail?: string;
       };
       if (message.type !== 'startupLog' || !message.message) return;
-      startupLog.write(message.level ?? 'info', message.message, message.detail);
+      writeStartupLog(message.level ?? 'info', message.message, message.detail);
     };
     worker.addEventListener('message', handleStartupLog);
     const executor = new RemoteExecutor(worker, options);
@@ -109,7 +115,7 @@ export function usePdfRuntime(options: {
     let active = true;
     const fail: Parameters<typeof readyTask.wait>[1] = (failure) => {
       if (!active) return;
-      startupLog.error('Unable to initialize PDF engine', failure.reason.message);
+      failStartupLog('Unable to initialize PDF engine', failure.reason.message);
       setState({
         pdfium: null,
         isLoading: false,
@@ -118,13 +124,13 @@ export function usePdfRuntime(options: {
     };
     const finish = () => {
       if (active) {
-        startupLog.info('PDF engine ready');
+        writeStartupInfo('PDF engine ready');
         setState({ pdfium, isLoading: false, error: null });
       }
     };
 
     readyTask.wait(
-      () => setPdfRenderTheme(engine, getPdfRenderTheme(getCurrentViewerTheme())).wait(finish, fail),
+      () => setPdfRenderTheme(engine, getPdfRenderTheme(viewerThemeStore.getState().theme)).wait(finish, fail),
       fail,
     );
 

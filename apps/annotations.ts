@@ -19,7 +19,7 @@ import {
 } from '@embedpdf/plugin-annotation';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { getPluginCapability } from './utils';
-import { getCurrentViewerTheme, type ViewerTheme } from './theme';
+import { viewerThemeStore, type ViewerTheme } from './theme';
 
 // Appearance and palette configuration
 
@@ -67,7 +67,7 @@ const THEME_HIGHLIGHT_POLICIES: Record<ViewerTheme, ThemeHighlightPolicy> = {
   },
 };
 
-export function getThemeHighlightPolicy(theme = getCurrentViewerTheme()) {
+export function getThemeHighlightPolicy(theme = viewerThemeStore.getState().theme) {
   return THEME_HIGHLIGHT_POLICIES[theme];
 }
 
