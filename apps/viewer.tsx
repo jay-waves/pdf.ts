@@ -5,10 +5,7 @@ import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
 import './viewer.css';
-import {
-  EMPTY_CLEANUP,
-  getPluginCapability,
-} from './utils';
+import { getPluginCapability } from './utils';
 import { getFileNameFromUrl } from './url';
 import {
   Outline,
@@ -82,16 +79,18 @@ import { PDFIUM_FONT_FALLBACK } from './fonts';
 import { StartupLogScreen, startupLog } from './startup-log';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
-// The worker configuration is tracked by reference. Keep it module-stable so
-// ordinary React re-renders cannot tear down and recreate the WASM engine.
-function installAll(installers: Array<() => () => void>) {
+
+function installAll(installers: Array<() => (() => void) | undefined>) {
   const cleanups: Array<() => void> = [];
   const cleanup = () => {
     while (cleanups.length) cleanups.pop()!();
   };
 
   try {
-    for (const install of installers) cleanups.push(install());
+    for (const install of installers) {
+      const cleanup = install();
+      if (cleanup) cleanups.push(cleanup);
+    }
   } catch (error) {
     cleanup();
     throw error;
@@ -113,7 +112,7 @@ function installScrollAttribute(scroll: PdfScroll) {
 
 function installFormDirty(registry: PluginRegistry, onDirty: () => void) {
   const form = getPluginCapability<FormCapability>(registry, 'form');
-  return form?.onFieldValueChange(onDirty) ?? EMPTY_CLEANUP;
+  return form?.onFieldValueChange(onDirty);
 }
 
 interface AppProps {
@@ -195,7 +194,9 @@ function App({
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const registryCleanupRef = useRef<(() => void) | null>(null);
-  const closeOverlay = () => dispatchCommand({ type: 'ui/close-overlay' });
+  const closeOverlay = useCallback(() => {
+    dispatchCommand({ type: 'ui/close-overlay' });
+  }, [dispatchCommand]);
 
   useEffect(() => installViewerCommandKeys(dispatchCommand), [dispatchCommand]);
 
@@ -285,35 +286,36 @@ function App({
         onClose={closeOverlay}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
       >
-        <Thumbnails
-          registry={registry}
-          documentId={documentId}
-          dispatch={dispatchCommand}
-          open={documentPane === 'thumbnails'}
-          totalPages={totalPages}
-          currentPageNumber={currentPageNumber}
-          onClose={closeOverlay}
-        />
-        <Outline
-          registry={registry}
-          pdfium={pdfium}
-          documentId={documentId}
-          scroll={pdfScroll}
-          open={documentPane === 'outline'}
-          cache={outlineCache}
-          currentBookmarkKey={currentBookmarkKey}
-          onCacheChange={setOutlineCache}
-        />
-        <Comments
-          engine={engine}
-          registry={registry}
-          documentId={documentId}
-          scroll={pdfScroll}
-          open={documentPane === 'comments'}
-          currentPageNumber={currentPageNumber}
-          targetAnnotationId={commentTarget?.annotationId}
-          targetAnnotationIsNew={commentTarget?.isNew}
-        />
+        {documentPane === 'thumbnails' ? (
+          <Thumbnails
+            registry={registry}
+            documentId={documentId}
+            dispatch={dispatchCommand}
+            totalPages={totalPages}
+            currentPageNumber={currentPageNumber}
+          />
+        ) : null}
+        {documentPane === 'outline' ? (
+          <Outline
+            pdfium={pdfium}
+            documentId={documentId}
+            scroll={pdfScroll}
+            cache={outlineCache}
+            currentBookmarkKey={currentBookmarkKey}
+            onCacheChange={setOutlineCache}
+          />
+        ) : null}
+        {documentPane === 'comments' ? (
+          <Comments
+            engine={engine}
+            registry={registry}
+            documentId={documentId}
+            scroll={pdfScroll}
+            currentPageNumber={currentPageNumber}
+            targetAnnotationId={commentTarget?.annotationId}
+            targetAnnotationIsNew={commentTarget?.isNew}
+          />
+        ) : null}
       </Dialog>
       <ColorPalette
         registry={registry}
@@ -327,13 +329,7 @@ function App({
         documentId={documentId}
         scroll={pdfScroll}
         container={viewerRootRef.current}
-        onOpenComments={(annotationId, isNew) => dispatchCommand({
-          type: 'ui/open-comments', annotationId, isNew,
-        })}
-        onOpenColorPalette={() => dispatchCommand({ type: 'ui/open-panel', panel: 'colors' })}
-        onTranslate={(nextDocumentId, anchor) => dispatchCommand({
-          type: 'ui/open-translation', documentId: nextDocumentId, anchor,
-        })}
+        dispatch={dispatchCommand}
       />
       {translationRequest ? (
         <SelectionTranslate
@@ -391,8 +387,6 @@ function App({
         pageNumber={currentPageNumber}
         totalPages={totalPages}
         outlineStatus={outlineCache.status}
-        onOpenOutline={() => dispatchCommand({ type: 'ui/open-panel', panel: 'outline' })}
-        onOpenThumbnails={() => dispatchCommand({ type: 'ui/open-panel', panel: 'thumbnails' })}
       />
     </main>
   );

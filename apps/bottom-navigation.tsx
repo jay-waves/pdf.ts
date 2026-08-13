@@ -12,16 +12,12 @@ export function BottomNav({
   pageNumber,
   totalPages,
   outlineStatus,
-  onOpenOutline,
-  onOpenThumbnails,
 }: {
   dispatch: ViewerCommandDispatch;
   title: string;
   pageNumber: number;
   totalPages: number;
   outlineStatus: OutlineCache['status'];
-  onOpenOutline: () => void;
-  onOpenThumbnails: () => void;
 }) {
   const [pageInput, setPageInput] = useState(String(pageNumber || 1));
   const interactingRef = useRef(false);
@@ -140,7 +136,7 @@ export function BottomNav({
             aria-label="Open outline"
             onClick={() => {
               reveal();
-              onOpenOutline();
+              dispatch({ type: 'ui/open-panel', panel: 'outline' });
             }}
           >
             <ListTree
@@ -159,7 +155,7 @@ export function BottomNav({
             aria-label="Open thumbnails"
             onClick={() => {
               reveal();
-              onOpenThumbnails();
+              dispatch({ type: 'ui/open-panel', panel: 'thumbnails' });
             }}
           >
             <BookImage

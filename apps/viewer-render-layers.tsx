@@ -14,10 +14,6 @@ import {
 import { viewerDiagnostics } from './viewer-diagnostics';
 import { startupLog } from './startup-log';
 
-function recordRenderTime(kind: 'base' | 'tile', startedAt: number) {
-  viewerDiagnostics.record(kind, performance.now() - startedAt);
-}
-
 function useRenderUrl(
   start: () => PdfTask<Blob> | null,
   kind: 'base' | 'tile',
@@ -42,7 +38,7 @@ function useRenderUrl(
     task.wait((blob) => {
       settled = true;
       const elapsed = performance.now() - startedAt;
-      recordRenderTime(kind, startedAt);
+      viewerDiagnostics.record(kind, elapsed);
       if (kind === 'base') {
         startupLog.once('first-raster-generated', 'Page raster generated', `${elapsed.toFixed(0)} ms`);
       }

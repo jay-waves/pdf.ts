@@ -41,8 +41,6 @@ export async function exportPdf(
   const document = await getDocumentForSerialization(registry, documentId);
   if (!document) return false;
 
-  // TODO: Reconsider a content-only export based on preparePrintDocument()
-  // if exporting without PDF annotations is requested again.
   const data = await engine.saveAsCopy(document).toPromise();
   if (!data) return false;
 

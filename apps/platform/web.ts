@@ -2,22 +2,22 @@ import { browserPersistence } from './browser-storage';
 import {
   BrowserPdfFileHandle,
   createDownloadWriter,
+  pickPdfFileHandle,
 } from './browser-file-handle';
 import { blobResource } from './resources';
 import { translateWithInstalledModel } from './browser-translation';
 import type { PdfFileHandle, PlatformDocument, ViewerPlatform } from './types';
 import { getExternalUrl } from '../url';
 
-class DownloadPdfFileHandle implements PdfFileHandle {
-  constructor(readonly name: string) {}
-
-  async prepareWrite() {
-    const shouldDownload = window.confirm(
-      'Direct saving is not available for this file. Download a copy instead?',
-    );
-    if (!shouldDownload) return null;
-    return createDownloadWriter(this.name);
-  }
+function createDownloadFileHandle(name: string): PdfFileHandle {
+  return {
+    async prepareWrite() {
+      const shouldDownload = window.confirm(
+        'Direct saving is not available for this file. Download a copy instead?',
+      );
+      return shouldDownload ? createDownloadWriter(name) : null;
+    },
+  };
 }
 
 function documentFromFile(file: File, fileHandle: PdfFileHandle): PlatformDocument {
@@ -56,15 +56,9 @@ export const platform: ViewerPlatform = {
     };
   },
   async openLocalDocument(file) {
-    if (file) return documentFromFile(file, new DownloadPdfFileHandle(file.name));
+    if (file) return documentFromFile(file, createDownloadFileHandle(file.name));
     if ('showOpenFilePicker' in window) {
-      const [handle] = await window.showOpenFilePicker({
-        id: 'pdf-file',
-        startIn: 'documents',
-        types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
-        excludeAcceptAllOption: true,
-        multiple: false,
-      });
+      const handle = await pickPdfFileHandle();
       return documentFromFile(
         await handle.getFile(),
         new BrowserPdfFileHandle(handle),
@@ -72,7 +66,7 @@ export const platform: ViewerPlatform = {
     }
     const pickedFile = await pickFileWithInput();
     return pickedFile
-      ? documentFromFile(pickedFile, new DownloadPdfFileHandle(pickedFile.name))
+      ? documentFromFile(pickedFile, createDownloadFileHandle(pickedFile.name))
       : undefined;
   },
   openExternal(url) {

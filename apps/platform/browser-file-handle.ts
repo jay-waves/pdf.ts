@@ -30,6 +30,17 @@ export async function verifyFilePermission(
     (request && await handle.requestPermission(options) === 'granted');
 }
 
+export async function pickPdfFileHandle() {
+  const [handle] = await window.showOpenFilePicker({
+    id: 'pdf-file',
+    startIn: 'documents',
+    types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
+    excludeAcceptAllOption: true,
+    multiple: false,
+  });
+  return handle;
+}
+
 export function createDownloadWriter(fileName: string) {
   return {
     async save(data: ArrayBuffer) {
@@ -39,15 +50,43 @@ export function createDownloadWriter(fileName: string) {
   };
 }
 
-export class BrowserPdfFileHandle implements PdfFileHandle {
-  readonly name: string;
+export function createBrowserWriter(
+  nativeHandle: FileSystemFileHandle,
+  storageKey?: string,
+) {
+  return {
+    async save(data: ArrayBuffer) {
+      const writable = await nativeHandle.createWritable();
+      try {
+        await writable.write(new Blob([data], { type: 'application/pdf' }));
+        await writable.close();
+      } catch (error) {
+        await writable.abort().catch(() => {});
+        throw error;
+      }
 
+      const writtenFile = await nativeHandle.getFile();
+      if (writtenFile.size !== data.byteLength) {
+        throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
+      }
+
+      if (storageKey) {
+        try {
+          await storeFileHandle(storageKey, nativeHandle);
+        } catch (error) {
+          console.warn('[pdf-ts] The PDF was saved, but its persistent file handle was not.', error);
+        }
+      }
+      return true;
+    },
+  };
+}
+
+export class BrowserPdfFileHandle implements PdfFileHandle {
   constructor(
-    readonly nativeHandle: FileSystemFileHandle,
+    private readonly nativeHandle: FileSystemFileHandle,
     private readonly storageKey?: string,
-  ) {
-    this.name = nativeHandle.name;
-  }
+  ) {}
 
   async prepareWrite() {
     if (!(await verifyFilePermission(this.nativeHandle, 'readwrite', true))) {
@@ -55,35 +94,9 @@ export class BrowserPdfFileHandle implements PdfFileHandle {
         'Write permission was not granted. Download a copy instead?',
       );
       if (!shouldDownload) return null;
-      return createDownloadWriter(this.name);
+      return createDownloadWriter(this.nativeHandle.name);
     }
 
-    const { nativeHandle, storageKey } = this;
-    return {
-      async save(data: ArrayBuffer) {
-        const writable = await nativeHandle.createWritable();
-        try {
-          await writable.write(new Blob([data], { type: 'application/pdf' }));
-          await writable.close();
-        } catch (error) {
-          await writable.abort().catch(() => {});
-          throw error;
-        }
-
-        const writtenFile = await nativeHandle.getFile();
-        if (writtenFile.size !== data.byteLength) {
-          throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
-        }
-
-        if (storageKey) {
-          try {
-            await storeFileHandle(storageKey, nativeHandle);
-          } catch (error) {
-            console.warn('[pdf-ts] The PDF was saved, but its persistent file handle was not.', error);
-          }
-        }
-        return true;
-      },
-    };
+    return createBrowserWriter(this.nativeHandle, this.storageKey);
   }
 }

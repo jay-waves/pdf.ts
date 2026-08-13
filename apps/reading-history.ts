@@ -3,10 +3,7 @@ import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
 import { platform } from '#platform';
 import type { PdfScroll } from './pdf-scroll';
-import {
-  EMPTY_CLEANUP,
-  getPluginCapability,
-} from './utils';
+import { getPluginCapability } from './utils';
 
 function isScrollStrategy(value: unknown): value is ScrollStrategy {
   return value === ScrollStrategy.Vertical || value === ScrollStrategy.Horizontal;
@@ -25,7 +22,7 @@ export function installReadingHistory(
   scroll: PdfScroll,
   documentKey?: string,
 ) {
-  if (!documentKey) return EMPTY_CLEANUP;
+  if (!documentKey) return;
 
   const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
   const spreadScope = spread?.forDocument(scroll.documentId);

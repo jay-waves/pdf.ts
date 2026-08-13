@@ -1,7 +1,8 @@
 import { getFileNameFromUrl, parseUrl } from '../url';
 import { browserPersistence } from './browser-storage';
 import {
-  BrowserPdfFileHandle,
+  createBrowserWriter,
+  pickPdfFileHandle,
   readStoredFileHandle,
   verifyFilePermission,
 } from './browser-file-handle';
@@ -79,13 +80,7 @@ class ChromePdfFileHandle implements PdfFileHandle {
       return storedHandle;
     }
 
-    const [pickedHandle] = await window.showOpenFilePicker({
-      id: 'pdf-file',
-      startIn: 'documents',
-      types: [{ description: 'PDF Document', accept: { 'application/pdf': ['.pdf'] } }],
-      excludeAcceptAllOption: true,
-      multiple: false,
-    });
+    const pickedHandle = await pickPdfFileHandle();
     if (pickedHandle.name !== this.name) {
       throw new DOMException(`Please select the original PDF (${this.name}).`, 'InvalidStateError');
     }
@@ -97,9 +92,7 @@ class ChromePdfFileHandle implements PdfFileHandle {
 
   async prepareWrite() {
     const handle = await this.resolveHandle();
-    return handle
-      ? new BrowserPdfFileHandle(handle, this.sourceUrl).prepareWrite()
-      : null;
+    return handle ? createBrowserWriter(handle, this.sourceUrl) : null;
   }
 }
 

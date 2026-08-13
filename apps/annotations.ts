@@ -18,7 +18,7 @@ import {
   type TrackedAnnotation,
 } from '@embedpdf/plugin-annotation';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
-import { EMPTY_CLEANUP, getPluginCapability } from './utils';
+import { getPluginCapability } from './utils';
 import { getCurrentViewerTheme, type ViewerTheme } from './theme';
 
 // Appearance and palette configuration
@@ -407,7 +407,7 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
 
 export function installAnnotationPreview(registry: PluginRegistry, documentId: string) {
   const scoped = getAnnotationScope(registry, documentId);
-  if (!scoped) return EMPTY_CLEANUP;
+  if (!scoped) return;
 
   const root = document.documentElement;
   const sync = () => {
@@ -439,7 +439,7 @@ export function installAnnotationDirty(
   onDirty: () => void,
 ) {
   const capability = getAnnotationCapability(registry);
-  if (!capability) return EMPTY_CLEANUP;
+  if (!capability) return;
 
   return capability.onAnnotationEvent((event) => {
     // The plugin emits an immediate uncommitted event and a second committed
@@ -453,7 +453,7 @@ export function installAnnotationLinks(
   openExternal: (uri: string) => void,
 ) {
   const capability = getAnnotationCapability(registry);
-  if (!capability) return EMPTY_CLEANUP;
+  if (!capability) return;
 
   return capability.onNavigate((event) => {
     if (event.result.outcome === 'uri') openExternal(event.result.uri);
@@ -465,7 +465,7 @@ export function installCommentEditor(
   onCreate: (annotationId: string) => void,
 ) {
   const capability = getAnnotationCapability(registry);
-  if (!capability) return EMPTY_CLEANUP;
+  if (!capability) return;
 
   return capability.onAnnotationEvent((event) => {
     if (

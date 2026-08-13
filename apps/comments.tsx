@@ -144,19 +144,25 @@ function deleteAnnotation(
   }]);
 }
 
-export function Comments({ engine, registry, documentId, scroll, open, currentPageNumber, targetAnnotationId, targetAnnotationIsNew }: {
+export function Comments({
+  engine,
+  registry,
+  documentId,
+  scroll,
+  currentPageNumber,
+  targetAnnotationId,
+  targetAnnotationIsNew,
+}: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
   documentId?: string | null;
   scroll?: PdfScroll | null;
-  open: boolean;
   currentPageNumber: number;
   targetAnnotationId?: string | null;
   targetAnnotationIsNew?: boolean;
 }) {
   const [revision, setRevision] = useState(0);
   const [editingComment, setEditingComment] = useState<EditingComment | null>(null);
-  const [summaryRevision, setSummaryRevision] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
   const consumedTargetIdRef = useRef<string | null>(null);
   const pendingCreationRef = useRef<{ annotationId: string; pageIndex: number } | null>(null);
@@ -164,8 +170,8 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
   const invalidSummaryIdsRef = useRef(new Set<string>());
   const editingAnnotationId = editingComment?.annotationId;
   const entries = useMemo(
-    () => open ? getEntries(registry, documentId) : [],
-    [documentId, open, registry, revision],
+    () => getEntries(registry, documentId),
+    [documentId, registry, revision],
   );
   const pageGroups = useMemo(() => entries.reduce<CommentPageGroup[]>((groups, annotation) => {
     const lastGroup = groups.at(-1);
@@ -180,7 +186,6 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
   useEffect(() => {
     summaryCacheRef.current.clear();
     invalidSummaryIdsRef.current.clear();
-    setSummaryRevision((value) => value + 1);
   }, [documentId, registry]);
 
   useEffect(() => {
@@ -209,9 +214,7 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
   }, [documentId, registry]);
 
   useEffect(() => {
-    if (!open || !registry) {
-      return;
-    }
+    if (!registry) return;
 
     const document = getDocument(registry, documentId);
     if (!document) return;
@@ -256,31 +259,22 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
         cache.set(annotationId, summary);
         invalidIds.delete(annotationId);
       }
-      setSummaryRevision((value) => value + 1);
+      setRevision((value) => value + 1);
     }).catch(() => {
       if (cancelled) return;
       for (const annotation of pendingEntries) {
         cache.set(annotation.id, '');
         invalidIds.delete(annotation.id);
       }
-      setSummaryRevision((value) => value + 1);
+      setRevision((value) => value + 1);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [documentId, engine, entries, open, registry]);
+  }, [documentId, engine, entries, registry]);
 
   useEffect(() => {
-    if (!open) {
-      const pendingCreation = pendingCreationRef.current;
-      if (pendingCreation) {
-        deleteAnnotation(registry, documentId, pendingCreation.pageIndex, pendingCreation.annotationId);
-      }
-      consumedTargetIdRef.current = null;
-      pendingCreationRef.current = null;
-      return;
-    }
     if (!targetAnnotationId || consumedTargetIdRef.current === targetAnnotationId) return;
     const target = entries.find((annotation) => annotation.id === targetAnnotationId);
     if (!target) return;
@@ -292,13 +286,16 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
       annotationId: target.id,
       draft: target.contents?.trim() ?? '',
     });
-  }, [documentId, entries, open, targetAnnotationId, targetAnnotationIsNew]);
+  }, [entries, targetAnnotationId, targetAnnotationIsNew]);
+
+  useEffect(() => () => {
+    const pendingCreation = pendingCreationRef.current;
+    if (pendingCreation) {
+      deleteAnnotation(registry, documentId, pendingCreation.pageIndex, pendingCreation.annotationId);
+    }
+  }, [documentId, registry]);
 
   useLayoutEffect(() => {
-    if (!open) {
-      setEditingComment(null);
-      return;
-    }
     if (editingAnnotationId) return;
 
     const frame = requestAnimationFrame(() => {
@@ -318,10 +315,10 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
       root.scrollTo({ top: Math.max(0, root.scrollTop + currentRect.top - rootRect.top - 12), behavior: 'auto' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [currentPageNumber, editingAnnotationId, entries.length, open]);
+  }, [currentPageNumber, editingAnnotationId, entries.length]);
 
   useLayoutEffect(() => {
-    if (!open || !editingAnnotationId) return;
+    if (!editingAnnotationId) return;
 
     const frame = requestAnimationFrame(() => {
       const root = contentRef.current;
@@ -332,7 +329,7 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [editingAnnotationId, open, summaryRevision]);
+  }, [editingAnnotationId, revision]);
 
   const saveComment = (annotation: PdfAnnotationObject) => {
     const scoped = getAnnotationScope(registry, documentId);
@@ -358,73 +355,111 @@ export function Comments({ engine, registry, documentId, scroll, open, currentPa
   };
 
   return (
-    <PanelContent ref={contentRef} padding="compact" className={styles.panel} hidden={!open}>
-      {open ? (
-      <>
+    <PanelContent ref={contentRef} padding="compact" className={styles.panel}>
       {!registry ? <PanelState>Loading comments...</PanelState> : null}
-      {registry && !entries.length ? <div className={styles.empty}>
-        <span className={styles.emptyIcon}><MessageSquareMore size={20} strokeWidth={1.6} /></span>
-        <strong className={styles.emptyTitle}>No comments yet</strong>
-        <span className={styles.emptyDescription}>Annotations and notes added to this PDF will appear here.</span>
-      </div> : null}
-      {pageGroups.length ? <ol className={styles.list}>
-        {pageGroups.map((group) => <li key={group.pageIndex} className={styles.pageGroup} data-comment-page={group.pageIndex + 1} data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}>
-          <div className={styles.pageHeader}>
-            Page {group.pageIndex + 1}
-          </div>
-          <ol className={styles.entries}>
-            {group.entries.map((annotation) => {
-              const Icon = getEntryIcon(annotation);
-              const label = getAnnotationLabel(annotation);
-              const contents = annotation.contents?.trim();
-              const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
-              const isEditing = isComment && editingComment?.annotationId === annotation.id;
-              const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
-              const hasExtractedSummary = summaryCacheRef.current.has(annotation.id);
-              const summary = contents || (isTextMarkup
-                ? hasExtractedSummary ? summaryCacheRef.current.get(annotation.id) || 'Text summary unavailable' : 'Loading text summary…'
-                : 'No text content');
-              return <li
-                key={annotation.id}
-                className={styles.item}
-                data-comment-annotation-id={annotation.id}
-                data-editing={isEditing ? 'true' : undefined}
-              >
-                {!isEditing ? <button
-                  type="button"
-                  className={styles.cardTarget}
-                  onClick={() => registry && documentId && navigateToAnnotation(registry, documentId, scroll, annotation)}
-                  aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
-                /> : null}
-                <div className={styles.heading}>
-                  <span className={styles.icon}><Icon size={15} strokeWidth={2} /></span>
-                  <span className={styles.type}>{label}</span>
-                </div>
-                {isEditing ? <form className={styles.editor} onSubmit={(event) => { event.preventDefault(); saveComment(annotation); }}>
-                  <textarea
-                    className={styles.textarea}
-                    value={editingComment.draft}
-                    onChange={(event) => setEditingComment({
-                      annotationId: annotation.id,
-                      draft: event.currentTarget.value,
-                    })}
-                    autoFocus
-                    aria-label={`Comment for ${label}`}
-                  />
-                  <div className={styles.actions}><Button onClick={() => cancelComment(annotation)}>Cancel</Button><Button type="submit" variant="primary">Save</Button></div>
-                </form> : isComment
-                  ? <button
-                      type="button"
-                      className={`${styles.body} ${styles.editableBody}`}
-                      onClick={() => setEditingComment({ annotationId: annotation.id, draft: contents ?? '' })}
-                    >{contents || 'Empty comment'}</button>
-                  : <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>}
-              </li>;
-            })}
-          </ol>
-        </li>)}
-      </ol> : null}
-      </>
+      {registry && !entries.length ? (
+        <div className={styles.empty}>
+          <span className={styles.emptyIcon}>
+            <MessageSquareMore size={20} strokeWidth={1.6} />
+          </span>
+          <strong className={styles.emptyTitle}>No comments yet</strong>
+          <span className={styles.emptyDescription}>
+            Annotations and notes added to this PDF will appear here.
+          </span>
+        </div>
+      ) : null}
+      {pageGroups.length ? (
+        <ol className={styles.list}>
+          {pageGroups.map((group) => (
+            <li
+              key={group.pageIndex}
+              className={styles.pageGroup}
+              data-comment-page={group.pageIndex + 1}
+              data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}
+            >
+              <div className={styles.pageHeader}>Page {group.pageIndex + 1}</div>
+              <ol className={styles.entries}>
+                {group.entries.map((annotation) => {
+                  const Icon = getEntryIcon(annotation);
+                  const label = getAnnotationLabel(annotation);
+                  const contents = annotation.contents?.trim();
+                  const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
+                  const isEditing = isComment && editingComment?.annotationId === annotation.id;
+                  const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
+                  const hasExtractedSummary = summaryCacheRef.current.has(annotation.id);
+                  const summary = contents || (isTextMarkup
+                    ? hasExtractedSummary
+                      ? summaryCacheRef.current.get(annotation.id) || 'Text summary unavailable'
+                      : 'Loading text summary…'
+                    : 'No text content');
+
+                  return (
+                    <li
+                      key={annotation.id}
+                      className={styles.item}
+                      data-comment-annotation-id={annotation.id}
+                      data-editing={isEditing ? 'true' : undefined}
+                    >
+                      {!isEditing ? (
+                        <button
+                          type="button"
+                          className={styles.cardTarget}
+                          onClick={() => {
+                            if (registry && documentId) {
+                              navigateToAnnotation(registry, documentId, scroll, annotation);
+                            }
+                          }}
+                          aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
+                        />
+                      ) : null}
+                      <div className={styles.heading}>
+                        <span className={styles.icon}><Icon size={15} strokeWidth={2} /></span>
+                        <span className={styles.type}>{label}</span>
+                      </div>
+                      {isEditing ? (
+                        <form
+                          className={styles.editor}
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            saveComment(annotation);
+                          }}
+                        >
+                          <textarea
+                            className={styles.textarea}
+                            value={editingComment.draft}
+                            onChange={(event) => setEditingComment({
+                              annotationId: annotation.id,
+                              draft: event.currentTarget.value,
+                            })}
+                            autoFocus
+                            aria-label={`Comment for ${label}`}
+                          />
+                          <div className={styles.actions}>
+                            <Button onClick={() => cancelComment(annotation)}>Cancel</Button>
+                            <Button type="submit" variant="primary">Save</Button>
+                          </div>
+                        </form>
+                      ) : isComment ? (
+                        <button
+                          type="button"
+                          className={`${styles.body} ${styles.editableBody}`}
+                          onClick={() => setEditingComment({
+                            annotationId: annotation.id,
+                            draft: contents ?? '',
+                          })}
+                        >
+                          {contents || 'Empty comment'}
+                        </button>
+                      ) : (
+                        <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </li>
+          ))}
+        </ol>
       ) : null}
     </PanelContent>
   );

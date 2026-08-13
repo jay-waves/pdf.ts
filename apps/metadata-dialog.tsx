@@ -3,7 +3,8 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfMetadataObject } from '@embedpdf/models';
 import { getDocument } from './viewer-document';
 import styles from './document-dialogs.module.css';
-import { DocumentDialog, getErrorMessage } from './document-dialog-shared';
+import { DocumentDialog } from './document-dialog-shared';
+import { getErrorMessage } from './utils';
 
 function formatMetadataDate(value: Date | null) {
   if (!value || Number.isNaN(value.getTime())) return 'Not provided';

@@ -6,10 +6,21 @@ import {
 } from '@embedpdf/models';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 
-export const EMPTY_CLEANUP = () => {};
-
 export function normalizePdfText(text: string) {
   return text.normalize('NFKC');
+}
+
+export function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message;
+  if (
+    error
+    && typeof error === 'object'
+    && 'message' in error
+    && typeof error.message === 'string'
+  ) {
+    return error.message;
+  }
+  return fallback;
 }
 
 export function isEditableTarget(target: EventTarget | null) {

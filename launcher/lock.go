@@ -10,9 +10,7 @@ import (
 	"time"
 )
 
-const (
-	lockWait = 10 * time.Second
-)
+const lockWait = 10 * time.Second
 
 var errDocumentLocked = errors.New("another pdf.ts process is currently writing this document")
 

@@ -137,14 +137,12 @@ function ThumbnailFlow({
   dispatch,
   pageCount,
   currentPageNumber,
-  onClose,
 }: {
   registry: PluginRegistry;
   documentId: string;
   dispatch: ViewerCommandDispatch;
   pageCount: number;
   currentPageNumber: number;
-  onClose: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), pageCount - 1);
@@ -185,7 +183,7 @@ function ThumbnailFlow({
             current={item.pageIndex === currentPageIndex}
             onSelect={() => {
               dispatch({ type: 'navigation/go-to-page', pageNumber: item.pageIndex + 1 });
-              onClose();
+              dispatch({ type: 'ui/close-overlay' });
             }}
           />
         ))}
@@ -197,33 +195,28 @@ export function Thumbnails({
   registry,
   documentId,
   dispatch,
-  open,
   totalPages,
   currentPageNumber,
-  onClose,
 }: {
   registry: PluginRegistry | undefined;
   documentId?: string | null;
   dispatch: ViewerCommandDispatch;
-  open: boolean;
   totalPages: number;
   currentPageNumber: number;
-  onClose: () => void;
 }) {
   return (
-    <PanelContent overflow="hidden" hidden={!open}>
-      {open && registry && documentId && totalPages > 0 ? (
+    <PanelContent overflow="hidden">
+      {registry && documentId && totalPages > 0 ? (
         <ThumbnailFlow
           registry={registry}
           documentId={documentId}
           dispatch={dispatch}
           pageCount={totalPages}
           currentPageNumber={currentPageNumber}
-          onClose={onClose}
         />
-      ) : open ? (
+      ) : (
         <PanelState>No pages available.</PanelState>
-      ) : null}
+      )}
     </PanelContent>
   );
 }

@@ -58,10 +58,6 @@ class StartupLogger {
     this.write('info', message, detail);
   }
 
-  warn(message: string, detail?: string) {
-    this.write('warn', message, detail);
-  }
-
   error(message: string, detail?: string) {
     if (this.snapshot.state !== 'running') return;
     this.append('error', message, detail);

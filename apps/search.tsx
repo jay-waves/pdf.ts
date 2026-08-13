@@ -75,13 +75,11 @@ export function Search({
   search,
   scroll,
   documentId,
-  open,
   onSearch,
 }: {
   search: PdfSearch;
   scroll?: PdfScroll | null;
   documentId?: string | null;
-  open: boolean;
   onSearch(): void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -91,26 +89,24 @@ export function Search({
   const total = state.results.length;
 
   useEffect(() => {
-    if (!open || !documentId) return;
+    if (!documentId) return;
     search.setDocument(documentId);
     setQuery(search.getSnapshot().query);
     return () => search.clear();
-  }, [documentId, open, search]);
+  }, [documentId, search]);
 
   useEffect(() => {
-    if (!open || !canSearch) return;
+    if (!canSearch) return;
     const frame = requestAnimationFrame(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
     });
     return () => cancelAnimationFrame(frame);
-  }, [canSearch, open]);
+  }, [canSearch]);
 
   useEffect(() => {
-    if (open) scrollToResult(scroll, state.results[state.activeResultIndex]);
-  }, [open, scroll, state.activeResultIndex, state.results]);
-
-  if (!open) return null;
+    scrollToResult(scroll, state.results[state.activeResultIndex]);
+  }, [scroll, state.activeResultIndex, state.results]);
 
   const runSearch = () => {
     if (canSearch && query.trim()) onSearch();

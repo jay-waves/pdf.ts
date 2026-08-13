@@ -10,7 +10,7 @@ type WriteResponse = {
   version: string;
 };
 
-type ConflictResponse = {
+type ErrorResponse = {
   message?: string;
 };
 
@@ -108,7 +108,7 @@ class PdfLauncherSession {
       body: revision.delta,
     });
     if (!response.ok) {
-      const failure = await response.json().catch(() => ({})) as { message?: string };
+      const failure = await response.json().catch(() => ({})) as ErrorResponse;
       throw new Error(failure.message ?? `PDF.ts could not append the PDF revision (${response.status}).`);
     }
 
@@ -133,7 +133,7 @@ class PdfLauncherSession {
     }
 
     if (response.status === 409) {
-      const conflict = await response.json().catch(() => ({})) as ConflictResponse;
+      const conflict = await response.json().catch(() => ({})) as ErrorResponse;
       const shouldSaveCopy = window.confirm(
         `${conflict.message ?? 'This PDF was modified by another program or launcher window.'}\n\n`
         + 'The original will not be overwritten. Save your changes as a conflict copy beside it?',
@@ -153,18 +153,13 @@ class PdfLauncherSession {
       return true;
     }
 
-    const failure = await response.json().catch(() => ({})) as { message?: string };
+    const failure = await response.json().catch(() => ({})) as ErrorResponse;
     throw new Error(failure.message ?? `PDF.ts could not save the PDF (${response.status}).`);
   }
 }
 
-function createPdfLauncherSession() {
-  const query = new URLSearchParams(window.location.search);
-  const documentId = query.get('launcherDocument');
-  return documentId ? new PdfLauncherSession(documentId) : null;
-}
-
-const launcher = createPdfLauncherSession();
+const launcherDocumentId = new URLSearchParams(window.location.search).get('launcherDocument');
+const launcher = launcherDocumentId ? new PdfLauncherSession(launcherDocumentId) : null;
 
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {

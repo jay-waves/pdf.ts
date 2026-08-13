@@ -423,7 +423,6 @@ export function ViewportInput({
           const interactionPaused = Boolean(interactionScope && !interactionScope.isPaused());
           if (interactionPaused) interactionScope?.pause();
           flushPendingInput();
-          const scrollPosition = pendingScroll ?? { left: viewport.scrollLeft, top: viewport.scrollTop };
           touchGesture = {
             pointerId: event.pointerId,
             pointerX: event.clientX,
@@ -432,8 +431,8 @@ export function ViewportInput({
             timer: 0,
             mode: 'pending',
             interactionPaused,
-            scrollLeft: scrollPosition.left,
-            scrollTop: scrollPosition.top,
+            scrollLeft: viewport.scrollLeft,
+            scrollTop: viewport.scrollTop,
           };
           touchGesture.timer = window.setTimeout(() => {
             const gesture = touchGesture;
@@ -534,10 +533,9 @@ export function ViewportInput({
         event.preventDefault();
         event.stopPropagation();
         flushPendingInput();
-        const scrollPosition = pendingScroll ?? { left: viewport.scrollLeft, top: viewport.scrollTop };
         panGesture = {
-          scrollLeft: scrollPosition.left,
-          scrollTop: scrollPosition.top,
+          scrollLeft: viewport.scrollLeft,
+          scrollTop: viewport.scrollTop,
           dragging: false,
         };
         viewport.dataset.pdfPanning = 'true';

@@ -5,7 +5,6 @@ import { PdfEngine as PdfiumEngine } from '@embedpdf/engines/pdfium';
 import { RemoteExecutor } from '@embedpdf/engines/pdfium-worker-engine';
 import type {
   ImageConversionTypes,
-  IPdfiumExecutor,
   PdfDocumentObject,
   PdfEngine,
   PdfTask,
@@ -21,7 +20,12 @@ interface PdfIncrementalRevision {
   delta: ArrayBuffer;
 }
 
-const executors = new WeakMap<PdfEngine<Blob>, RemoteExecutor>();
+interface RemoteExecutorInternals {
+  readyTask: Task<boolean, { code: number; message: string }>;
+  send<T>(method: string, args: unknown[]): PdfTask<T>;
+}
+
+const executors = new WeakMap<PdfEngine<Blob>, RemoteExecutorInternals>();
 
 /**
  * Project-owned access to the live PDFium engine and the viewer's sole PDF.
@@ -56,12 +60,11 @@ export class PdfRuntime {
     return operation(this.engine, document);
   }
 
-  async getFontDiagnostics(): Promise<PdfFontDiagnostic[]> {
+  getFontDiagnostics(): Promise<PdfFontDiagnostic[]> {
     const executor = executors.get(this.engine);
-    if (!executor) return [];
-    return (executor as unknown as {
-      send(method: string, args: unknown[]): PdfTask<PdfFontDiagnostic[]>;
-    }).send('getFontDiagnostics', []).toPromise();
+    return executor
+      ? executor.send<PdfFontDiagnostic[]>('getFontDiagnostics', []).toPromise()
+      : Promise.resolve([]);
   }
 }
 
@@ -91,7 +94,8 @@ export function usePdfRuntime(options: {
     };
     worker.addEventListener('message', handleStartupLog);
     const executor = new RemoteExecutor(worker, options);
-    const engine = new PdfiumEngine<Blob>(executor as unknown as IPdfiumExecutor, {
+    const internals = executor as unknown as RemoteExecutorInternals;
+    const engine = new PdfiumEngine<Blob>(executor, {
       imageConverter: (getImageData, imageType, quality) => browserImageDataToBlobConverter(
         getImageData,
         imageType ?? options.defaultImageType,
@@ -99,11 +103,9 @@ export function usePdfRuntime(options: {
       ),
     });
     const pdfium = new PdfRuntime(engine);
-    executors.set(engine, executor);
+    executors.set(engine, internals);
 
-    const readyTask = (executor as unknown as {
-      readyTask: Task<boolean, { code: number; message: string }>;
-    }).readyTask;
+    const { readyTask } = internals;
     let active = true;
     const fail: Parameters<typeof readyTask.wait>[1] = (failure) => {
       if (!active) return;
@@ -143,9 +145,7 @@ export function setPdfRenderTheme(
 ): PdfTask<boolean> {
   const executor = executors.get(engine);
   if (!executor) throw new Error('This PDF engine does not support render themes.');
-  return (executor as unknown as {
-    send(method: string, args: unknown[]): PdfTask<boolean>;
-  }).send('setRenderTheme', [theme]);
+  return executor.send<boolean>('setRenderTheme', [theme]);
 }
 
 export function savePdfIncrementally(
@@ -157,7 +157,5 @@ export function savePdfIncrementally(
     throw new Error('This PDF engine does not support incremental save.');
   }
 
-  return (executor as unknown as {
-    send(method: string, args: unknown[]): PdfTask<PdfIncrementalRevision>;
-  }).send('saveIncremental', [document]);
+  return executor.send<PdfIncrementalRevision>('saveIncremental', [document]);
 }

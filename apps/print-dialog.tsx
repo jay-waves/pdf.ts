@@ -6,7 +6,8 @@ import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { Button, DialogActions } from './components';
 import { getDocument } from './viewer-document';
 import styles from './document-dialogs.module.css';
-import { DocumentDialog, getErrorMessage } from './document-dialog-shared';
+import { DocumentDialog } from './document-dialog-shared';
+import { getErrorMessage } from './utils';
 
 type PrintMode = 'all' | 'current' | 'custom';
 

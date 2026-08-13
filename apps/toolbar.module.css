@@ -22,14 +22,11 @@
 .modeButton {
   @apply cursor-pointer rounded-md border border-transparent bg-transparent text-inherit outline-none;
   @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
-}
-
-.modeButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
-
-.modeButton {
   @apply h-6.5 min-w-0 items-center justify-center gap-1.25 leading-3.5;
   @apply inline-flex w-16 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
 }
+
+.modeButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
 .modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
 
 .zoomControl {

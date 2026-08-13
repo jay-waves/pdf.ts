@@ -40,13 +40,18 @@ type CopyResult struct {
 }
 
 func NewResource(path string) (*Resource, error) {
-	version, err := fileVersion(path)
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("fingerprint document: %w", err)
+		return nil, fmt.Errorf("open document: %w", err)
 	}
-	info, err := os.Stat(path)
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("inspect document: %w", err)
+	}
+	version, err := fileVersionFrom(file)
+	if err != nil {
+		return nil, fmt.Errorf("fingerprint document: %w", err)
 	}
 	return &Resource{
 		path:    path,
@@ -105,12 +110,9 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 		return nil, nil, fmt.Errorf("create temporary document: %w", err)
 	}
 	tempPath := temp.Name()
-	keepTemp := false
 	defer func() {
 		_ = temp.Close()
-		if !keepTemp {
-			_ = os.Remove(tempPath)
-		}
+		_ = os.Remove(tempPath)
 	}()
 
 	limited := http.MaxBytesReader(response, request.Body, maxDocumentBytes)
@@ -147,16 +149,8 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 	if err := atomicReplace(tempPath, resource.path); err != nil {
 		return nil, nil, fmt.Errorf("replace document: %w", err)
 	}
-	keepTemp = true
 	version := hex.EncodeToString(hash.Sum(nil))
-	info, statErr := os.Stat(resource.path)
-	resource.mutex.Lock()
-	resource.version = version
-	if statErr == nil {
-		resource.size = info.Size()
-		resource.modTime = info.ModTime()
-	}
-	resource.mutex.Unlock()
+	resource.recordVersion(version)
 	return &WriteResult{Version: version}, nil, nil
 }
 
@@ -262,6 +256,17 @@ func (resource *Resource) versionFor(file *os.File, info os.FileInfo) (string, e
 	resource.modTime = info.ModTime()
 	resource.mutex.Unlock()
 	return version, nil
+}
+
+func (resource *Resource) recordVersion(version string) {
+	info, err := os.Stat(resource.path)
+	resource.mutex.Lock()
+	defer resource.mutex.Unlock()
+	resource.version = version
+	if err == nil {
+		resource.size = info.Size()
+		resource.modTime = info.ModTime()
+	}
 }
 
 func quoteETag(value string) string {

@@ -42,6 +42,7 @@ import { getExternalUrl, getSelectedExternalUrl } from './url';
 import { platform } from '#platform';
 import { getDocument } from './viewer-document';
 import type { PdfScroll } from './pdf-scroll';
+import type { ViewerCommandDispatch } from './viewer-controller';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
@@ -217,18 +218,14 @@ export function ContextMenu({
   documentId,
   scroll,
   container,
-  onOpenComments,
-  onOpenColorPalette,
-  onTranslate,
+  dispatch,
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
   documentId?: string | null;
   scroll?: PdfScroll | null;
   container: HTMLElement | null;
-  onOpenComments(annotationId: string, isNew: boolean): void;
-  onOpenColorPalette(): void;
-  onTranslate(documentId: string, anchor: { x: number; y: number }): void;
+  dispatch: ViewerCommandDispatch;
 }) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
 
@@ -316,7 +313,14 @@ export function ContextMenu({
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
     { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    { label: 'Translate', icon: Languages, action: () => { onTranslate(documentId, menu); setMenu(null); } },
+    { label: 'Translate', icon: Languages, action: () => {
+      dispatch({
+        type: 'ui/open-translation',
+        documentId,
+        anchor: menu,
+      });
+      setMenu(null);
+    } },
     { label: 'Search', icon: ExternalLink, action: () => {
       const selectedText = selectionScope?.getSelectedText();
       setMenu(null);
@@ -368,11 +372,14 @@ export function ContextMenu({
         const commentId = isNew
           ? createCommentAnnotation(annotation, commentTarget)
           : commentTarget.id;
-        onOpenComments(commentId, isNew);
+        dispatch({ type: 'ui/open-comments', annotationId: commentId, isNew });
       }
       setMenu(null);
     } },
-    { label: 'Colors', icon: PaintBucket, action: () => { onOpenColorPalette(); setMenu(null); } },
+    { label: 'Colors', icon: PaintBucket, action: () => {
+      dispatch({ type: 'ui/open-panel', panel: 'colors' });
+      setMenu(null);
+    } },
     { label: 'Delete', icon: Trash2, action: () => {
       annotation?.deleteAnnotations(selectedAnnotations.map(({ object }) => ({
         pageIndex: object.pageIndex,

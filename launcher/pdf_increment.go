@@ -75,12 +75,9 @@ func (resource *Resource) ReplacePdfIncrement(
 		return nil, nil, fmt.Errorf("create temporary document: %w", err)
 	}
 	tempPath := temp.Name()
-	keepTemp := false
 	defer func() {
 		_ = temp.Close()
-		if !keepTemp {
-			_ = os.Remove(tempPath)
-		}
+		_ = os.Remove(tempPath)
 	}()
 
 	baseHash := sha256.New()
@@ -130,16 +127,7 @@ func (resource *Resource) ReplacePdfIncrement(
 	if err := atomicReplace(tempPath, resource.path); err != nil {
 		return nil, nil, fmt.Errorf("replace document: %w", err)
 	}
-	keepTemp = true
-
 	version := hex.EncodeToString(outputHash.Sum(nil))
-	info, statErr := os.Stat(resource.path)
-	resource.mutex.Lock()
-	resource.version = version
-	if statErr == nil {
-		resource.size = info.Size()
-		resource.modTime = info.ModTime()
-	}
-	resource.mutex.Unlock()
+	resource.recordVersion(version)
 	return &WriteResult{Version: version}, nil, nil
 }

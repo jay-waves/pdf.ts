@@ -15,6 +15,7 @@ const vite = spawnSync('pnpm', ['exec', 'vite', 'build'], {
   stdio: 'inherit',
   shell: process.platform === 'win32',
 });
+if (vite.error) throw vite.error;
 if (vite.status !== 0) process.exit(vite.status ?? 1);
 
 cpSync(resolve(repoRoot, 'vscode', 'extension.cjs'), resolve(extensionDir, 'extension.cjs'));

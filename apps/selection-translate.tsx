@@ -70,7 +70,7 @@ export function SelectionTranslate({
       window.removeEventListener('scroll', close, { capture: true });
       unsubscribeSelectionChange();
     };
-  }, [registry, request]);
+  }, [onClose, registry, request]);
 
   return (
     <FloatingPopover

@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import { PdfPermissionFlag } from '@embedpdf/models';
+import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 import { Button, Dialog, DialogActions } from './components';
-import { getDocumentOps } from './viewer-document';
+import { getErrorMessage, getPluginCapability } from './utils';
 import styles from './document-dialogs.module.css';
-import { DocumentDialog, getErrorMessage } from './document-dialog-shared';
+import { DocumentDialog } from './document-dialog-shared';
 
 export function ProtectDialog({ registry, documentId, open, onClose, onProtectionChanged }: {
   registry?: PluginRegistry;
@@ -22,8 +23,8 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
   const [protectionState, setProtectionState] = useState<boolean | null>(null);
   const busy = busyAction !== null;
 
-  const ops = getDocumentOps(registry, documentId);
-  const document = ops?.document;
+  const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
+  const document = documentId ? manager?.getDocument(documentId) : undefined;
   const isProtected = protectionState ?? document?.isEncrypted ?? false;
   const requiresOwnerPassword = document?.isEncrypted === true && !document.isOwnerUnlocked;
 
@@ -48,7 +49,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
       setError('Passwords do not match.');
       return;
     }
-    if (!ops) {
+    if (!manager || !documentId) {
       setError('Document protection is not available.');
       return;
     }
@@ -56,7 +57,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
     setBusyAction('protect');
     setError('');
     try {
-      const updated = await ops.setEncryption({
+      const updated = await manager.setDocumentEncryption(documentId, {
         userPassword: password,
         ownerPassword: password,
         allowedFlags: PdfPermissionFlag.AllowAll,
@@ -73,7 +74,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
   };
 
   async function removeProtection() {
-    if (!ops || !document) {
+    if (!manager || !document || !documentId) {
       setError('Document protection is not available.');
       return;
     }
@@ -91,14 +92,14 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
     setError('');
     try {
       if (requiresOwnerPassword) {
-        const unlocked = await ops.unlockOwnerPermissions(ownerPassword).toPromise();
+        const unlocked = await manager.unlockOwnerPermissions(documentId, ownerPassword).toPromise();
         if (!unlocked) {
           setError('Incorrect owner password.');
           return;
         }
       }
 
-      const removed = await ops.removeEncryption().toPromise();
+      const removed = await manager.removeEncryption(documentId).toPromise();
       if (!removed) throw new Error('PDFium rejected password removal.');
       setProtectionState(false);
       onProtectionChanged();
@@ -203,8 +204,8 @@ export function UnlockDialog({ registry, documentId, incorrect }: {
       return;
     }
 
-    const ops = getDocumentOps(registry, documentId);
-    if (!ops) {
+    const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
+    if (!manager) {
       setError('Password verification is not available.');
       return;
     }
@@ -212,7 +213,7 @@ export function UnlockDialog({ registry, documentId, incorrect }: {
     setBusy(true);
     setError('');
     try {
-      const retry = await ops.retry(password).toPromise();
+      const retry = await manager.retryDocument(documentId, { password }).toPromise();
       await retry.task.toPromise();
     } catch {
       // The document manager remounts this dialog when it returns to the error state.

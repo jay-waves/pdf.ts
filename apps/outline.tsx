@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
+import { useEffect, useRef, useState } from 'react';
 import {
   PdfZoomMode,
   type PdfBookmarkObject,
@@ -7,10 +6,7 @@ import {
 import { PanelContent, PanelState } from './components';
 import type { PdfRuntime } from './pdf-engine';
 import type { PdfScroll } from './pdf-scroll';
-import {
-  EMPTY_CLEANUP,
-  getDestinationFromTarget,
-} from './utils';
+import { getDestinationFromTarget } from './utils';
 import styles from './outline.module.css';
 
 const outlinePrefetchCache = new Map<string, OutlineCache>();
@@ -28,13 +24,6 @@ type FlattenedBookmark = {
   pageNumber: number;
 };
 type CurrentBookmark = Pick<FlattenedBookmark, 'key' | 'title'>;
-
-function toOutlineCache(bookmarks: PdfBookmarkObject[]): OutlineCache {
-  return {
-    status: bookmarks.length ? 'ready' : 'empty',
-    bookmarks,
-  };
-}
 
 function cacheOutline(key: string, cache: OutlineCache) {
   if (!outlinePrefetchCache.has(key) && outlinePrefetchCache.size >= OUTLINE_CACHE_LIMIT) {
@@ -139,17 +128,19 @@ function isCurrentLoadedDocument(pdfium: PdfRuntime, documentId: string) {
   return Boolean(pdfium.getDocument(documentId));
 }
 
-async function loadBookmarks(pdfium: PdfRuntime, documentId: string) {
+async function loadOutline(pdfium: PdfRuntime, documentId: string) {
   if (!isCurrentLoadedDocument(pdfium, documentId)) {
-    return [];
+    return { status: 'empty', bookmarks: [] } satisfies OutlineCache;
   }
 
-  const task = pdfium.withDocument(documentId, (engine, document) => engine.getBookmarks(document));
-  return (await task.toPromise()).bookmarks;
-}
-
-async function loadOutline(pdfium: PdfRuntime, documentId: string) {
-  return toOutlineCache(await loadBookmarks(pdfium, documentId));
+  const task = pdfium.withDocument(documentId, (engine, document) => (
+    engine.getBookmarks(document)
+  ));
+  const { bookmarks } = await task.toPromise();
+  return {
+    status: bookmarks.length ? 'ready' : 'empty',
+    bookmarks,
+  } satisfies OutlineCache;
 }
 
 export function installOutlinePrefetch(
@@ -169,7 +160,7 @@ export function installOutlinePrefetch(
   const cached = cacheKey ? outlinePrefetchCache.get(cacheKey) : undefined;
   if (cached) {
     onLoaded(cached);
-    return EMPTY_CLEANUP;
+    return;
   }
 
   let requestedDocumentId: string | null = null;
@@ -240,20 +231,16 @@ function scrollToBookmark(scroll: PdfScroll, bookmark: PdfBookmarkObject) {
 }
 
 export function Outline({
-  registry,
   pdfium,
   documentId,
   scroll,
-  open,
   cache,
   currentBookmarkKey,
   onCacheChange,
 }: {
-  registry?: PluginRegistry;
   pdfium: PdfRuntime;
   documentId?: string | null;
   scroll?: PdfScroll | null;
-  open: boolean;
   cache: OutlineCache;
   currentBookmarkKey: string;
   onCacheChange: (cache: OutlineCache) => void;
@@ -268,16 +255,11 @@ export function Outline({
   }, [currentBookmarkKey]);
 
   useEffect(() => {
-    setSelectedBookmarkKey(currentBookmarkKey);
     setExpandedBookmarkKeys(new Set());
   }, [cache.bookmarks]);
 
   useEffect(() => {
-    if (!open) {
-      retriedOnOpenRef.current = false;
-      return;
-    }
-    if (!registry || !documentId || cache.status !== 'error' || retriedOnOpenRef.current) {
+    if (!documentId || cache.status !== 'error' || retriedOnOpenRef.current) {
       return;
     }
 
@@ -304,17 +286,17 @@ export function Outline({
     return () => {
       cancelled = true;
     };
-  }, [cache.status, documentId, onCacheChange, open, pdfium, registry]);
+  }, [cache.status, documentId, onCacheChange, pdfium]);
 
   useEffect(() => {
-    if (!open || cache.status !== 'ready') {
+    if (cache.status !== 'ready') {
       return;
     }
 
     scrollCurrentBookmarkIntoView(contentRef.current);
-  }, [cache.status, open, selectedBookmarkKey]);
+  }, [cache.status, selectedBookmarkKey]);
 
-  const body = useMemo(() => {
+  const renderBody = () => {
     if (cache.status === 'idle' || cache.status === 'loading') {
       return <PanelState className="text-[11px]">Loading outline...</PanelState>;
     }
@@ -334,7 +316,7 @@ export function Outline({
         expandedBookmarkKeys={expandedBookmarkKeys}
         path={[]}
         onSelect={(bookmark, bookmarkKey, hasChildren) => {
-          if (!registry || !documentId || !scroll) return;
+          if (!scroll) return;
 
           const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
           const destination = getDestinationFromTarget(bookmark.target);
@@ -366,19 +348,11 @@ export function Outline({
         }}
       />
     );
-  }, [
-    cache.bookmarks,
-    cache.status,
-    expandedBookmarkKeys,
-    documentId,
-    registry,
-    scroll,
-    selectedBookmarkKey,
-  ]);
+  };
 
   return (
-    <PanelContent ref={contentRef} hidden={!open}>
-      {open ? body : null}
+    <PanelContent ref={contentRef}>
+      {renderBody()}
     </PanelContent>
   );
 }

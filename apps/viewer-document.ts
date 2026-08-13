@@ -1,6 +1,5 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfDocumentObject } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
 
 export const DOCUMENT_ID = 'pdf-ts-document';
 
@@ -29,28 +28,4 @@ export function onDocumentLoaded(
     current = next;
     if (next) listener(next);
   });
-}
-
-/**
- * The only application-facing bridge to EmbedPDF's document manager. Loading
- * remains owned by EmbedPDF, while features operate on one explicit document.
- */
-export function getDocumentOps(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-) {
-  const manager = registry?.getPlugin('document-manager')?.provides?.() as
-    | DocumentManagerCapability
-    | undefined;
-  if (!manager || !documentId) return null;
-
-  return {
-    document: manager.getDocument(documentId),
-    retry: (password: string) => manager.retryDocument(documentId, { password }),
-    setEncryption: (options: Parameters<DocumentManagerCapability['setDocumentEncryption']>[1]) =>
-      manager.setDocumentEncryption(documentId, options),
-    unlockOwnerPermissions: (password: string) =>
-      manager.unlockOwnerPermissions(documentId, password),
-    removeEncryption: () => manager.removeEncryption(documentId),
-  };
 }

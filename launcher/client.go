@@ -12,6 +12,16 @@ import (
 	"time"
 )
 
+var daemonHTTPClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		Proxy: nil,
+		DialContext: (&net.Dialer{
+			Timeout: 5 * time.Second,
+		}).DialContext,
+	},
+}
+
 func DaemonRunning(stateDir string) (bool, error) {
 	listenAddress, err := daemonAddress(stateDir)
 	if err != nil || listenAddress == "" {
@@ -107,16 +117,7 @@ func daemonRequest(method, listenAddress, path string, body io.Reader) (*http.Re
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			Proxy: nil,
-			DialContext: (&net.Dialer{
-				Timeout: 5 * time.Second,
-			}).DialContext,
-		},
-	}
-	response, err := client.Do(request)
+	response, err := daemonHTTPClient.Do(request)
 	if err != nil {
 		return nil, err
 	}

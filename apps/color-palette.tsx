@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import { PdfBlendMode } from '@embedpdf/models';
 import type { TrackedAnnotation } from '@embedpdf/plugin-annotation';
@@ -102,14 +102,11 @@ export function ColorPalette({
     };
   }, [documentId, open, registry]);
 
-  const colors = useMemo(() => {
-    const presets = capability?.getColorPresets() ?? [];
-    return Array.from(new Set([
-      TRANSPARENT_ANNOTATION_COLOR,
-      ...presets,
-      ...DEFAULT_ANNOTATION_COLORS,
-    ].map(normalizeAnnotationColor).filter((color): color is string => Boolean(color))));
-  }, [capability, open]);
+  const colors = Array.from(new Set([
+    TRANSPARENT_ANNOTATION_COLOR,
+    ...(capability?.getColorPresets() ?? []),
+    ...DEFAULT_ANNOTATION_COLORS,
+  ].map(normalizeAnnotationColor).filter((color): color is string => Boolean(color))));
 
   const toolId = contextTool?.id ?? null;
   const values = getAnnotationValues(defaults, selectedAnnotations);

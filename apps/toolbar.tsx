@@ -189,8 +189,6 @@ function ZoomControl({
   );
 }
 
-const ToolbarButton = IconButton;
-
 export function Toolbar({
   search,
   scroll,
@@ -252,7 +250,7 @@ export function Toolbar({
   useEffect(() => {
     if (searchOpen) showToolbar();
     else scheduleToolbarHide();
-  }, [searchOpen]);
+  }, [scheduleToolbarHide, searchOpen, showToolbar]);
 
   useEffect(() => {
     if (!pinned) scheduleToolbarHide();
@@ -319,34 +317,34 @@ export function Toolbar({
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
     };
-  }, [pinned, portalContainer]);
+  }, [pinned, portalContainer, scheduleToolbarHide, showToolbar]);
 
   const renderPersistentControls = () => (
     <div className={styles.persistentControls}>
       <FloatingToolbarDivider />
       <FloatingToolbarGroup>
-        <ToolbarButton
+        <IconButton
           label="Save"
           icon={Save}
           disabled={!canSave}
           onClick={() => dispatch({ type: 'document/save' })}
         />
         {canConfigureTheme ? (
-          <ToolbarButton
+          <IconButton
             label={darkAppearance ? 'Light theme' : 'Dark theme'}
             icon={darkAppearance ? Sun : Moon}
             iconSize={15.5}
             onClick={() => dispatch({ type: 'theme/toggle' })}
           />
         ) : null}
-        <ToolbarButton
+        <IconButton
           label="Pan"
           icon={Hand}
           active={panMode}
           disabled={!canUseDocument}
           onClick={togglePan}
         />
-        <ToolbarButton
+        <IconButton
           label="Pin toolbar"
           icon={Pin}
           active={pinned}
@@ -358,7 +356,7 @@ export function Toolbar({
 
   const renderSection = (label: string, children: ReactNode, overflow = false) => (
     <FloatingToolbar label={label} overflow={overflow}>
-      <ToolbarButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
+      <IconButton label="Back" icon={ArrowLeft} onClick={returnToPrimaryToolbar} />
       <FloatingToolbarDivider />
       {children}
       {renderPersistentControls()}
@@ -410,44 +408,44 @@ export function Toolbar({
 
         {activeSection === 'document' ? renderSection('Document toolbar', (
           <FloatingToolbarGroup>
-            <ToolbarButton
+            <IconButton
               label="Print"
               icon={Printer}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'print' })}
             />
-            <ToolbarButton
+            <IconButton
               label="Security"
               icon={Lock}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'protect' })}
             />
-            <ToolbarButton
+            <IconButton
               label="Export"
               icon={Download}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'document/export' })}
             />
-            <ToolbarButton
+            <IconButton
               label="Metadata"
               icon={Info}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'metadata' })}
             />
             {canConfigureTheme ? (
-              <ToolbarButton
+              <IconButton
                 label="Themes"
                 icon={Palette}
                 onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'theme' })}
               />
             ) : null}
-            <ToolbarButton
+            <IconButton
               label="Developer"
               icon={Wrench}
               onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'developer' })}
             />
             {signatureCount > 0 ? (
-              <ToolbarButton
+              <IconButton
                 label={`Digital signatures (${signatureCount})`}
                 icon={Signature}
                 onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'signatures' })}
@@ -459,7 +457,7 @@ export function Toolbar({
         {activeSection === 'page' ? renderSection('Page toolbar', (
           <>
             <FloatingToolbarGroup>
-              <ToolbarButton
+              <IconButton
                 label="Zoom out"
                 icon={Minus}
                 disabled={!canUseDocument}
@@ -472,7 +470,7 @@ export function Toolbar({
                 onPresetChange={selectZoom}
                 onPercentChange={enterZoom}
               />
-              <ToolbarButton
+              <IconButton
                 label="Zoom in"
                 icon={Plus}
                 disabled={!canUseDocument}
@@ -481,34 +479,34 @@ export function Toolbar({
             </FloatingToolbarGroup>
             <FloatingToolbarDivider />
             <FloatingToolbarGroup>
-              <ToolbarButton
+              <IconButton
                 label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'}
                 icon={GalleryHorizontal}
                 active={spreadMode === SpreadMode.Odd}
                 disabled={!canUseDocument}
                 onClick={() => dispatch({ type: 'view/toggle-spread' })}
               />
-              <ToolbarButton
+              <IconButton
                 label="Vertical scroll"
                 icon={ArrowDownUp}
                 active={scrollStrategy === ScrollStrategy.Vertical}
                 disabled={!canUseDocument}
                 onClick={() => dispatch({ type: 'view/set-scroll', strategy: ScrollStrategy.Vertical })}
               />
-              <ToolbarButton
+              <IconButton
                 label="Horizontal scroll"
                 icon={ArrowLeftRight}
                 active={scrollStrategy === ScrollStrategy.Horizontal}
                 disabled={!canUseDocument}
                 onClick={() => dispatch({ type: 'view/set-scroll', strategy: ScrollStrategy.Horizontal })}
               />
-              <ToolbarButton
+              <IconButton
                 label="Rotate"
                 icon={RotateCw}
                 disabled={!canUseDocument}
                 onClick={() => dispatch({ type: 'view/rotate' })}
               />
-              <ToolbarButton
+              <IconButton
                 label="Thumbnails"
                 icon={BookImage}
                 active={thumbnailsOpen}
@@ -524,7 +522,6 @@ export function Toolbar({
             search={search}
             scroll={scroll}
             documentId={documentId}
-            open
             onSearch={pinForSearch}
           />
         ), true) : null}
@@ -532,7 +529,7 @@ export function Toolbar({
         {activeSection === 'draw' ? renderSection('Draw toolbar', (
           <div className={styles.drawTools}>
             {DRAW_TOOLS.map(({ id, label, icon }) => (
-              <ToolbarButton
+              <IconButton
                 key={id}
                 label={label}
                 icon={icon}
@@ -542,20 +539,20 @@ export function Toolbar({
               />
             ))}
             <FloatingToolbarDivider />
-            <ToolbarButton
+            <IconButton
               label="Colors"
               icon={PaintBucket}
               active={colorPaletteOpen}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'colors' })}
             />
-            <ToolbarButton
+            <IconButton
               label="Undo"
               icon={Undo2}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'annotation/history', direction: 'undo' })}
             />
-            <ToolbarButton
+            <IconButton
               label="Redo"
               icon={Redo2}
               disabled={!canUseDocument}
