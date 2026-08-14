@@ -600,15 +600,27 @@ function ReadyViewer({
   );
 }
 
-initializeViewerTheme();
-installErrorDiagnostics();
-installRenderDprOverride();
+const disposeTheme = initializeViewerTheme();
+const disposeDiagnostics = installErrorDiagnostics();
+const disposeDpr = installRenderDprOverride();
 beginStartupLog(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
 writeStartupInfo('Viewer environment ready', navigator.platform || 'Web');
 
+function ViewerLifecycle() {
+  useEffect(() => () => {
+    disposeDpr();
+    disposeDiagnostics();
+    disposeTheme();
+  }, []);
+
+  return (
+    <TooltipProvider>
+      <ViewerBootstrap />
+      <StartupLogScreen />
+    </TooltipProvider>
+  );
+}
+
 createRoot(document.getElementById('root')!).render(
-  <TooltipProvider>
-    <ViewerBootstrap />
-    <StartupLogScreen />
-  </TooltipProvider>,
+  <ViewerLifecycle />,
 );

@@ -80,6 +80,7 @@ function ThumbnailCard({
     const render = getDocumentScope<RenderCapability>(registry, 'render', documentId);
     if (!render) return;
     let objectUrl: string | undefined;
+    let active = true;
     const rotation = ((page.rotation ?? 0) + documentRotation) % 4;
     const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
     const task = render.renderPageRect({
@@ -92,11 +93,13 @@ function ThumbnailCard({
       },
     });
     task.wait((blob) => {
+      if (!active) return;
       objectUrl = URL.createObjectURL(blob);
       setUrl(objectUrl);
     }, () => {});
 
     return () => {
+      active = false;
       task.abort({
         code: PdfErrorCode.Cancelled,
         message: 'Thumbnail left the virtual window',

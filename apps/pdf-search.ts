@@ -14,6 +14,7 @@ export interface PdfSearchState {
   query: string;
   flags: MatchFlag[];
   results: SearchResult[];
+  resultsByPage: ReadonlyMap<number, PageSearchResult[]>;
   activeResultIndex: number;
   loading: boolean;
   attach(pdfium: PdfRuntime): void;
@@ -25,11 +26,17 @@ export interface PdfSearchState {
   dispose(): void;
 }
 
+export interface PageSearchResult {
+  result: SearchResult;
+  resultIndex: number;
+}
+
 const EMPTY_SEARCH = {
   documentId: null,
   query: '',
   flags: [] as MatchFlag[],
   results: [] as SearchResult[],
+  resultsByPage: new Map<number, PageSearchResult[]>(),
   activeResultIndex: -1,
   loading: false,
 };
@@ -69,14 +76,29 @@ export function createPdfSearchStore() {
         task = current;
         current.onProgress(({ results }) => {
           if (task === current && results.length) {
-            set((state) => ({ results: [...state.results, ...results] }));
+            set((state) => {
+              const nextResults = [...state.results, ...results];
+              return {
+                results: nextResults,
+                resultsByPage: appendResultsByPage(
+                  state.resultsByPage,
+                  results,
+                  state.results.length,
+                ),
+              };
+            });
           }
         });
         current.wait(
           ({ results }) => {
             if (task !== current) return;
             task = null;
-            set({ results, activeResultIndex: findNearestResult(results, nearPage), loading: false });
+            set({
+              results,
+              resultsByPage: indexResultsByPage(results),
+              activeResultIndex: findNearestResult(results, nearPage),
+              loading: false,
+            });
           },
           (error) => {
             if (task !== current) return;
@@ -139,4 +161,34 @@ function findNearestResult(results: SearchResult[], pageIndex: number) {
   if (!results.length) return -1;
   const next = results.findIndex((result) => result.pageIndex >= pageIndex);
   return next >= 0 ? next : results.length - 1;
+}
+
+function indexResultsByPage(results: SearchResult[]) {
+  const indexed = new Map<number, PageSearchResult[]>();
+  results.forEach((result, resultIndex) => {
+    const pageResults = indexed.get(result.pageIndex);
+    const entry = { result, resultIndex };
+    if (pageResults) pageResults.push(entry);
+    else indexed.set(result.pageIndex, [entry]);
+  });
+  return indexed;
+}
+
+function appendResultsByPage(
+  current: ReadonlyMap<number, PageSearchResult[]>,
+  results: SearchResult[],
+  startIndex: number,
+) {
+  const indexed = new Map(current);
+  const changedPages = new Set<number>();
+  results.forEach((result, offset) => {
+    let pageResults = indexed.get(result.pageIndex);
+    if (!changedPages.has(result.pageIndex)) {
+      pageResults = pageResults ? [...pageResults] : [];
+      indexed.set(result.pageIndex, pageResults);
+      changedPages.add(result.pageIndex);
+    }
+    pageResults!.push({ result, resultIndex: startIndex + offset });
+  });
+  return indexed;
 }

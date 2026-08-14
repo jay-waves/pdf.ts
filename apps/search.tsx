@@ -8,6 +8,7 @@ import { useDocumentState } from '@embedpdf/core/react';
 import { MatchFlag, type SearchResult } from '@embedpdf/models';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react';
 import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { ControlButton, Tooltip } from './components';
 import { pdfSearchStore } from './pdf-search';
 import type { PdfScroll } from './pdf-scroll';
@@ -25,15 +26,23 @@ export function SearchLayer({
   documentId: string;
   pageIndex: number;
 }) {
-  const state = useStore(pdfSearchStore);
+  const { pageResults, activeResultIndex } = useStore(pdfSearchStore, useShallow((state) => {
+    if (state.documentId !== documentId) {
+      return { pageResults: undefined, activeResultIndex: -1 };
+    }
+    const pageResults = state.resultsByPage.get(pageIndex);
+    const activeResultIndex = pageResults?.some(({ resultIndex }) => (
+      resultIndex === state.activeResultIndex
+    )) ? state.activeResultIndex : -1;
+    return { pageResults, activeResultIndex };
+  }));
   const scale = useDocumentState(documentId)?.scale ?? 1;
-  if (state.documentId !== documentId || !state.results.length) return null;
+  if (!pageResults?.length) return null;
 
   return (
     <div {...props} style={{ ...style, position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {state.results.map((result, resultIndex) => (
-        result.pageIndex === pageIndex
-          ? result.rects.map((rect, rectIndex) => (
+      {pageResults.map(({ result, resultIndex }) => (
+        result.rects.map((rect, rectIndex) => (
             <div
               key={`${resultIndex}-${rectIndex}`}
               className="pdf-search-highlight"
@@ -43,7 +52,7 @@ export function SearchLayer({
                 left: rect.origin.x * scale,
                 width: rect.size.width * scale,
                 height: rect.size.height * scale,
-                backgroundColor: resultIndex === state.activeResultIndex
+                backgroundColor: resultIndex === activeResultIndex
                   ? ACTIVE_HIGHLIGHT_COLOR
                   : HIGHLIGHT_COLOR,
                 mixBlendMode: 'multiply',
@@ -52,7 +61,6 @@ export function SearchLayer({
               }}
             />
           ))
-          : null
       ))}
     </div>
   );

@@ -34,9 +34,11 @@ function useRenderUrl(
     if (!task) return;
 
     const startedAt = performance.now();
+    let active = true;
     let settled = false;
     task.wait((blob) => {
       settled = true;
+      if (!active) return;
       const elapsed = performance.now() - startedAt;
       recordRenderTiming(kind, elapsed);
       if (kind === 'base') {
@@ -50,6 +52,7 @@ function useRenderUrl(
     });
 
     return () => {
+      active = false;
       revoke();
       if (!settled) task.abort({ code: PdfErrorCode.Cancelled, message: cancelMessage });
     };

@@ -223,8 +223,13 @@ export function initializeViewerTheme() {
     applyViewerColorMode(getSystemColorMode(media));
   };
   media.addEventListener('change', syncAutomaticTheme);
-  new MutationObserver(syncAutomaticTheme).observe(document.body, {
+  const observer = new MutationObserver(syncAutomaticTheme);
+  observer.observe(document.body, {
     attributes: true,
     attributeFilter: ['class'],
   });
+  return () => {
+    media.removeEventListener('change', syncAutomaticTheme);
+    observer.disconnect();
+  };
 }
