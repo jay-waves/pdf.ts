@@ -27,6 +27,8 @@
 }
 
 .modeButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
+.modeButton:disabled { @apply cursor-default opacity-48; }
+.modeButton:disabled:is(:hover, :focus-visible) { @apply border-transparent shadow-none; }
 .modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
 
 .zoomControl {

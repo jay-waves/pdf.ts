@@ -19,7 +19,10 @@
   "dependencies": {
     "@embedpdf/core": "3.0.0-next.5",
     "@embedpdf/engine": "3.0.0-next.5",
+    "@embedpdf/plugin-interaction": "3.0.0-next.5",
     "@embedpdf/plugin-render": "3.0.0-next.5",
+    "@embedpdf/plugin-search": "3.0.0-next.5",
+    "@embedpdf/plugin-selection": "3.0.0-next.5",
     "@embedpdf/plugin-stage": "3.0.0-next.5",
     "@embedpdf/react": "3.0.0-next.5",
     "@use-gesture/react": "^10.3.1",

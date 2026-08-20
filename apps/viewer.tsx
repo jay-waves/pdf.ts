@@ -3,22 +3,27 @@ import { createRoot } from 'react-dom/client';
 import { localEngine } from '@embedpdf/engine';
 import { renderPlugin } from '@embedpdf/plugin-render';
 import { stagePlugin } from '@embedpdf/plugin-stage';
+import { interactionPlugin } from '@embedpdf/plugin-interaction';
+import { searchPlugin } from '@embedpdf/plugin-search';
+import { selectionPlugin } from '@embedpdf/plugin-selection';
 import {
   DocumentGate,
   DocumentScope,
   RenderLayer,
+  SearchLayer,
+  SelectionClipboard,
+  SelectionLayer,
   Stage,
   Viewer,
   useDocumentId,
   useDocumentStatus,
   useDocuments,
-  usePages,
-  useZoom,
   type InitialDocument,
 } from '@embedpdf/react';
 import './viewer.css';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
+import { ViewerV3Controls } from './viewer-v3-controls';
 
 const DOCUMENT_ID = 'pdf-ts-document';
 const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
@@ -30,7 +35,9 @@ const createEngine = () => localEngine({ encoderWorker: false });
 // Stage replaces the v2 viewport/scroll/zoom/spread/rotate/tiling stack.
 // Editing plugins intentionally stay out until their v3 APIs settle.
 const plugins = [
+  interactionPlugin(),
   stagePlugin({
+    interaction: true,
     flow: 'continuous',
     layout: 'vertical',
     spread: 'none',
@@ -38,6 +45,8 @@ const plugins = [
     gap: { px: 12 },
     zoom: { mode: 'fit-page' },
   }),
+  selectionPlugin(),
+  searchPlugin(),
   renderPlugin(),
 ];
 
@@ -117,49 +126,20 @@ function DocumentFallback() {
   return <LoadingStatus label="Opening PDF document…" />;
 }
 
-function CoreControls() {
-  const { currentPage, pageCount, goToPage, next, prev } = usePages();
-  const { zoom, zoomIn, zoomOut, fitPage, fitWidth } = useZoom();
-
-  return (
-    <nav className="pdf-v3-controls" aria-label="PDF controls">
-      <button type="button" onClick={() => prev()} disabled={currentPage <= 0}>‹</button>
-      <span>{pageCount ? `${currentPage + 1} / ${pageCount}` : '– / –'}</span>
-      <button type="button" onClick={() => next()} disabled={currentPage + 1 >= pageCount}>›</button>
-      <span className="pdf-v3-divider" />
-      <button type="button" onClick={zoomOut}>−</button>
-      <span>{Math.round(zoom * 100)}%</span>
-      <button type="button" onClick={zoomIn}>+</button>
-      <button type="button" onClick={fitPage}>Fit page</button>
-      <button type="button" onClick={fitWidth}>Fit width</button>
-      <input
-        aria-label="Page number"
-        type="number"
-        min={1}
-        max={Math.max(1, pageCount)}
-        value={pageCount ? currentPage + 1 : 1}
-        onChange={(event) => {
-          const pageIndex = Number(event.target.value) - 1;
-          if (Number.isInteger(pageIndex) && pageIndex >= 0 && pageIndex < pageCount) {
-            goToPage(pageIndex);
-          }
-        }}
-      />
-    </nav>
-  );
-}
-
 function ReadyDocument() {
   return (
     <div className="pdf-v3-viewer">
-      <Stage className="pdf-v3-stage">
+      <Stage className="pdf-v3-stage" interaction>
         {() => (
           <div className="pdf-v3-page">
             <RenderLayer />
+            <SearchLayer />
+            <SelectionLayer />
           </div>
         )}
       </Stage>
-      <CoreControls />
+      <SelectionClipboard />
+      <ViewerV3Controls />
     </div>
   );
 }
@@ -174,7 +154,7 @@ function ViewerWorkspace() {
       <DocumentGate fallback={<DocumentFallback />}>
         <ReadyDocument />
       </DocumentGate>
-      {active?.name ? <div className="pdf-v3-title">{active.name}</div> : null}
+      {active?.name ? <span className="sr-only">{active.name}</span> : null}
     </DocumentScope>
   );
 }

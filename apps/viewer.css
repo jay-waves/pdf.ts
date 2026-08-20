@@ -45,69 +45,6 @@ textarea {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 18%), 0 2px 8px rgb(0 0 0 / 25%);
 }
 
-.pdf-v3-controls {
-  position: fixed;
-  z-index: 20;
-  right: 16px;
-  bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 38px;
-  padding: 6px 8px;
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 10px;
-  color: #f1f3f4;
-  background: rgb(32 33 36 / 92%);
-  box-shadow: 0 4px 18px rgb(0 0 0 / 30%);
-  backdrop-filter: blur(8px);
-}
-
-.pdf-v3-controls button,
-.pdf-v3-controls input {
-  height: 26px;
-  border: 0;
-  border-radius: 6px;
-  color: inherit;
-  background: rgb(255 255 255 / 10%);
-}
-
-.pdf-v3-controls button {
-  cursor: pointer;
-}
-
-.pdf-v3-controls button:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
-.pdf-v3-controls input {
-  width: 52px;
-  padding-inline: 6px;
-}
-
-.pdf-v3-divider {
-  width: 1px;
-  height: 20px;
-  background: rgb(255 255 255 / 16%);
-}
-
-.pdf-v3-title {
-  position: fixed;
-  z-index: 20;
-  top: 12px;
-  left: 50%;
-  max-width: min(60vw, 640px);
-  padding: 5px 10px;
-  overflow: hidden;
-  border-radius: 7px;
-  color: #f1f3f4;
-  background: rgb(32 33 36 / 82%);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transform: translateX(-50%);
-}
-
 .pdf-v3-password {
   position: fixed;
   inset: 0;

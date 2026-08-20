@@ -14,7 +14,16 @@ importers:
       '@embedpdf/engine':
         specifier: 3.0.0-next.5
         version: 3.0.0-next.5
+      '@embedpdf/plugin-interaction':
+        specifier: 3.0.0-next.5
+        version: 3.0.0-next.5
       '@embedpdf/plugin-render':
+        specifier: 3.0.0-next.5
+        version: 3.0.0-next.5
+      '@embedpdf/plugin-search':
+        specifier: 3.0.0-next.5
+        version: 3.0.0-next.5
+      '@embedpdf/plugin-selection':
         specifier: 3.0.0-next.5
         version: 3.0.0-next.5
       '@embedpdf/plugin-stage':
