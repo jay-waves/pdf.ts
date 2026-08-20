@@ -48,6 +48,10 @@ const plugins: PluginOption[] = [
         resolve(licenseOutputDir, 'licenses'),
         { recursive: true },
       );
+      cpSync(
+        resolve(__dirname, 'node_modules/@embedpdf/engine/LICENSE'),
+        resolve(licenseOutputDir, 'licenses/EmbedPDF-Apache-2.0.txt'),
+      );
     },
   },
 ];

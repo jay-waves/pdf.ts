@@ -162,12 +162,12 @@ const launcherDocumentId = new URLSearchParams(window.location.search).get('laun
 const launcher = launcherDocumentId ? new PdfLauncherSession(launcherDocumentId) : null;
 
 export const platform: ViewerPlatform = {
-  async loadViewerResources(bundledWasmUrl) {
+  async loadViewerResources() {
     if (!launcher) {
       throw new Error('This PDF.ts viewer URL is missing its daemon document identifier.');
     }
     return {
-      wasm: { url: bundledWasmUrl },
+      wasm: { url: '' },
       document: await launcher.openDocument(),
     };
   },

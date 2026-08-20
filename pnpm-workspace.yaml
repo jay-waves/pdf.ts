@@ -7,24 +7,7 @@ peerDependencyRules:
     - svelte
     - vue
 
-packageExtensions:
-  '@embedpdf/utils@2.14.4':
-    dependencies:
-      '@embedpdf/models': 2.14.4
-
-overrides:
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-arabic': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-hebrew': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-jp': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-kr': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-latin': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-sc': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-tc': '-'
-
 allowBuilds:
   '@vscode/vsce-sign': false
   esbuild: false
   keytar: false
-
-patchedDependencies:
-  '@embedpdf/engines@2.14.4': patches/@embedpdf__engines@2.14.4.patch

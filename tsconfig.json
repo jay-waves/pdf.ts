@@ -23,5 +23,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["apps", "viewer.html"]
+  "include": ["apps/viewer.tsx", "apps/vite-env.d.ts", "viewer.html"]
 }

@@ -50,10 +50,8 @@ function pickFileWithInput() {
 }
 
 export const platform: ViewerPlatform = {
-  async loadViewerResources(bundledWasmUrl) {
-    return {
-      wasm: { url: bundledWasmUrl },
-    };
+  async loadViewerResources() {
+    return { wasm: { url: '' } };
   },
   async openLocalDocument(file) {
     if (file) return documentFromFile(file, createDownloadFileHandle(file.name));
