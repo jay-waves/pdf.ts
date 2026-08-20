@@ -6,6 +6,9 @@ export interface ReadingProgress {
 
 interface PdfFileWriter {
   save(data: ArrayBuffer): Promise<boolean>;
+  /** Save a complete incremental-mode serialization, letting the host strip
+   *  the unchanged base bytes before transport. */
+  saveIncrementalDocument?(data: ArrayBuffer): Promise<boolean>;
   saveIncremental?(revision: {
     baseSize: number;
     delta: ArrayBuffer;

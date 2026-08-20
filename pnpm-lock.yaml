@@ -17,6 +17,9 @@ importers:
       '@embedpdf/plugin-interaction':
         specifier: 3.0.0-next.5
         version: 3.0.0-next.5
+      '@embedpdf/plugin-metadata':
+        specifier: 3.0.0-next.5
+        version: 3.0.0-next.5
       '@embedpdf/plugin-render':
         specifier: 3.0.0-next.5
         version: 3.0.0-next.5

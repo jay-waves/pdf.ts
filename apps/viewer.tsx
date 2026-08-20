@@ -4,6 +4,7 @@ import { localEngine } from '@embedpdf/engine';
 import { renderPlugin } from '@embedpdf/plugin-render';
 import { stagePlugin } from '@embedpdf/plugin-stage';
 import { interactionPlugin } from '@embedpdf/plugin-interaction';
+import { metadataPlugin } from '@embedpdf/plugin-metadata';
 import { searchPlugin } from '@embedpdf/plugin-search';
 import { selectionPlugin } from '@embedpdf/plugin-selection';
 import {
@@ -24,13 +25,21 @@ import './viewer.css';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
 import { ViewerV3Controls } from './viewer-v3-controls';
+import notoSansUrl from '../assets/NotoSans-VariableFont_wdth,wght.ttf?url';
 
 const DOCUMENT_ID = 'pdf-ts-document';
 const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
 
 // v3 owns the worker and WASM lifecycle. The Windows launcher permits its
 // blob worker; disabling the encoder pool keeps this first slice to one worker.
-const createEngine = () => localEngine({ encoderWorker: false });
+const createEngine = () => localEngine({
+  encoderWorker: false,
+  fallbackFonts: [{
+    key: 'pdf-ts-noto-sans',
+    familyName: 'Noto Sans',
+    url: notoSansUrl,
+  }],
+});
 
 // Stage replaces the v2 viewport/scroll/zoom/spread/rotate/tiling stack.
 // Editing plugins intentionally stay out until their v3 APIs settle.
@@ -47,6 +56,7 @@ const plugins = [
   }),
   selectionPlugin(),
   searchPlugin(),
+  metadataPlugin(),
   renderPlugin(),
 ];
 
@@ -126,7 +136,7 @@ function DocumentFallback() {
   return <LoadingStatus label="Opening PDF document…" />;
 }
 
-function ReadyDocument() {
+function ReadyDocument({ sourceDocument }: { sourceDocument: PlatformDocument }) {
   return (
     <div className="pdf-v3-viewer">
       <Stage className="pdf-v3-stage" interaction>
@@ -139,12 +149,12 @@ function ReadyDocument() {
         )}
       </Stage>
       <SelectionClipboard />
-      <ViewerV3Controls />
+      <ViewerV3Controls sourceDocument={sourceDocument} />
     </div>
   );
 }
 
-function ViewerWorkspace() {
+function ViewerWorkspace({ sourceDocument }: { sourceDocument: PlatformDocument }) {
   const { docs, activeId } = useDocuments();
   const active = docs.find((doc) => doc.id === activeId);
   if (!activeId) return <LoadingStatus label="Opening PDF document…" />;
@@ -152,7 +162,7 @@ function ViewerWorkspace() {
   return (
     <DocumentScope id={activeId}>
       <DocumentGate fallback={<DocumentFallback />}>
-        <ReadyDocument />
+        <ReadyDocument sourceDocument={sourceDocument} />
       </DocumentGate>
       {active?.name ? <span className="sr-only">{active.name}</span> : null}
     </DocumentScope>
@@ -183,7 +193,7 @@ function CoreViewer({
         </div>
       )}
     >
-      <ViewerWorkspace />
+      <ViewerWorkspace sourceDocument={sourceDocument} />
     </Viewer>
   );
 }

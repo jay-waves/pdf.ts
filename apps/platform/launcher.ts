@@ -75,6 +75,18 @@ class PdfLauncherSession {
 
   async prepareWrite() {
     return {
+      saveIncrementalDocument: this.incrementalAvailable
+        ? async (data: ArrayBuffer) => {
+            if (data.byteLength < this.baseSize) {
+              throw new Error('The incremental PDF is smaller than its opened base.');
+            }
+            if (data.byteLength === this.baseSize) return true;
+            return this.saveIncremental({
+              baseSize: this.baseSize,
+              delta: data.slice(this.baseSize),
+            });
+          }
+        : undefined,
       saveIncremental: this.incrementalAvailable
         ? async (revision: { baseSize: number; delta: ArrayBuffer }) => (
             this.saveIncremental(revision)

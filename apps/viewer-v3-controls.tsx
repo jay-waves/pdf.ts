@@ -9,21 +9,28 @@ import {
   CornerUpRight,
   ChevronDown,
   ChevronUp,
+  Download,
   GalleryHorizontal,
   Hand,
+  Info,
   LayoutTemplate,
   Minus,
   Moon,
   PenLine,
   Pin,
   Plus,
+  Printer,
   RotateCw,
   Save,
   TextSearch,
+  Wrench,
   X,
 } from 'lucide-react';
 import {
+  useDocumentId,
+  useDocuments,
   useLayout,
+  useMetadata,
   usePages,
   useSearch,
   useSearchState,
@@ -32,7 +39,10 @@ import {
   useZoom,
 } from '@embedpdf/react';
 import {
+  Button,
   ControlButton,
+  Dialog,
+  DialogActions,
   FloatingSurface,
   FloatingToolbar,
   FloatingToolbarDivider,
@@ -44,16 +54,99 @@ import { useViewerActivityAutoHide } from './components/use-auto-hide';
 import { getStoredToolbarPinned, setStoredToolbarPinned } from './theme';
 import toolbarStyles from './toolbar.module.css';
 import navigationStyles from './bottom-navigation.module.css';
+import documentStyles from './document-dialogs.module.css';
+import { platform } from '#platform';
+import { downloadPdf } from './platform/browser-download';
+import type { PlatformDocument } from './platform/types';
 
 type ToolbarSection = 'document' | 'page' | 'draw' | 'search';
 
 const NOOP = () => {};
 const PRIMARY_ITEMS = [
-  { id: 'document', label: 'Docs', icon: BookText, enabled: false },
+  { id: 'document', label: 'Docs', icon: BookText, enabled: true },
   { id: 'page', label: 'Page', icon: LayoutTemplate, enabled: true },
   { id: 'draw', label: 'Draw', icon: PenLine, enabled: false },
   { id: 'search', label: 'Find', icon: TextSearch, enabled: true },
 ] as const;
+
+function formatMetadataDate(value: string | null) {
+  if (!value) return 'Not provided';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  }).format(date);
+}
+
+function MetadataDialogV3({
+  fileName,
+  open,
+  onClose,
+}: {
+  fileName?: string;
+  open: boolean;
+  onClose(): void;
+}) {
+  const { metadata } = useMetadata();
+  const { pageCount } = usePages();
+  const fields = metadata ? [
+    ['File name', fileName],
+    ['Pages', String(pageCount)],
+    ['Title', metadata.title],
+    ['Author', metadata.author],
+    ['Creator', metadata.creator],
+    ['Producer', metadata.producer],
+    ['Created', formatMetadataDate(metadata.created)],
+    ['Modified', formatMetadataDate(metadata.modified)],
+  ] : [];
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Metadata">
+      <div className={documentStyles.metadataContent}>
+        {!metadata ? <div className={documentStyles.metadataStatus}>Loading metadata…</div> : null}
+        {metadata ? (
+          <dl className={documentStyles.metadataDetails}>
+            {fields.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value || 'Not provided'}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </div>
+      <DialogActions>
+        <Button variant="primary" onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function DocumentToolbar({
+  busy,
+  onBack,
+  onExport,
+  onMetadata,
+}: {
+  busy: boolean;
+  onBack(): void;
+  onExport(): void;
+  onMetadata(): void;
+}) {
+  return (
+    <FloatingToolbar label="Document toolbar">
+      <IconButton label="Back" icon={ArrowLeft} onClick={onBack} />
+      <FloatingToolbarDivider />
+      <FloatingToolbarGroup>
+        <IconButton label="Print (waiting for EmbedPDF v3 UI)" icon={Printer} disabled onClick={NOOP} />
+        <IconButton label="Export" icon={Download} disabled={busy} onClick={onExport} />
+        <IconButton label="Metadata" icon={Info} onClick={onMetadata} />
+        <IconButton label="Developer diagnostics (waiting for EmbedPDF v3)" icon={Wrench} disabled onClick={NOOP} />
+      </FloatingToolbarGroup>
+    </FloatingToolbar>
+  );
+}
 
 function SearchToolbar({ onBack }: { onBack(): void }) {
   const search = useSearch();
@@ -196,11 +289,15 @@ function PageToolbar({ onBack }: { onBack(): void }) {
   );
 }
 
-function ViewerToolbar() {
+function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument }) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const hovering = useRef(false);
   const { activeToolId, activate } = useTool();
+  const documentId = useDocumentId();
+  const { download } = useDocuments();
   const { visible, reveal, scheduleHide } = useViewerActivityAutoHide(
     'toolbar',
     () => !pinned && !hovering.current,
@@ -239,6 +336,42 @@ function ViewerToolbar() {
     setStoredToolbarPinned(next);
   };
 
+  const serialize = useCallback(async () => {
+    if (!documentId) throw new Error('No PDF document is open.');
+    const bytes = await download(documentId, { mode: 'incremental' });
+    return bytes.slice().buffer as ArrayBuffer;
+  }, [documentId, download]);
+
+  const saveDocument = useCallback(async () => {
+    const target = await sourceDocument.fileHandle.prepareWrite();
+    if (!target) return false;
+    setBusy(true);
+    try {
+      const data = await serialize();
+      return target.saveIncrementalDocument
+        ? await target.saveIncrementalDocument(data)
+        : await target.save(data);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to save the PDF.');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [serialize, sourceDocument.fileHandle]);
+
+  const exportDocument = useCallback(async () => {
+    setBusy(true);
+    try {
+      downloadPdf(await serialize(), sourceDocument.name ?? 'document.pdf');
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to export the PDF.');
+    } finally {
+      setBusy(false);
+    }
+  }, [serialize, sourceDocument.name]);
+
+  useEffect(() => platform.onDocumentSaveRequested?.(async () => saveDocument()), [saveDocument]);
+
   return (
     <div
       className={toolbarStyles.root}
@@ -254,7 +387,14 @@ function ViewerToolbar() {
       }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {activeSection === 'page' ? <PageToolbar onBack={() => setActiveSection(null)} />
+      {activeSection === 'document' ? (
+        <DocumentToolbar
+          busy={busy}
+          onBack={() => setActiveSection(null)}
+          onExport={() => void exportDocument()}
+          onMetadata={() => setMetadataOpen(true)}
+        />
+      ) : activeSection === 'page' ? <PageToolbar onBack={() => setActiveSection(null)} />
         : activeSection === 'search' ? <SearchToolbar onBack={() => setActiveSection(null)} /> : (
         <FloatingToolbar label="PDF toolbar">
           <FloatingToolbarGroup>
@@ -280,7 +420,7 @@ function ViewerToolbar() {
           <div className={toolbarStyles.persistentControls}>
             <FloatingToolbarDivider />
             <FloatingToolbarGroup>
-              <IconButton label="Save (waiting for EmbedPDF v3)" icon={Save} disabled onClick={NOOP} />
+              <IconButton label="Save" icon={Save} disabled={busy} onClick={() => void saveDocument()} />
               <IconButton label="Theme rendering (waiting for EmbedPDF v3)" icon={Moon} disabled onClick={NOOP} />
               <IconButton
                 label="Pan"
@@ -293,6 +433,11 @@ function ViewerToolbar() {
           </div>
         </FloatingToolbar>
       )}
+      <MetadataDialogV3
+        fileName={sourceDocument.name}
+        open={metadataOpen}
+        onClose={() => setMetadataOpen(false)}
+      />
     </div>
   );
 }
@@ -410,10 +555,10 @@ function ViewerBottomNavigation() {
   );
 }
 
-export function ViewerV3Controls() {
+export function ViewerV3Controls({ sourceDocument }: { sourceDocument: PlatformDocument }) {
   return (
     <TooltipProvider>
-      <ViewerToolbar />
+      <ViewerToolbar sourceDocument={sourceDocument} />
       <ViewerBottomNavigation />
     </TooltipProvider>
   );
