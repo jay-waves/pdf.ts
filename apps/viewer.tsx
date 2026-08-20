@@ -79,7 +79,6 @@ import {
   beginStartupLog,
   completeStartupLog,
   failStartupLog,
-  StartupLogScreen,
   writeStartupInfo,
   writeStartupLogOnce,
 } from './startup-log';
@@ -616,7 +615,6 @@ function ViewerLifecycle() {
   return (
     <TooltipProvider>
       <ViewerBootstrap />
-      <StartupLogScreen />
     </TooltipProvider>
   );
 }

@@ -17,6 +17,7 @@ import {
   type PdfFontDiagnostic,
 } from './fonts';
 import type { PdfRuntime } from './pdf-engine';
+import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import styles from './developer-dialog.module.css';
 
 
@@ -55,6 +56,7 @@ export function DeveloperDialog({
 }) {
   const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
   const snapshot = useStore(viewerDiagnosticsStore);
+  const startupSnapshot = useStore(startupLogStore);
   const dprMode = snapshot.renderDprMode;
   const dpr = getEffectiveRenderDpr(dprMode);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
@@ -108,6 +110,7 @@ export function DeveloperDialog({
     `Tile render last / average: ${formatTiming(snapshot.tileTiming)} across ${snapshot.tileTiming.count} completed tasks.`,
     'Timing is end-to-end task latency; averages cover completed tasks since the last rendering reset.',
     'Raster memory is an estimate and excludes PDFium WASM and GPU copies.',
+    formatStartupDiagnostics(startupSnapshot),
     snapshot.errors.length
       ? `Recent errors (latest ${snapshot.errors.length}):\n${snapshot.errors.join('\n\n')}`
       : 'Recent errors: none recorded.',

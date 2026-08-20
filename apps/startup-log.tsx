@@ -1,11 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
-import { Dialog } from './components';
 
 export type StartupLogLevel = 'info' | 'warn' | 'error';
 
-type StartupLogEntry = {
+export type StartupLogEntry = {
   id: number;
   elapsed: number;
   level: StartupLogLevel;
@@ -13,15 +10,13 @@ type StartupLogEntry = {
   detail?: string;
 };
 
-type StartupLogSnapshot = {
+export type StartupLogSnapshot = {
   session: number;
   title: string;
   state: 'running' | 'ready' | 'error';
   entries: StartupLogEntry[];
 };
 
-const REVEAL_DELAY_MS = 1000;
-const STARTUP_LOG_DEFAULT_OPEN = false;
 const MAX_ENTRIES = 24;
 
 export const startupLogStore = createStore<StartupLogSnapshot>(() => ({
@@ -90,65 +85,35 @@ export function completeStartupLog(message: string, detail?: string) {
   startupLogStore.setState({ state: 'ready' });
 }
 
-function formatEntry(entry: StartupLogEntry) {
-  const prefix = entry.level === 'info' ? '' : `[${entry.level}] `;
-  return `${prefix}${entry.message}${entry.detail ? ` · ${entry.detail}` : ''}`;
+function formatDuration(duration: number) {
+  return duration < 1000 ? `${duration.toFixed(0)} ms` : `${(duration / 1000).toFixed(2)} s`;
 }
 
-export function StartupLogScreen() {
-  const snapshot = useStore(startupLogStore);
-  const [visible, setVisible] = useState(STARTUP_LOG_DEFAULT_OPEN);
-  const [dismissed, setDismissed] = useState(false);
-  const detailsRef = useRef<HTMLTextAreaElement>(null);
+function formatEntry(entry: StartupLogEntry) {
+  const prefix = entry.level === 'info' ? '' : `[${entry.level}] `;
+  return `[+${formatDuration(entry.elapsed)}] ${prefix}${entry.message}${entry.detail ? ` · ${entry.detail}` : ''}`;
+}
 
-  useLayoutEffect(() => {
-    setVisible(STARTUP_LOG_DEFAULT_OPEN);
-    setDismissed(false);
-  }, [snapshot.session]);
+export function formatStartupDiagnostics(snapshot: StartupLogSnapshot) {
+  const completed = snapshot.entries.at(-1);
+  const state = snapshot.state === 'running' ? 'in progress' : snapshot.state;
+  const total = completed ? ` in ${formatDuration(completed.elapsed)}` : '';
+  const milestones = [
+    ['Viewer resources ready', 'Resources'],
+    ['PDF engine ready', 'PDF engine'],
+    ['Document opened', 'Document opened'],
+    ['Page raster generated', 'First raster'],
+    ['First page ready', 'First page'],
+  ].flatMap(([message, label]) => {
+    const entry = snapshot.entries.find((candidate) => candidate.message === message);
+    return entry ? [`- ${label}: ${formatDuration(entry.elapsed)}`] : [];
+  });
 
-  useEffect(() => {
-    if (STARTUP_LOG_DEFAULT_OPEN || snapshot.state !== 'running' || visible || dismissed) return;
-    const timer = window.setTimeout(() => setVisible(true), REVEAL_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [dismissed, snapshot.session, snapshot.state, visible]);
-
-  useEffect(() => {
-    const details = detailsRef.current;
-    if (details) details.scrollTop = details.scrollHeight;
-  }, [snapshot.entries]);
-
-  if (!visible || dismissed) return null;
-
-  const status = snapshot.state === 'error'
-    ? 'PDF startup did not complete successfully. Tap outside to dismiss.'
-    : 'Some work is still in progress. Tap outside to dismiss.';
-  const details = [
+  return [
+    `Startup: ${state}${total}.`,
+    ...(milestones.length ? ['Startup milestones:', ...milestones] : []),
+    'Startup log:',
     snapshot.title,
-    '',
     ...snapshot.entries.map(formatEntry),
   ].join('\n');
-
-  return (
-    <Dialog
-      open
-      onClose={() => setDismissed(true)}
-      title="Startup details"
-      titleVariant="popup"
-      variant="popupWide"
-      contentClassName="flex h-[min(620px,calc(100vh-32px))] flex-col font-mono"
-    >
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(180px,1fr)] gap-3 p-3.5 text-[11px]">
-        <p className={`m-0 ${snapshot.state === 'error' ? 'text-danger' : 'text-secondary'}`} role="status">
-          {status}
-        </p>
-        <textarea
-          ref={detailsRef}
-          className="h-full min-h-45 resize-none rounded-md border border-border bg-input p-2.5 font-mono text-[10.5px] leading-4 text-foreground outline-none focus:border-accent"
-          value={details}
-          aria-label="Startup log"
-          readOnly
-        />
-      </div>
-    </Dialog>
-  );
 }
