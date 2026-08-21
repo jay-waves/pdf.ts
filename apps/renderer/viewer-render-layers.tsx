@@ -47,8 +47,14 @@ function useRenderUrl(
       const nextUrl = URL.createObjectURL(blob);
       urlRef.current = nextUrl;
       setUrl(nextUrl);
-    }, () => {
+    }, (failure) => {
       settled = true;
+      if (kind === 'base' && active && failure.reason.code !== PdfErrorCode.Cancelled) {
+        console.error('[pdf-ts] Page raster failed', {
+          code: failure.reason.code,
+          message: failure.reason.message,
+        });
+      }
     });
 
     return () => {

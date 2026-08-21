@@ -37,7 +37,7 @@ import { ViewportInput } from './viewer-viewport-input';
 import { PDF_TILE_SIZE_CSS_PX } from './viewer-diagnostics';
 import { RasterLayer, TileLayer } from './viewer-render-layers';
 import { DOCUMENT_ID } from '../document/viewer-document';
-import './viewer-surface';
+import './viewer-surface.css';
 import styles from '../viewer/viewer.module.css';
 import { completeStartupLog, failStartupLog, writeStartupLogOnce } from '../viewer/startup-log';
 

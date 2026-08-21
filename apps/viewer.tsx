@@ -5,7 +5,7 @@ import type { PluginRegistry } from '@embedpdf/core';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
-import './viewer';
+import './viewer.css';
 import { getPluginCapability } from './shared/utils';
 import { getFileNameFromUrl } from './shared/url';
 import {

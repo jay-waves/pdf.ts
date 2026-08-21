@@ -49,8 +49,19 @@ class PdfLauncherSession {
   }
 
   async openDocument(): Promise<PlatformDocument> {
-    const response = await fetch(this.resourceUrl, { method: 'HEAD', cache: 'no-store' });
+    console.info('[pdf-ts] Requesting PDF metadata');
+    let response: Response;
+    try {
+      response = await fetch(this.resourceUrl, { method: 'HEAD', cache: 'no-store' });
+    } catch (error) {
+      console.error('[pdf-ts] PDF metadata request failed', error);
+      throw error;
+    }
     if (!response.ok) {
+      console.error('[pdf-ts] PDF metadata request returned an error', {
+        status: response.status,
+        statusText: response.statusText,
+      });
       if (response.status === 410) {
         throw new Error('This PDF was moved or deleted. Open it with PDF.ts again to register its new location.');
       }
@@ -65,6 +76,10 @@ class PdfLauncherSession {
     if (!Number.isSafeInteger(this.baseSize) || this.baseSize <= 0) {
       throw new Error('PDF.ts did not provide the PDF size.');
     }
+    console.info('[pdf-ts] PDF metadata ready', {
+      bytes: this.baseSize,
+      contentType: response.headers.get('Content-Type') || 'unknown',
+    });
     return {
       resource: { url: this.resourceUrl },
       key: `pdf.ts:${this.resourceUrl}`,

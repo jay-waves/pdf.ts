@@ -99,6 +99,19 @@ export function usePdfRuntime(options: {
       writeStartupLog(message.level ?? 'info', message.message, message.detail);
     };
     worker.addEventListener('message', handleStartupLog);
+    const handleWorkerError = (event: ErrorEvent) => {
+      console.error('[pdf-ts] PDF worker script failed', {
+        message: event.message,
+        filename: event.filename,
+        line: event.lineno,
+        column: event.colno,
+      });
+    };
+    const handleWorkerMessageError = (event: MessageEvent<unknown>) => {
+      console.error('[pdf-ts] PDF worker message could not be decoded', event.data);
+    };
+    worker.addEventListener('error', handleWorkerError);
+    worker.addEventListener('messageerror', handleWorkerMessageError);
     const executor = new RemoteExecutor(worker, options);
     const internals = executor as unknown as RemoteExecutorInternals;
     const engine = new PdfiumEngine<Blob>(executor, {
@@ -137,6 +150,8 @@ export function usePdfRuntime(options: {
     return () => {
       active = false;
       worker.removeEventListener('message', handleStartupLog);
+      worker.removeEventListener('error', handleWorkerError);
+      worker.removeEventListener('messageerror', handleWorkerMessageError);
       executors.delete(engine);
       void engine.destroy().toPromise().catch(() => worker.terminate());
     };
