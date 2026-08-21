@@ -22,7 +22,6 @@ overrides:
   '@embedpdf/engines@2.14.4>@embedpdf/fonts-tc': '-'
 
 allowBuilds:
-  '@vscode/vsce-sign': false
   esbuild: false
   keytar: false
 

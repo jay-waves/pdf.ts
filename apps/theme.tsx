@@ -137,10 +137,6 @@ export function setStoredToolbarPinned(pinned: boolean) {
 }
 
 function loadViewerThemeSettings(): ViewerThemeSettings {
-  if (platform.viewerThemePolicy === 'host') {
-    return { light: 'light', dark: 'dark' };
-  }
-
   const storedLight = platform.getPreference(LIGHT_THEME_STORAGE_KEY);
   const storedDark = platform.getPreference(DARK_THEME_STORAGE_KEY);
   const light = isLightViewerTheme(storedLight) ? storedLight : 'light';
@@ -162,10 +158,6 @@ export const viewerThemeStore = createStore<{
   manualColorMode: null,
 }));
 
-export function supportsViewerThemeSettings() {
-  return platform.viewerThemePolicy !== 'host';
-}
-
 export function getPdfRenderTheme(theme: ViewerTheme): PdfRenderTheme | null {
   return findViewerTheme(theme)?.renderTheme ?? null;
 }
@@ -175,14 +167,6 @@ export function isDarkViewerTheme(theme: ViewerTheme) {
 }
 
 function getSystemColorMode(media: MediaQueryList): ViewerColorMode {
-  if (document.body.classList.contains('vscode-dark')
-    || document.body.classList.contains('vscode-high-contrast')) {
-    return 'dark';
-  }
-  if (document.body.classList.contains('vscode-light')
-    || document.body.classList.contains('vscode-high-contrast-light')) {
-    return 'light';
-  }
   return media.matches ? 'dark' : 'light';
 }
 
@@ -198,7 +182,6 @@ function applyViewerColorMode(mode: ViewerColorMode) {
 }
 
 export function setViewerThemeSettings(settings: ViewerThemeSettings) {
-  if (!supportsViewerThemeSettings()) return;
   viewerThemeStore.setState({ settings: { ...settings } });
   platform.setPreference(LIGHT_THEME_STORAGE_KEY, settings.light);
   platform.setPreference(DARK_THEME_STORAGE_KEY, settings.dark);
@@ -208,7 +191,6 @@ export function setViewerThemeSettings(settings: ViewerThemeSettings) {
 }
 
 export function toggleViewerColorMode() {
-  if (!supportsViewerThemeSettings()) return;
   const manualColorMode = isDarkViewerTheme(viewerThemeStore.getState().theme) ? 'light' : 'dark';
   viewerThemeStore.setState({ manualColorMode });
   applyViewerColorMode(manualColorMode);

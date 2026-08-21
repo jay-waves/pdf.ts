@@ -1,36 +1,39 @@
-# pdf.ts Extension
+# PDF.ts
 
-A polished PDF viewer powered by EmbedPDF, available for the web, VS Code, and Chrome.
-
-## Desktop launcher
-
-The launcher is built into this repository and only accepts PDF files. It
-serves the viewer from `pdf.ts.localhost`, safely saves full or incremental
-updates, and installs only the PDF file association.
-
-```bash
-pnpm build:linux
-pnpm build:windows
-```
-
-Artifacts are written to `release/pdf.ts` and `release/pdf.ts.exe`.
+A polished PDF viewer powered by EmbedPDF, available for the web, Chrome,
+Linux, and Windows.
 
 ## Build
 
+Compile the shared browser viewer once:
+
 ```bash
-# Static web app (output: release/web)
-pnpm build:web
-
-# Chrome extension
-pnpm build:chrome
-
-# VS Code extension
-pnpm build:vscode
+pnpm compile
 ```
 
-Extension directories are written to `release/chrome-extension` and
-`release/vscode-extension`; packaged `.zip` and `.vsix` files are written
-directly to `release`.
+The static web app is written to `release/web`. Package any host from that
+compiled viewer without rebuilding the frontend:
+
+```bash
+pnpm package:chrome
+pnpm package:linux
+pnpm package:windows
+```
+
+To compile once and package every host:
+
+```bash
+pnpm build:all
+```
+
+Artifacts are written to:
+
+- `release/pdf-ts-chrome-v<version>.zip`
+- `release/pdf.ts`
+- `release/pdf.ts.exe`
+
+The desktop launcher serves the viewer from `pdf.ts.localhost`, safely saves
+full or incremental updates, and installs only the PDF file association.
 
 <table>
   <tr>

@@ -1,6 +1,6 @@
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({
-    url: chrome.runtime.getURL('viewer.html'),
+    url: chrome.runtime.getURL('index.html'),
   });
 });
 
@@ -31,7 +31,7 @@ const getDocumentUrlFromExtensionShortcut = (url) => {
 };
 
 const getViewerUrl = (documentUrl) =>
-  chrome.runtime.getURL(`viewer.html?file=${encodeURIComponent(documentUrl)}`);
+  chrome.runtime.getURL(`index.html?file=${encodeURIComponent(documentUrl)}`);
 
 const redirectPdfTab = (tabId, url) => {
   const documentUrl = isSupportedPdfUrl(url) ? url : getDocumentUrlFromExtensionShortcut(url);

@@ -8,7 +8,7 @@ const source = resolve(root, 'release/web');
 const embedded = resolve(root, 'launcher/viewer');
 const target = process.argv[2];
 if (!['linux-amd64', 'windows-amd64'].includes(target)) throw new Error('Expected linux-amd64 or windows-amd64.');
-if (!existsSync(resolve(source, 'index.html'))) throw new Error('Run pnpm build:web first.');
+if (!existsSync(resolve(source, 'index.html'))) throw new Error('Run pnpm compile first.');
 
 function copy(sourceDir, targetDir) {
   mkdirSync(targetDir, { recursive: true });
@@ -45,7 +45,7 @@ try {
       const check = spawnSync(candidate, ['--version'], { stdio: 'ignore' });
       return !check.error && check.status === 0;
     });
-    if (!windres) throw new Error('build:windows requires llvm-windres or windres');
+    if (!windres) throw new Error('package:windows requires llvm-windres or windres');
     windowsResource = resolve(root, 'launcher', 'icon_windows_amd64.syso');
     const compiled = spawnSync(windres, [
       '--input', resolve(root, 'launcher', 'icon.rc'),
@@ -61,7 +61,7 @@ try {
     stdio: 'inherit',
   });
   requireSuccess(result, 'go build');
-  console.log(`Built ${output}`);
+  console.log(`Packaged ${output}`);
 } finally {
   if (windowsResource) rmSync(windowsResource, { force: true });
   cleanEmbeddedViewer();

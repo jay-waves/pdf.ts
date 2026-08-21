@@ -21,7 +21,6 @@ import { PdfScroll } from './pdf-scroll';
 import {
   initializeViewerTheme,
   isDarkViewerTheme,
-  supportsViewerThemeSettings,
   viewerThemeStore,
 } from './theme';
 import { Toolbar } from './toolbar';
@@ -265,7 +264,7 @@ function App({
     panMode,
     signatureCount: signatures.length,
     canSave: isDirty,
-    canConfigureTheme: supportsViewerThemeSettings(),
+    canConfigureTheme: true,
     darkAppearance: isDarkViewerTheme(viewerTheme),
   };
 

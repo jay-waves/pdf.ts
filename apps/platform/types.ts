@@ -48,15 +48,8 @@ export type PlatformTranslationResult =
   | { type: 'external'; url: string };
 
 export interface ViewerPlatform {
-  /** Host-controlled viewers derive their appearance externally and hide local theme controls. */
-  viewerThemePolicy?: 'host';
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file?: File): Promise<PlatformDocument | undefined>;
-  requestDocumentSave?(): void;
-  onDocumentSaveRequested?(
-    handler: (preserveDirty: boolean) => Promise<boolean>,
-  ): () => void;
-  setDocumentDirty?(dirty: boolean): void;
   openExternal(url: string): void;
   translate(text: string): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
