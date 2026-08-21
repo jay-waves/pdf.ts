@@ -30,12 +30,20 @@ let startedAt = performance.now();
 let nextEntryId = 1;
 const onceKeys = new Set<string>();
 
+function formatConsoleMessage(message: string) {
+  return /[.!?]$/u.test(message) ? message : `${message}.`;
+}
+
+function writeConsole(level: StartupLogLevel, elapsed: number, message: string, detail?: string) {
+  const text = `[pdf-ts +${elapsed.toFixed(1)}ms] ${formatConsoleMessage(message)}`;
+  const output = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info;
+  if (detail) output(text, detail);
+  else output(text);
+}
+
 function appendStartupLog(level: StartupLogLevel, message: string, detail?: string) {
   const entry = { id: nextEntryId++, elapsed: performance.now() - startedAt, level, message, detail };
-  const consoleMessage = detail ? `${message} · ${detail}` : message;
-  if (level === 'error') console.error('[pdf-ts]', consoleMessage);
-  else if (level === 'warn') console.warn('[pdf-ts]', consoleMessage);
-  else console.log('[pdf-ts]', consoleMessage);
+  writeConsole(level, entry.elapsed, message, detail);
   startupLogStore.setState((state) => ({
     entries: [...state.entries, entry].slice(-MAX_ENTRIES),
   }));
@@ -50,7 +58,7 @@ export function beginStartupLog(title = 'PDF.ts') {
     state: 'running',
     entries: [],
   }));
-  console.log(`[pdf-ts] ${title}`);
+  writeConsole('info', 0, `Starting ${title}`);
 }
 
 export function writeStartupLog(level: StartupLogLevel, message: string, detail?: string) {
@@ -89,11 +97,6 @@ function formatDuration(duration: number) {
   return duration < 1000 ? `${duration.toFixed(0)} ms` : `${(duration / 1000).toFixed(2)} s`;
 }
 
-function formatEntry(entry: StartupLogEntry) {
-  const prefix = entry.level === 'info' ? '' : `[${entry.level}] `;
-  return `[+${formatDuration(entry.elapsed)}] ${prefix}${entry.message}${entry.detail ? ` · ${entry.detail}` : ''}`;
-}
-
 export function formatStartupDiagnostics(snapshot: StartupLogSnapshot) {
   const completed = snapshot.entries.at(-1);
   const state = snapshot.state === 'running' ? 'in progress' : snapshot.state;
@@ -112,8 +115,5 @@ export function formatStartupDiagnostics(snapshot: StartupLogSnapshot) {
   return [
     `Startup: ${state}${total}.`,
     ...(milestones.length ? ['Startup milestones:', ...milestones] : []),
-    'Startup log:',
-    snapshot.title,
-    ...snapshot.entries.map(formatEntry),
   ].join('\n');
 }
