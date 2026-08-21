@@ -5,51 +5,50 @@ import type { PluginRegistry } from '@embedpdf/core';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
-import './viewer.css';
-import { getPluginCapability } from './utils';
-import { getFileNameFromUrl } from './url';
+import './viewer';
+import { getPluginCapability } from './shared/utils';
+import { getFileNameFromUrl } from './shared/url';
 import {
   Outline,
   getCurrentBookmark,
   installPageTracker,
   installOutlinePrefetch,
   type OutlineCache,
-} from './outline';
-import { BottomNav } from './bottom-navigation';
-import { pdfSearchStore } from './pdf-search';
-import { PdfScroll } from './pdf-scroll';
+} from './navigation/outline';
+import { BottomNav } from './navigation/bottom-navigation';
+import { pdfSearchStore } from './search/pdf-search';
+import { PdfScroll } from './renderer/pdf-scroll';
 import {
   initializeViewerTheme,
   isDarkViewerTheme,
   viewerThemeStore,
-} from './theme';
-import { Toolbar } from './toolbar';
-import { Thumbnails } from './thumbnails';
-import { ColorPalette } from './color-palette';
+} from './theme/theme';
+import { Toolbar } from './toolbar/toolbar';
+import { Thumbnails } from './navigation/thumbnails';
+import { ColorPalette } from './annotations/color-palette';
 import {
   installAnnotationDirty,
   installAnnotationLinks,
   installAnnotationPreview,
   installCommentEditor,
-} from './annotations';
-import { Comments } from './comments';
-import { MetadataDialog } from './metadata-dialog';
-import { PrintDialog } from './print-dialog';
-import { ProtectDialog } from './protection-dialogs';
-import { ThemeDialog } from './theme-dialog';
-import { DeveloperDialog } from './developer-dialog';
-import { ContextMenu } from './context-menu';
+} from './annotations/annotations';
+import { Comments } from './annotations/comments';
+import { MetadataDialog } from './document/metadata-dialog';
+import { PrintDialog } from './document/print-dialog';
+import { ProtectDialog } from './document/protection-dialogs';
+import { ThemeDialog } from './theme/theme-dialog';
+import { DeveloperDialog } from './viewer/developer-dialog';
+import { ContextMenu } from './selection/context-menu';
 import { Dialog, TooltipProvider } from './components';
-import { exportPdf } from './pdf-save';
-import { usePdfRuntime, type PdfRuntime } from './pdf-engine';
-import { useDocumentPersistence } from './viewer-document-persistence';
-import { useRenderThemeVersion } from './viewer-render-theme';
-import { SelectionTranslate } from './selection-translate';
-import { installReadingHistory as installPlatformReadingHistory } from './reading-history';
+import { exportPdf } from './document/pdf-save';
+import { usePdfRuntime, useRenderThemeVersion, type PdfRuntime } from './renderer/pdf-engine';
+import { useDocumentPersistence } from './document/viewer-document-persistence';
+import { SelectionTranslate } from './selection/selection-translate';
+import { installReadingHistory as installPlatformReadingHistory } from './navigation/reading-history';
 import {
   SignatureDialog,
   useDocumentSignatures,
-} from './signatures';
+} from './document/signatures';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
 import {
@@ -57,22 +56,22 @@ import {
   PdfSurface,
   RENDER_IMAGE_TYPE,
   VIEWER_STATUS_CLASS,
-} from './viewer-surface';
-import styles from './viewer.module.css';
+} from './renderer/viewer-surface';
+import styles from './viewer/viewer.module.css';
 import {
   getEffectiveRenderDpr,
   installErrorDiagnostics,
   installRenderDprOverride,
   resetViewerDiagnostics,
   viewerDiagnosticsStore,
-} from './viewer-diagnostics';
-import { DOCUMENT_ID } from './viewer-document';
+} from './renderer/viewer-diagnostics';
+import { DOCUMENT_ID } from './document/viewer-document';
 import {
   INITIAL_VIEWER_UI,
   installViewerCommandKeys,
   reduceViewerUi,
   useViewerController,
-} from './viewer-controller';
+} from './viewer/viewer-controller';
 import { PDFIUM_FONT_FALLBACK } from './fonts';
 import {
   beginStartupLog,
@@ -80,7 +79,7 @@ import {
   failStartupLog,
   writeStartupInfo,
   writeStartupLogOnce,
-} from './startup-log';
+} from './viewer/startup-log';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
 

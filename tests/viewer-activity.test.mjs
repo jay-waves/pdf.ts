@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { viewerActivity } from '../apps/viewer-activity.ts';
+import { viewerActivity } from '../apps/viewer/viewer-activity.ts';
 
 test('viewer activity emits a structured session event stream', () => {
   const events = [];

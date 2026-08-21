@@ -1,4 +1,4 @@
-import { getFileNameFromUrl, parseUrl } from '../url';
+import { getFileNameFromUrl, parseUrl } from '../shared/url';
 import { browserPersistence } from './browser-storage';
 import {
   createBrowserWriter,

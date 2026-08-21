@@ -1,0 +1,42 @@
+@reference '../tailwind.css';
+
+.root {
+  @apply pointer-events-none fixed inset-x-0 top-0 z-31 flex flex-col items-center bg-transparent opacity-0;
+  @apply transition-opacity duration-200 ease-out motion-reduce:transition-none;
+  padding-top: 2.5vh;
+}
+.root[data-visible='true'] { @apply pointer-events-auto opacity-100; }
+
+/* Keep the responsive toolbar state on the root. Persistent actions belong to
+   the primary toolbar on narrow screens, while wide layouts retain them in
+   every section. display: contents preserves the existing flex layout. */
+.persistentControls { display: contents; }
+@media (max-width: 640px) {
+  .root[data-toolbar-level='secondary'] .persistentControls { display: none; }
+}
+
+.drawTools { @apply my-[-2px] inline-flex min-w-0 max-w-[min(720px,calc(100vw-18px))] items-center gap-0.75 overflow-auto py-0.5; }
+.icon { @apply block size-3.5 flex-none; }
+.searchModeIcon { @apply size-4; }
+
+.modeButton {
+  @apply cursor-pointer rounded-md border border-transparent bg-transparent text-inherit outline-none;
+  @apply transition-[background-color,border-color,box-shadow,color] duration-150 ease-control motion-reduce:transition-none;
+  @apply h-6.5 min-w-0 items-center justify-center gap-1.25 leading-3.5;
+  @apply inline-flex w-16 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
+}
+
+.modeButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
+.modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
+
+.zoomControl {
+  @apply inline-flex h-6.5 w-18.5 items-stretch overflow-hidden rounded-md border border-border-subtle bg-input;
+  @apply transition-[border-color,box-shadow] duration-150 ease-control focus-within:border-accent focus-within:shadow-control;
+}
+.zoomControl:hover { @apply border-accent shadow-control; }
+.zoomInput { @apply min-w-0 flex-1 border-0 bg-transparent px-1.5 text-center text-inherit outline-none tabular-nums; }
+.zoomInput:disabled { @apply opacity-50; }
+.zoomMenu {
+  @apply h-auto w-5.5 flex-none justify-center rounded-none border-0 border-l border-border-subtle bg-transparent p-0 shadow-none;
+}
+.zoomMenu:hover { @apply border-border-subtle bg-hover shadow-none; }

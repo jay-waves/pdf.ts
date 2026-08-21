@@ -1,6 +1,6 @@
 import { browserPersistence } from './browser-storage';
 import { translateWithModelDownload } from './browser-translation';
-import { getExternalUrl } from '../url';
+import { getExternalUrl } from '../shared/url';
 import type {
   PlatformDocument,
   ViewerPlatform,

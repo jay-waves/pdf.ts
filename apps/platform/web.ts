@@ -4,10 +4,24 @@ import {
   createDownloadWriter,
   pickPdfFileHandle,
 } from './browser-file-handle';
-import { blobResource } from './resources';
 import { translateWithInstalledModel } from './browser-translation';
-import type { PdfFileHandle, PlatformDocument, ViewerPlatform } from './types';
-import { getExternalUrl } from '../url';
+import type { ManagedResource, PdfFileHandle, PlatformDocument, ViewerPlatform } from './types';
+import { getExternalUrl } from '../shared/url';
+
+function blobResource(blob: Blob): ManagedResource {
+  const url = URL.createObjectURL(blob);
+  let released = false;
+
+  return {
+    url,
+    openStream: () => blob.stream(),
+    release() {
+      if (released) return;
+      released = true;
+      URL.revokeObjectURL(url);
+    },
+  };
+}
 
 function createDownloadFileHandle(name: string): PdfFileHandle {
   return {

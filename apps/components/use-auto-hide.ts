@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { viewerActivity } from '../viewer-activity';
-import type { ViewerActivityAudience } from '../viewer-activity';
+import { viewerActivity } from '../viewer/viewer-activity';
+import type { ViewerActivityAudience } from '../viewer/viewer-activity';
 
 function useAutoHide(shouldHide: () => boolean, delay = 900) {
   const [visible, setVisible] = useState(false);

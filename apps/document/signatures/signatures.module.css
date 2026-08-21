@@ -1,0 +1,27 @@
+@reference '../../tailwind.css';
+
+.list { @apply mx-3.25 mt-3 grid max-h-[min(55vh,440px)] gap-2.5 overflow-auto; }
+.card { @apply rounded-md border border-border-subtle bg-app p-3; }
+.cardTitle { @apply mt-0 mb-2.5 text-xs text-foreground; }
+.details { @apply m-0 grid gap-1.5 text-[11px]; }
+.details > div { @apply grid grid-cols-[72px_minmax(0,1fr)] gap-2; }
+.details dt { @apply text-secondary; }
+.details dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
+.status { @apply mt-2.5 mb-0 text-[10px] text-secondary; }
+.status[data-verified='true'] { @apply font-medium text-foreground; }
+.actions { @apply px-3.25 pt-3 pb-3.25; }
+.widget {
+  @apply pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 overflow-hidden rounded border border-dashed border-secondary/65 bg-app/80 text-[11px] leading-none text-secondary;
+}
+
+.widget[data-appearance-active='true'] {
+  @apply border-0 bg-transparent;
+}
+
+.widget svg {
+  @apply size-3.5 flex-none;
+}
+
+.widget span {
+  @apply overflow-hidden text-ellipsis whitespace-nowrap;
+}

@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   getThemeRenderGeometry,
   toReverseByteOrderBitmapColor,
-} from '../apps/pdf-render-theme.ts';
+} from '../apps/renderer/pdf-render-theme.ts';
 
 test('bitmap background colors swap red and blue without changing alpha or green', () => {
   assert.equal(toReverseByteOrderBitmapColor(0x7f123456), 0x7f563412);
