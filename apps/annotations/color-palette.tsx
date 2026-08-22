@@ -102,11 +102,11 @@ export function ColorPalette({
     };
   }, [documentId, open, registry]);
 
-  const colors = Array.from(new Set([
+  const colors = [...new Set([
     TRANSPARENT_ANNOTATION_COLOR,
     ...(capability?.getColorPresets() ?? []),
     ...DEFAULT_ANNOTATION_COLORS,
-  ].map(normalizeAnnotationColor).filter((color): color is string => Boolean(color))));
+  ].map(normalizeAnnotationColor).filter((color): color is string => Boolean(color)))];
 
   const toolId = contextTool?.id ?? null;
   const values = getAnnotationValues(defaults, selectedAnnotations);

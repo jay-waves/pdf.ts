@@ -69,22 +69,7 @@ function getExternalLink(annotation: PdfAnnotationObject | undefined) {
 async function copyText(value: string) {
   value = normalizePdfText(value);
   if (!value) return;
-  try {
-    await navigator.clipboard.writeText(value);
-    return;
-  } catch {
-    // The legacy path also works in webviews where the async clipboard API is unavailable.
-  }
-
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.append(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-  if (!copied) throw new Error('Clipboard copy was rejected');
+  await navigator.clipboard.writeText(value);
 }
 
 function getPersistedTextSlice(annotation: PdfTextMarkupAnnotation) {
@@ -151,7 +136,7 @@ function getCaptureRect(
   };
 }
 
-function copyAnnotationImage(
+async function copyAnnotationImage(
   registry: PluginRegistry,
   documentId: string,
   document: PdfDocumentObject,
@@ -159,13 +144,13 @@ function copyAnnotationImage(
 ) {
   const render = getPluginCapability<RenderCapability>(registry, 'render');
   const page = document.pages[annotation.pageIndex];
-  if (!render || !page || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
-    return Promise.reject(new Error('Image clipboard is unavailable'));
+  if (!render || !page) {
+    throw new Error('Image clipboard is unavailable');
   }
 
   const rect = getCaptureRect(annotation, page.size);
   if (rect.size.width <= 0 || rect.size.height <= 0) {
-    return Promise.reject(new Error('Annotation has no visible area'));
+    throw new Error('Annotation has no visible area');
   }
 
   const scaleFactor = Math.min(
@@ -187,7 +172,7 @@ function copyAnnotationImage(
     },
   }).toPromise();
 
-  return navigator.clipboard.write([new ClipboardItem({ 'image/png': image })]);
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': image })]);
 }
 
 function getMenuAnchor(

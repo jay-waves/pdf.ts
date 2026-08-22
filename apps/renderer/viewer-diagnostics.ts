@@ -147,7 +147,7 @@ export function installErrorDiagnostics() {
 }
 
 export function sampleRasterPixels(root: ParentNode = document) {
-  const images = (selector: string) => Array.from(root.querySelectorAll<HTMLImageElement>(selector));
+  const images = (selector: string) => [...root.querySelectorAll<HTMLImageElement>(selector)];
   const pixels = (items: HTMLImageElement[]) => items
     .reduce((total, image) => total + image.naturalWidth * image.naturalHeight, 0);
   const baseImages = images('.pdf-page-render-image');

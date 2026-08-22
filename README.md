@@ -3,6 +3,9 @@
 A polished PDF viewer powered by EmbedPDF, available for the web, Chrome,
 Linux, and Windows.
 
+The browser build targets ES2025 and requires Chrome/Edge 129+, Firefox 147+,
+or Safari 26+.
+
 ## Build
 
 Compile the shared browser viewer once:

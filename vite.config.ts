@@ -38,6 +38,8 @@ export default defineConfig({
     },
   ],
   build: {
+    target: ['es2025', 'chrome129', 'edge129', 'firefox147', 'safari26'],
+    cssTarget: ['chrome129', 'edge129', 'firefox147', 'safari26'],
     outDir: resolve(__dirname, 'release/web'),
     emptyOutDir: true,
     sourcemap: false,

@@ -61,7 +61,7 @@ function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
 
   walk(bookmarks);
 
-  flattened.sort((left, right) => {
+  const sorted = flattened.toSorted((left, right) => {
     if (left.pageNumber !== right.pageNumber) {
       return left.pageNumber - right.pageNumber;
     }
@@ -69,8 +69,8 @@ function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
     return left.title.localeCompare(right.title, 'zh-CN');
   });
 
-  flattenedBookmarksCache.set(bookmarks, flattened);
-  return flattened;
+  flattenedBookmarksCache.set(bookmarks, sorted);
+  return sorted;
 }
 
 export function getCurrentBookmark(bookmarks: PdfBookmarkObject[], pageNumber: number): CurrentBookmark | null {

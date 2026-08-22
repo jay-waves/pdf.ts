@@ -53,7 +53,7 @@ export function classifyPdfFontFamily(
   const matches = Object.entries(aliases)
     .map(([alias, family]) => [normalizeFaceName(alias), family] as const)
     .filter(([alias]) => alias)
-    .sort((a, b) => b[0].length - a[0].length);
+    .toSorted((a, b) => b[0].length - a[0].length);
   for (const [alias, family] of matches) {
     if (normalizedFace.includes(alias)) return family;
   }

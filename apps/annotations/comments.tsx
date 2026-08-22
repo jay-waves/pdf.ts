@@ -42,10 +42,10 @@ function normalizeSummary(value: string) {
 
 function summarizeMarkup(annotation: PdfAnnotationObject, runs: PdfTextRun[]) {
   const annotationRects = getAnnotationRects(annotation);
-  const pieces = runs
+  const pieces = [...new Set(runs
     .filter((run) => annotationRects.some((rect) => rectsIntersect(rect, run.rect)))
     .map((run) => run.text.trim())
-    .filter((text, index, items) => Boolean(text) && items.indexOf(text) === index);
+    .filter(Boolean))];
   return normalizeSummary(pieces.join(' '));
 }
 
@@ -76,7 +76,7 @@ function getEntries(registry: PluginRegistry | undefined, documentId: string | n
   return scoped.scope.getAnnotations()
     .map(({ object }) => object)
     .filter((annotation) => !HIDDEN_ANNOTATION_TYPES.has(annotation.type))
-    .sort((left, right) => left.pageIndex - right.pageIndex ||
+    .toSorted((left, right) => left.pageIndex - right.pageIndex ||
       left.rect.origin.y - right.rect.origin.y ||
       left.rect.origin.x - right.rect.origin.x ||
       left.id.localeCompare(right.id));
@@ -301,7 +301,7 @@ export function Comments({
     const frame = requestAnimationFrame(() => {
       const root = contentRef.current;
       if (!root) return;
-      const items = Array.from(root.querySelectorAll<HTMLElement>('[data-comment-page]'));
+      const items = [...root.querySelectorAll<HTMLElement>('[data-comment-page]')];
       const exact = items.find((item) => Number(item.dataset.commentPage) === currentPageNumber);
       const current = exact
         ?? items.find((item) => Number(item.dataset.commentPage) > currentPageNumber)
@@ -323,7 +323,7 @@ export function Comments({
     const frame = requestAnimationFrame(() => {
       const root = contentRef.current;
       if (!root) return;
-      const target = Array.from(root.querySelectorAll<HTMLElement>('[data-comment-annotation-id]'))
+      const target = [...root.querySelectorAll<HTMLElement>('[data-comment-annotation-id]')]
         .find((item) => item.dataset.commentAnnotationId === editingAnnotationId);
       if (target) scrollCommentItemIntoView(root, target);
     });

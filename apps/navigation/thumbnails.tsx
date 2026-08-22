@@ -153,10 +153,9 @@ function ThumbnailFlow({
   const pages = documentState?.document?.pages ?? [];
   const [documentRotation, setDocumentRotation] = useState(documentState?.rotation ?? 0);
   const items = useMemo(
-    () => Array.from(
-      { length: pageCount },
-      (_, pageIndex) => getThumbnailItem(pages[pageIndex], pageIndex, documentRotation),
-    ),
+    () => Array.from({ length: pageCount }, (_, pageIndex) => (
+      getThumbnailItem(pages[pageIndex], pageIndex, documentRotation)
+    )),
     [documentRotation, pageCount, pages],
   );
 

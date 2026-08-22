@@ -3,7 +3,7 @@
   "name": "PDF Viewer",
   "description": "Open local PDF files with PDF Viewer.",
   "version": "0.4.5",
-  "minimum_chrome_version": "120",
+  "minimum_chrome_version": "129",
   "icons": {
     "16": "icon-16.png",
     "32": "icon-32.png",
