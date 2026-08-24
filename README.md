@@ -8,6 +8,27 @@ or Safari 26+.
 
 ## Build
 
+All builds require Node.js with Corepack/pnpm. Native packaging additionally
+requires:
+
+- Go 1.23+ to build the launcher
+- [nFPM](https://nfpm.goreleaser.com/docs/install/) to create `deb`/`rpm` packages
+- NSIS and a PE resource compiler to create the Windows installer on Linux
+
+```bash
+corepack enable
+pnpm install
+
+# Debian / Ubuntu
+sudo apt install golang-go binutils-mingw-w64-x86-64 nsis
+
+# Fedora
+sudo dnf install golang mingw64-binutils mingw32-nsis
+
+# Install nFPM; ensure $(go env GOPATH)/bin is in PATH
+go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
+```
+
 Compile the shared browser viewer once:
 
 ```bash
@@ -25,7 +46,6 @@ pnpm package:deb     # Linux binary and deb only
 pnpm package:rpm     # Linux binary and rpm only
 ```
 
-Native packaging requires nFPM for deb/rpm and NSIS for the Windows installer.
 See [`packaging/README.md`](packaging/README.md).
 
 To compile once and package every host:
