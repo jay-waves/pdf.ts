@@ -7,7 +7,11 @@ const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'release/web');
 const embedded = resolve(root, 'launcher/viewer');
 const target = process.argv[2];
-if (!['linux-amd64', 'windows-amd64'].includes(target)) throw new Error('Expected linux-amd64 or windows-amd64.');
+const targets = new Set(['linux-amd64', 'windows-amd64', 'darwin-amd64', 'darwin-arm64']);
+if (!targets.has(target)) throw new Error(`Expected one of: ${[...targets].join(', ')}.`);
+if (target.startsWith('darwin-') && process.platform !== 'darwin') {
+  throw new Error('Building macOS launchers and DMGs requires macOS.');
+}
 if (!existsSync(resolve(source, 'index.html'))) throw new Error('Run pnpm compile first.');
 
 function copy(sourceDir, targetDir) {
@@ -31,8 +35,14 @@ function requireSuccess(result, command) {
   if (result.status !== 0) throw new Error(`${command} exited with status ${result.status ?? 1}.`);
 }
 
-const windows = target === 'windows-amd64';
-const output = resolve(root, 'release', windows ? 'pdf.ts.exe' : 'pdf.ts');
+const [goos, goarch] = target.split('-');
+const windows = goos === 'windows';
+const outputName = windows
+  ? 'pdf.ts.exe'
+  : goos === 'darwin'
+    ? `pdf.ts-darwin-${goarch}`
+    : 'pdf.ts';
+const output = resolve(root, 'release', outputName);
 mkdirSync(resolve(root, 'release'), { recursive: true });
 const linkerFlags = windows ? '-s -w -H=windowsgui' : '-s -w';
 let windowsResource = null;
@@ -57,7 +67,7 @@ try {
   }
   const result = spawnSync(process.env.PDF_TS_GO ?? 'go', ['build', '-trimpath', `-ldflags=${linkerFlags}`, '-o', output, './launcher'], {
     cwd: root,
-    env: { ...process.env, GOOS: windows ? 'windows' : 'linux', GOARCH: 'amd64' },
+    env: { ...process.env, GOOS: goos, GOARCH: goarch },
     stdio: 'inherit',
   });
   requireSuccess(result, 'go build');

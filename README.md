@@ -1,7 +1,7 @@
 # PDF.ts
 
 A polished PDF viewer powered by EmbedPDF, available for the web, Chrome,
-Linux, and Windows.
+Linux, Windows, and macOS.
 
 The browser build targets ES2025 and requires Chrome/Edge 129+, Firefox 147+,
 or Safari 26+.
@@ -14,6 +14,8 @@ requires:
 - Go 1.23+ to build the launcher
 - [nFPM](https://nfpm.goreleaser.com/docs/install/) to create `deb`/`rpm` packages
 - NSIS and a PE resource compiler to create the Windows installer on Linux
+- macOS system tools `hdiutil`, `sips`, `iconutil`, and `ditto` to create
+  unsigned app bundles and disk images
 
 ```bash
 corepack enable
@@ -29,6 +31,20 @@ sudo dnf install golang mingw64-binutils mingw32-nsis
 go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 ```
 
+macOS launchers, app bundles, and DMGs must be built on macOS. The required
+packaging commands are provided by the operating system, so no third-party DMG
+dependency is needed. The macOS artifacts are intentionally neither signed nor
+notarized, and the packaging process does not invoke `codesign`. Set
+`PDF_TS_HDIUTIL` only when `hdiutil` is installed outside its normal system
+location. Go may add the minimal ad-hoc code-signature structure required for
+an Apple Silicon executable; this does not identify the developer or make the
+app trusted by Gatekeeper.
+
+The Fedora `mingw32-nsis` package is intentional: NSIS uses its traditional
+x86 bootstrap to install the 64-bit `pdf.ts.exe` into `%ProgramFiles%`.
+Custom tool locations can be supplied through `PDF_TS_GO`, `PDF_TS_WINDRES`,
+`PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, and `PDF_TS_HDIUTIL`.
+
 Compile the shared browser viewer once:
 
 ```bash
@@ -42,6 +58,7 @@ compiled viewer without rebuilding the frontend:
 pnpm package:chrome
 pnpm package:windows # Windows binary and NSIS installer
 pnpm package:linux   # Linux binary, deb, and Fedora-compatible rpm
+pnpm package:macos   # unsigned amd64 and arm64 macOS apps and DMGs
 pnpm package:deb     # Linux binary and deb only
 pnpm package:rpm     # Linux binary and rpm only
 ```
@@ -62,9 +79,14 @@ Artifacts are written to:
 - `release/pdf-ts_<version>_amd64.deb`
 - `release/pdf-ts-<version>-1.x86_64.rpm`
 - `release/pdf-ts-setup-v<version>.exe`
+- `release/macos-<arch>/pdf.ts.app`
+- `release/pdf-ts-v<version>-macos-<arch>.dmg`
 
-The desktop launcher serves the viewer from `pdf.ts.localhost`, safely saves
-full or incremental updates, and installs only the PDF file association.
+The desktop launcher serves the viewer from `pdf.ts.localhost` and safely saves
+full or incremental updates. Portable launchers expose `pdf.ts purge` to stop
+the current user's daemon and delete that user's viewer data. Installation,
+uninstallation, and PDF file association are owned by nFPM, NSIS, or the macOS
+app bundle instead of launcher commands.
 Launching `pdf.ts` without arguments opens the shared Welcome screen; selecting
 or dropping a PDF there uses the browser's local-file saving capabilities.
 

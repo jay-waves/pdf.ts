@@ -55,20 +55,11 @@ func run(args []string) error {
 			return openViewer("")
 		}
 		return openViewer(args[1])
-	case "install":
+	case "purge":
 		if len(args) != 1 {
 			return usageError()
 		}
-		executable, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("locate pdf.ts executable: %w", err)
-		}
-		return Install(executable)
-	case "uninstall":
-		if len(args) > 2 || len(args) == 2 && args[1] != "--purge" {
-			return usageError()
-		}
-		return Uninstall(len(args) == 2)
+		return Purge()
 	default:
 		return usageError()
 	}
@@ -96,7 +87,7 @@ func printStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: pdf.ts <start|daemon|status|stop|open [document]|install|uninstall [--purge]>")
+	return errors.New("usage: pdf.ts <start|daemon|status|stop|open [document]|purge>")
 }
 
 func openViewer(argument string) error {
