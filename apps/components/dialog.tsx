@@ -14,7 +14,7 @@ const VARIANT_CLASSES: Record<DialogVariant, string> = {
 const TITLE_VARIANT_CLASSES: Record<DialogTitleVariant, string> = {
   hidden: 'sr-only',
   panel: 'm-0 bg-surface-alt px-3.25 py-2.5 text-xs font-semibold',
-  popup: 'm-0 border-b border-border-subtle bg-surface px-3.25 py-2.5 text-xs font-semibold text-foreground',
+  popup: "relative m-0 bg-surface px-3.25 py-2.5 text-xs font-semibold text-foreground after:absolute after:inset-x-4.5 after:bottom-0 after:h-px after:bg-[color-mix(in_srgb,var(--pdf-foreground-primary)_16%,transparent)] after:content-['']",
 };
 
 export function Dialog({

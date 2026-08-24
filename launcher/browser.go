@@ -18,5 +18,8 @@ func OpenBrowser(url string) error {
 	default:
 		return fmt.Errorf("opening a browser is not implemented for %s", runtime.GOOS)
 	}
-	return command.Start()
+	if err := command.Start(); err != nil {
+		return err
+	}
+	return command.Process.Release()
 }

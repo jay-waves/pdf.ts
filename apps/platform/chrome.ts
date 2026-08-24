@@ -1,5 +1,6 @@
 import { getFileNameFromUrl, parseUrl } from '../shared/url';
 import { browserPersistence } from './browser-storage';
+import { browserLocalDocumentCapabilities } from './browser-local-document';
 import {
   createBrowserWriter,
   pickPdfFileHandle,
@@ -121,6 +122,7 @@ export const platform: ViewerPlatform = {
       } : undefined,
     };
   },
+  ...browserLocalDocumentCapabilities,
   openExternal(url) {
     const target = parseUrl(url, activeDocumentUrl ?? window.location.href);
     if (!target || !['file:', 'http:', 'https:'].includes(target.protocol)) return;

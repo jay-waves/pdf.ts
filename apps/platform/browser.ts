@@ -10,13 +10,12 @@ import type { ViewerPlatform } from './types';
  * Chrome extension pages are identified by their protocol and use that same
  * bundle with the extension adapter.
  */
-const isLauncherDocument = Boolean(
-  new URLSearchParams(window.location.search).get('launcherDocument'),
-);
+const isLauncher = window.location.hostname === 'pdf.ts.localhost'
+  || new URLSearchParams(window.location.search).has('launcherDocument');
 const isChromeExtension = window.location.protocol === 'chrome-extension:';
 
 export const platform: ViewerPlatform = isChromeExtension
   ? chromePlatform
-  : isLauncherDocument
+  : isLauncher
     ? launcherPlatform
     : webPlatform;

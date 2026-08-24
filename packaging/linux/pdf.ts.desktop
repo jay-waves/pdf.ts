@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=pdf.ts
+Comment=Open PDF documents in a local browser viewer
+Exec=pdf.ts open %f
+Terminal=false
+MimeType=application/pdf;
+Categories=Office;Viewer;
+Icon=pdf.ts

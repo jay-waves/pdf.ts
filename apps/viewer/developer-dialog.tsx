@@ -123,6 +123,7 @@ export function DeveloperDialog({
       title="Developer"
       titleVariant="popup"
       contentClassName={styles.dialog}
+      overlayClassName={styles.overlay}
     >
       <PanelContent className={styles.content}>
         <section className={styles.section} aria-labelledby="developer-statistics">
@@ -143,6 +144,7 @@ export function DeveloperDialog({
             <span>Device Pixel Ratio (DPR)</span>
             <Select
               className={styles.select}
+              contentClassName={styles.selectContent}
               value={dprMode}
               options={DPR_OPTIONS}
               label="Device Pixel Ratio"

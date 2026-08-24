@@ -21,9 +21,9 @@ if (!existsSync(resolve(viewerDir, 'index.html'))) {
 
 rmSync(extensionDir, { recursive: true, force: true });
 cpSync(viewerDir, extensionDir, { recursive: true });
-cpSync(resolve(repoRoot, 'chrome', 'service-worker.js'), resolve(extensionDir, 'service-worker.js'));
+cpSync(resolve(repoRoot, 'packaging', 'chrome', 'service-worker.js'), resolve(extensionDir, 'service-worker.js'));
 
-const manifest = JSON.parse(readFileSync(resolve(repoRoot, 'chrome', 'manifest.json'), 'utf8'));
+const manifest = JSON.parse(readFileSync(resolve(repoRoot, 'packaging', 'chrome', 'manifest.json'), 'utf8'));
 manifest.version = packageJson.version;
 writeFileSync(
   resolve(extensionDir, 'manifest.json'),

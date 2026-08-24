@@ -2,13 +2,13 @@ import type { ComponentProps } from 'react';
 import { Dialog } from '../components';
 import styles from './document-dialogs.module.css';
 
-export function DocumentDialog(props: ComponentProps<typeof Dialog>) {
+export function DocumentDialog({ contentClassName = '', ...props }: ComponentProps<typeof Dialog>) {
   return (
     <Dialog
       {...props}
       variant="popup"
       titleVariant="popup"
-      contentClassName={styles.flatDialog}
+      contentClassName={`${styles.flatDialog} ${contentClassName}`.trim()}
       overlayClassName={styles.flatOverlay}
     />
   );

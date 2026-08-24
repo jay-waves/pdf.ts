@@ -77,7 +77,12 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
   };
 
   return (
-    <DocumentDialog open={open} onClose={onClose} title="Themes">
+    <DocumentDialog
+      open={open}
+      onClose={onClose}
+      title="Themes"
+      contentClassName={styles.themeDialog}
+    >
       <div className={`${styles.form} ${styles.themeForm}`}>
         <ThemeOptionRow
           label="Light"

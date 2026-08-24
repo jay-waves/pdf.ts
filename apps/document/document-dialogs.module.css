@@ -23,17 +23,20 @@
 .metadataDetails dt { @apply text-secondary; }
 .metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
 .optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
-.themeForm { @apply gap-3 pt-2.5 pb-5; }
+.themeDialog { @apply w-[min(27rem,calc(100vw-2rem))]; }
+.themeForm { @apply gap-5 p-4.5; }
 .themeGroup { @apply m-0 min-w-0 border-0 p-0; }
 .themeGroup:disabled { @apply opacity-40 grayscale; }
-.themeGroupLabel { @apply mb-1.5 p-0 text-[11px] font-medium text-secondary; }
-.themeOptions { @apply grid grid-cols-4 gap-1.5; }
+.themeGroupLabel { @apply mb-2 p-0 text-[11px] font-medium text-secondary; }
+.themeOptions {
+  @apply grid grid-cols-4 gap-2;
+}
 .themeOption {
-  @apply relative grid min-w-0 cursor-pointer gap-1 rounded border border-transparent bg-transparent p-1 text-secondary outline-none;
+  @apply relative grid min-w-0 cursor-pointer gap-2 rounded border border-transparent bg-transparent p-1 text-secondary outline-none;
   @apply hover:bg-hover focus-visible:border-accent disabled:cursor-default disabled:hover:bg-transparent;
 }
 .themeOption[data-state='checked'] { @apply border-accent text-foreground; }
-.themePreview { @apply relative flex h-5.5 overflow-hidden rounded-sm; }
+.themePreview { @apply relative flex h-9 overflow-hidden rounded-sm; }
 .themePreview > span { @apply flex-1; }
 .themeOptionLabel { @apply overflow-hidden text-center text-[10px] leading-3.5 text-ellipsis whitespace-nowrap; }
 .flatActions { @apply border-t border-border-subtle pt-2.5; }

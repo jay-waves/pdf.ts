@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://nfpm.goreleaser.com/schema.json
+name: pdf-ts
+arch: amd64
+platform: linux
+version: ${PDF_TS_VERSION}
+release: 1
+version_schema: semver
+section: utils
+priority: optional
+maintainer: jay-waves
+description: A polished PDF viewer built with web technologies and a native launcher.
+vendor: jay-waves
+homepage: https://github.com/jay-waves/pdf.ts
+license: MIT
+depends:
+  - xdg-utils
+contents:
+  - src: release/pdf.ts
+    dst: /usr/bin/pdf.ts
+    file_info:
+      mode: 0755
+  - src: packaging/linux/pdf.ts.desktop
+    dst: /usr/share/applications/pdf.ts.desktop
+    file_info:
+      mode: 0644
+  - src: packaging/linux/pdf.ts.service
+    dst: /usr/lib/systemd/user/pdf.ts.service
+    file_info:
+      mode: 0644
+  - src: assets/icon-128.png
+    dst: /usr/share/icons/hicolor/128x128/apps/pdf.ts.png
+    file_info:
+      mode: 0644
+  - src: LICENSE.txt
+    dst: /usr/share/licenses/pdf.ts/LICENSE.txt
+    file_info:
+      mode: 0644
+scripts:
+  postinstall: packaging/linux/scripts/refresh-desktop.sh
+  postremove: packaging/linux/scripts/refresh-desktop.sh

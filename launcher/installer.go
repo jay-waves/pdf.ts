@@ -27,9 +27,23 @@ func Install(executable string) error {
 	return nil
 }
 
-func Uninstall() error {
+func Uninstall(purge bool) error {
+	if purge {
+		if err := StopDaemon(""); err != nil {
+			return fmt.Errorf("stop pdf.ts daemon: %w", err)
+		}
+	}
 	if err := uninstallAssociations(); err != nil {
 		return fmt.Errorf("uninstall pdf.ts file associations: %w", err)
+	}
+	if purge {
+		directory, err := DefaultStateDir()
+		if err != nil {
+			return err
+		}
+		if err := os.RemoveAll(directory); err != nil {
+			return fmt.Errorf("remove pdf.ts application data: %w", err)
+		}
 	}
 	return nil
 }

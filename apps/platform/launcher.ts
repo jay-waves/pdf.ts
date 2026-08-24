@@ -1,4 +1,5 @@
 import { browserPersistence } from './browser-storage';
+import { browserLocalDocumentCapabilities } from './browser-local-document';
 import { translateWithModelDownload } from './browser-translation';
 import { getExternalUrl } from '../shared/url';
 import type {
@@ -178,14 +179,12 @@ const launcher = launcherDocumentId ? new PdfLauncherSession(launcherDocumentId)
 
 export const platform: ViewerPlatform = {
   async loadViewerResources(bundledWasmUrl) {
-    if (!launcher) {
-      throw new Error('This PDF.ts viewer URL is missing its daemon document identifier.');
-    }
     return {
       wasm: { url: bundledWasmUrl },
-      document: await launcher.openDocument(),
+      document: await launcher?.openDocument(),
     };
   },
+  ...browserLocalDocumentCapabilities,
   openExternal(url) {
     const target = getExternalUrl(url, window.location.href);
     if (target) window.open(target, '_blank', 'noopener,noreferrer');

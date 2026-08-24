@@ -101,6 +101,18 @@ func RegisterWithDaemon(stateDir, documentPath string) (string, error) {
 	return result.URL, nil
 }
 
+func WelcomeURL(stateDir string) (string, error) {
+	listenAddress, err := daemonAddress(stateDir)
+	if err != nil {
+		return "", err
+	}
+	_, port, err := net.SplitHostPort(listenAddress)
+	if err != nil {
+		return "", fmt.Errorf("parse pdf.ts daemon address: %w", err)
+	}
+	return "http://" + net.JoinHostPort(DefaultPublicHost, port) + "/", nil
+}
+
 func daemonAddress(stateDir string) (string, error) {
 	registry, err := OpenRegistry(stateDir)
 	if err != nil {

@@ -391,13 +391,7 @@ function App({
   );
 }
 
-const WEB_FILE_CONTROL_CLASS = [
-  'inline-flex min-h-9.5 cursor-pointer items-center justify-center',
-  'rounded-lg border border-accent bg-accent px-5.5',
-  'text-[13px] font-semibold text-surface',
-].join(' ');
-
-function WebDocumentPicker({
+function Welcome({
   onOpen,
 }: {
   onOpen(file?: File): Promise<void>;
@@ -419,8 +413,10 @@ function WebDocumentPicker({
   return (
     <main className="grid min-h-screen place-items-center bg-app p-6">
       <section
+        aria-label="Choose or drop a PDF file"
         className={styles.welcomeCard}
         data-dragging={dragging ? 'true' : undefined}
+        onClick={() => void openDocument()}
         onDragEnter={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -434,28 +430,28 @@ function WebDocumentPicker({
         }}
         onDrop={(event) => {
           event.preventDefault();
+          event.stopPropagation();
           setDragging(false);
           void openDocument(event.dataTransfer.files[0]);
         }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          void openDocument();
+        }}
+        role="button"
+        tabIndex={0}
       >
         <img className="size-13.5" src="./icon.png" alt="" />
-        <h1 className="mt-4.5 mb-6.5 text-[25px]">PDF.ts Web Viewer</h1>
-        <button
-          className={WEB_FILE_CONTROL_CLASS}
-          type="button"
-          onClick={() => void openDocument()}
-        >
-          Choose a PDF file
-        </button>
-        <span className="mt-2.5 mb-6.5 block text-[11px] text-muted">or drop a PDF here</span>
+        <h1 className="mt-4.5 mb-0 text-[25px]">PDF.ts</h1>
+        <p className="mt-3 mb-0 text-[13px] font-semibold text-muted">
+          Click to choose or drop a PDF
+        </p>
         {selectionError ? (
           <p className="mt-3 mb-0 text-xs text-danger" role="alert">
             {selectionError}
           </p>
         ) : null}
-        <small className="mt-5.5 block leading-[1.6] text-muted">
-          Local files are processed only in this browser tab and are never uploaded.
-        </small>
       </section>
     </main>
   );
@@ -568,7 +564,7 @@ function ReadyViewer({
       trackResource(document.resource);
       setResources({ ...resources, document });
     };
-    return <WebDocumentPicker
+    return <Welcome
       onOpen={async (file) => {
         const document = await openLocalDocument(file);
         if (document) useDocument(document);

@@ -38,9 +38,26 @@ type Registry struct {
 }
 
 func DefaultStateDir() (string, error) {
-	directory, err := os.UserConfigDir()
+	var directory string
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		directory = os.Getenv("XDG_DATA_HOME")
+		if directory == "" {
+			directory, err = os.UserHomeDir()
+			if err == nil {
+				directory = filepath.Join(directory, ".local", "share")
+			}
+		}
+	case "windows":
+		directory, err = os.UserCacheDir()
+	case "darwin":
+		directory, err = os.UserConfigDir()
+	default:
+		return "", fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
 	if err != nil {
-		return "", fmt.Errorf("locate user configuration directory: %w", err)
+		return "", fmt.Errorf("locate user application data directory: %w", err)
 	}
 	return filepath.Join(directory, "pdf.ts"), nil
 }

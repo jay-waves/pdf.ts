@@ -15,12 +15,12 @@ const lockWait = 10 * time.Second
 var errDocumentLocked = errors.New("another pdf.ts process is currently writing this document")
 
 func acquireDocumentLock(documentPath string) (func(), error) {
-	cache, err := os.UserCacheDir()
+	directory, err := resolveStateDir("")
 	if err != nil {
-		return nil, fmt.Errorf("locate cache directory: %w", err)
+		return nil, err
 	}
 	sum := sha256.Sum256([]byte(filepath.Clean(documentPath)))
-	lockRoot := filepath.Join(cache, "pdf.ts", "locks")
+	lockRoot := filepath.Join(directory, "locks")
 	if err := os.MkdirAll(lockRoot, 0o700); err != nil {
 		return nil, fmt.Errorf("create lock directory: %w", err)
 	}
