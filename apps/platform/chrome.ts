@@ -7,56 +7,17 @@ import {
   readStoredFileHandle,
   verifyFilePermission,
 } from './browser-file-handle';
-import { translateWithModelDownload } from './browser-translation';
+import { browserTranslationCapabilities } from './browser-translation';
 import type { PdfFileHandle, ViewerPlatform } from './types';
 
 let activeDocumentUrl: string | undefined;
-let googleTranslateTabId: number | undefined;
-interface ChromeTab {
-  id?: number;
-  windowId: number;
-}
 type ChromeGlobal = typeof globalThis & {
   chrome: {
     tabs: {
-      create(options: { url: string }): Promise<ChromeTab>;
-      query(options: { url: string }): Promise<ChromeTab[]>;
-      update(tabId: number, options: { url: string; active: boolean }): Promise<ChromeTab>;
-    };
-    windows: {
-      update(windowId: number, options: { focused: boolean }): Promise<unknown>;
+      create(options: { url: string }): Promise<unknown>;
     };
   };
 };
-
-async function updateGoogleTranslateTab(tabId: number, url: string) {
-  try {
-    const tab = await (globalThis as ChromeGlobal).chrome.tabs.update(tabId, { url, active: true });
-    googleTranslateTabId = tabId;
-    void (globalThis as ChromeGlobal).chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
-    return true;
-  } catch {
-    if (googleTranslateTabId === tabId) googleTranslateTabId = undefined;
-    return false;
-  }
-}
-
-async function openGoogleTranslate(url: string) {
-  const { tabs } = (globalThis as ChromeGlobal).chrome;
-  if (googleTranslateTabId !== undefined && await updateGoogleTranslateTab(googleTranslateTabId, url)) {
-    return;
-  }
-
-  try {
-    const [existingTab] = await tabs.query({ url: 'https://translate.google.com/*' });
-    if (existingTab?.id !== undefined && await updateGoogleTranslateTab(existingTab.id, url)) return;
-  } catch {
-    // Fall through and create a replacement tab.
-  }
-
-  const createdTab = await tabs.create({ url });
-  googleTranslateTabId = createdTab.id;
-}
 
 class ChromePdfFileHandle implements PdfFileHandle {
   private nativeHandle?: FileSystemFileHandle;
@@ -126,12 +87,8 @@ export const platform: ViewerPlatform = {
   openExternal(url) {
     const target = parseUrl(url, activeDocumentUrl ?? window.location.href);
     if (!target || !['file:', 'http:', 'https:'].includes(target.protocol)) return;
-    if (target.hostname === 'translate.google.com') {
-      void openGoogleTranslate(target.href).catch(() => {});
-      return;
-    }
     void (globalThis as ChromeGlobal).chrome.tabs.create({ url: target.href });
   },
-  translate: translateWithModelDownload,
+  ...browserTranslationCapabilities,
   ...browserPersistence,
 };

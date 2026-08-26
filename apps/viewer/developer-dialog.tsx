@@ -18,6 +18,13 @@ import {
 } from '../fonts';
 import type { PdfRuntime } from '../renderer/pdf-engine';
 import { formatStartupDiagnostics, startupLogStore } from './startup-log';
+import { platform } from '#platform';
+import {
+  getBrowserTranslationLanguage,
+  getTranslationTargetLanguage,
+  normalizeTranslationLanguage,
+  TRANSLATION_TARGET_LANGUAGE_PREFERENCE,
+} from '../selection/translation-settings';
 import styles from './developer-dialog.module.css';
 
 
@@ -55,6 +62,10 @@ export function DeveloperDialog({
   onClose(): void;
 }) {
   const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
+  const [translationTargetLanguage, setTranslationTargetLanguage] = useState(
+    () => getTranslationTargetLanguage(platform.getPreference),
+  );
+  const [translationLanguageError, setTranslationLanguageError] = useState('');
   const snapshot = useStore(viewerDiagnosticsStore);
   const startupSnapshot = useStore(startupLogStore);
   const dprMode = snapshot.renderDprMode;
@@ -63,6 +74,8 @@ export function DeveloperDialog({
 
   useEffect(() => {
     if (!open) return;
+    setTranslationTargetLanguage(getTranslationTargetLanguage(platform.getPreference));
+    setTranslationLanguageError('');
     let active = true;
     const sample = () => {
       sampleRasterPixels();
@@ -77,6 +90,17 @@ export function DeveloperDialog({
       window.clearInterval(timer);
     };
   }, [open, pdfium]);
+
+  const saveTranslationTargetLanguage = () => {
+    try {
+      const language = normalizeTranslationLanguage(translationTargetLanguage);
+      platform.setPreference(TRANSLATION_TARGET_LANGUAGE_PREFERENCE, language);
+      setTranslationTargetLanguage(language);
+      setTranslationLanguageError('');
+    } catch (error) {
+      setTranslationLanguageError(error instanceof Error ? error.message : 'Invalid language tag.');
+    }
+  };
 
   const fontRequestDetails = fontDiagnostics.length
     ? fontDiagnostics.map((font) => {
@@ -151,6 +175,23 @@ export function DeveloperDialog({
               onValueChange={(value) => setRenderDprMode(value as RenderDprMode)}
             />
           </div>
+          <div className={styles.control}>
+            <label htmlFor="translation-target-language">Translation target language</label>
+            <input
+              id="translation-target-language"
+              className={styles.input}
+              value={translationTargetLanguage}
+              spellCheck={false}
+              onBlur={saveTranslationTargetLanguage}
+              onChange={(event) => setTranslationTargetLanguage(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+            />
+          </div>
+          <p className={`${styles.hint} ${translationLanguageError ? 'text-danger' : ''}`.trim()}>
+            {translationLanguageError || `Use a BCP 47 tag. Browser default: ${getBrowserTranslationLanguage()}.`}
+          </p>
           <p className={styles.hint}>
             DPR profiles adjust tile raster scale; tile edges follow a fixed {PDF_TILE_SIZE_CSS_PX} CSS px × DPR ratio.
           </p>

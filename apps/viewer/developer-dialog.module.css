@@ -17,6 +17,7 @@
 .stats dd { @apply m-0 text-right text-foreground tabular-nums; }
 .control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,220px)] items-center gap-4; }
 .select { @apply w-full border-border bg-surface-alt text-foreground; }
+.input { @apply h-6.5 w-full rounded-md border border-border bg-surface-alt px-2 text-foreground outline-none focus:border-accent; }
 .selectContent { @apply bg-surface-alt; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
 .detailsLabel { @apply grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5 text-secondary; }

@@ -1,6 +1,6 @@
 import { browserPersistence } from './browser-storage';
 import { browserLocalDocumentCapabilities } from './browser-local-document';
-import { translateWithModelDownload } from './browser-translation';
+import { browserTranslationCapabilities } from './browser-translation';
 import { getExternalUrl } from '../shared/url';
 import type {
   PlatformDocument,
@@ -189,6 +189,6 @@ export const platform: ViewerPlatform = {
     const target = getExternalUrl(url, window.location.href);
     if (target) window.open(target, '_blank', 'noopener,noreferrer');
   },
-  translate: translateWithModelDownload,
+  ...browserTranslationCapabilities,
   ...browserPersistence,
 };

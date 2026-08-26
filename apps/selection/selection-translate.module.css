@@ -6,3 +6,15 @@
   @apply shadow-popover select-text;
   overflow-wrap: anywhere;
 }
+
+.downloadable {
+  @apply cursor-pointer p-0 transition-colors duration-100 hover:bg-hover;
+}
+
+.downloadAction {
+  @apply block w-full cursor-pointer rounded-[inherit] border-0 bg-transparent px-2.5 py-2 text-left text-inherit outline-none whitespace-pre-wrap;
+}
+
+.downloadAction:focus-visible {
+  @apply ring-1 ring-accent;
+}

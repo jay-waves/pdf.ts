@@ -45,13 +45,26 @@ export interface ViewerResources {
 
 export type PlatformTranslationResult =
   | { type: 'inline'; text: string }
-  | { type: 'external'; url: string };
+  | {
+    type: 'downloadable';
+    downloading: boolean;
+    sourceLanguage: string;
+    targetLanguage: string;
+  };
+
+export interface PlatformTranslationOptions {
+  allowModelDownload?: boolean;
+  onDownloadProgress?(progress: number): void;
+  signal?: AbortSignal;
+  sourceLanguage?: string;
+  targetLanguage: string;
+}
 
 export interface ViewerPlatform {
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file?: File): Promise<PlatformDocument | undefined>;
   openExternal(url: string): void;
-  translate(text: string): Promise<PlatformTranslationResult>;
+  translate(text: string, options: PlatformTranslationOptions): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
