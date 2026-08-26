@@ -56,7 +56,7 @@ import {
   PdfSurface,
   RENDER_IMAGE_TYPE,
   VIEWER_STATUS_CLASS,
-} from './renderer/viewer-surface';
+} from './viewer/pdf-surface';
 import styles from './viewer/viewer.module.css';
 import {
   getEffectiveRenderDpr,
@@ -76,12 +76,20 @@ import { PDFIUM_FONT_FALLBACK } from './fonts';
 import {
   beginStartupLog,
   completeStartupLog,
+  describeStartupUrl,
   failStartupLog,
   writeStartupInfo,
   writeStartupLogOnce,
 } from './viewer/startup-log';
 
 const BUNDLED_PDFIUM_WASM_URL = new URL(pdfiumWasmUrl, import.meta.url).href;
+
+beginStartupLog(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
+writeStartupInfo(
+  'Viewer script loaded',
+  `${window.location.origin}${window.location.pathname}; ${navigator.onLine ? 'online' : 'offline'}`,
+);
+writeStartupInfo('PDFium WASM asset resolved', describeStartupUrl(BUNDLED_PDFIUM_WASM_URL));
 
 function installAll(installers: Array<() => (() => void) | undefined>) {
   const cleanups: Array<() => void> = [];
@@ -556,6 +564,17 @@ function ReadyViewer({
     }
   }, [pdfium, resources.document]);
 
+  if (!pdfium) {
+    if (isLoading) {
+      return <LoadingStatus label="Starting PDF engine…" />;
+    }
+    return (
+      <div className={`${VIEWER_STATUS_CLASS} ${error ? 'text-danger' : ''}`}>
+        {error ? `Unable to initialize PDF engine: ${error.message}` : 'PDF engine unavailable.'}
+      </div>
+    );
+  }
+
   if (platform.openLocalDocument && !resources.document) {
     const openLocalDocument = platform.openLocalDocument;
     const useDocument = (document: NonNullable<ViewerResources['document']>) => {
@@ -572,17 +591,6 @@ function ReadyViewer({
     />;
   }
 
-  if (!pdfium) {
-    if (isLoading) {
-      return <LoadingStatus label="Starting PDF engine…" />;
-    }
-    return (
-      <div className={`${VIEWER_STATUS_CLASS} ${error ? 'text-danger' : ''}`}>
-        {error ? `Unable to initialize PDF engine: ${error.message}` : 'PDF engine unavailable.'}
-      </div>
-    );
-  }
-
   return (
     <App
       key={resources.document?.resource.url}
@@ -596,7 +604,6 @@ function ReadyViewer({
 const disposeTheme = initializeViewerTheme();
 const disposeDiagnostics = installErrorDiagnostics();
 const disposeDpr = installRenderDprOverride();
-beginStartupLog(`PDF.ts ${__PDF_TS_BUILD_INFO__}`);
 writeStartupInfo('Viewer environment ready', navigator.platform || 'Web');
 
 function ViewerLifecycle() {

@@ -316,12 +316,32 @@ workerScope.onmessage = (event) => {
   }
 
   void (async () => {
+    const wasmUrl = (() => {
+      try {
+        const url = new URL(request.wasmUrl, self.location.href);
+        return `${url.origin}${url.pathname}`;
+      } catch {
+        return '[invalid URL]';
+      }
+    })();
+    const startedAt = performance.now();
+    const slowDownloadWarning = self.setTimeout(() => {
+      postStartupLog(
+        'PDFium WASM download is taking longer than expected',
+        `${wasmUrl}; ${((performance.now() - startedAt) / 1000).toFixed(1)} s elapsed`,
+        'warn',
+      );
+    }, 5000);
     try {
-      postStartupLog('Loading PDFium WASM');
+      postStartupLog('Loading PDFium WASM', wasmUrl);
       const response = await fetch(request.wasmUrl);
       if (!response.ok) throw new Error(`Could not load PDFium (${response.status}).`);
       const wasmBinary = await response.arrayBuffer();
-      postStartupLog('PDFium WASM ready', `${(wasmBinary.byteLength / 1024 / 1024).toFixed(1)} MB`);
+      self.clearTimeout(slowDownloadWarning);
+      postStartupLog(
+        'PDFium WASM ready',
+        `${(wasmBinary.byteLength / 1024 / 1024).toFixed(1)} MB in ${((performance.now() - startedAt) / 1000).toFixed(2)} s`,
+      );
       const module = await init({ wasmBinary });
       native = new PdfiumNative(module);
       if (request.fontFallback) {
@@ -331,6 +351,11 @@ workerScope.onmessage = (event) => {
       installThemeRenderer(module, () => renderTheme);
       workerScope.postMessage({ id: request.id, type: 'ready' });
     } catch (error) {
+      postStartupLog(
+        'PDFium WASM initialization failed',
+        `${wasmUrl}; ${((performance.now() - startedAt) / 1000).toFixed(2)} s; ${error instanceof Error ? error.message : String(error)}`,
+        'error',
+      );
       respond(request.id, {
         type: 'error',
         error: taskError(
@@ -338,6 +363,8 @@ workerScope.onmessage = (event) => {
           PdfErrorCode.Initialization,
         ),
       });
+    } finally {
+      self.clearTimeout(slowDownloadWarning);
     }
   })();
 };

@@ -17,7 +17,7 @@ export type StartupLogSnapshot = {
   entries: StartupLogEntry[];
 };
 
-const MAX_ENTRIES = 24;
+const MAX_STARTUP_ENTRIES = 24;
 
 export const startupLogStore = createStore<StartupLogSnapshot>(() => ({
   session: 0,
@@ -29,6 +29,15 @@ export const startupLogStore = createStore<StartupLogSnapshot>(() => ({
 let startedAt = performance.now();
 let nextEntryId = 1;
 const onceKeys = new Set<string>();
+
+export function describeStartupUrl(value: string, base = window.location.href) {
+  try {
+    const url = new URL(value, base);
+    return `${url.origin}${url.pathname}`;
+  } catch {
+    return '[invalid URL]';
+  }
+}
 
 function formatConsoleMessage(message: string) {
   return /[.!?]$/u.test(message) ? message : `${message}.`;
@@ -45,7 +54,7 @@ function appendStartupLog(level: StartupLogLevel, message: string, detail?: stri
   const entry = { id: nextEntryId++, elapsed: performance.now() - startedAt, level, message, detail };
   writeConsole(level, entry.elapsed, message, detail);
   startupLogStore.setState((state) => ({
-    entries: [...state.entries, entry].slice(-MAX_ENTRIES),
+    entries: [...state.entries, entry].slice(-MAX_STARTUP_ENTRIES),
   }));
 }
 

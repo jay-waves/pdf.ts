@@ -30,16 +30,16 @@ import {
   themeUnderlineRenderer,
 } from '../annotations/theme-renderers';
 import type { ManagedResource } from '../platform/types';
-import type { PdfScroll } from './pdf-scroll';
+import type { PdfScroll } from '../renderer/pdf-scroll';
 import { SearchLayer } from '../search/search';
-import { ViewerViewport } from './viewer-viewport';
-import { ViewportInput } from './viewer-viewport-input';
-import { PDF_TILE_SIZE_CSS_PX } from './viewer-diagnostics';
-import { RasterLayer, TileLayer } from './viewer-render-layers';
+import { ViewerViewport } from '../renderer/viewer-viewport';
+import { ViewportInput } from '../renderer/viewer-viewport-input';
+import { PDF_TILE_SIZE_CSS_PX } from '../renderer/viewer-diagnostics';
+import { RasterLayer, TileLayer } from '../renderer/viewer-render-layers';
 import { DOCUMENT_ID } from '../document/viewer-document';
-import './viewer-surface.css';
-import styles from '../viewer/viewer.module.css';
-import { completeStartupLog, failStartupLog, writeStartupLogOnce } from '../viewer/startup-log';
+import './pdf-surface.css';
+import styles from './viewer.module.css';
+import { completeStartupLog, failStartupLog, writeStartupLogOnce } from './startup-log';
 
 export const RENDER_IMAGE_TYPE = 'image/bmp';
 const TILING_OVERLAP_PX = 2;
