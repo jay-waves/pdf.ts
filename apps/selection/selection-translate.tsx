@@ -116,11 +116,11 @@ export function SelectionTranslate({
       const direction = `${getLanguageName(result.sourceLanguage)} → ${getLanguageName(result.targetLanguage)}`;
       return result.downloading
         ? `${direction}\nModel download is in progress. Click to continue.`
-        : `${direction}\nClick to download the local model and translate.`;
+        : `${direction}\nThis language direction is not ready for this site. Click to prepare and translate.`;
     }
     if (typeof result.progress === 'number') {
       return result.progress >= 1
-        ? 'Installing the built-in translation model...'
+        ? 'Preparing the built-in translation model...'
         : `Downloading the built-in translation model... ${Math.round(result.progress * 100)}%`;
     }
     return 'Translating...';

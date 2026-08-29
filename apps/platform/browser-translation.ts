@@ -5,8 +5,14 @@ import type {
 
 type TranslationAvailability = 'available' | 'downloadable' | 'downloading' | 'unavailable';
 
-const OPERATION_TIMEOUT_MS = 3 * 60 * 1000;
+const OPERATION_TIMEOUT_MS = 60 * 1000;
+const AVAILABILITY_TIMEOUT_MS = 5 * 1000;
+const DOWNLOAD_CONSENT_STORAGE_KEY = 'pdf.ts:translation-download-consent';
 let languageDetectorPromise: Promise<ChromeLanguageDetector> | null = null;
+let cachedTranslator: {
+  languagePairKey: string;
+  session: ChromeTranslator;
+} | null = null;
 
 interface DownloadMonitor {
   addEventListener(type: 'downloadprogress', listener: (event: { loaded: number }) => void): void;
@@ -14,7 +20,6 @@ interface DownloadMonitor {
 
 interface ChromeTranslator {
   destroy?(): void;
-  ready?: Promise<void>;
   translate(text: string, options?: { signal?: AbortSignal }): Promise<string>;
 }
 
@@ -40,6 +45,28 @@ interface ChromeLanguageDetectorConstructor {
   create(): Promise<ChromeLanguageDetector>;
 }
 
+function hasDownloadConsent(languagePairKey: string) {
+  try {
+    const entries = JSON.parse(localStorage.getItem(DOWNLOAD_CONSENT_STORAGE_KEY) ?? '[]') as unknown;
+    return Array.isArray(entries) && entries.includes(languagePairKey);
+  } catch {
+    return false;
+  }
+}
+
+function grantDownloadConsent(languagePairKey: string) {
+  try {
+    const entries = JSON.parse(localStorage.getItem(DOWNLOAD_CONSENT_STORAGE_KEY) ?? '[]') as unknown;
+    const approved = new Set(Array.isArray(entries)
+      ? entries.filter((entry): entry is string => typeof entry === 'string')
+      : []);
+    approved.add(languagePairKey);
+    localStorage.setItem(DOWNLOAD_CONSENT_STORAGE_KEY, JSON.stringify([...approved]));
+  } catch (error) {
+    console.warn('Could not save translation model consent.', error);
+  }
+}
+
 function baseLanguage(language: string) {
   try {
     return new Intl.Locale(language).language;
@@ -54,20 +81,36 @@ function translationModelLanguage(language: string) {
     if (locale.language === 'zh') {
       return locale.script === 'Hant' || ['HK', 'MO', 'TW'].includes(locale.region ?? '')
         ? 'zh-Hant'
-        : 'zh';
+        : 'zh-Hans';
     }
-    return locale.language;
+    return locale.baseName;
   } catch {
     return baseLanguage(language);
   }
 }
 
-function withTimeout<Result>(promise: Promise<Result>, message: string, onTimeout?: () => void) {
+function isSameTranslationLanguage(sourceLanguage: string, targetLanguage: string) {
+  if (sourceLanguage === targetLanguage) return true;
+  try {
+    const source = new Intl.Locale(sourceLanguage).maximize();
+    const target = new Intl.Locale(targetLanguage).maximize();
+    return source.language === target.language && source.script === target.script;
+  } catch {
+    return baseLanguage(sourceLanguage) === baseLanguage(targetLanguage);
+  }
+}
+
+function withTimeout<Result>(
+  promise: Promise<Result>,
+  message: string,
+  onTimeout?: () => void,
+  timeoutMs = OPERATION_TIMEOUT_MS,
+) {
   return new Promise<Result>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
       reject(new Error(message));
       onTimeout?.();
-    }, OPERATION_TIMEOUT_MS);
+    }, timeoutMs);
     promise.then(
       (result) => {
         window.clearTimeout(timeout);
@@ -91,7 +134,12 @@ async function detectSourceLanguage(text: string) {
 
   if (!languageDetectorPromise) {
     languageDetectorPromise = (async () => {
-      const availability = await LanguageDetector.availability();
+      const availability = await withTimeout(
+        LanguageDetector.availability(),
+        'The browser did not report language detection availability.',
+        undefined,
+        AVAILABILITY_TIMEOUT_MS,
+      );
       if (availability === 'unavailable') {
         throw new Error('The built-in language detection model is not available in this browser.');
       }
@@ -104,9 +152,11 @@ async function detectSourceLanguage(text: string) {
 
   const detector = await languageDetectorPromise;
   const [bestMatch] = await withTimeout(detector.detect(text), 'Language detection took too long.');
-  return bestMatch?.confidence !== undefined && bestMatch.confidence < 0.45
-    ? 'en'
-    : bestMatch?.detectedLanguage || 'en';
+  if (!bestMatch || bestMatch.detectedLanguage === 'und'
+    || (bestMatch.confidence !== undefined && bestMatch.confidence < 0.45)) {
+    throw new Error('The source language could not be detected.');
+  }
+  return bestMatch.detectedLanguage;
 }
 
 export async function translateWithBrowserModel(
@@ -117,7 +167,7 @@ export async function translateWithBrowserModel(
     options.sourceLanguage ?? await detectSourceLanguage(text),
   );
   const targetLanguage = translationModelLanguage(options.targetLanguage);
-  if (baseLanguage(sourceLanguage) === baseLanguage(targetLanguage)) {
+  if (isSameTranslationLanguage(sourceLanguage, targetLanguage)) {
     return { type: 'inline', text };
   }
 
@@ -129,8 +179,19 @@ export async function translateWithBrowserModel(
   }
 
   const languagePair = { sourceLanguage, targetLanguage };
-  if (!options.allowModelDownload) {
-    const availability = await Translator.availability(languagePair);
+  const languagePairKey = `${sourceLanguage}\u0000${targetLanguage}`;
+  let translator = cachedTranslator?.languagePairKey === languagePairKey
+    ? cachedTranslator.session
+    : undefined;
+  if (options.allowModelDownload) grantDownloadConsent(languagePairKey);
+  const canDownload = options.allowModelDownload || hasDownloadConsent(languagePairKey);
+  if (!translator && !canDownload) {
+    const availability = await withTimeout(
+      Translator.availability(languagePair),
+      'The browser did not report translation model availability.',
+      undefined,
+      AVAILABILITY_TIMEOUT_MS,
+    );
     if (availability === 'unavailable') {
       throw new Error(`Local translation from ${sourceLanguage} to ${targetLanguage} is not available.`);
     }
@@ -148,23 +209,19 @@ export async function translateWithBrowserModel(
   const abort = () => controller.abort();
   if (options.signal?.aborted) controller.abort();
   options.signal?.addEventListener('abort', abort, { once: true });
-  let translator: ChromeTranslator | undefined;
   try {
-    translator = await withTimeout(Translator.create({
-      ...languagePair,
-      signal: controller.signal,
-      monitor(monitor) {
-        monitor.addEventListener('downloadprogress', ({ loaded }) => {
-          options.onDownloadProgress?.(loaded);
-        });
-      },
-    }), 'The built-in translation model took too long to become ready.', abort);
-    if (translator.ready) {
-      await withTimeout(
-        translator.ready,
-        'The built-in translation model took too long to become ready.',
-        abort,
-      );
+    if (!translator) {
+      translator = await withTimeout(Translator.create({
+        ...languagePair,
+        signal: controller.signal,
+        monitor(monitor) {
+          monitor.addEventListener('downloadprogress', ({ loaded }) => {
+            options.onDownloadProgress?.(Math.max(0, Math.min(1, loaded)));
+          });
+        },
+      }), 'The built-in translation model took too long to become ready.', abort);
+      cachedTranslator?.session.destroy?.();
+      cachedTranslator = { languagePairKey, session: translator };
     }
     return {
       type: 'inline',
@@ -176,11 +233,6 @@ export async function translateWithBrowserModel(
     };
   } finally {
     options.signal?.removeEventListener('abort', abort);
-    try {
-      translator?.destroy?.();
-    } catch {
-      // The browser may already have released an aborted translation session.
-    }
   }
 }
 

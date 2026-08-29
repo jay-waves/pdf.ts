@@ -6,6 +6,15 @@ Linux, Windows, and macOS.
 The browser build targets ES2025 and requires Chrome/Edge 129+, Firefox 147+,
 or Safari 26+.
 
+Translation is local-only and requires browser support for the built-in
+Translator API; Microsoft Edge 148 or later is required. The target language
+defaults to the browser's preferred language and can be changed in the
+Developer dialog. Translation uses [BCP 47](https://www.rfc-editor.org/info/bcp47)
+tags: `zh-Hans` for Simplified Chinese and `zh-Hant` for Traditional Chinese.
+Consult the [official Edge language list](https://github.com/MicrosoftEdge/Demos/blob/main/built-in-ai/static/translator-api.js)
+or use the [Edge Built-in AI Playground](https://microsoftedge.github.io/Demos/built-in-ai/)
+to check model availability.
+
 ## Build
 
 All builds require Node.js with Corepack/pnpm. Native packaging additionally
