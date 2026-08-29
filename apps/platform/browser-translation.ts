@@ -1,9 +1,9 @@
 import type {
+  PlatformLanguageDetectionResult,
+  PlatformTranslationAvailability,
   PlatformTranslationOptions,
   PlatformTranslationResult,
 } from './types';
-
-type TranslationAvailability = 'available' | 'downloadable' | 'downloading' | 'unavailable';
 
 const OPERATION_TIMEOUT_MS = 60 * 1000;
 const AVAILABILITY_TIMEOUT_MS = 5 * 1000;
@@ -27,7 +27,7 @@ interface ChromeTranslatorConstructor {
   availability(options: {
     sourceLanguage: string;
     targetLanguage: string;
-  }): Promise<TranslationAvailability>;
+  }): Promise<PlatformTranslationAvailability>;
   create(options: {
     sourceLanguage: string;
     targetLanguage: string;
@@ -41,7 +41,7 @@ interface ChromeLanguageDetector {
 }
 
 interface ChromeLanguageDetectorConstructor {
-  availability(): Promise<TranslationAvailability>;
+  availability(): Promise<PlatformTranslationAvailability>;
   create(): Promise<ChromeLanguageDetector>;
 }
 
@@ -78,11 +78,11 @@ function baseLanguage(language: string) {
 function translationModelLanguage(language: string) {
   try {
     const locale = new Intl.Locale(language);
-    if (locale.language === 'zh') {
-      return locale.script === 'Hant' || ['HK', 'MO', 'TW'].includes(locale.region ?? '')
-        ? 'zh-Hant'
-        : 'zh-Hans';
-    }
+    // TODO(edge-translator): Preserve zh-Hans/zh-Hant once Edge can finish
+    // creating those sessions. In Edge 151, even the official playground
+    // stalls after their models report as downloaded; lzh is the working
+    // local Chinese route for now.
+    if (locale.language === 'zh' || locale.language === 'lzh') return 'lzh';
     return locale.baseName;
   } catch {
     return baseLanguage(language);
@@ -152,20 +152,46 @@ async function detectSourceLanguage(text: string) {
 
   const detector = await languageDetectorPromise;
   const [bestMatch] = await withTimeout(detector.detect(text), 'Language detection took too long.');
-  if (!bestMatch || bestMatch.detectedLanguage === 'und'
-    || (bestMatch.confidence !== undefined && bestMatch.confidence < 0.45)) {
+  if (!bestMatch || bestMatch.detectedLanguage === 'und') {
     throw new Error('The source language could not be detected.');
   }
-  return bestMatch.detectedLanguage;
+  return bestMatch;
+}
+
+export async function detectLanguageWithBrowserModel(
+  text: string,
+): Promise<PlatformLanguageDetectionResult> {
+  return detectSourceLanguage(text);
+}
+
+export async function getBrowserTranslationAvailability(
+  sourceLanguage: string,
+  targetLanguage: string,
+) {
+  const Translator = (
+    globalThis as typeof globalThis & { Translator?: ChromeTranslatorConstructor }
+  ).Translator;
+  if (!Translator) return 'unavailable';
+  return withTimeout(
+    Translator.availability({
+      sourceLanguage: translationModelLanguage(sourceLanguage),
+      targetLanguage: translationModelLanguage(targetLanguage),
+    }),
+    'The browser did not report translation model availability.',
+    undefined,
+    AVAILABILITY_TIMEOUT_MS,
+  );
 }
 
 export async function translateWithBrowserModel(
   text: string,
   options: PlatformTranslationOptions,
 ): Promise<PlatformTranslationResult> {
-  const sourceLanguage = translationModelLanguage(
-    options.sourceLanguage ?? await detectSourceLanguage(text),
-  );
+  const detection = options.sourceLanguage
+    ? { detectedLanguage: options.sourceLanguage }
+    : await detectSourceLanguage(text);
+
+  const sourceLanguage = translationModelLanguage(detection.detectedLanguage);
   const targetLanguage = translationModelLanguage(options.targetLanguage);
   if (isSameTranslationLanguage(sourceLanguage, targetLanguage)) {
     return { type: 'inline', text };
@@ -237,5 +263,7 @@ export async function translateWithBrowserModel(
 }
 
 export const browserTranslationCapabilities = {
+  detectLanguage: detectLanguageWithBrowserModel,
+  getTranslationAvailability: getBrowserTranslationAvailability,
   translate: translateWithBrowserModel,
 };

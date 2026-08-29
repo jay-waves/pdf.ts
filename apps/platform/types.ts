@@ -52,6 +52,17 @@ export type PlatformTranslationResult =
     targetLanguage: string;
   };
 
+export interface PlatformLanguageDetectionResult {
+  confidence?: number;
+  detectedLanguage: string;
+}
+
+export type PlatformTranslationAvailability =
+  | 'available'
+  | 'downloadable'
+  | 'downloading'
+  | 'unavailable';
+
 export interface PlatformTranslationOptions {
   allowModelDownload?: boolean;
   onDownloadProgress?(progress: number): void;
@@ -64,6 +75,11 @@ export interface ViewerPlatform {
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file?: File): Promise<PlatformDocument | undefined>;
   openExternal(url: string): void;
+  detectLanguage(text: string): Promise<PlatformLanguageDetectionResult>;
+  getTranslationAvailability(
+    sourceLanguage: string,
+    targetLanguage: string,
+  ): Promise<PlatformTranslationAvailability>;
   translate(text: string, options: PlatformTranslationOptions): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;

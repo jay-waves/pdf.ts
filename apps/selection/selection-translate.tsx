@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from '../components';
+import { getDocument } from '../document/viewer-document';
 import { platform } from '#platform';
 import { getPluginCapability, normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
+import { detectDocumentLanguage } from './document-language';
 import {
   getLanguageName,
+  getTranslationSourceLanguage,
   getTranslationTargetLanguage,
 } from './translation-settings';
 import styles from './selection-translate.module.css';
@@ -78,19 +81,27 @@ export function SelectionTranslate({
     setResult({ status: 'loading' });
     const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
     const scope = selection?.forDocument(request.documentId);
-    if (!selection || !scope) return;
+    if (!registry || !selection || !scope) return;
 
     let cancelled = false;
-    scope.getSelectedText().toPromise().then((parts) => {
+    const configuredSourceLanguage = getTranslationSourceLanguage(platform.getPreference);
+    const document = getDocument(registry, request.documentId)!;
+    Promise.all([
+      scope.getSelectedText().toPromise(),
+      configuredSourceLanguage
+        ? Promise.resolve(configuredSourceLanguage)
+        : detectDocumentLanguage(registry.getEngine(), document)
+          .then((result) => result.detectedLanguage),
+    ]).then(([parts, sourceLanguage]) => {
       if (cancelled) return;
       const text = normalizeText(parts);
       setSourceText(text);
-      void translate(text, false);
+      void translate(text, false, sourceLanguage);
     }).catch((error) => {
       if (cancelled) return;
       setResult({
         status: 'error',
-        text: error instanceof Error ? error.message : 'Could not read the selected text.',
+        text: error instanceof Error ? error.message : 'Could not prepare translation.',
       });
     });
 

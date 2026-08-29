@@ -1,4 +1,5 @@
 export const TRANSLATION_TARGET_LANGUAGE_PREFERENCE = 'pdf.ts:translation-target-language';
+export const TRANSLATION_SOURCE_LANGUAGE_PREFERENCE = 'pdf.ts:translation-source-language';
 
 export function getBrowserTranslationLanguage() {
   return normalizeTranslationLanguage(
@@ -19,10 +20,21 @@ export function normalizeTranslationLanguage(value: unknown, fallback?: string) 
 }
 
 export function getTranslationTargetLanguage(readPreference: (key: string) => string | null) {
-  return normalizeTranslationLanguage(
-    readPreference(TRANSLATION_TARGET_LANGUAGE_PREFERENCE),
-    getBrowserTranslationLanguage(),
-  );
+  return getConfiguredTranslationTargetLanguage(readPreference) ?? getBrowserTranslationLanguage();
+}
+
+export function getConfiguredTranslationTargetLanguage(
+  readPreference: (key: string) => string | null,
+) {
+  const configured = readPreference(TRANSLATION_TARGET_LANGUAGE_PREFERENCE)?.trim();
+  if (!configured) return undefined;
+  const language = normalizeTranslationLanguage(configured);
+  return language === getBrowserTranslationLanguage() ? undefined : language;
+}
+
+export function getTranslationSourceLanguage(readPreference: (key: string) => string | null) {
+  const configured = readPreference(TRANSLATION_SOURCE_LANGUAGE_PREFERENCE)?.trim();
+  return configured ? normalizeTranslationLanguage(configured) : undefined;
 }
 
 export function getLanguageName(language: string) {

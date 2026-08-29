@@ -17,12 +17,16 @@ import {
   type PdfFontDiagnostic,
 } from '../fonts';
 import type { PdfRuntime } from '../renderer/pdf-engine';
+import type { PlatformLanguageDetectionResult } from '../platform/types';
 import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import { platform } from '#platform';
 import {
   getBrowserTranslationLanguage,
+  getConfiguredTranslationTargetLanguage,
+  getTranslationSourceLanguage,
   getTranslationTargetLanguage,
   normalizeTranslationLanguage,
+  TRANSLATION_SOURCE_LANGUAGE_PREFERENCE,
   TRANSLATION_TARGET_LANGUAGE_PREFERENCE,
 } from '../selection/translation-settings';
 import styles from './developer-dialog.module.css';
@@ -53,29 +57,44 @@ function formatTiming({ count, last, average }: {
 }
 
 export function DeveloperDialog({
+  detectedDocumentLanguage,
   open,
   pdfium,
   onClose,
 }: {
+  detectedDocumentLanguage?: PlatformLanguageDetectionResult;
   open: boolean;
   pdfium: PdfRuntime;
   onClose(): void;
 }) {
   const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
   const [translationTargetLanguage, setTranslationTargetLanguage] = useState(
-    () => getTranslationTargetLanguage(platform.getPreference),
+    () => getConfiguredTranslationTargetLanguage(platform.getPreference) ?? '',
+  );
+  const [translationSourceLanguage, setTranslationSourceLanguage] = useState(
+    () => getTranslationSourceLanguage(platform.getPreference) ?? '',
   );
   const [translationLanguageError, setTranslationLanguageError] = useState('');
+  const [translationSourceLanguageError, setTranslationSourceLanguageError] = useState('');
   const snapshot = useStore(viewerDiagnosticsStore);
   const startupSnapshot = useStore(startupLogStore);
   const dprMode = snapshot.renderDprMode;
   const dpr = getEffectiveRenderDpr(dprMode);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
+  const translationSourcePlaceholder = detectedDocumentLanguage
+    ? `Auto (${detectedDocumentLanguage.detectedLanguage}${
+      detectedDocumentLanguage.confidence === undefined
+        ? ''
+        : `, ${Math.round(detectedDocumentLanguage.confidence * 100)}% confidence`
+    })`
+    : 'Auto (detecting document language)';
 
   useEffect(() => {
     if (!open) return;
-    setTranslationTargetLanguage(getTranslationTargetLanguage(platform.getPreference));
+    setTranslationSourceLanguage(getTranslationSourceLanguage(platform.getPreference) ?? '');
+    setTranslationTargetLanguage(getConfiguredTranslationTargetLanguage(platform.getPreference) ?? '');
     setTranslationLanguageError('');
+    setTranslationSourceLanguageError('');
     let active = true;
     const sample = () => {
       sampleRasterPixels();
@@ -91,13 +110,59 @@ export function DeveloperDialog({
     };
   }, [open, pdfium]);
 
-  const saveTranslationTargetLanguage = () => {
+  const saveTranslationSourceLanguage = async () => {
+    const configured = translationSourceLanguage.trim();
+    if (!configured) {
+      platform.setPreference(TRANSLATION_SOURCE_LANGUAGE_PREFERENCE, '');
+      setTranslationSourceLanguage('');
+      setTranslationSourceLanguageError('');
+      return;
+    }
     try {
-      const language = normalizeTranslationLanguage(translationTargetLanguage);
-      platform.setPreference(TRANSLATION_TARGET_LANGUAGE_PREFERENCE, language);
-      setTranslationTargetLanguage(language);
+      const language = normalizeTranslationLanguage(configured);
+      const targetLanguage = getTranslationTargetLanguage(platform.getPreference);
+      const availability = await platform.getTranslationAvailability(language, targetLanguage);
+      if (availability === 'unavailable') {
+        throw new Error(`Translation from ${language} to ${targetLanguage} is not supported.`);
+      }
+      platform.setPreference(TRANSLATION_SOURCE_LANGUAGE_PREFERENCE, language);
+      setTranslationSourceLanguage(language);
+      setTranslationSourceLanguageError('');
+    } catch (error) {
+      setTranslationSourceLanguage(getTranslationSourceLanguage(platform.getPreference) ?? '');
+      setTranslationSourceLanguageError(
+        error instanceof Error ? error.message : 'Invalid language tag.',
+      );
+    }
+  };
+
+  const saveTranslationTargetLanguage = async () => {
+    const configured = translationTargetLanguage.trim();
+    if (!configured) {
+      platform.setPreference(TRANSLATION_TARGET_LANGUAGE_PREFERENCE, '');
+      setTranslationTargetLanguage('');
+      setTranslationLanguageError('');
+      return;
+    }
+    try {
+      const language = normalizeTranslationLanguage(configured);
+      const browserLanguage = getBrowserTranslationLanguage();
+      const sourceLanguage = getTranslationSourceLanguage(platform.getPreference)
+        ?? detectedDocumentLanguage?.detectedLanguage;
+      if (sourceLanguage) {
+        const availability = await platform.getTranslationAvailability(sourceLanguage, language);
+        if (availability === 'unavailable') {
+          throw new Error(`Translation from ${sourceLanguage} to ${language} is not supported.`);
+        }
+      }
+      const override = language === browserLanguage ? '' : language;
+      platform.setPreference(TRANSLATION_TARGET_LANGUAGE_PREFERENCE, override);
+      setTranslationTargetLanguage(override);
       setTranslationLanguageError('');
     } catch (error) {
+      setTranslationTargetLanguage(
+        getConfiguredTranslationTargetLanguage(platform.getPreference) ?? '',
+      );
       setTranslationLanguageError(error instanceof Error ? error.message : 'Invalid language tag.');
     }
   };
@@ -176,31 +241,77 @@ export function DeveloperDialog({
             />
           </div>
           <div className={styles.control}>
-            <label htmlFor="translation-target-language">Translation target language</label>
+            <label htmlFor="translation-source-language">Translation source language</label>
             <input
-              id="translation-target-language"
+              id="translation-source-language"
               className={styles.input}
-              value={translationTargetLanguage}
+              value={translationSourceLanguage}
+              placeholder={translationSourcePlaceholder}
               spellCheck={false}
-              onBlur={saveTranslationTargetLanguage}
-              onChange={(event) => setTranslationTargetLanguage(event.target.value)}
+              onBlur={() => void saveTranslationSourceLanguage()}
+              onChange={(event) => {
+                const value = event.target.value;
+                setTranslationSourceLanguage(value);
+                if (!value.trim()) {
+                  setTranslationSourceLanguageError('');
+                  return;
+                }
+                try {
+                  normalizeTranslationLanguage(value);
+                  setTranslationSourceLanguageError('');
+                } catch (error) {
+                  setTranslationSourceLanguageError(
+                    error instanceof Error ? error.message : 'Invalid language tag.',
+                  );
+                }
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.currentTarget.blur();
               }}
             />
           </div>
-          <p className={`${styles.hint} ${translationLanguageError ? 'text-danger' : ''}`.trim()}>
-            {translationLanguageError || `Use a BCP 47 tag. Browser default: ${getBrowserTranslationLanguage()}.`}
-          </p>
+          {translationSourceLanguageError ? (
+            <p className={`${styles.hint} text-danger`}>{translationSourceLanguageError}</p>
+          ) : null}
+          <div className={styles.control}>
+            <label htmlFor="translation-target-language">Translation target language</label>
+            <input
+              id="translation-target-language"
+              className={styles.input}
+              value={translationTargetLanguage}
+              placeholder={`Auto (browser ${getBrowserTranslationLanguage()})`}
+              spellCheck={false}
+              onBlur={() => void saveTranslationTargetLanguage()}
+              onChange={(event) => {
+                const value = event.target.value;
+                setTranslationTargetLanguage(value);
+                if (!value.trim()) {
+                  setTranslationLanguageError('');
+                  return;
+                }
+                try {
+                  normalizeTranslationLanguage(value);
+                  setTranslationLanguageError('');
+                } catch (error) {
+                  setTranslationLanguageError(
+                    error instanceof Error ? error.message : 'Invalid language tag.',
+                  );
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+            />
+          </div>
+          {translationLanguageError ? (
+            <p className={`${styles.hint} text-danger`}>{translationLanguageError}</p>
+          ) : null}
           <p className={styles.hint}>
             DPR profiles adjust tile raster scale; tile edges follow a fixed {PDF_TILE_SIZE_CSS_PX} CSS px × DPR ratio.
           </p>
         </section>
 
-        <label className={styles.detailsLabel}>
-          <span>Details</span>
-          <textarea className={styles.details} value={details} readOnly />
-        </label>
+        <textarea aria-label="Details" className={styles.details} value={details} readOnly />
       </PanelContent>
     </Dialog>
   );

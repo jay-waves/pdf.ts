@@ -51,6 +51,7 @@ import {
 } from './document/signatures';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
+import type { PlatformLanguageDetectionResult } from './platform/types';
 import {
   LoadingStatus,
   PdfSurface,
@@ -65,7 +66,8 @@ import {
   resetViewerDiagnostics,
   viewerDiagnosticsStore,
 } from './renderer/viewer-diagnostics';
-import { DOCUMENT_ID } from './document/viewer-document';
+import { DOCUMENT_ID, onDocumentLoaded } from './document/viewer-document';
+import { detectDocumentLanguage } from './selection/document-language';
 import {
   INITIAL_VIEWER_UI,
   installViewerCommandKeys,
@@ -165,6 +167,9 @@ function App({
     bookmarks: [],
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
+  const [detectedDocumentLanguage, setDetectedDocumentLanguage] = useState<
+    PlatformLanguageDetectionResult
+  >();
   const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
   const viewerTheme = useStore(viewerThemeStore, (state) => state.theme);
@@ -221,6 +226,32 @@ function App({
   useEffect(() => {
     pdfSearchStore.getState().attach(pdfium);
   }, [pdfium]);
+
+  useEffect(() => {
+    if (!registry || !documentId) {
+      setDetectedDocumentLanguage(undefined);
+      return;
+    }
+
+    let active = true;
+    let currentDocument: object | undefined;
+    const unsubscribe = onDocumentLoaded(registry, documentId, (document) => {
+      currentDocument = document;
+      setDetectedDocumentLanguage(undefined);
+      void detectDocumentLanguage(engine, document).then((result) => {
+        if (active && currentDocument === document) setDetectedDocumentLanguage(result);
+      }).catch((error) => {
+        if (active && currentDocument === document) {
+          console.warn('[pdf-ts] failed to detect document language', error);
+        }
+      });
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [documentId, engine, registry]);
 
   const initializePlugins = useCallback(async (nextRegistry: PluginRegistry) => {
     registryCleanupRef.current?.();
@@ -384,6 +415,7 @@ function App({
         onClose={closeOverlay}
       />
       <DeveloperDialog
+        detectedDocumentLanguage={detectedDocumentLanguage}
         open={activeDialog === 'developer'}
         pdfium={pdfium}
         onClose={closeOverlay}
