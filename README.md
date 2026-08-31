@@ -10,9 +10,9 @@ Translation is local-only and requires browser support for the built-in
 Translator API; Microsoft Edge 148 or later is required. The target language
 defaults to the browser's preferred language and can be changed in the
 Developer dialog. Translation uses [BCP 47](https://www.rfc-editor.org/info/bcp47)
-tags. As a temporary Edge 151 compatibility workaround, all Chinese tags are
-routed through `lzh`: Edge's `zh-hans` and `zh-hant` sessions can remain stuck
-after their models report as downloaded, including in Edge's official playground.
+tags. Language tags are passed through without changing their meaning; an
+unspecified `zh` tag is supplemented as `zh-Hans` for the browser Translator
+API.
 Consult the [official Edge language list](https://github.com/MicrosoftEdge/Demos/blob/main/built-in-ai/static/translator-api.js)
 or use the [Edge Built-in AI Playground](https://microsoftedge.github.io/Demos/built-in-ai/)
 to check model availability.

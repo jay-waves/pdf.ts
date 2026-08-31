@@ -4,7 +4,7 @@ export type ViewerActivityAudience = 'all' | 'toolbar' | 'navigation';
 
 type ViewerActivityEvent = {
   id: number;
-  phase: 'start' | 'update' | 'end';
+  phase: 'start' | 'update' | 'end' | 'toggle-controls' | 'hide-controls';
   source: ViewerInputSource;
   path: ViewerActivityPath;
   audience: ViewerActivityAudience;
@@ -61,6 +61,21 @@ class ViewerActivityStore {
   ) {
     const session = this.begin(source, path, audience);
     session.end();
+  }
+
+  controls(
+    action: 'toggle' | 'hide',
+    source: ViewerInputSource,
+    path: ViewerActivityPath,
+    audience: ViewerActivityAudience = 'all',
+  ) {
+    this.publish({
+      id: this.nextId++,
+      phase: action === 'toggle' ? 'toggle-controls' : 'hide-controls',
+      source,
+      path,
+      audience,
+    });
   }
 
   private publish(event: ViewerActivityEvent) {

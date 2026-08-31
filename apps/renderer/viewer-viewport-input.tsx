@@ -21,7 +21,6 @@ const MAX_ZOOM_LEVEL = 60;
 const PAN_DRAG_THRESHOLD_PX = 4;
 const TOUCH_LONG_PRESS_DELAY_MS = 500;
 const TOUCH_PAN_THRESHOLD_PX = 8;
-const TOUCH_EDGE_TAP_SIZE_PX = 48;
 const TOUCH_INERTIA_MIN_SPEED_PX_PER_MS = 0.08;
 const TOUCH_INERTIA_STOP_SPEED_PX_PER_MS = 0.02;
 const TOUCH_INERTIA_MAX_SPEED_PX_PER_MS = 2.5;
@@ -68,6 +67,43 @@ function compressWheelDelta(delta: number) {
   return Math.sign(delta) * (
     WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX
     + (magnitude - WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX) * WHEEL_SCROLL_COMPRESSION_RATIO
+  );
+}
+
+const TOUCH_INTERACTIVE_TARGET_SELECTOR = [
+  'a[href]',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  'summary',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[role="slider"]',
+  '[role="tab"]',
+  '[data-comment-annotation-id]',
+  '[style*="cursor: pointer"]',
+].join(',');
+
+function isInteractiveTouchTarget(target: Element) {
+  return Boolean(
+    target.closest(TOUCH_INTERACTIVE_TARGET_SELECTOR)
+    || window.getComputedStyle(target).cursor === 'pointer'
+  );
+}
+
+function hasViewportTextSelection(viewport: Element) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return false;
+  return Boolean(
+    (selection.anchorNode && viewport.contains(selection.anchorNode))
+    || (selection.focusNode && viewport.contains(selection.focusNode))
   );
 }
 
@@ -374,6 +410,7 @@ export function ViewportInput({
         pendingZoomDelta = 0;
         pendingZoomLevel = null;
         pinchStartZoom = zoomScope.getState().currentZoomLevel;
+        viewerActivity.controls('hide', 'Touch', ['Viewport', 'Zoom']);
         pinchActivity = viewerActivity.begin('Touch', ['Viewport', 'Zoom']);
       }
 
@@ -420,6 +457,13 @@ export function ViewportInput({
           }
 
           const target = event.target instanceof Element ? event.target : viewport;
+          // Native controls, links, annotations, and editable widgets consume a
+          // tap before viewer chrome gets a chance to interpret it.
+          if (isInteractiveTouchTarget(target) || hasViewportTextSelection(viewport)) {
+            cancelActiveDrag = null;
+            cancel();
+            return;
+          }
           const interactionPaused = Boolean(interactionScope && !interactionScope.isPaused());
           if (interactionPaused) interactionScope?.pause();
           flushPendingInput();
@@ -477,6 +521,7 @@ export function ViewportInput({
           ) {
             window.clearTimeout(touchGesture.timer);
             touchGesture.mode = 'pan';
+            viewerActivity.controls('hide', 'Touch', ['Viewport', 'Pan']);
             dragActivity = viewerActivity.begin(pointerInputSource(event), ['Viewport', 'Pan']);
           }
         }
@@ -493,20 +538,7 @@ export function ViewportInput({
           cancelActiveDrag = null;
           if (!completedTouch) return;
           if (completedTouch.mode === 'pending' && !canceled) {
-            const bounds = viewport.getBoundingClientRect();
-            if (completedTouch.pointerY - bounds.top <= TOUCH_EDGE_TAP_SIZE_PX) {
-              viewerActivity.pulse(
-                'Touch',
-                ['Controls', 'Toolbar', 'Edge tap'],
-                'toolbar',
-              );
-            } else if (bounds.bottom - completedTouch.pointerY <= TOUCH_EDGE_TAP_SIZE_PX) {
-              viewerActivity.pulse(
-                'Touch',
-                ['Controls', 'Navigation', 'Edge tap'],
-                'navigation',
-              );
-            }
+            viewerActivity.controls('toggle', 'Touch', ['Viewport', 'Tap']);
           }
           if (completedTouch.mode === 'pan' && !canceled) {
             dragActivity?.update(['Viewport', 'Pan', 'Inertia']);

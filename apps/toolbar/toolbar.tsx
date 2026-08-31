@@ -209,6 +209,7 @@ export function Toolbar({
 }: ToolbarProps) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
+  const [touchInput, setTouchInput] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const searchWasOpenRef = useRef(false);
   const pointerHoveringRef = useRef(false);
@@ -223,10 +224,27 @@ export function Toolbar({
   );
 
   useEffect(() => {
-    if (activeTool && !searchOpen) {
+    if (activeTool && !searchOpen && !touchInput) {
       setActiveSection('draw');
     }
-  }, [activeTool, searchOpen]);
+  }, [activeTool, searchOpen, touchInput]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const nextTouchInput = event.pointerType === 'touch';
+      setTouchInput((current) => current === nextTouchInput ? current : nextTouchInput);
+    };
+    window.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, { capture: true });
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!touchInput) return;
+    setActiveSection((current) => current === 'draw' ? null : current);
+    if (activeTool) dispatch({ type: 'annotation/clear-tool' });
+  }, [activeTool, dispatch, touchInput]);
 
   useEffect(() => {
     setActiveSection((current) => {
@@ -387,8 +405,10 @@ export function Toolbar({
                   key={id}
                   type="button"
                   className={styles.modeButton}
+                  disabled={id === 'draw' && touchInput}
                   onClick={() => openSection(id)}
-                  aria-label={label}
+                  aria-label={id === 'draw' && touchInput ? 'Draw (mouse or pen only)' : label}
+                  title={id === 'draw' && touchInput ? 'Draw requires a mouse or pen' : undefined}
                 >
                   <Icon
                     className={`${styles.icon} ${id === 'search' ? styles.searchModeIcon : ''}`}

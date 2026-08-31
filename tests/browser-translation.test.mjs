@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { translateWithBrowserModel } from '../apps/platform/browser-translation.ts';
 
-test('Edge Chinese translation uses the temporary lzh compatibility route', async () => {
+test('Chinese translation only supplements an unspecified zh language', async () => {
   const previousTranslator = globalThis.Translator;
   const previousWindow = globalThis.window;
   let createdWith;
@@ -19,11 +19,29 @@ test('Edge Chinese translation uses the temporary lzh compatibility route', asyn
 
   try {
     await translateWithBrowserModel('测试', {
+      sourceLanguage: 'zh',
+      targetLanguage: 'en',
+    });
+    assert.equal(createdWith.sourceLanguage, 'zh-Hans');
+    assert.equal(createdWith.targetLanguage, 'en');
+
+    await translateWithBrowserModel('测试', {
       sourceLanguage: 'zh-Hans',
+      targetLanguage: 'fr',
+    });
+    assert.equal(createdWith.sourceLanguage, 'zh-Hans');
+
+    await translateWithBrowserModel('測試', {
+      sourceLanguage: 'zh-Hant',
+      targetLanguage: 'en',
+    });
+    assert.equal(createdWith.sourceLanguage, 'zh-Hant');
+
+    await translateWithBrowserModel('測試', {
+      sourceLanguage: 'lzh',
       targetLanguage: 'en',
     });
     assert.equal(createdWith.sourceLanguage, 'lzh');
-    assert.equal(createdWith.targetLanguage, 'en');
   } finally {
     globalThis.Translator = previousTranslator;
     globalThis.window = previousWindow;

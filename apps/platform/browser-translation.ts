@@ -78,11 +78,10 @@ function baseLanguage(language: string) {
 function translationModelLanguage(language: string) {
   try {
     const locale = new Intl.Locale(language);
-    // TODO(edge-translator): Preserve zh-Hans/zh-Hant once Edge can finish
-    // creating those sessions. In Edge 151, even the official playground
-    // stalls after their models report as downloaded; lzh is the working
-    // local Chinese route for now.
-    if (locale.language === 'zh' || locale.language === 'lzh') return 'lzh';
+    // The Translator API expects a script for an otherwise-unspecified
+    // Chinese language. Preserve explicit scripts, regions, and lzh instead
+    // of replacing the user's requested language.
+    if (locale.baseName === 'zh') return 'zh-Hans';
     return locale.baseName;
   } catch {
     return baseLanguage(language);
