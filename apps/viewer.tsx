@@ -1,133 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { localEngine } from '@embedpdf/engine';
-import { renderPlugin } from '@embedpdf/plugin-render';
-import { stagePlugin } from '@embedpdf/plugin-stage';
-import { interactionPlugin } from '@embedpdf/plugin-interaction';
-import { metadataPlugin } from '@embedpdf/plugin-metadata';
-import { searchPlugin } from '@embedpdf/plugin-search';
-import { selectionPlugin } from '@embedpdf/plugin-selection';
 import {
-  DocumentGate,
-  DocumentScope,
   RenderLayer,
   SearchLayer,
   SelectionClipboard,
   SelectionLayer,
   Stage,
   Viewer,
-  useDocumentId,
-  useDocumentStatus,
-  useDocuments,
-  type InitialDocument,
 } from '@embedpdf/react';
 import './viewer.css';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
 import { ViewerV3Controls } from './viewer-v3-controls';
-
-const DOCUMENT_ID = 'pdf-ts-document';
-const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
-
-// v3 owns the worker and WASM lifecycle. The Windows launcher permits its
-// blob worker; disabling the encoder pool keeps this first slice to one worker.
-const createEngine = () => localEngine({ encoderWorker: false });
-
-// Stage replaces the v2 viewport/scroll/zoom/spread/rotate/tiling stack.
-// Editing plugins intentionally stay out until their v3 APIs settle.
-const plugins = [
-  interactionPlugin(),
-  stagePlugin({
-    flow: 'continuous',
-    layout: 'vertical',
-    spread: 'none',
-    padding: 20,
-    gap: { px: 12 },
-    zoom: { mode: 'fit-page' },
-  }),
-  selectionPlugin(),
-  searchPlugin(),
-  metadataPlugin(),
-  renderPlugin(),
-];
-
-function LoadingStatus({ label }: { label: string }) {
-  return (
-    <div className={VIEWER_STATUS_CLASS} role="status" aria-live="polite">
-      {label}
-    </div>
-  );
-}
-
-async function readDocument(resource: ManagedResource, signal: AbortSignal) {
-  if (resource.openStream) {
-    return new Uint8Array(await new Response(resource.openStream()).arrayBuffer());
-  }
-  const response = await fetch(resource.url, { signal });
-  if (!response.ok) throw new Error(`Unable to open PDF: HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-function initialDocument(
-  document: PlatformDocument,
-  onResourceConsumed: (resource: ManagedResource) => void,
-): InitialDocument {
-  return {
-    name: document.name ?? 'PDF',
-    source: async (signal) => {
-      const bytes = await readDocument(document.resource, signal);
-      onResourceConsumed(document.resource);
-      return { kind: 'bytes', id: DOCUMENT_ID, bytes };
-    },
-  };
-}
-
-function PasswordPrompt() {
-  const documentId = useDocumentId();
-  const { unlock } = useDocuments();
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  if (!documentId) return <LoadingStatus label="No PDF document." />;
-
-  return (
-    <form
-      className="pdf-v3-password"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setBusy(true);
-        setError('');
-        void unlock(documentId, { password })
-          .catch(() => setError('Incorrect password.'))
-          .finally(() => setBusy(false));
-      }}
-    >
-      <strong>Password required</strong>
-      <input
-        autoFocus
-        type="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-      />
-      <button type="submit" disabled={busy || !password}>
-        {busy ? 'Opening…' : 'Open PDF'}
-      </button>
-      {error ? <span className="text-danger">{error}</span> : null}
-    </form>
-  );
-}
-
-function DocumentFallback() {
-  const status = useDocumentStatus();
-  if (status === 'locked') return <PasswordPrompt />;
-  if (status === 'error') {
-    return <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to open PDF.</div>;
-  }
-  return <LoadingStatus label="Opening PDF document…" />;
-}
+import { createViewerEngine, viewerPlugins } from './engine/viewer-engine';
+import { DocumentLifecycle, LoadingStatus, VIEWER_STATUS_CLASS } from './document/document-lifecycle';
+import { createInitialDocument } from './document/document-session';
+import { useDocumentSecurity } from './document/document-security';
 
 function ReadyDocument({ sourceDocument }: { sourceDocument: PlatformDocument }) {
+  const { canRender } = useDocumentSecurity();
+  if (!canRender) {
+    return <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Document preview is not permitted.</div>;
+  }
+
   return (
     <div className="pdf-v3-viewer">
       <Stage className="pdf-v3-stage" interaction>
@@ -145,21 +40,6 @@ function ReadyDocument({ sourceDocument }: { sourceDocument: PlatformDocument })
   );
 }
 
-function ViewerWorkspace({ sourceDocument }: { sourceDocument: PlatformDocument }) {
-  const { docs, activeId } = useDocuments();
-  const active = docs.find((doc) => doc.id === activeId);
-  if (!activeId) return <LoadingStatus label="Opening PDF document…" />;
-
-  return (
-    <DocumentScope id={activeId}>
-      <DocumentGate fallback={<DocumentFallback />}>
-        <ReadyDocument sourceDocument={sourceDocument} />
-      </DocumentGate>
-      {active?.name ? <span className="sr-only">{active.name}</span> : null}
-    </DocumentScope>
-  );
-}
-
 function CoreViewer({
   sourceDocument,
   onResourceConsumed,
@@ -168,14 +48,14 @@ function CoreViewer({
   onResourceConsumed(resource: ManagedResource): void;
 }) {
   const documents = useMemo(
-    () => [initialDocument(sourceDocument, onResourceConsumed)],
+    () => [createInitialDocument(sourceDocument, onResourceConsumed)],
     [onResourceConsumed, sourceDocument],
   );
 
   return (
     <Viewer
-      engine={createEngine}
-      plugins={plugins}
+      engine={createViewerEngine}
+      plugins={viewerPlugins}
       initialDocuments={documents}
       fallback={<LoadingStatus label="Starting EmbedPDF v3…" />}
       renderError={(error) => (
@@ -184,7 +64,9 @@ function CoreViewer({
         </div>
       )}
     >
-      <ViewerWorkspace sourceDocument={sourceDocument} />
+      <DocumentLifecycle>
+        <ReadyDocument sourceDocument={sourceDocument} />
+      </DocumentLifecycle>
     </Viewer>
   );
 }

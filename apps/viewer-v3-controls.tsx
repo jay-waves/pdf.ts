@@ -27,8 +27,6 @@ import {
   X,
 } from 'lucide-react';
 import {
-  useDocumentId,
-  useDocuments,
   useLayout,
   useMetadata,
   usePages,
@@ -55,8 +53,9 @@ import { getStoredToolbarPinned, setStoredToolbarPinned } from './theme/theme';
 import toolbarStyles from './toolbar/toolbar.module.css';
 import navigationStyles from './navigation/bottom-navigation.module.css';
 import documentStyles from './document/document-dialogs.module.css';
-import { downloadPdf } from './platform/browser-download';
 import type { PlatformDocument } from './platform/types';
+import { useDocumentPersistence } from './document/document-persistence';
+import { useDocumentSecurity } from './document/document-security';
 
 type ToolbarSection = 'document' | 'page' | 'draw' | 'search';
 
@@ -124,11 +123,15 @@ function MetadataDialogV3({
 
 function DocumentToolbar({
   busy,
+  canDownload,
+  canPrint,
   onBack,
   onExport,
   onMetadata,
 }: {
   busy: boolean;
+  canDownload: boolean;
+  canPrint: boolean;
   onBack(): void;
   onExport(): void;
   onMetadata(): void;
@@ -138,8 +141,13 @@ function DocumentToolbar({
       <IconButton label="Back" icon={ArrowLeft} onClick={onBack} />
       <FloatingToolbarDivider />
       <FloatingToolbarGroup>
-        <IconButton label="Print (waiting for EmbedPDF v3 UI)" icon={Printer} disabled onClick={NOOP} />
-        <IconButton label="Export" icon={Download} disabled={busy} onClick={onExport} />
+        <IconButton
+          label={canPrint ? 'Print (UI pending)' : 'Printing is not permitted'}
+          icon={Printer}
+          disabled
+          onClick={NOOP}
+        />
+        <IconButton label="Export" icon={Download} disabled={busy || !canDownload} onClick={onExport} />
         <IconButton label="Metadata" icon={Info} onClick={onMetadata} />
         <IconButton label="Developer diagnostics (waiting for EmbedPDF v3)" icon={Wrench} disabled onClick={NOOP} />
       </FloatingToolbarGroup>
@@ -292,11 +300,10 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const hovering = useRef(false);
   const { activeToolId, activate } = useTool();
-  const documentId = useDocumentId();
-  const { download } = useDocuments();
+  const security = useDocumentSecurity();
+  const persistence = useDocumentPersistence(sourceDocument, security.canDownload);
   const { visible, reveal, scheduleHide } = useViewerActivityAutoHide(
     'toolbar',
     () => !pinned && !hovering.current,
@@ -309,7 +316,7 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+      if (security.canSearch && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
         event.preventDefault();
         setActiveSection('search');
         reveal();
@@ -317,7 +324,7 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [reveal]);
+  }, [reveal, security.canSearch]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
@@ -334,40 +341,6 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
     setPinned(next);
     setStoredToolbarPinned(next);
   };
-
-  const serialize = useCallback(async () => {
-    if (!documentId) throw new Error('No PDF document is open.');
-    const bytes = await download(documentId, { mode: 'incremental' });
-    return bytes.slice().buffer as ArrayBuffer;
-  }, [documentId, download]);
-
-  const saveDocument = useCallback(async () => {
-    const target = await sourceDocument.fileHandle.prepareWrite();
-    if (!target) return false;
-    setBusy(true);
-    try {
-      const data = await serialize();
-      return target.saveIncrementalDocument
-        ? await target.saveIncrementalDocument(data)
-        : await target.save(data);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to save the PDF.');
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  }, [serialize, sourceDocument.fileHandle]);
-
-  const exportDocument = useCallback(async () => {
-    setBusy(true);
-    try {
-      downloadPdf(await serialize(), sourceDocument.name ?? 'document.pdf');
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to export the PDF.');
-    } finally {
-      setBusy(false);
-    }
-  }, [serialize, sourceDocument.name]);
 
   return (
     <div
@@ -386,17 +359,20 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
     >
       {activeSection === 'document' ? (
         <DocumentToolbar
-          busy={busy}
+          busy={persistence.busy}
+          canDownload={security.canDownload}
+          canPrint={security.canPrint}
           onBack={() => setActiveSection(null)}
-          onExport={() => void exportDocument()}
+          onExport={() => void persistence.exportCopy()}
           onMetadata={() => setMetadataOpen(true)}
         />
       ) : activeSection === 'page' ? <PageToolbar onBack={() => setActiveSection(null)} />
         : activeSection === 'search' ? <SearchToolbar onBack={() => setActiveSection(null)} /> : (
         <FloatingToolbar label="PDF toolbar">
           <FloatingToolbarGroup>
-            {PRIMARY_ITEMS.map(({ id, label, icon: Icon, enabled }) => (
-              <button
+            {PRIMARY_ITEMS.map(({ id, label, icon: Icon, enabled: supported }) => {
+              const enabled = supported && (id !== 'search' || security.canSearch);
+              return <button
                 key={id}
                 type="button"
                 className={toolbarStyles.modeButton}
@@ -411,13 +387,13 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
                   strokeWidth={2}
                 />
                 <span className={toolbarStyles.modeLabel}>{label}</span>
-              </button>
-            ))}
+              </button>;
+            })}
           </FloatingToolbarGroup>
           <div className={toolbarStyles.persistentControls}>
             <FloatingToolbarDivider />
             <FloatingToolbarGroup>
-              <IconButton label="Save" icon={Save} disabled={busy} onClick={() => void saveDocument()} />
+              <IconButton label="Save" icon={Save} disabled={!persistence.canSave} onClick={() => void persistence.save()} />
               <IconButton label="Theme rendering (waiting for EmbedPDF v3)" icon={Moon} disabled onClick={NOOP} />
               <IconButton
                 label="Pan"
