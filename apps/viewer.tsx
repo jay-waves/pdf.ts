@@ -46,7 +46,6 @@ const createEngine = () => localEngine({
 const plugins = [
   interactionPlugin(),
   stagePlugin({
-    interaction: true,
     flow: 'continuous',
     layout: 'vertical',
     spread: 'none',
