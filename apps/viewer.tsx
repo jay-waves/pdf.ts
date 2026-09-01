@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  AnnotationLayer,
   RenderLayer,
   SearchLayer,
   SelectionClipboard,
   SelectionLayer,
   Stage,
   Viewer,
+  useFilePickerProvider,
 } from '@embedpdf/react';
 import './viewer.css';
 import { platform } from '#platform';
@@ -16,9 +18,11 @@ import { createViewerEngine, viewerPlugins } from './engine/viewer-engine';
 import { DocumentLifecycle, LoadingStatus, VIEWER_STATUS_CLASS } from './document/document-lifecycle';
 import { createInitialDocument } from './document/document-session';
 import { useDocumentSecurity } from './document/document-security';
+import { annotationRenderers } from './annotations/theme-renderers';
 
 function ReadyDocument({ sourceDocument }: { sourceDocument: PlatformDocument }) {
   const { canRender } = useDocumentSecurity();
+  useFilePickerProvider();
   if (!canRender) {
     return <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Document preview is not permitted.</div>;
   }
@@ -29,6 +33,7 @@ function ReadyDocument({ sourceDocument }: { sourceDocument: PlatformDocument })
         {() => (
           <div className="pdf-v3-page">
             <RenderLayer />
+            <AnnotationLayer renderers={annotationRenderers} />
             <SearchLayer />
             <SelectionLayer />
           </div>

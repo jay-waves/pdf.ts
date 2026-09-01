@@ -15,3 +15,18 @@
 .root[data-auto-text='true'] :global([contenteditable]) {
   color: var(--pdf-annotation-auto-text) !important;
 }
+
+.root[data-auto-highlight='true'] :global(svg) {
+  mix-blend-mode: multiply;
+}
+
+.root[data-auto-highlight='true'] :global(svg [fill]:not([fill='transparent'])) {
+  fill: var(--pdf-annotation-auto-highlight, #ffcd45) !important;
+}
+
+:global(:root[data-viewer-theme='dark']) .root[data-auto-highlight='true'] :global(svg),
+:global(:root[data-viewer-theme='nord']) .root[data-auto-highlight='true'] :global(svg),
+:global(:root[data-viewer-theme='gruvbox']) .root[data-auto-highlight='true'] :global(svg) {
+  mix-blend-mode: normal;
+  opacity: 0.2;
+}

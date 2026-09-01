@@ -3,6 +3,7 @@ import {
   ArrowDownUp,
   ArrowLeft,
   ArrowLeftRight,
+  Circle,
   BookImage,
   BookText,
   CornerDownLeft,
@@ -10,19 +11,28 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  Eraser,
   GalleryHorizontal,
   Hand,
+  Highlighter,
   Info,
   LayoutTemplate,
   Minus,
   Moon,
   PenLine,
+  Palette,
+  MessageSquareMore,
   Pin,
   Plus,
   Printer,
   RotateCw,
+  Slash,
   Save,
   TextSearch,
+  Type,
+  Underline,
+  Strikethrough,
+  Square,
   Wrench,
   X,
 } from 'lucide-react';
@@ -49,13 +59,16 @@ import {
   TooltipProvider,
 } from './components';
 import { useViewerActivityAutoHide } from './components/use-auto-hide';
-import { getStoredToolbarPinned, setStoredToolbarPinned } from './theme/theme';
+import { getStoredToolbarPinned, setStoredToolbarPinned, toggleViewerColorMode } from './theme/theme';
 import toolbarStyles from './toolbar/toolbar.module.css';
 import navigationStyles from './navigation/bottom-navigation.module.css';
 import documentStyles from './document/document-dialogs.module.css';
 import type { PlatformDocument } from './platform/types';
 import { useDocumentPersistence } from './document/document-persistence';
 import { useDocumentSecurity } from './document/document-security';
+import { useAnnotation, useAnnotationSelection } from '@embedpdf/react';
+import { ColorPalette } from './annotations/color-palette';
+import { Comments } from './annotations/comments';
 
 type ToolbarSection = 'document' | 'page' | 'draw' | 'search';
 
@@ -63,7 +76,7 @@ const NOOP = () => {};
 const PRIMARY_ITEMS = [
   { id: 'document', label: 'Docs', icon: BookText, enabled: true },
   { id: 'page', label: 'Page', icon: LayoutTemplate, enabled: true },
-  { id: 'draw', label: 'Draw', icon: PenLine, enabled: false },
+  { id: 'draw', label: 'Draw', icon: PenLine, enabled: true },
   { id: 'search', label: 'Find', icon: TextSearch, enabled: true },
 ] as const;
 
@@ -296,6 +309,59 @@ function PageToolbar({ onBack }: { onBack(): void }) {
   );
 }
 
+const DRAW_TOOLS = [
+  { id: 'highlight', label: 'Highlight', icon: Highlighter },
+  { id: 'underline', label: 'Underline', icon: Underline },
+  { id: 'strikeout', label: 'Strikeout', icon: Strikethrough },
+  { id: 'ink', label: 'Pen', icon: PenLine },
+  { id: 'ink-highlight', label: 'Highlighter pen', icon: Highlighter },
+  { id: 'square', label: 'Rectangle', icon: Square },
+  { id: 'circle', label: 'Ellipse', icon: Circle },
+  { id: 'line', label: 'Line', icon: Slash },
+  { id: 'free-text', label: 'Text', icon: Type },
+  { id: 'note', label: 'Comment', icon: MessageSquareMore },
+] as const;
+
+function DrawToolbar({ onBack }: { onBack(): void }) {
+  const annotation = useAnnotation();
+  const selection = useAnnotationSelection();
+  const { activeToolId, activate } = useTool();
+  const security = useDocumentSecurity();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+
+  return <>
+    <FloatingToolbar label="Annotation toolbar" overflow>
+      <IconButton label="Back" icon={ArrowLeft} onClick={() => {
+        annotation.cancel();
+        activate('pointer');
+        onBack();
+      }} />
+      <FloatingToolbarDivider />
+      <FloatingToolbarGroup>
+        {DRAW_TOOLS.map(({ id, label, icon }) => <IconButton
+          key={id}
+          label={label}
+          icon={icon}
+          disabled={!security.canAnnotate}
+          active={activeToolId === id}
+          onClick={() => activate(activeToolId === id ? 'pointer' : id)}
+        />)}
+      </FloatingToolbarGroup>
+      <FloatingToolbarDivider />
+      <FloatingToolbarGroup>
+        <IconButton label="Colors and opacity" icon={Palette} onClick={() => setPaletteOpen(true)} />
+        <IconButton label="Comments" icon={MessageSquareMore} disabled={!security.canReadAnnotations}
+          onClick={() => setCommentsOpen(true)} />
+        <IconButton label="Delete selected annotation" icon={Eraser} disabled={!selection.length}
+          onClick={() => annotation.deleteSelection()} />
+      </FloatingToolbarGroup>
+    </FloatingToolbar>
+    <ColorPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    <Comments open={commentsOpen} onClose={() => setCommentsOpen(false)} />
+  </>;
+}
+
 function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument }) {
   const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
@@ -367,11 +433,14 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
           onMetadata={() => setMetadataOpen(true)}
         />
       ) : activeSection === 'page' ? <PageToolbar onBack={() => setActiveSection(null)} />
+        : activeSection === 'draw' ? <DrawToolbar onBack={() => setActiveSection(null)} />
         : activeSection === 'search' ? <SearchToolbar onBack={() => setActiveSection(null)} /> : (
         <FloatingToolbar label="PDF toolbar">
           <FloatingToolbarGroup>
             {PRIMARY_ITEMS.map(({ id, label, icon: Icon, enabled: supported }) => {
-              const enabled = supported && (id !== 'search' || security.canSearch);
+              const enabled = supported
+                && (id !== 'search' || security.canSearch)
+                && (id !== 'draw' || security.canReadAnnotations);
               return <button
                 key={id}
                 type="button"
@@ -394,7 +463,7 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
             <FloatingToolbarDivider />
             <FloatingToolbarGroup>
               <IconButton label="Save" icon={Save} disabled={!persistence.canSave} onClick={() => void persistence.save()} />
-              <IconButton label="Theme rendering (waiting for EmbedPDF v3)" icon={Moon} disabled onClick={NOOP} />
+              <IconButton label="Toggle color mode" icon={Moon} onClick={toggleViewerColorMode} />
               <IconButton
                 label="Pan"
                 icon={Hand}
