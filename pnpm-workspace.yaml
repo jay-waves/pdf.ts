@@ -8,22 +8,22 @@ peerDependencyRules:
     - vue
 
 packageExtensions:
-  '@embedpdf/utils@2.14.4':
+  '@embedpdf/utils@2.15.0':
     dependencies:
-      '@embedpdf/models': 2.14.4
+      '@embedpdf/models': 2.15.0
 
 overrides:
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-arabic': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-hebrew': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-jp': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-kr': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-latin': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-sc': '-'
-  '@embedpdf/engines@2.14.4>@embedpdf/fonts-tc': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-arabic': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-hebrew': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-jp': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-kr': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-latin': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-sc': '-'
+  '@embedpdf/engines@2.15.0>@embedpdf/fonts-tc': '-'
 
 allowBuilds:
   esbuild: false
   keytar: false
 
 patchedDependencies:
-  '@embedpdf/engines@2.14.4': patches/@embedpdf__engines@2.14.4.patch
+  '@embedpdf/engines@2.15.0': patches/@embedpdf__engines@2.15.0.patch

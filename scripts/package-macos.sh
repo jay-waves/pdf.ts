@@ -4,7 +4,12 @@ set -eu
 cd "$(dirname "$0")/.."
 repo_root=$PWD
 
-arch=$1
+[ "$#" -eq 0 ] || {
+  echo "Usage: $0" >&2
+  exit 2
+}
+
+arch=arm64
 binary="$repo_root/release/pdf.ts-darwin-${arch}"
 
 version=$(node -p "require('./package.json').version")

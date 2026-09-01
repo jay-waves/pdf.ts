@@ -1,12 +1,12 @@
-import { cpSync, readFileSync } from 'node:fs';
+import { cpSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
+import packageJson from './package.json' with { type: 'json' };
 
-const packageJson = JSON.parse(
-  readFileSync(resolve(__dirname, 'package.json'), 'utf8'),
-) as { version: string };
+const outputDir = 'release/web';
+const browserTargets = ['chrome152', 'edge152', 'firefox154', 'safari26', 'ios26'];
 const buildTimestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 export default defineConfig({
@@ -19,7 +19,7 @@ export default defineConfig({
   publicDir: false,
   resolve: {
     alias: {
-      '#platform': resolve(__dirname, 'apps/platform/browser.ts'),
+      '#platform': resolve(import.meta.dirname, 'apps/platform/browser.ts'),
     },
   },
   plugins: [
@@ -28,30 +28,20 @@ export default defineConfig({
     {
       name: 'viewer-static-files',
       writeBundle() {
-        const outputDir = resolve(__dirname, 'release/web');
-        cpSync(resolve(__dirname, 'LICENSE.txt'), resolve(outputDir, 'LICENSE.txt'));
-        cpSync(resolve(__dirname, 'licenses'), resolve(outputDir, 'licenses'), {
+        const resolvedOutputDir = resolve(import.meta.dirname, outputDir);
+        cpSync(resolve(import.meta.dirname, 'LICENSE.txt'), resolve(resolvedOutputDir, 'LICENSE.txt'));
+        cpSync(resolve(import.meta.dirname, 'licenses'), resolve(resolvedOutputDir, 'licenses'), {
           recursive: true,
         });
-        cpSync(resolve(__dirname, 'assets/icon.png'), resolve(outputDir, 'icon.png'));
+        cpSync(resolve(import.meta.dirname, 'assets/icon.png'), resolve(resolvedOutputDir, 'icon.png'));
       },
     },
   ],
   build: {
-    target: ['es2025', 'chrome129', 'edge129', 'firefox147', 'safari26'],
-    cssTarget: ['chrome129', 'edge129', 'firefox147', 'safari26'],
-    outDir: resolve(__dirname, 'release/web'),
+    target: browserTargets,
+    cssTarget: browserTargets,
+    modulePreload: { polyfill: false },
+    outDir: outputDir,
     emptyOutDir: true,
-    sourcemap: false,
-    rollupOptions: {
-      input: {
-        index: resolve(__dirname, 'index.html'),
-      },
-      output: {
-        entryFileNames: 'assets/[name]-[hash].js',
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
-      },
-    },
   },
 });

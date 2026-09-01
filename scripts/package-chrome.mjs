@@ -11,8 +11,9 @@ import { relative, resolve } from 'node:path';
 import yazl from 'yazl';
 
 const repoRoot = resolve(import.meta.dirname, '..');
-const viewerDir = resolve(repoRoot, 'release', 'web');
-const extensionDir = resolve(repoRoot, 'release', 'chrome-extension');
+const releaseDir = resolve(repoRoot, 'release');
+const viewerDir = resolve(releaseDir, 'web');
+const extensionDir = resolve(releaseDir, 'chrome-extension');
 const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
 
 if (!existsSync(resolve(viewerDir, 'index.html'))) {
@@ -37,8 +38,12 @@ for (const size of [16, 32, 48, 128]) {
   );
 }
 
-const archivePath = resolve(repoRoot, 'release', `pdf-ts-chrome-v${packageJson.version}.zip`);
-rmSync(archivePath, { force: true });
+for (const entry of readdirSync(releaseDir)) {
+  if (/^pdf-ts-chrome-v.+\.zip$/u.test(entry)) {
+    rmSync(resolve(releaseDir, entry), { force: true });
+  }
+}
+const archivePath = resolve(releaseDir, `pdf-ts-chrome-v${packageJson.version}.zip`);
 
 const zip = new yazl.ZipFile();
 function addDirectory(directory) {

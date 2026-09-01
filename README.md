@@ -3,8 +3,8 @@
 A polished PDF viewer powered by EmbedPDF, available for the web, Chrome,
 Linux, Windows, and macOS.
 
-The browser build targets ES2025 and requires Chrome/Edge 129+, Firefox 147+,
-or Safari 26+.
+The browser build targets ES2025 and requires Chrome/Edge 152+, Firefox 154+,
+Safari 26+, or iOS 26+.
 
 Translation is local-only and requires browser support for the built-in
 Translator API; Microsoft Edge 148 or later is required. The target language
@@ -19,17 +19,17 @@ to check model availability.
 
 ## Build
 
-All builds require Node.js with Corepack/pnpm. Native packaging additionally
+All builds require Node.js 24 LTS and pnpm 11. Native packaging additionally
 requires:
 
-- Go 1.23+ to build the launcher
+- Go 1.27+ to build the launcher
 - [nFPM](https://nfpm.goreleaser.com/docs/install/) to create `deb`/`rpm` packages
 - NSIS and a PE resource compiler to create the Windows installer on Linux
 - macOS system tools `hdiutil`, `sips`, `iconutil`, and `ditto` to create
   unsigned app bundles and disk images
 
 ```bash
-corepack enable
+corepack install --global pnpm@11.24.0
 pnpm install
 
 # Debian / Ubuntu
@@ -69,7 +69,7 @@ compiled viewer without rebuilding the frontend:
 pnpm package:chrome
 pnpm package:windows # Windows binary and NSIS installer
 pnpm package:linux   # Linux binary, deb, and Fedora-compatible rpm
-pnpm package:macos   # unsigned amd64 and arm64 macOS apps and DMGs
+pnpm package:macos   # unsigned Apple Silicon macOS app and DMG
 pnpm package:deb     # Linux binary and deb only
 pnpm package:rpm     # Linux binary and rpm only
 ```
@@ -90,8 +90,8 @@ Artifacts are written to:
 - `release/pdf-ts_<version>_amd64.deb`
 - `release/pdf-ts-<version>-1.x86_64.rpm`
 - `release/pdf-ts-setup-v<version>.exe`
-- `release/macos-<arch>/pdf.ts.app`
-- `release/pdf-ts-v<version>-macos-<arch>.dmg`
+- `release/macos-arm64/pdf.ts.app`
+- `release/pdf-ts-v<version>-macos-arm64.dmg`
 
 The desktop launcher serves the viewer from `pdf.ts.localhost` and safely saves
 full or incremental updates. Portable launchers expose `pdf.ts purge` to stop

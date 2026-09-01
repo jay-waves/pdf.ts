@@ -7,10 +7,10 @@ const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'release/web');
 const embedded = resolve(root, 'launcher/viewer');
 const target = process.argv[2];
-const targets = new Set(['linux-amd64', 'windows-amd64', 'darwin-amd64', 'darwin-arm64']);
+const targets = new Set(['linux-amd64', 'windows-amd64', 'darwin-arm64']);
 if (!targets.has(target)) throw new Error(`Expected one of: ${[...targets].join(', ')}.`);
-if (target.startsWith('darwin-') && process.platform !== 'darwin') {
-  throw new Error('Building macOS launchers and DMGs requires macOS.');
+if (target === 'darwin-arm64' && (process.platform !== 'darwin' || process.arch !== 'arm64')) {
+  throw new Error('Building the macOS launcher and DMG requires Apple Silicon macOS.');
 }
 if (!existsSync(resolve(source, 'index.html'))) throw new Error('Run pnpm compile first.');
 

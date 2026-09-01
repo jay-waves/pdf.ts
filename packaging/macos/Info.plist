@@ -46,7 +46,7 @@
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.productivity</string>
   <key>LSMinimumSystemVersion</key>
-  <string>11.0</string>
+  <string>13.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>
