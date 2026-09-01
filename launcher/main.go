@@ -24,7 +24,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return usageError()
+		return openViewer("")
 	}
 	switch args[0] {
 	case "start":
@@ -48,24 +48,18 @@ func run(args []string) error {
 		}
 		return printStatus()
 	case "open":
-		if len(args) != 2 {
+		if len(args) > 2 {
 			return usageError()
 		}
-		return openDocument(args[1])
-	case "install":
+		if len(args) == 1 {
+			return openViewer("")
+		}
+		return openViewer(args[1])
+	case "purge":
 		if len(args) != 1 {
 			return usageError()
 		}
-		executable, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("locate pdf.ts executable: %w", err)
-		}
-		return Install(executable)
-	case "uninstall":
-		if len(args) != 1 {
-			return usageError()
-		}
-		return Uninstall()
+		return Purge()
 	default:
 		return usageError()
 	}
@@ -93,19 +87,28 @@ func printStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: pdf.ts <start|daemon|status|stop|open <document>|install|uninstall>")
+	return errors.New("usage: pdf.ts <start|daemon|status|stop|open [document]|purge>")
 }
 
-func openDocument(argument string) error {
-	documentPath, err := ResolveTarget(argument)
-	if err != nil {
-		return err
+func openViewer(argument string) error {
+	var documentPath string
+	var err error
+	if argument != "" {
+		documentPath, err = ResolveTarget(argument)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := startDaemon(); err != nil {
 		return err
 	}
-	viewerURL, err := RegisterWithDaemon("", documentPath)
+	var viewerURL string
+	if documentPath == "" {
+		viewerURL, err = WelcomeURL("")
+	} else {
+		viewerURL, err = RegisterWithDaemon("", documentPath)
+	}
 	if err != nil {
 		return err
 	}

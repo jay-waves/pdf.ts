@@ -1,6 +1,7 @@
 import { browserPersistence } from './browser-storage';
-import { translateWithModelDownload } from './browser-translation';
-import { getExternalUrl } from '../url';
+import { browserLocalDocumentCapabilities } from './browser-local-document';
+import { browserTranslationCapabilities } from './browser-translation';
+import { getExternalUrl } from '../shared/url';
 import type {
   PlatformDocument,
   ViewerPlatform,
@@ -49,8 +50,19 @@ class PdfLauncherSession {
   }
 
   async openDocument(): Promise<PlatformDocument> {
-    const response = await fetch(this.resourceUrl, { method: 'HEAD', cache: 'no-store' });
+    console.info('[pdf-ts] Requesting PDF metadata');
+    let response: Response;
+    try {
+      response = await fetch(this.resourceUrl, { method: 'HEAD', cache: 'no-store' });
+    } catch (error) {
+      console.error('[pdf-ts] PDF metadata request failed', error);
+      throw error;
+    }
     if (!response.ok) {
+      console.error('[pdf-ts] PDF metadata request returned an error', {
+        status: response.status,
+        statusText: response.statusText,
+      });
       if (response.status === 410) {
         throw new Error('This PDF was moved or deleted. Open it with PDF.ts again to register its new location.');
       }
@@ -65,6 +77,10 @@ class PdfLauncherSession {
     if (!Number.isSafeInteger(this.baseSize) || this.baseSize <= 0) {
       throw new Error('PDF.ts did not provide the PDF size.');
     }
+    console.info('[pdf-ts] PDF metadata ready', {
+      bytes: this.baseSize,
+      contentType: response.headers.get('Content-Type') || 'unknown',
+    });
     return {
       resource: { url: this.resourceUrl },
       key: `pdf.ts:${this.resourceUrl}`,
@@ -75,18 +91,6 @@ class PdfLauncherSession {
 
   async prepareWrite() {
     return {
-      saveIncrementalDocument: this.incrementalAvailable
-        ? async (data: ArrayBuffer) => {
-            if (data.byteLength < this.baseSize) {
-              throw new Error('The incremental PDF is smaller than its opened base.');
-            }
-            if (data.byteLength === this.baseSize) return true;
-            return this.saveIncremental({
-              baseSize: this.baseSize,
-              delta: data.slice(this.baseSize),
-            });
-          }
-        : undefined,
       saveIncremental: this.incrementalAvailable
         ? async (revision: { baseSize: number; delta: ArrayBuffer }) => (
             this.saveIncremental(revision)
@@ -174,19 +178,17 @@ const launcherDocumentId = new URLSearchParams(window.location.search).get('laun
 const launcher = launcherDocumentId ? new PdfLauncherSession(launcherDocumentId) : null;
 
 export const platform: ViewerPlatform = {
-  async loadViewerResources() {
-    if (!launcher) {
-      throw new Error('This PDF.ts viewer URL is missing its daemon document identifier.');
-    }
+  async loadViewerResources(bundledWasmUrl) {
     return {
-      wasm: { url: '' },
-      document: await launcher.openDocument(),
+      wasm: { url: bundledWasmUrl },
+      document: await launcher?.openDocument(),
     };
   },
+  ...browserLocalDocumentCapabilities,
   openExternal(url) {
     const target = getExternalUrl(url, window.location.href);
     if (target) window.open(target, '_blank', 'noopener,noreferrer');
   },
-  translate: translateWithModelDownload,
+  ...browserTranslationCapabilities,
   ...browserPersistence,
 };

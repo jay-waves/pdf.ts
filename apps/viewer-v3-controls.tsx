@@ -51,11 +51,10 @@ import {
   TooltipProvider,
 } from './components';
 import { useViewerActivityAutoHide } from './components/use-auto-hide';
-import { getStoredToolbarPinned, setStoredToolbarPinned } from './theme';
-import toolbarStyles from './toolbar.module.css';
-import navigationStyles from './bottom-navigation.module.css';
-import documentStyles from './document-dialogs.module.css';
-import { platform } from '#platform';
+import { getStoredToolbarPinned, setStoredToolbarPinned } from './theme/theme';
+import toolbarStyles from './toolbar/toolbar.module.css';
+import navigationStyles from './navigation/bottom-navigation.module.css';
+import documentStyles from './document/document-dialogs.module.css';
 import { downloadPdf } from './platform/browser-download';
 import type { PlatformDocument } from './platform/types';
 
@@ -369,8 +368,6 @@ function ViewerToolbar({ sourceDocument }: { sourceDocument: PlatformDocument })
       setBusy(false);
     }
   }, [serialize, sourceDocument.name]);
-
-  useEffect(() => platform.onDocumentSaveRequested?.(async () => saveDocument()), [saveDocument]);
 
   return (
     <div

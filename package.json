@@ -2,19 +2,39 @@
   "name": "pdf.ts",
   "license": "MIT",
   "private": true,
-  "version": "0.7.10",
-  "packageManager": "pnpm@11.7.0",
+  "version": "0.8.7",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
+  "browserslist": {
+    "production": [
+      "Chrome >= 152",
+      "Edge >= 152",
+      "Firefox >= 154",
+      "Safari >= 26",
+      "iOS >= 26"
+    ]
+  },
   "scripts": {
-    "typecheck": "tsgo --noEmit",
-    "test": "node --test tests/pdf-render-theme.test.mjs tests/viewer-activity.test.mjs",
-    "dev": "node scripts/build-chrome.mjs --watch",
-    "build:chrome": "pnpm typecheck && node scripts/build-chrome.mjs",
-    "build:linux": "pnpm build:web && node scripts/build-launcher.mjs linux-amd64",
-    "build:windows": "pnpm build:web && node scripts/build-launcher.mjs windows-amd64",
-    "build:web": "pnpm typecheck && VIEWER_PLATFORM=web vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/browser-translation.test.mjs tests/pdf-render-theme.test.mjs tests/translation-settings.test.mjs tests/viewer-activity.test.mjs",
+    "dev": "vite",
+    "compile": "pnpm typecheck && vite build",
+    "package:chrome": "node scripts/package-chrome.mjs",
+    "package:linux:binary": "node scripts/package-launcher.mjs linux-amd64",
+    "package:windows:binary": "node scripts/package-launcher.mjs windows-amd64",
+    "package:macos:binary": "node scripts/package-launcher.mjs darwin-arm64",
+    "package:deb": "pnpm package:linux:binary && sh scripts/package-linux.sh deb",
+    "package:rpm": "pnpm package:linux:binary && sh scripts/package-linux.sh rpm",
+    "package:linux": "pnpm package:linux:binary && sh scripts/package-linux.sh deb && sh scripts/package-linux.sh rpm",
+    "package:windows": "pnpm package:windows:binary && sh scripts/package-windows.sh",
+    "package:macos": "pnpm package:macos:binary && sh scripts/package-macos.sh",
+    "package:all": "pnpm package:chrome && pnpm package:linux && pnpm package:windows",
+    "build:all": "pnpm compile && pnpm package:all",
     "deploy:web": "bash scripts/deploy-web.sh",
-    "build:vscode": "pnpm typecheck && node scripts/build-vscode.mjs"
+    "check": "pnpm typecheck && pnpm test"
   },
   "dependencies": {
     "@embedpdf/core": "3.0.0-next.10",
@@ -29,23 +49,22 @@
     "@use-gesture/react": "^10.3.1",
     "asn1js": "^3.0.10",
     "hash-wasm": "^4.12.0",
-    "idb-keyval": "^6.2.2",
-    "lucide-react": "^1.16.0",
+    "idb-keyval": "^6.3.0",
+    "lucide-react": "^1.37.0",
     "pkijs": "^3.4.0",
-    "radix-ui": "^1.6.2",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "zustand": "^5.0.14"
+    "radix-ui": "^1.6.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "@vitejs/plugin-react": "^5.0.0",
-    "@vscode/vsce": "^3.9.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "tailwindcss": "^4.3.3",
-    "vite": "^7.0.0",
-    "yazl": "2.5.1"
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "yazl": "^3.3.1"
   }
 }

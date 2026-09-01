@@ -25,21 +25,13 @@ import './viewer.css';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
 import { ViewerV3Controls } from './viewer-v3-controls';
-import notoSansUrl from '../assets/NotoSans-VariableFont_wdth,wght.ttf?url';
 
 const DOCUMENT_ID = 'pdf-ts-document';
 const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
 
 // v3 owns the worker and WASM lifecycle. The Windows launcher permits its
 // blob worker; disabling the encoder pool keeps this first slice to one worker.
-const createEngine = () => localEngine({
-  encoderWorker: false,
-  fallbackFonts: [{
-    key: 'pdf-ts-noto-sans',
-    familyName: 'Noto Sans',
-    url: notoSansUrl,
-  }],
-});
+const createEngine = () => localEngine({ encoderWorker: false });
 
 // Stage replaces the v2 viewport/scroll/zoom/spread/rotate/tiling stack.
 // Editing plugins intentionally stay out until their v3 APIs settle.

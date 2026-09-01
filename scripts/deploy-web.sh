@@ -47,7 +47,7 @@ if [[ "$dry_run" == false ]]; then
 fi
 
 source_revision="$(git -C "$repo_root" rev-parse --short HEAD)"
-pnpm --dir "$repo_root" build:web
+pnpm --dir "$repo_root" compile
 
 [[ -f "$build_dir/index.html" ]] || {
   echo 'Web build did not produce release/web/index.html.' >&2

@@ -1,0 +1,162 @@
+/* Viewer-owned document surface and its EmbedPDF layers. */
+.viewer {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  /* Zoom/layout changes already preserve their own viewport anchor. Browser
+     scroll anchoring can instead lock onto a recycled virtual page and move
+     the viewport a second time during a large scale change. */
+  overflow-anchor: none;
+  background: var(--pdf-background-app);
+  /* The viewer owns touch selection: swipe pans, long press selects text. */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.pdf-viewer-scroll-area {
+  --pdf-viewer-scrollbar-size: 8px;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.pdf-viewer-scrollbar {
+  z-index: 2;
+  display: flex;
+  padding: 2px;
+  background: var(--pdf-scrollbar-track);
+  touch-action: none;
+  user-select: none;
+}
+
+.pdf-viewer-scrollbar-horizontal {
+  height: var(--pdf-viewer-scrollbar-size);
+  flex-direction: column;
+}
+
+.pdf-viewer-scrollbar-vertical {
+  width: var(--pdf-viewer-scrollbar-size);
+}
+
+.pdf-viewer-scrollbar-thumb {
+  position: relative;
+  flex: 1;
+  border-radius: 999px;
+}
+
+.pdf-viewer-scrollbar-thumb::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--pdf-scrollbar-thumb);
+  content: '';
+  pointer-events: none;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.pdf-viewer-scrollbar:hover .pdf-viewer-scrollbar-thumb::after {
+  background: var(--pdf-scrollbar-thumb-hover);
+}
+
+.pdf-viewer-scrollbar-horizontal:hover .pdf-viewer-scrollbar-thumb::after {
+  transform: scaleY(1.35);
+}
+
+.pdf-viewer-scrollbar-vertical:hover .pdf-viewer-scrollbar-thumb::after {
+  transform: scaleX(1.35);
+}
+
+:is(.viewer.is-pan-mode, .viewer.is-pan-mode *) {
+  cursor: grab !important;
+}
+
+:is(.viewer[data-pdf-panning="true"], .viewer[data-pdf-panning="true"] *) {
+  cursor: grabbing !important;
+}
+
+:root[data-pdf-scroll-strategy="vertical"] .viewer {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+:root[data-pdf-scroll-strategy="vertical"] .pdf-viewer-scrollbar-horizontal,
+:root[data-pdf-scroll-strategy="horizontal"] .pdf-viewer-scrollbar-vertical {
+  display: none;
+}
+
+:root[data-pdf-scroll-strategy="horizontal"] .viewer {
+  overflow-x: scroll !important;
+  overflow-y: hidden !important;
+}
+
+.viewer img,
+.viewer canvas {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.pdf-page-render-image {
+  display: block;
+}
+
+.pdf-page-surface {
+  box-shadow:
+    0 0 0 1px var(--pdf-page-border),
+    0 1px 2px var(--pdf-page-shadow);
+}
+
+:root[data-viewer-color-mode="dark"] :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
+  filter: brightness(0.76) contrast(1.22) saturate(1);
+}
+
+.pdf-page-tiling-layer,
+.pdf-text-selection-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Drawing previews are outside the per-annotation AUTO wrapper. Theme only
+   visible SVG geometry while the active tool still uses its stored AUTO color. */
+:root[data-pdf-annotation-auto-preview]
+  .pdf-annotation-layer > div[style*="z-index: 10"]
+  svg [stroke]:not([stroke="transparent"]),
+:root[data-pdf-annotation-auto-preview]
+  .pdf-annotation-layer > div[style*="z-index: 10"]
+  svg [style*="pointer-events: none"]:not([stroke="transparent"]) {
+  stroke: var(--pdf-annotation-auto-stroke) !important;
+}
+
+/* Underline and strikeout selection previews use nested divs rather than SVG. */
+:root:is(
+  [data-pdf-annotation-auto-preview="underline"],
+  [data-pdf-annotation-auto-preview="strikeout"]
+)
+  .pdf-annotation-layer > div[style*="inset: 0"] > div
+  > div[style*="pointer-events: none"] {
+  background: var(--pdf-annotation-auto-stroke) !important;
+  scale: 1 0.75;
+}
+
+:root[data-pdf-annotation-auto-preview="underline"]
+  .pdf-annotation-layer > div[style*="inset: 0"] > div
+  > div[style*="pointer-events: none"] {
+  transform-origin: center bottom;
+}
+
+/* Solar highlights use the brighter theme teal during text selection too. */
+:root[data-viewer-theme="solar"][data-pdf-annotation-auto-preview="highlight"]
+  .pdf-annotation-layer > div[style*="inset: 0"] > div {
+  background: var(--pdf-annotation-auto-highlight) !important;
+}
+
+:root[data-viewer-color-mode="dark"] .pdf-text-selection-layer > div {
+  mix-blend-mode: normal !important;
+}
+
+/* Multiply preserves the printed-page look in light mode, but muddies both
+   ordinary and current search matches against dark-mode page rendering. */
+:root[data-viewer-color-mode="dark"] .pdf-search-highlight {
+  mix-blend-mode: normal !important;
+}

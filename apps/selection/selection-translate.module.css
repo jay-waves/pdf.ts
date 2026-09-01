@@ -1,0 +1,20 @@
+@reference '../tailwind.css';
+
+.panel {
+  @apply pointer-events-auto z-[2147483647] max-h-[min(256px,calc(100vh-24px))] min-w-40 max-w-[min(304px,calc(100vw-24px))] overflow-auto;
+  @apply rounded-lg border border-border bg-elevated px-2.5 py-2 text-[10.5px] leading-[1.45] whitespace-pre-wrap text-foreground;
+  @apply shadow-popover select-text;
+  overflow-wrap: anywhere;
+}
+
+.downloadable {
+  @apply cursor-pointer p-0 transition-colors duration-100 hover:bg-hover;
+}
+
+.downloadAction {
+  @apply block w-full cursor-pointer rounded-[inherit] border-0 bg-transparent px-2.5 py-2 text-left text-inherit outline-none whitespace-pre-wrap;
+}
+
+.downloadAction:focus-visible {
+  @apply ring-1 ring-accent;
+}

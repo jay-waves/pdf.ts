@@ -48,20 +48,42 @@ export interface ViewerResources {
 
 export type PlatformTranslationResult =
   | { type: 'inline'; text: string }
-  | { type: 'external'; url: string };
+  | {
+    type: 'downloadable';
+    downloading: boolean;
+    sourceLanguage: string;
+    targetLanguage: string;
+  };
+
+export interface PlatformLanguageDetectionResult {
+  confidence?: number;
+  detectedLanguage: string;
+}
+
+export type PlatformTranslationAvailability =
+  | 'available'
+  | 'downloadable'
+  | 'downloading'
+  | 'unavailable';
+
+export interface PlatformTranslationOptions {
+  allowModelDownload?: boolean;
+  onDownloadProgress?(progress: number): void;
+  signal?: AbortSignal;
+  sourceLanguage?: string;
+  targetLanguage: string;
+}
 
 export interface ViewerPlatform {
-  /** Host-controlled viewers derive their appearance externally and hide local theme controls. */
-  viewerThemePolicy?: 'host';
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file?: File): Promise<PlatformDocument | undefined>;
-  requestDocumentSave?(): void;
-  onDocumentSaveRequested?(
-    handler: (preserveDirty: boolean) => Promise<boolean>,
-  ): () => void;
-  setDocumentDirty?(dirty: boolean): void;
   openExternal(url: string): void;
-  translate(text: string): Promise<PlatformTranslationResult>;
+  detectLanguage(text: string): Promise<PlatformLanguageDetectionResult>;
+  getTranslationAvailability(
+    sourceLanguage: string,
+    targetLanguage: string,
+  ): Promise<PlatformTranslationAvailability>;
+  translate(text: string, options: PlatformTranslationOptions): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;

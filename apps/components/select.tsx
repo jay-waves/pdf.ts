@@ -14,6 +14,7 @@ export function Select({
   options,
   label,
   className,
+  contentClassName,
   disabled,
   iconOnly = false,
   sideOffset = 5,
@@ -23,6 +24,7 @@ export function Select({
   options: SelectOption[];
   label: string;
   className?: string;
+  contentClassName?: string;
   disabled?: boolean;
   iconOnly?: boolean;
   sideOffset?: number;
@@ -42,7 +44,7 @@ export function Select({
       </RadixSelect.Trigger>
       <RadixSelect.Portal container={portalContainer ?? undefined}>
         <RadixSelect.Content
-          className="pdf-select-content z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground shadow-popover"
+          className={`pdf-select-content z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground shadow-popover ${contentClassName ?? ''}`.trim()}
           position="popper"
           sideOffset={sideOffset}
           collisionPadding={6}

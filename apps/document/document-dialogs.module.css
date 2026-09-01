@@ -1,0 +1,42 @@
+@reference '../tailwind.css';
+
+.flatOverlay {
+  background: rgb(15 23 42 / 28%);
+  backdrop-filter: blur(1.5px);
+}
+.flatDialog {
+  border-color: var(--pdf-border-subtle);
+  background: var(--pdf-background-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+.form { @apply m-0 grid gap-2.5 bg-surface px-3.25 pt-3 pb-3.25; }
+.field { @apply grid gap-1.25 text-secondary; }
+.input { @apply h-7.25 w-full rounded border border-border bg-input px-1.75 text-foreground outline-none; }
+.flatDialog .input { @apply border-border-subtle bg-surface-alt; }
+.input:focus { @apply border-accent; }
+.error { @apply leading-3.75 text-danger; }
+.metadataContent { @apply grid gap-3 bg-surface px-3.25 pt-3 pb-5; }
+.metadataStatus { @apply text-secondary; }
+.metadataDetails { @apply m-0 grid overflow-hidden rounded bg-surface-alt text-[11px]; }
+.metadataDetails > div { @apply grid grid-cols-[76px_minmax(0,1fr)] gap-2 border-b border-border-subtle px-2.5 py-2; }
+.metadataDetails > div:last-child { @apply border-b-0; }
+.metadataDetails dt { @apply text-secondary; }
+.metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
+.optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
+.themeDialog { @apply w-[min(27rem,calc(100vw-2rem))]; }
+.themeForm { @apply gap-5 p-4.5; }
+.themeGroup { @apply m-0 min-w-0 border-0 p-0; }
+.themeGroup:disabled { @apply opacity-40 grayscale; }
+.themeGroupLabel { @apply mb-2 p-0 text-[11px] font-medium text-secondary; }
+.themeOptions {
+  @apply grid grid-cols-4 gap-2;
+}
+.themeOption {
+  @apply relative grid min-w-0 cursor-pointer gap-2 rounded border border-transparent bg-transparent p-1 text-secondary outline-none;
+  @apply hover:bg-hover focus-visible:border-accent disabled:cursor-default disabled:hover:bg-transparent;
+}
+.themeOption[data-state='checked'] { @apply border-accent text-foreground; }
+.themePreview { @apply relative flex h-9 overflow-hidden rounded-sm; }
+.themePreview > span { @apply flex-1; }
+.themeOptionLabel { @apply overflow-hidden text-center text-[10px] leading-3.5 text-ellipsis whitespace-nowrap; }
+.flatActions { @apply border-t border-border-subtle pt-2.5; }

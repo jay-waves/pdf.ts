@@ -1,0 +1,24 @@
+@reference '../tailwind.css';
+
+.overlay {
+  background: rgb(15 23 42 / 28%);
+  backdrop-filter: blur(1.5px);
+}
+.dialog {
+  @apply flex flex-col border-border-subtle bg-surface;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+.content { @apply min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 bg-surface text-[11px]; display: grid; }
+.section { @apply grid gap-2; }
+.sectionTitle { @apply m-0 text-[11px] font-semibold text-foreground; }
+.stats { @apply m-0 grid overflow-hidden rounded-md bg-surface-alt; }
+.stats > div { @apply grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-border px-3 py-2 last:border-b-0; }
+.stats dt { @apply text-secondary; }
+.stats dd { @apply m-0 text-right text-foreground tabular-nums; }
+.control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,220px)] items-center gap-4; }
+.select { @apply w-full border-border bg-surface-alt text-foreground; }
+.input { @apply h-6.5 w-full rounded-md border border-border bg-surface-alt px-2 text-foreground outline-none focus:border-accent; }
+.input::placeholder { @apply text-muted opacity-100; }
+.selectContent { @apply bg-surface-alt; }
+.hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
+.details { @apply h-full min-h-29 resize-none rounded-md border border-border bg-surface-alt p-2.5 font-mono text-[10.5px] leading-4 text-foreground outline-none focus:border-accent; }
