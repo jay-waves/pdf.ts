@@ -1,12 +1,10 @@
 @reference '../tailwind.css';
 
 .overlay {
-  background: rgb(15 23 42 / 28%);
-  backdrop-filter: blur(1.5px);
+  background: var(--pdf-overlay-background);
 }
 .dialog {
-  @apply flex flex-col border-border-subtle bg-surface;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  @apply flex flex-col;
 }
 .content { @apply min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 bg-surface text-[11px]; display: grid; }
 .section { @apply grid gap-2; }

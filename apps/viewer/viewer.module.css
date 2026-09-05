@@ -1,21 +1,35 @@
 @reference '../tailwind.css';
 
 .loadingStatus {
-  @apply inline-flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2 text-secondary;
+  @apply inline-flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2 text-secondary shadow-float;
 }
 
 .loadingSpinner {
   @apply size-4 shrink-0 rounded-full border-2 border-border border-t-accent animate-spin motion-reduce:animate-none;
 }
 
+.welcome {
+  @apply grid min-h-screen place-items-center p-6;
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent), transparent 34%),
+    radial-gradient(circle at 82% 78%, color-mix(in srgb, var(--pdf-foreground-secondary) 8%, transparent), transparent 36%),
+    var(--pdf-background-app);
+}
+
 .welcomeCard {
-  @apply w-[min(520px,100%)] cursor-pointer rounded-lg border border-dashed border-secondary bg-transparent p-10.5 text-center text-foreground outline-none;
-  @apply transition-colors duration-150 ease-control motion-reduce:transition-none;
+  @apply w-[min(520px,100%)] cursor-pointer rounded-3xl border p-10.5 text-center text-foreground outline-none;
+  @apply transition-[border-color,box-shadow,transform] duration-250 ease-control motion-reduce:transition-none;
   @apply max-[540px]:px-5 max-[540px]:py-7.5;
 }
 
 .welcomeCard:hover,
 .welcomeCard:focus-visible,
 .welcomeCard[data-dragging='true'] {
-  @apply border-accent;
+  @apply -translate-y-0.75 border-accent;
+  box-shadow:
+    var(--pdf-glass-shadow),
+    0 0 0 4px color-mix(in srgb, var(--pdf-accent-primary) 11%, transparent);
 }
+
+.welcomeCard:active { @apply translate-y-0 scale-[0.99]; }
+.welcomeCard img { filter: drop-shadow(0 10px 18px color-mix(in srgb, var(--pdf-accent-primary) 22%, transparent)); }

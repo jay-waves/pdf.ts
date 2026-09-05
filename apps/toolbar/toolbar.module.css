@@ -26,7 +26,8 @@
   @apply inline-flex w-16 px-1.5 max-[640px]:size-6.5 max-[640px]:p-0;
 }
 
-.modeButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
+.modeButton:hover { @apply bg-hover; }
+.modeButton:focus-visible { @apply border-accent shadow-control; }
 .modeButton:disabled { @apply cursor-default opacity-48; }
 .modeButton:disabled:hover { @apply border-transparent shadow-none; }
 .modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }

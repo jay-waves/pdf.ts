@@ -23,13 +23,13 @@ export function Tooltip({
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal container={portalContainer ?? undefined}>
         <RadixTooltip.Content
-          className="pointer-events-none relative z-[2147483647] max-w-45 whitespace-nowrap rounded-md border border-border bg-foreground px-1.75 py-1 text-center text-[10px] leading-3.5 font-normal text-surface shadow-float"
+          className="pdf-glass-tooltip pointer-events-none relative z-[2147483647] max-w-45 whitespace-nowrap rounded-lg border px-1.75 py-1 text-center text-[10px] leading-3.5 font-normal text-white"
           side="bottom"
           sideOffset={8}
           collisionPadding={8}
         >
           {content}
-          <RadixTooltip.Arrow className="fill-foreground" width={7} height={4} />
+          <RadixTooltip.Arrow className="fill-[var(--pdf-tooltip-background)]" width={7} height={4} />
         </RadixTooltip.Content>
       </RadixTooltip.Portal>
     </RadixTooltip.Root>

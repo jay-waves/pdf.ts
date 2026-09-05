@@ -380,7 +380,7 @@ export function ContextMenu({
     <FloatingPopover
       onClose={() => setMenu(null)}
       anchor={menu}
-      className="relative z-[2147483646] flex items-center gap-px rounded border border-border bg-elevated p-0.5 text-foreground shadow-float"
+      className="pdf-glass-surface pdf-glass-popover relative z-[2147483646] flex items-center gap-px rounded-lg border p-0.5 text-foreground"
       role="toolbar"
       label={menu.kind === 'selection' ? 'Text selection actions' : 'Annotation actions'}
       align={menu.kind === 'selection' ? 'center' : 'start'}

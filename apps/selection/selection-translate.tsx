@@ -142,7 +142,7 @@ export function SelectionTranslate({
       onClose={onClose}
       anchor={request.anchor}
       sideOffset={10}
-      className={`${styles.panel} ${result.status === 'error' ? 'text-danger' : ''} ${downloadable ? styles.downloadable : ''}`.trim()}
+      className={`pdf-glass-surface pdf-glass-popover ${styles.panel} ${result.status === 'error' ? 'text-danger' : ''} ${downloadable ? styles.downloadable : ''}`.trim()}
       label="Translation"
       role={downloadable ? 'dialog' : 'status'}
     >

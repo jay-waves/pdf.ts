@@ -14,7 +14,8 @@
   @apply inline-flex h-6.5 min-w-0 max-w-[min(320px,calc(100vw-236px))] flex-[0_1_auto] cursor-pointer items-center justify-center gap-1.25 rounded-md border border-transparent bg-transparent px-2 text-left text-inherit outline-none;
   @apply max-[640px]:size-6.5 max-[640px]:max-w-6.5 max-[640px]:flex-none max-[640px]:p-0;
 }
-.outlineButton:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
+.outlineButton:hover { @apply bg-hover; }
+.outlineButton:focus-visible { @apply border-accent shadow-control; }
 .outlineButton:disabled { @apply cursor-default opacity-48; }
 .thumbnailButton { @apply size-6.5 max-w-6.5 flex-none p-0; }
 .navigationTitleIcon { @apply hidden flex-none max-[640px]:block; }

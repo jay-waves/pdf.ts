@@ -1,19 +1,16 @@
 @reference '../tailwind.css';
 
 .flatOverlay {
-  background: rgb(15 23 42 / 28%);
-  backdrop-filter: blur(1.5px);
+  background: var(--pdf-overlay-background);
 }
 .flatDialog {
-  border-color: var(--pdf-border-subtle);
-  background: var(--pdf-background-surface);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  border-color: var(--pdf-glass-border);
 }
 .form { @apply m-0 grid gap-2.5 bg-surface px-3.25 pt-3 pb-3.25; }
 .field { @apply grid gap-1.25 text-secondary; }
-.input { @apply h-7.25 w-full rounded border border-border bg-input px-1.75 text-foreground outline-none; }
+.input { @apply h-7.25 w-full rounded-md border border-border bg-input px-2 text-foreground outline-none transition-[border-color,box-shadow] duration-150; }
 .flatDialog .input { @apply border-border-subtle bg-surface-alt; }
-.input:focus { @apply border-accent; }
+.input:focus { @apply border-accent shadow-control; }
 .error { @apply leading-3.75 text-danger; }
 .metadataContent { @apply grid gap-3 bg-surface px-3.25 pt-3 pb-5; }
 .metadataStatus { @apply text-secondary; }

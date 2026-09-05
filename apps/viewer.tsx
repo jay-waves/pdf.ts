@@ -451,10 +451,10 @@ function Welcome({
   };
 
   return (
-    <main className="grid min-h-screen place-items-center bg-app p-6">
+    <main className={styles.welcome}>
       <section
         aria-label="Choose or drop a PDF file"
-        className={styles.welcomeCard}
+        className={`pdf-glass-surface ${styles.welcomeCard}`}
         data-dragging={dragging ? 'true' : undefined}
         onClick={() => void openDocument()}
         onDragEnter={(event) => {

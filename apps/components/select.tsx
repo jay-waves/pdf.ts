@@ -7,7 +7,7 @@ interface SelectOption {
   value: string;
 }
 
-const TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5 outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control hover:border-accent hover:shadow-control focus-visible:border-accent focus-visible:shadow-control disabled:opacity-50 disabled:hover:border-border-subtle disabled:hover:shadow-none';
+const TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between gap-1 rounded-md border border-border-subtle bg-input px-1.5 text-inherit leading-3.5 outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control hover:bg-hover focus-visible:border-accent focus-visible:shadow-control disabled:opacity-50 disabled:hover:bg-input disabled:hover:border-border-subtle disabled:hover:shadow-none';
 
 export function Select({
   value,
@@ -44,7 +44,7 @@ export function Select({
       </RadixSelect.Trigger>
       <RadixSelect.Portal container={portalContainer ?? undefined}>
         <RadixSelect.Content
-          className={`pdf-select-content z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-border bg-toolbar-secondary text-foreground shadow-popover ${contentClassName ?? ''}`.trim()}
+          className={`pdf-select-content pdf-glass-surface pdf-glass-popover z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border text-foreground ${contentClassName ?? ''}`.trim()}
           position="popper"
           sideOffset={sideOffset}
           collisionPadding={6}
