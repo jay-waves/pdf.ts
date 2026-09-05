@@ -1,3 +1,4 @@
+import { LanguageDetectionDownloadRequired } from './types';
 import type {
   PlatformLanguageDetectionResult,
   PlatformTranslationAvailability,
@@ -7,7 +8,6 @@ import type {
 
 const OPERATION_TIMEOUT_MS = 60 * 1000;
 const AVAILABILITY_TIMEOUT_MS = 5 * 1000;
-const DOWNLOAD_CONSENT_STORAGE_KEY = 'pdf.ts:translation-download-consent';
 let languageDetectorPromise: Promise<ChromeLanguageDetector> | null = null;
 let cachedTranslator: {
   languagePairKey: string;
@@ -43,28 +43,6 @@ interface ChromeLanguageDetector {
 interface ChromeLanguageDetectorConstructor {
   availability(): Promise<PlatformTranslationAvailability>;
   create(): Promise<ChromeLanguageDetector>;
-}
-
-function hasDownloadConsent(languagePairKey: string) {
-  try {
-    const entries = JSON.parse(localStorage.getItem(DOWNLOAD_CONSENT_STORAGE_KEY) ?? '[]') as unknown;
-    return Array.isArray(entries) && entries.includes(languagePairKey);
-  } catch {
-    return false;
-  }
-}
-
-function grantDownloadConsent(languagePairKey: string) {
-  try {
-    const entries = JSON.parse(localStorage.getItem(DOWNLOAD_CONSENT_STORAGE_KEY) ?? '[]') as unknown;
-    const approved = new Set(Array.isArray(entries)
-      ? entries.filter((entry): entry is string => typeof entry === 'string')
-      : []);
-    approved.add(languagePairKey);
-    localStorage.setItem(DOWNLOAD_CONSENT_STORAGE_KEY, JSON.stringify([...approved]));
-  } catch (error) {
-    console.warn('Could not save translation model consent.', error);
-  }
 }
 
 function baseLanguage(language: string) {
@@ -123,7 +101,7 @@ function withTimeout<Result>(
   });
 }
 
-async function detectSourceLanguage(text: string) {
+async function detectSourceLanguage(text: string, allowModelDownload = false) {
   const LanguageDetector = (
     globalThis as typeof globalThis & { LanguageDetector?: ChromeLanguageDetectorConstructor }
   ).LanguageDetector;
@@ -133,6 +111,9 @@ async function detectSourceLanguage(text: string) {
 
   if (!languageDetectorPromise) {
     languageDetectorPromise = (async () => {
+      if (allowModelDownload) {
+        return withTimeout(LanguageDetector.create(), 'Language detection took too long.');
+      }
       const availability = await withTimeout(
         LanguageDetector.availability(),
         'The browser did not report language detection availability.',
@@ -141,6 +122,9 @@ async function detectSourceLanguage(text: string) {
       );
       if (availability === 'unavailable') {
         throw new Error('The built-in language detection model is not available in this browser.');
+      }
+      if (availability !== 'available') {
+        throw new LanguageDetectionDownloadRequired(availability === 'downloading', () => detectSourceLanguage(text, true));
       }
       return withTimeout(LanguageDetector.create(), 'Language detection took too long.');
     })();
@@ -208,9 +192,8 @@ export async function translateWithBrowserModel(
   let translator = cachedTranslator?.languagePairKey === languagePairKey
     ? cachedTranslator.session
     : undefined;
-  if (options.allowModelDownload) grantDownloadConsent(languagePairKey);
-  const canDownload = options.allowModelDownload || hasDownloadConsent(languagePairKey);
-  if (!translator && !canDownload) {
+  // Stored consent cannot replace the transient activation from this click.
+  if (!translator && !options.allowModelDownload) {
     const availability = await withTimeout(
       Translator.availability(languagePair),
       'The browser did not report translation model availability.',

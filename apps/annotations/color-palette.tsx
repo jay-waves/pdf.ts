@@ -1,23 +1,18 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import { PdfBlendMode } from '@embedpdf/models';
 import type { TrackedAnnotation } from '@embedpdf/plugin-annotation';
-import { Check } from 'lucide-react';
+import { useStore } from 'zustand';
+import { viewerThemeStore } from '../theme/theme';
+import { ANNOTATION_PALETTES, getAnnotationPaletteIndex } from './theme-palette';
 import {
-  DEFAULT_ANNOTATION_COLOR,
-  DEFAULT_ANNOTATION_COLORS,
   DEFAULT_HIGHLIGHT_COLOR,
-  HIGHLIGHT_STYLES,
-  TRANSPARENT_ANNOTATION_COLOR,
   getAnnotationCapability,
   getAnnotationColorFields,
-  getAnnotationColorPatch,
-  getAnnotationAutoColor,
+  getAnnotationPresetPatch,
   getAnnotationScope,
   getAnnotationToolLabel,
   getCommonAnnotationTool,
   normalizeAnnotationColor,
-  normalizeAnnotationOpacity,
   type AnnotationColorFieldKey,
   type AnnotationToolLike,
 } from './annotations';
@@ -58,6 +53,7 @@ export function ColorPalette({
   onClose(): void;
 }) {
   const capability = getAnnotationCapability(registry);
+  const theme = useStore(viewerThemeStore, (state) => state.theme);
   const [snapshot, setSnapshot] = useState<PaletteSnapshot>(EMPTY_SNAPSHOT);
   const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('strokeColor');
   const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;
@@ -102,11 +98,7 @@ export function ColorPalette({
     };
   }, [documentId, open, registry]);
 
-  const colors = [...new Set([
-    TRANSPARENT_ANNOTATION_COLOR,
-    ...(capability?.getColorPresets() ?? []),
-    ...DEFAULT_ANNOTATION_COLORS,
-  ].map(normalizeAnnotationColor).filter((color): color is string => Boolean(color)))];
+  const colors = ANNOTATION_PALETTES[theme];
 
   const toolId = contextTool?.id ?? null;
   const values = getAnnotationValues(defaults, selectedAnnotations);
@@ -114,14 +106,7 @@ export function ColorPalette({
   const currentColor =
     normalizeAnnotationColor(values[selectedField]) ??
     DEFAULT_HIGHLIGHT_COLOR;
-  const customInputColor = currentColor === TRANSPARENT_ANNOTATION_COLOR
-    ? DEFAULT_ANNOTATION_COLOR
-    : currentColor;
-  const currentOpacity = normalizeAnnotationOpacity(values.opacity) ?? 1;
-  const currentHighlightStyle = typeof values.blendMode === 'number'
-    ? values.blendMode
-    : PdfBlendMode.Multiply;
-  const autoColor = getAnnotationAutoColor(toolId, selectedField);
+  const currentIndex = getAnnotationPaletteIndex(currentColor);
 
   const applyPatch = (patch: Record<string, unknown>) => {
     const scoped = getAnnotationScope(registry, documentId);
@@ -148,8 +133,7 @@ export function ColorPalette({
     const color = normalizeAnnotationColor(value);
     if (!color || !capability) return;
 
-    applyPatch(getAnnotationColorPatch(toolId, selectedField, color));
-    if (color !== TRANSPARENT_ANNOTATION_COLOR) capability.addColorPreset(color);
+    applyPatch(getAnnotationPresetPatch(toolId, selectedField, color));
   };
 
   const body = !capability
@@ -158,23 +142,6 @@ export function ColorPalette({
         <div className={styles.meta}>
           <span>{getAnnotationToolLabel(contextTool)}</span>
         </div>
-
-        {toolId === 'highlight' ? <div
-          className={styles.targets}
-          role="group"
-          aria-label="Highlight style"
-        >
-          {HIGHLIGHT_STYLES.map(({ label, value }) => <button
-            key={value}
-            type="button"
-            className={styles.target}
-            data-active={currentHighlightStyle === value ? 'true' : undefined}
-            onClick={() => applyPatch({ blendMode: value })}
-            aria-pressed={currentHighlightStyle === value}
-          >
-            {label}
-          </button>)}
-        </div> : null}
 
         {colorFields.length > 1 ? <div
           className={styles.targets}
@@ -194,55 +161,24 @@ export function ColorPalette({
         </div> : null}
 
         <div className={styles.grid} role="group" aria-label="Color presets">
-          {colors.map((color) => {
-            const isAuto = color === autoColor;
+          {colors.map((color, index) => {
+            const number = String(index + 1).padStart(2, '0');
             return <button
-              key={color}
+              key={index}
               type="button"
               className={styles.swatch}
               style={{ '--pdf-swatch-color': color } as CSSProperties}
-              data-active={currentColor === color ? 'true' : undefined}
-              data-auto={isAuto ? 'true' : undefined}
-              data-transparent={color === TRANSPARENT_ANNOTATION_COLOR ? 'true' : undefined}
+              data-active={currentIndex === index ? 'true' : undefined}
               onClick={() => applyColor(color)}
-              aria-label={isAuto
-                ? 'Auto'
-                : color === TRANSPARENT_ANNOTATION_COLOR ? 'Transparent' : color}
-              aria-pressed={currentColor === color}
+              aria-label={`Color ${number}`}
+              aria-pressed={currentIndex === index}
             >
-              {isAuto
-                ? <span className={styles.autoLabel}>Auto</span>
-                : currentColor === color ? <Check size={13} strokeWidth={2.2} /> : null}
+              <span className={styles.color} />
+              <span className={styles.number}>{number}</span>
             </button>;
           })}
         </div>
 
-        <label className={styles.custom}>
-          <span>Custom</span>
-          <input
-            className={styles.colorInput}
-            type="color"
-            value={customInputColor}
-            onChange={(event) => applyColor(event.currentTarget.value)}
-          />
-          <span className={styles.value}>{currentColor}</span>
-        </label>
-
-        <label className={styles.opacity}>
-          <span>Opacity</span>
-          <input
-            className={styles.opacityInput}
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={Math.round(currentOpacity * 100)}
-            onChange={(event) => applyPatch({
-              opacity: Number(event.currentTarget.value) / 100,
-            })}
-          />
-          <span className={styles.value}>{Math.round(currentOpacity * 100)}%</span>
-        </label>
       </div>;
 
   return (
@@ -251,6 +187,7 @@ export function ColorPalette({
       onClose={onClose}
       title="Annotation colors"
       variant="panelCompact"
+      contentClassName={styles.dialog}
     >
       <PanelContent>{body}</PanelContent>
     </Dialog>

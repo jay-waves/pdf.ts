@@ -41,6 +41,7 @@ export function detectDocumentLanguage(
   if (!pending) {
     pending = runDocumentLanguageDetection(engine, document);
     detectionCache.set(document, pending);
+    pending.catch(() => { detectionCache.delete(document); });
   }
   return pending;
 }

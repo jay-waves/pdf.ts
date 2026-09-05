@@ -20,6 +20,7 @@ import {
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { getPluginCapability } from '../shared/utils';
 import { viewerThemeStore, type ViewerTheme } from '../theme/theme';
+import { ANNOTATION_PALETTES, getThemeAnnotationColor } from './theme-palette';
 
 // Appearance and palette configuration
 
@@ -274,6 +275,19 @@ export function getAnnotationColorPatch(
   return patch;
 }
 
+export function getAnnotationPresetPatch(
+  toolId: string | null,
+  field: AnnotationColorFieldKey,
+  color: string,
+) {
+  const highlight = toolId === 'highlight' || toolId === 'inkHighlighter';
+  return {
+    ...getAnnotationColorPatch(toolId, field, color),
+    opacity: highlight ? 0.28 : 1,
+    ...(highlight ? { blendMode: PdfBlendMode.Normal } : {}),
+  };
+}
+
 export function getAnnotationAutoColor(
   toolId: string | null,
   field: AnnotationColorFieldKey,
@@ -335,7 +349,7 @@ export function createCommentAnnotation(
     },
     contents: '',
     name: PdfAnnotationName.Comment,
-    strokeColor: DEFAULT_HIGHLIGHT_COLOR,
+    strokeColor: ANNOTATION_PALETTES[viewerThemeStore.getState().theme][0],
     opacity: 1,
     flags: ['print', 'noRotate', 'noZoom'],
     created: new Date(),
@@ -359,9 +373,9 @@ export function createTextMarkupAnnotations(
       pageIndex: selection.pageIndex,
       rect: selection.rect,
       segmentRects: selection.segmentRects,
-      strokeColor: isHighlight ? DEFAULT_HIGHLIGHT_COLOR : DEFAULT_ANNOTATION_COLOR,
-      opacity: 1,
-      ...(isHighlight ? { blendMode: PdfBlendMode.Multiply } : {}),
+      strokeColor: ANNOTATION_PALETTES[viewerThemeStore.getState().theme][0],
+      opacity: isHighlight ? 0.28 : 1,
+      ...(isHighlight ? { blendMode: PdfBlendMode.Normal } : {}),
       custom: slice ? { pdfTs: { textSlice: {
         charIndex: slice.start,
         charCount: slice.count,
@@ -409,6 +423,8 @@ export function installAnnotationPreview(registry: PluginRegistry, documentId: s
   const scoped = getAnnotationScope(registry, documentId);
   if (!scoped) return;
 
+  const uninstallPalette = installAnnotationPalette(registry, documentId);
+
   const root = document.documentElement;
   const sync = () => {
     const active = scoped.scope.getActiveTool();
@@ -430,7 +446,68 @@ export function installAnnotationPreview(registry: PluginRegistry, documentId: s
   return () => {
     unsubscribeTool();
     unsubscribeTools();
+    uninstallPalette?.();
     delete root.dataset.pdfAnnotationAutoPreview;
+  };
+}
+
+function installAnnotationPalette(registry: PluginRegistry, documentId: string) {
+  const scoped = getAnnotationScope(registry, documentId);
+  if (!scoped) return;
+  let syncing = false;
+  const sync = () => {
+    if (syncing) return;
+    syncing = true;
+    try {
+      const theme = viewerThemeStore.getState().theme;
+      const fields = ['strokeColor', 'color', 'fontColor', 'backgroundColor'] as const;
+      for (const tool of scoped.capability.getTools()) {
+        const defaults = (tool.defaults ?? {}) as Record<string, unknown>;
+        const patch: Record<string, unknown> = {};
+        for (const field of fields) {
+          const current = normalizeAnnotationColor(defaults[field]);
+          if (!current || current === TRANSPARENT_ANNOTATION_COLOR) continue;
+          const color = getThemeAnnotationColor(current, theme) ?? ANNOTATION_PALETTES[theme][0];
+          if (color !== current) patch[field] = color;
+        }
+        if (tool.id === 'highlight' || tool.id === 'inkHighlighter') {
+          if (defaults.opacity !== 0.28) patch.opacity = 0.28;
+          if (defaults.blendMode !== PdfBlendMode.Normal) patch.blendMode = PdfBlendMode.Normal;
+        }
+        if (Object.keys(patch).length) scoped.capability.setToolDefaults(tool.id, patch);
+      }
+      const updates = scoped.scope.getAnnotations().flatMap(({ object }) => {
+        const values = object as unknown as Record<string, unknown>;
+        const patch: Record<string, unknown> = {};
+        for (const field of fields) {
+          const color = getThemeAnnotationColor(values[field], theme);
+          if (color && color !== values[field]) patch[field] = color;
+        }
+        // Upgrade old default highlights to the same fixed preset appearance.
+        if (hasAutoAnnotationStrokeColor(object) && object.type === PdfAnnotationSubtype.HIGHLIGHT) {
+          patch.opacity = 0.28;
+          patch.blendMode = PdfBlendMode.Normal;
+        }
+        return Object.keys(patch).length ? [{ pageIndex: object.pageIndex, id: object.id, patch }] : [];
+      });
+      if (updates.length) scoped.scope.updateAnnotations(updates);
+    } finally {
+      syncing = false;
+    }
+  };
+  sync();
+  const unsubscribeTheme = viewerThemeStore.subscribe((state, previous) => {
+    if (state.theme !== previous.theme) sync();
+  });
+  const unsubscribeAnnotations = scoped.scope.onAnnotationEvent((event) => {
+    // Do not turn undo/redo update events into new history commands.
+    if (event.type === 'loaded' || (event.type === 'create' && !event.committed)) sync();
+  });
+  const unsubscribeTools = scoped.capability.onToolsChange(sync);
+  return () => {
+    unsubscribeTheme();
+    unsubscribeAnnotations();
+    unsubscribeTools();
   };
 }
 

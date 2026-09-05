@@ -6,20 +6,19 @@
 .flatDialog {
   border-color: var(--pdf-glass-border);
 }
-.form { @apply m-0 grid gap-2.5 bg-surface px-3.25 pt-3 pb-3.25; }
+.form { @apply m-0 grid gap-3.5 bg-transparent px-3.25 pt-3 pb-3.25; }
 .field { @apply grid gap-1.25 text-secondary; }
-.input { @apply h-7.25 w-full rounded-md border border-border bg-input px-2 text-foreground outline-none transition-[border-color,box-shadow] duration-150; }
-.flatDialog .input { @apply border-border-subtle bg-surface-alt; }
-.input:focus { @apply border-accent shadow-control; }
+.input { @apply h-7.25 w-full rounded-lg border border-border bg-input px-2 text-foreground outline-none transition-[border-color,box-shadow] duration-150; }
+.flatDialog .input { @apply border-border-subtle bg-[var(--pdf-control-background)]; }
+.flatDialog .input:focus, .input:focus { @apply border-accent shadow-control; }
 .error { @apply leading-3.75 text-danger; }
-.metadataContent { @apply grid gap-3 bg-surface px-3.25 pt-3 pb-5; }
+.metadataContent { @apply grid gap-3 bg-transparent px-3.25 pt-3 pb-5; }
 .metadataStatus { @apply text-secondary; }
-.metadataDetails { @apply m-0 grid overflow-hidden rounded bg-surface-alt text-[11px]; }
-.metadataDetails > div { @apply grid grid-cols-[76px_minmax(0,1fr)] gap-2 border-b border-border-subtle px-2.5 py-2; }
-.metadataDetails > div:last-child { @apply border-b-0; }
+.metadataDetails { @apply m-0 grid overflow-hidden rounded-lg bg-[var(--pdf-inset-background)] text-[11px]; }
+.metadataDetails > div { @apply grid grid-cols-[76px_minmax(0,1fr)] gap-2 px-2.5 py-2; }
 .metadataDetails dt { @apply text-secondary; }
 .metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
-.optionGroup { @apply overflow-hidden rounded bg-surface-alt; }
+.optionGroup { @apply grid gap-1; }
 .themeDialog { @apply w-[min(27rem,calc(100vw-2rem))]; }
 .themeForm { @apply gap-5 p-4.5; }
 .themeGroup { @apply m-0 min-w-0 border-0 p-0; }
@@ -36,4 +35,4 @@
 .themePreview { @apply relative flex h-9 overflow-hidden rounded-sm; }
 .themePreview > span { @apply flex-1; }
 .themeOptionLabel { @apply overflow-hidden text-center text-[10px] leading-3.5 text-ellipsis whitespace-nowrap; }
-.flatActions { @apply border-t border-border-subtle pt-2.5; }
+.flatActions { @apply pt-2.5; }

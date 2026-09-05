@@ -86,3 +86,18 @@ export interface ViewerPlatform {
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
   writeReadingProgress(documentKey: string, progress: ReadingProgress): Promise<void>;
 }
+
+export class LanguageDetectionDownloadRequired extends Error {
+  readonly downloading: boolean;
+  readonly resume: () => Promise<PlatformLanguageDetectionResult>;
+
+  constructor(
+    downloading: boolean,
+    resume: () => Promise<PlatformLanguageDetectionResult>,
+  ) {
+    super('Click to download the language detection model.');
+    this.name = 'LanguageDetectionDownloadRequired';
+    this.downloading = downloading;
+    this.resume = resume;
+  }
+}

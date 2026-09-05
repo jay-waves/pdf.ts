@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
-const SURFACE_CLASS = 'pdf-glass-surface min-h-8.5 w-fit max-w-[calc(100vw-32px)] rounded-xl border p-1 max-[640px]:max-w-[calc(100vw-16px)]';
+const SURFACE_CLASS = 'pdf-glass-surface min-h-8.5 w-fit max-w-[calc(100vw-32px)] rounded-xl border p-1.5 max-[640px]:max-w-[calc(100vw-16px)]';
 
 export function FloatingSurface({
   as: Component = 'div',
@@ -36,5 +36,5 @@ export function FloatingToolbarGroup({ children }: { children: ReactNode }) {
 }
 
 export function FloatingToolbarDivider() {
-  return <div className="h-4.5 w-px flex-none bg-border" aria-hidden="true" />;
+  return <div className="h-4 w-px flex-none bg-[var(--pdf-glass-border)]" aria-hidden="true" />;
 }

@@ -3,8 +3,9 @@
 .button[data-active='true'] {
   border-color: transparent;
   background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
-  color: inherit;
+  color: var(--pdf-accent-primary);
   box-shadow: none;
 }
 
-.button[data-active='true']:is(:hover, :focus-visible) { @apply border-accent shadow-control; }
+.button[data-active='true']:hover { background-color: var(--pdf-interactive-selected); }
+.button[data-active='true']:focus-visible { @apply border-accent shadow-control; }

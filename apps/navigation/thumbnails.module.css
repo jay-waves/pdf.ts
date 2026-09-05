@@ -11,7 +11,9 @@
   @apply block w-full overflow-hidden rounded border border-border-subtle bg-input;
 }
 
-.card:is(:hover, :focus-visible) {
+.card:hover { @apply bg-hover; }
+
+.card:focus-visible {
   @apply border-accent shadow-control;
 }
 

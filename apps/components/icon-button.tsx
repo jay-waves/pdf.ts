@@ -3,10 +3,10 @@ import { Tooltip } from './tooltip';
 import styles from './icon-button.module.css';
 
 const CONTROL_BUTTON_CLASS = [
-  'inline-grid size-6.5 flex-none cursor-pointer place-items-center rounded-md',
+  'inline-grid size-6.5 flex-none cursor-pointer place-items-center rounded-lg',
   'border border-transparent bg-transparent p-0 text-inherit outline-none',
   'transition-[background-color,border-color,box-shadow,color,transform] duration-150 ease-control',
-  'hover:bg-hover focus-visible:border-accent focus-visible:shadow-control active:scale-[0.92]',
+  'hover:bg-hover focus-visible:border-accent focus-visible:shadow-control active:scale-[0.96]',
   'disabled:cursor-default disabled:opacity-48 disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100',
 ].join(' ');
 

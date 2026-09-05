@@ -62,18 +62,20 @@
   --pdf-scrollbar-track: var(--pdf-background-app);
   --pdf-page-border: color-mix(in srgb, var(--pdf-foreground-primary) 12%, transparent);
   --pdf-page-shadow: rgb(0 0 0 / 14%);
-  --pdf-control-ring: inset 0 0 0 0.5px color-mix(in srgb, var(--pdf-accent-primary) 72%, transparent);
-  --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 82%, transparent);
+  --pdf-control-ring: 0 0 0 2px color-mix(in srgb, var(--pdf-accent-primary) 32%, transparent);
+  --pdf-control-background: color-mix(in srgb, var(--pdf-background-input) 88%, transparent);
+  --pdf-inset-background: color-mix(in srgb, var(--pdf-background-surface-alt) 82%, transparent);
+  --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 94%, transparent);
   --pdf-glass-border: color-mix(in srgb, var(--pdf-foreground-primary) 11%, transparent);
   --pdf-glass-highlight: rgb(255 255 255 / 72%);
-  --pdf-glass-filter: blur(28px) saturate(155%) contrast(94%);
+  --pdf-glass-filter: blur(20px) saturate(110%);
   --pdf-glass-shadow:
     0 1px 1px rgb(15 23 42 / 5%),
-    0 10px 30px rgb(15 23 42 / 13%),
-    0 24px 64px rgb(15 23 42 / 7%),
+    0 8px 24px rgb(15 23 42 / 9%),
+    0 20px 48px rgb(15 23 42 / 4%),
     inset 0 1px 0 var(--pdf-glass-highlight);
-  --pdf-mica-background: color-mix(in srgb, var(--pdf-background-surface) 94%, transparent);
-  --pdf-mica-filter: blur(42px) saturate(135%) contrast(96%);
+  --pdf-mica-background: color-mix(in srgb, var(--pdf-background-surface) 98%, transparent);
+  --pdf-mica-filter: blur(24px) saturate(105%);
   --pdf-mica-shadow:
     0 2px 8px rgb(15 23 42 / 8%),
     0 24px 72px rgb(15 23 42 / 18%),
@@ -113,7 +115,7 @@
   --pdf-scrollbar-thumb-hover: #6f6f6f;
   --pdf-page-background: #050505;
   --pdf-page-shadow: rgb(0 0 0 / 32%);
-  --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 78%, transparent);
+  --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 94%, transparent);
   --pdf-glass-border: rgb(255 255 255 / 14%);
   --pdf-glass-highlight: rgb(255 255 255 / 13%);
   --pdf-glass-shadow:
@@ -121,7 +123,7 @@
     0 14px 38px rgb(0 0 0 / 34%),
     0 30px 76px rgb(0 0 0 / 18%),
     inset 0 1px 0 var(--pdf-glass-highlight);
-  --pdf-mica-background: color-mix(in srgb, var(--pdf-background-surface) 92%, transparent);
+  --pdf-mica-background: color-mix(in srgb, var(--pdf-background-surface) 98%, transparent);
   --pdf-mica-shadow:
     0 2px 8px rgb(0 0 0 / 24%),
     0 26px 76px rgb(0 0 0 / 44%),
@@ -150,7 +152,7 @@
   --pdf-scrollbar-thumb-hover: #5e81ac;
   --pdf-page-background: #2e3440;
   --pdf-page-shadow: rgb(15 20 30 / 28%);
-  --pdf-glass-background: color-mix(in srgb, #434c5e 80%, transparent);
+  --pdf-glass-background: color-mix(in srgb, #434c5e 94%, transparent);
   --pdf-glass-border: rgb(236 239 244 / 14%);
   --pdf-glass-highlight: rgb(236 239 244 / 12%);
   --pdf-annotation-auto-stroke: #88c0d0;
@@ -175,7 +177,7 @@
   --pdf-scrollbar-thumb-hover: #665c54;
   --pdf-page-background: #2d2c2a;
   --pdf-page-shadow: rgb(0 0 0 / 30%);
-  --pdf-glass-background: rgb(50 48 47 / 82%);
+  --pdf-glass-background: rgb(50 48 47 / 94%);
   --pdf-glass-border: rgb(235 219 178 / 16%);
   --pdf-glass-highlight: rgb(249 245 215 / 11%);
   --pdf-annotation-auto-stroke: #c9b77a;
@@ -226,7 +228,7 @@
   --pdf-scrollbar-thumb-hover: #a9a091;
   --pdf-page-background: #fbfaf6;
   --pdf-page-shadow: rgb(91 80 62 / 10%);
-  --pdf-glass-background: color-mix(in srgb, #faf8f3 84%, transparent);
+  --pdf-glass-background: color-mix(in srgb, #faf8f3 94%, transparent);
   --pdf-glass-border: rgb(91 80 62 / 13%);
   --pdf-glass-highlight: rgb(255 255 255 / 78%);
   --pdf-annotation-auto-stroke: #5f8f86;
@@ -242,17 +244,17 @@
   --pdf-background-elevated: #eff1f5;
   --pdf-toolbar-background: #e6e9ef;
   --pdf-toolbar-secondary-background: #eff1f5;
-  --pdf-foreground-primary: #8839ef;
-  --pdf-foreground-secondary: #179299;
-  --pdf-foreground-muted: #40a02b;
-  --pdf-border-default: color-mix(in srgb, #04a5e5 42%, #eff1f5);
-  --pdf-border-subtle: color-mix(in srgb, #179299 28%, #eff1f5);
+  --pdf-foreground-primary: #4c4f69;
+  --pdf-foreground-secondary: #5c5f77;
+  --pdf-foreground-muted: #6c6f85;
+  --pdf-border-default: color-mix(in srgb, #4c4f69 18%, #eff1f5);
+  --pdf-border-subtle: color-mix(in srgb, #4c4f69 10%, #eff1f5);
   --pdf-border-strong: #8839ef;
-  --pdf-control-border: color-mix(in srgb, #40a02b 55%, #eff1f5);
+  --pdf-control-border: color-mix(in srgb, #4c4f69 22%, #eff1f5);
   --pdf-accent-primary: #04a5e5;
   --pdf-text-selection-color: rgb(23 146 153 / 22%);
-  --pdf-interactive-hover: color-mix(in srgb, #40a02b 13%, #eff1f5);
-  --pdf-interactive-selected: color-mix(in srgb, #8839ef 16%, #eff1f5);
+  --pdf-interactive-hover: color-mix(in srgb, #04a5e5 8%, #eff1f5);
+  --pdf-interactive-selected: color-mix(in srgb, #04a5e5 14%, #eff1f5);
   --pdf-danger-primary: #d20f39;
   --pdf-scrollbar-thumb: #179299;
   --pdf-scrollbar-thumb-hover: #04a5e5;
@@ -338,7 +340,7 @@
 }
 
 @supports not (backdrop-filter: blur(1px)) {
-  :root {
+  :root[data-viewer-theme], :root {
     --pdf-glass-background: var(--pdf-background-surface);
     --pdf-glass-filter: none;
     --pdf-mica-background: var(--pdf-background-surface);
@@ -347,7 +349,7 @@
 }
 
 @media (prefers-contrast: more) {
-  :root {
+  :root[data-viewer-theme], :root {
     --pdf-glass-background: var(--pdf-background-surface);
     --pdf-glass-border: color-mix(in srgb, var(--pdf-foreground-primary) 38%, transparent);
     --pdf-glass-filter: none;
@@ -361,4 +363,22 @@
   .pdf-glass-popover,
   .pdf-dialog-overlay,
   .pdf-dialog-content { animation: none !important; }
+}
+
+/* All dark palettes use the same restrained edge lighting and shadow depth. */
+:root[data-viewer-color-mode='dark'] {
+  --pdf-glass-highlight: rgb(255 255 255 / 10%);
+  --pdf-glass-shadow: 0 2px 6px rgb(0 0 0 / 16%), 0 12px 32px rgb(0 0 0 / 26%), inset 0 1px 0 var(--pdf-glass-highlight);
+  --pdf-mica-shadow: 0 4px 12px rgb(0 0 0 / 18%), 0 24px 64px rgb(0 0 0 / 36%), inset 0 1px 0 var(--pdf-glass-highlight);
+  --pdf-overlay-background: rgb(0 0 0 / 30%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-viewer-theme], :root {
+    --pdf-glass-background: var(--pdf-background-surface);
+    --pdf-mica-background: var(--pdf-background-surface);
+    --pdf-glass-filter: none;
+    --pdf-mica-filter: none;
+  }
+  .pdf-dialog-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }

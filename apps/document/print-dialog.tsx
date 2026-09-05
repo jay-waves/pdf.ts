@@ -20,8 +20,8 @@ const PRINT_MODE_OPTIONS = [
 const PRINT_OPTION_CLASS = [
   'grid min-h-8.25 w-full cursor-pointer',
   'grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2',
-  'border-0 border-b border-border bg-transparent px-2 py-1.25',
-  'text-left text-inherit outline-none last:border-b-0',
+  'rounded-md border-0 bg-transparent px-2 py-1.25',
+  'text-left text-inherit outline-none',
   'transition-[background-color,box-shadow] duration-150 ease-control',
   'hover:bg-hover data-[state=checked]:bg-selected',
   'focus-visible:relative focus-visible:z-1',

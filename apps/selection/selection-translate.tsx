@@ -1,3 +1,4 @@
+import { LanguageDetectionDownloadRequired } from '../platform/types';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
@@ -17,7 +18,8 @@ import styles from './selection-translate.module.css';
 const MAX_TEXT_LENGTH = 4000;
 
 type TranslationState =
-  | { status: 'loading'; progress?: number }
+  | { status: 'loading'; progress?: number; detecting?: boolean }
+  | { status: 'detection-download'; request: LanguageDetectionDownloadRequired }
   | { status: 'downloadable'; downloading: boolean; sourceLanguage: string; targetLanguage: string }
   | { status: 'success'; text: string }
   | { status: 'error'; text: string };
@@ -69,6 +71,10 @@ export function SelectionTranslate({
       }
     } catch (error) {
       if (controller.signal.aborted) return;
+      if (error instanceof LanguageDetectionDownloadRequired) {
+        setResult({ status: 'detection-download', request: error });
+        return;
+      }
       setResult({
         status: 'error',
         text: error instanceof Error ? error.message : 'Translation failed.',
@@ -87,7 +93,10 @@ export function SelectionTranslate({
     const configuredSourceLanguage = getTranslationSourceLanguage(platform.getPreference);
     const document = getDocument(registry, request.documentId)!;
     Promise.all([
-      scope.getSelectedText().toPromise(),
+      scope.getSelectedText().toPromise().then((parts) => {
+        if (!cancelled) setSourceText(normalizeText(parts));
+        return parts;
+      }),
       configuredSourceLanguage
         ? Promise.resolve(configuredSourceLanguage)
         : detectDocumentLanguage(registry.getEngine(), document)
@@ -99,6 +108,10 @@ export function SelectionTranslate({
       void translate(text, false, sourceLanguage);
     }).catch((error) => {
       if (cancelled) return;
+      if (error instanceof LanguageDetectionDownloadRequired) {
+        setResult({ status: 'detection-download', request: error });
+        return;
+      }
       setResult({
         status: 'error',
         text: error instanceof Error ? error.message : 'Could not prepare translation.',
@@ -120,15 +133,35 @@ export function SelectionTranslate({
     };
   }, [onClose, registry, request, translate]);
 
-  const downloadable = result.status === 'downloadable';
+  const resumeDetection = async (download: LanguageDetectionDownloadRequired) => {
+    activeController.current?.abort();
+    const controller = new AbortController();
+    activeController.current = controller;
+    setResult({ status: 'loading', detecting: true });
+    try {
+      const detection = await download.resume();
+      if (!controller.signal.aborted) {
+        // Detection may outlast user activation. Translation gets its own button if needed.
+        void translate(sourceText, false, detection.detectedLanguage);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) setResult({ status: 'error', text: error instanceof Error ? error.message : 'Language detection failed.' });
+    }
+  };
+
+  const downloadable = result.status === 'downloadable' || result.status === 'detection-download';
   const message = (() => {
     if (result.status === 'success' || result.status === 'error') return result.text;
+    if (result.status === 'detection-download') return result.request.downloading
+      ? 'Language detection model is downloading. Click to continue.'
+      : 'Download the language detection model to translate. Click to download.';
     if (result.status === 'downloadable') {
       const direction = `${getLanguageName(result.sourceLanguage)} → ${getLanguageName(result.targetLanguage)}`;
       return result.downloading
         ? `${direction}\nModel download is in progress. Click to continue.`
-        : `${direction}\nThis language direction is not ready for this site. Click to prepare and translate.`;
+        : `${direction}\nDownload this language model to translate. Click to download.`;
     }
+    if (result.detecting) return 'Preparing the language detection model...';
     if (typeof result.progress === 'number') {
       return result.progress >= 1
         ? 'Preparing the built-in translation model...'
@@ -150,7 +183,11 @@ export function SelectionTranslate({
         <button
           className={styles.downloadAction}
           type="button"
-          onClick={() => void translate(sourceText, true, result.sourceLanguage)}
+          onClick={() => {
+            if (result.status === 'detection-download') void resumeDetection(result.request);
+            else if (result.status === 'downloadable') void translate(sourceText, true, result.sourceLanguage);
+          }}
+          disabled={!sourceText}
         >
           {message}
         </button>

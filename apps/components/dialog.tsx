@@ -13,8 +13,8 @@ const VARIANT_CLASSES: Record<DialogVariant, string> = {
 
 const TITLE_VARIANT_CLASSES: Record<DialogTitleVariant, string> = {
   hidden: 'sr-only',
-  panel: 'm-0 border-b border-border-subtle bg-transparent px-3.5 py-3 text-xs font-semibold',
-  popup: "relative m-0 bg-transparent px-3.5 py-3 text-xs font-semibold text-foreground after:absolute after:inset-x-4.5 after:bottom-0 after:h-px after:bg-[color-mix(in_srgb,var(--pdf-foreground-primary)_14%,transparent)] after:content-['']",
+  panel: 'm-0 bg-transparent px-3.5 py-3 text-xs font-semibold',
+  popup: 'm-0 bg-transparent px-3.5 py-3 text-xs font-semibold text-foreground',
 };
 
 export function Dialog({
@@ -57,5 +57,5 @@ export function Dialog({
 }
 
 export function DialogActions({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={`flex justify-end gap-1.5 ${className}`.trim()} {...props} />;
+  return <div className={`flex justify-end gap-2 ${className}`.trim()} {...props} />;
 }
