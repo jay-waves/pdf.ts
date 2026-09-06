@@ -1,12 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
-import { PdfErrorCode, type PdfPageObject } from '@embedpdf/models';
+import type { PdfPageObject } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { useStore } from 'zustand';
 import { PanelContent, PanelState } from '../components';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import { getDocumentScope } from '../shared/utils';
-import { getSystemDpr } from '../renderer/viewer-diagnostics';
+import { viewerDiagnosticsStore } from '../renderer/viewer-diagnostics';
+import { useRenderUrl } from '../renderer/use-render-url';
 import { getDocumentState } from '../document/viewer-document';
 import styles from './thumbnails.module.css';
 
@@ -67,7 +69,7 @@ function ThumbnailCard({
 }) {
   const cardRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
-  const [url, setUrl] = useState<string>();
+  const systemDpr = useStore(viewerDiagnosticsStore, (state) => state.systemDpr);
 
   useEffect(() => {
     const card = cardRef.current;
@@ -75,38 +77,23 @@ function ThumbnailCard({
     return observeVisibility(card, setVisible);
   }, []);
 
-  useEffect(() => {
-    if (!page || !visible) return;
+  const start = useCallback(() => {
+    if (!page || !visible) return null;
     const render = getDocumentScope<RenderCapability>(registry, 'render', documentId);
-    if (!render) return;
-    let objectUrl: string | undefined;
-    let active = true;
+    if (!render) return null;
     const rotation = ((page.rotation ?? 0) + documentRotation) % 4;
     const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
-    const task = render.renderPageRect({
-      pageIndex: page.index ?? item.pageIndex,
+    return render.renderPageRect({
+      pageIndex: item.pageIndex,
       rect: { origin: { x: 0, y: 0 }, size: page.size },
       options: {
         scaleFactor: THUMBNAIL_RENDER_HEIGHT / rotatedHeight,
-        dpr: Math.min(getSystemDpr(), 1.5),
+        dpr: Math.min(systemDpr, 1.5),
         rotation,
       },
     });
-    task.wait((blob) => {
-      if (!active) return;
-      objectUrl = URL.createObjectURL(blob);
-      setUrl(objectUrl);
-    }, () => {});
-
-    return () => {
-      active = false;
-      task.abort({
-        code: PdfErrorCode.Cancelled,
-        message: 'Thumbnail left the virtual window',
-      });
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [documentId, documentRotation, item.pageIndex, page, registry, visible]);
+  }, [documentId, documentRotation, item.pageIndex, page, registry, systemDpr, visible]);
+  const [url, releaseImage] = useRenderUrl(start, 'thumbnail');
 
   const pageNumber = item.pageIndex + 1;
   return (
@@ -123,6 +110,7 @@ function ThumbnailCard({
         {visible && url ? (
           <img
             src={url}
+            onLoad={releaseImage}
             alt=""
             draggable={false}
             className="size-full object-contain"

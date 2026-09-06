@@ -355,112 +355,118 @@ export function Comments({
   };
 
   return (
-    <PanelContent ref={contentRef} padding="compact" className={styles.panel}>
-      {!registry ? <PanelState>Loading comments...</PanelState> : null}
-      {registry && !entries.length ? (
-        <div className={styles.empty}>
-          <span className={styles.emptyIcon}>
-            <MessageSquareMore size={20} strokeWidth={1.6} />
-          </span>
-          <strong className={styles.emptyTitle}>No comments yet</strong>
-          <span className={styles.emptyDescription}>
-            Annotations and notes added to this PDF will appear here.
-          </span>
-        </div>
-      ) : null}
-      {pageGroups.length ? (
-        <ol className={styles.list}>
-          {pageGroups.map((group) => (
-            <li
-              key={group.pageIndex}
-              className={styles.pageGroup}
-              data-comment-page={group.pageIndex + 1}
-              data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}
-            >
-              <div className={styles.pageHeader}>Page {group.pageIndex + 1}</div>
-              <ol className={styles.entries}>
-                {group.entries.map((annotation) => {
-                  const Icon = getEntryIcon(annotation);
-                  const label = getAnnotationLabel(annotation);
-                  const contents = annotation.contents?.trim();
-                  const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
-                  const isEditing = isComment && editingComment?.annotationId === annotation.id;
-                  const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
-                  const hasExtractedSummary = summaryCacheRef.current.has(annotation.id);
-                  const summary = contents || (isTextMarkup
-                    ? hasExtractedSummary
-                      ? summaryCacheRef.current.get(annotation.id) || 'Text summary unavailable'
-                      : 'Loading text summary…'
-                    : 'No text content');
+    <div className={styles.layout}>
+      <PanelContent ref={contentRef} padding="compact" className={styles.panel}>
+        {!registry ? <PanelState>Loading comments...</PanelState> : null}
+        {registry && !entries.length ? (
+          <div className={styles.empty}>
+            <span className={styles.emptyIcon}>
+              <MessageSquareMore size={20} strokeWidth={1.6} />
+            </span>
+            <strong className={styles.emptyTitle}>No comments yet</strong>
+            <span className={styles.emptyDescription}>
+              Annotations and notes added to this PDF will appear here.
+            </span>
+          </div>
+        ) : null}
+        {pageGroups.length ? (
+          <ol className={styles.list}>
+            {pageGroups.map((group) => (
+              <li
+                key={group.pageIndex}
+                className={styles.pageGroup}
+                data-comment-page={group.pageIndex + 1}
+                data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}
+              >
+                <div className={styles.pageHeader}>
+                  <span>Page {group.pageIndex + 1}</span>
+                  <span className={styles.pageCount}>{group.entries.length}</span>
+                </div>
+                <ol className={styles.entries}>
+                  {group.entries.map((annotation) => {
+                    const Icon = getEntryIcon(annotation);
+                    const label = getAnnotationLabel(annotation);
+                    const contents = annotation.contents?.trim();
+                    const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
+                    const isEditing = isComment && editingComment?.annotationId === annotation.id;
+                    const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
+                    const hasExtractedSummary = summaryCacheRef.current.has(annotation.id);
+                    const summary = contents || (isTextMarkup
+                      ? hasExtractedSummary
+                        ? summaryCacheRef.current.get(annotation.id) || 'Text summary unavailable'
+                        : 'Loading text summary…'
+                      : 'No text content');
 
-                  return (
-                    <li
-                      key={annotation.id}
-                      className={styles.item}
-                      data-comment-annotation-id={annotation.id}
-                      data-editing={isEditing ? 'true' : undefined}
-                    >
-                      {!isEditing ? (
-                        <button
-                          type="button"
-                          className={styles.cardTarget}
-                          onClick={() => {
-                            if (registry && documentId) {
-                              navigateToAnnotation(registry, documentId, scroll, annotation);
-                            }
-                          }}
-                          aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
-                        />
-                      ) : null}
-                      <div className={styles.heading}>
-                        <span className={styles.icon}><Icon size={15} strokeWidth={2} /></span>
-                        <span className={styles.type}>{label}</span>
-                      </div>
-                      {isEditing ? (
-                        <form
-                          className={styles.editor}
-                          onSubmit={(event) => {
-                            event.preventDefault();
-                            saveComment(annotation);
-                          }}
-                        >
-                          <textarea
-                            className={styles.textarea}
-                            value={editingComment.draft}
-                            onChange={(event) => setEditingComment({
-                              annotationId: annotation.id,
-                              draft: event.currentTarget.value,
-                            })}
-                            autoFocus
-                            aria-label={`Comment for ${label}`}
+                    return (
+                      <li
+                        key={annotation.id}
+                        className={styles.item}
+                        data-comment-annotation-id={annotation.id}
+                        data-editing={isEditing ? 'true' : undefined}
+                      >
+                        {!isEditing ? (
+                          <button
+                            type="button"
+                            className={styles.cardTarget}
+                            onClick={() => {
+                              if (registry && documentId) {
+                                navigateToAnnotation(registry, documentId, scroll, annotation);
+                              }
+                            }}
+                            aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
                           />
-                          <div className={styles.actions}>
-                            <Button onClick={() => cancelComment(annotation)}>Cancel</Button>
-                            <Button type="submit" variant="primary">Save</Button>
-                          </div>
-                        </form>
-                      ) : isComment ? (
-                        <button
-                          type="button"
-                          className={`${styles.body} ${styles.editableBody}`}
-                          onClick={() => setEditingComment({
-                            annotationId: annotation.id,
-                            draft: contents ?? '',
-                          })}
-                        >
-                          {contents || 'Empty comment'}
-                        </button>
-                      ) : (
-                        <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
-            </li>
-          ))}
-        </ol>
-      ) : null}
-    </PanelContent>
+                        ) : null}
+                        <div className={styles.heading}>
+                          <span className={styles.icon}><Icon size={15} strokeWidth={2} /></span>
+                          <span className={styles.type}>{label}</span>
+                        </div>
+                        {isEditing ? (
+                          <form
+                            className={styles.editor}
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              saveComment(annotation);
+                            }}
+                          >
+                            <textarea
+                              className={styles.textarea}
+                              value={editingComment.draft}
+                              onChange={(event) => setEditingComment({
+                                annotationId: annotation.id,
+                                draft: event.currentTarget.value,
+                              })}
+                              placeholder="Write a comment…"
+                              autoFocus
+                              aria-label={`Comment for ${label}`}
+                            />
+                            <div className={styles.actions}>
+                              <Button appearance="flat" onClick={() => cancelComment(annotation)}>Cancel</Button>
+                              <Button type="submit" variant="primary">Save</Button>
+                            </div>
+                          </form>
+                        ) : isComment ? (
+                          <button
+                            type="button"
+                            className={`${styles.body} ${styles.editableBody}`}
+                            onClick={() => setEditingComment({
+                              annotationId: annotation.id,
+                              draft: contents ?? '',
+                            })}
+                          >
+                            {contents || 'Empty comment'}
+                          </button>
+                        ) : (
+                          <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+      </PanelContent>
+    </div>
   );
 }

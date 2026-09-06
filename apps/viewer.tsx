@@ -62,7 +62,7 @@ import styles from './viewer/viewer.module.css';
 import {
   getEffectiveRenderDpr,
   installErrorDiagnostics,
-  installRenderDprOverride,
+  installRenderDprMonitor,
   resetViewerDiagnostics,
   viewerDiagnosticsStore,
 } from './renderer/viewer-diagnostics';
@@ -161,7 +161,9 @@ function App({
   const [registry, setRegistry] = useState<PluginRegistry>();
   const [pdfScroll, setPdfScroll] = useState<PdfScroll | null>(null);
   const [viewerUi, dispatchViewerUi] = useReducer(reduceViewerUi, INITIAL_VIEWER_UI);
-  const dprMode = useStore(viewerDiagnosticsStore, (state) => state.renderDprMode);
+  const renderDpr = useStore(viewerDiagnosticsStore, (state) => (
+    getEffectiveRenderDpr(state.renderDprMode, state.systemDpr)
+  ));
   const [outlineCache, setOutlineCache] = useState<OutlineCache>({
     status: 'idle',
     bookmarks: [],
@@ -316,7 +318,7 @@ function App({
         documentResource={documentResource}
         onInitialized={initializePlugins}
         onResourceConsumed={onResourceConsumed}
-        renderDpr={getEffectiveRenderDpr(dprMode)}
+        renderDpr={renderDpr}
       />
       <Toolbar
         scroll={pdfScroll}
@@ -634,7 +636,7 @@ function ReadyViewer({
 
 const disposeTheme = initializeViewerTheme();
 const disposeDiagnostics = installErrorDiagnostics();
-const disposeDpr = installRenderDprOverride();
+const disposeDpr = installRenderDprMonitor();
 writeStartupInfo('Viewer environment ready', navigator.platform || 'Web');
 
 function ViewerLifecycle() {

@@ -3,6 +3,7 @@ import type { PluginRegistry } from '@embedpdf/core';
 import { browserImageDataToBlobConverter } from '@embedpdf/engines/converters';
 import { PdfEngine as PdfiumEngine } from '@embedpdf/engines/pdfium';
 import { RemoteExecutor } from '@embedpdf/engines/pdfium-worker-engine';
+import { PdfErrorCode } from '@embedpdf/models';
 import type {
   ImageConversionTypes,
   PdfDocumentObject,
@@ -87,7 +88,16 @@ export function usePdfRuntime(options: {
 
   useEffect(() => {
     writeStartupLogOnce('pdf-worker', 'Starting PDF worker');
-    const worker = new Worker(new URL('./pdfium-worker', import.meta.url), { type: 'module' });
+    setState({ pdfium: null, isLoading: true, error: null });
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('./pdfium-worker', import.meta.url), { type: 'module' });
+    } catch (error) {
+      const failure = error instanceof Error ? error : new Error(String(error));
+      failStartupLog('Unable to start PDF worker', failure.message);
+      setState({ pdfium: null, isLoading: false, error: failure });
+      return;
+    }
     const handleStartupLog = (event: MessageEvent<unknown>) => {
       const message = event.data as {
         type?: string;
@@ -99,19 +109,6 @@ export function usePdfRuntime(options: {
       writeStartupLog(message.level ?? 'info', message.message, message.detail);
     };
     worker.addEventListener('message', handleStartupLog);
-    const handleWorkerError = (event: ErrorEvent) => {
-      console.error('[pdf-ts] PDF worker script failed', {
-        message: event.message,
-        filename: event.filename,
-        line: event.lineno,
-        column: event.colno,
-      });
-    };
-    const handleWorkerMessageError = (event: MessageEvent<unknown>) => {
-      console.error('[pdf-ts] PDF worker message could not be decoded', event.data);
-    };
-    worker.addEventListener('error', handleWorkerError);
-    worker.addEventListener('messageerror', handleWorkerMessageError);
     const executor = new RemoteExecutor(worker, options);
     const internals = executor as unknown as RemoteExecutorInternals;
     const engine = new PdfiumEngine<Blob>(executor, {
@@ -126,15 +123,27 @@ export function usePdfRuntime(options: {
 
     const { readyTask } = internals;
     let active = true;
-    const fail: Parameters<typeof readyTask.wait>[1] = (failure) => {
-      if (!active) return;
-      failStartupLog('Unable to initialize PDF engine', failure.reason.message);
-      setState({
-        pdfium: null,
-        isLoading: false,
-        error: new Error(failure.reason.message),
-      });
+    let destroyed = false;
+    const destroy = () => {
+      if (destroyed) return;
+      destroyed = true;
+      executors.delete(engine);
+      void engine.destroy().toPromise().catch(() => worker.terminate());
     };
+    const fail = (message: string) => {
+      if (!active) return;
+      active = false;
+      failStartupLog('PDF engine failed', message);
+      setState({ pdfium: null, isLoading: false, error: new Error(message) });
+      // Script/transport errors do not produce the executor's usual reply.
+      // Reject readiness explicitly and dispose pending requests as well.
+      readyTask.reject({ code: PdfErrorCode.Initialization, message });
+      destroy();
+    };
+    const handleWorkerError = (event: ErrorEvent) => fail(event.message || 'PDF worker script failed');
+    const handleWorkerMessageError = () => fail('PDF worker message could not be decoded');
+    worker.addEventListener('error', handleWorkerError);
+    worker.addEventListener('messageerror', handleWorkerMessageError);
     const finish = () => {
       if (active) {
         writeStartupInfo('PDF engine ready');
@@ -143,8 +152,12 @@ export function usePdfRuntime(options: {
     };
 
     readyTask.wait(
-      () => setPdfRenderTheme(engine, getPdfRenderTheme(viewerThemeStore.getState().theme)).wait(finish, fail),
-      fail,
+      () => {
+        if (!active) return;
+        setPdfRenderTheme(engine, getPdfRenderTheme(viewerThemeStore.getState().theme))
+          .wait(finish, (failure) => fail(failure.reason.message));
+      },
+      (failure) => fail(failure.reason.message),
     );
 
     return () => {
@@ -152,8 +165,8 @@ export function usePdfRuntime(options: {
       worker.removeEventListener('message', handleStartupLog);
       worker.removeEventListener('error', handleWorkerError);
       worker.removeEventListener('messageerror', handleWorkerMessageError);
-      executors.delete(engine);
-      void engine.destroy().toPromise().catch(() => worker.terminate());
+      readyTask.reject({ code: PdfErrorCode.Cancelled, message: 'PDF runtime disposed' });
+      destroy();
     };
   }, [options.defaultImageType, options.fontFallback, options.wasmUrl]);
 

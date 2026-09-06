@@ -37,7 +37,7 @@ const DPR_OPTIONS: Array<{ value: RenderDprMode; label: string }> = [
   { value: '1.25', label: 'Performance (1.25x)' },
   { value: '1.5', label: 'Balanced (1.5x)' },
   { value: '1.75', label: 'Quality (1.75x)' },
-  { value: 'system', label: `System (${getSystemDpr()}x, native)` },
+  { value: 'system', label: 'System (native)' },
 ];
 
 function formatPixels(value: number) {

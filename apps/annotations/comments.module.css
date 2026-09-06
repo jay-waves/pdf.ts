@@ -1,61 +1,48 @@
 @reference '../tailwind.css';
 
-.panel { background: transparent; }
-.empty { @apply grid min-h-60 place-items-center content-center gap-1.5 p-6 text-center text-muted; }
-.emptyIcon { @apply mb-0.5 inline-grid size-8.5 place-items-center; }
-.emptyTitle { @apply text-[11px] font-semibold text-secondary; }
-.emptyDescription { @apply max-w-65 text-[10px] leading-3.75; }
-.list { @apply m-0 grid list-none gap-3.5 p-0; }
-.pageGroup { @apply grid gap-1.75; }
-.pageHeader { @apply flex min-h-5 items-center gap-2.5 px-0.5 font-medium text-secondary tabular-nums; }
-
-.pageHeader::after {
-  @apply h-px flex-1 bg-border;
-  content: '';
-}
-
+.layout { @apply flex h-full min-h-0 flex-col; }
+.panel { @apply min-h-0 flex-1; background: transparent; scrollbar-gutter: stable; }
+.empty { @apply grid min-h-60 h-full place-items-center content-center gap-2 p-6 text-center text-muted; }
+.emptyIcon { @apply mb-2 inline-grid size-14 place-items-center rounded-2xl text-accent; background: color-mix(in srgb, var(--pdf-accent-primary) 8%, transparent); }
+.emptyTitle { @apply text-xs font-semibold text-secondary; }
+.emptyDescription { @apply max-w-65 text-[11px] leading-5; }
+.list { @apply m-0 grid list-none gap-5 p-2; }
+.pageGroup { @apply grid gap-2; }
+.pageHeader { @apply flex min-h-7 items-center gap-2 px-2 text-[11px] font-medium text-secondary tabular-nums; }
+.pageHeader::after { @apply h-px flex-1 bg-border-subtle; content: ''; }
+.pageCount { @apply inline-grid min-w-5 place-items-center rounded-md px-1 text-[10px] text-muted; background: var(--pdf-inset-background); }
 .pageGroup[data-current='true'] .pageHeader { @apply text-accent; }
-.entries { @apply m-0 grid list-none gap-1.75 p-0; }
-
+.entries { @apply m-0 grid list-none gap-1 p-0; }
 .item {
-  @apply relative grid rounded-md border border-border-subtle bg-[var(--pdf-control-background)] px-2.75 pt-2.25 pb-2.5;
-  @apply transition-[border-color,background-color,box-shadow] duration-150 ease-control;
+  @apply relative grid rounded-xl border border-transparent px-3 pt-2 pb-3;
+  @apply transition-[border-color,background-color] duration-150 ease-control;
 }
-
-.item[data-editing='true'] { @apply bg-surface-alt; }
-
-.item[data-editing='true']::before {
-  @apply absolute inset-y-2 left-0 w-0.5 rounded-r bg-accent opacity-55;
-  content: '';
-}
-
-.item:has(.cardTarget:hover) { @apply border-border bg-hover; }
-.item:has(.cardTarget:focus-visible) { @apply border-accent shadow-control; }
+.item + .item::after { @apply pointer-events-none absolute -top-px right-3 left-3 h-px bg-border-subtle; content: ''; }
+.item[data-editing='true'] { background: color-mix(in srgb, var(--pdf-accent-primary) 5%, transparent); border-color: color-mix(in srgb, var(--pdf-accent-primary) 22%, transparent); }
+.item:has(.cardTarget:hover) { @apply bg-hover; }
+.item:has(.cardTarget:focus-visible) { @apply border-accent; }
 .cardTarget { @apply absolute inset-0 z-0 cursor-pointer rounded-[inherit] border-0 bg-transparent p-0 outline-none; }
-.heading { @apply pointer-events-none relative z-1 grid min-h-7 grid-cols-[25px_minmax(0,1fr)] items-center py-px text-left; }
-.icon { @apply grid size-5.5 place-items-center text-accent; }
-.type { @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-medium text-secondary; }
-
+.heading { @apply pointer-events-none relative z-1 grid min-h-7 grid-cols-[28px_minmax(0,1fr)] items-center py-px text-left; }
+.icon { @apply grid size-6 place-items-center text-accent; }
+.type { @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-medium text-secondary; }
 .body {
-  @apply relative z-1 ml-6.25 min-h-6.25 w-[calc(100%-25px)] rounded border-0 bg-transparent py-0.75 leading-4 text-secondary whitespace-pre-wrap;
+  @apply relative z-1 ml-7 min-h-7 w-[calc(100%-28px)] rounded-md border-0 bg-transparent px-0 py-1 text-xs leading-5 text-foreground whitespace-pre-wrap;
   overflow-wrap: anywhere;
 }
-
 .editableBody { @apply cursor-text text-left outline-none; }
-
-.editableBody:is(:hover, :focus-visible) { @apply text-foreground; }
-.readonlyBody { @apply pointer-events-none text-muted; }
-.editor { @apply relative z-1 mt-1 ml-6.25 grid gap-1.5; }
-
+.editableBody:hover { @apply text-accent; }
+.editableBody:focus-visible { @apply shadow-control; }
+.readonlyBody { @apply pointer-events-none text-secondary; }
+.editor { @apply relative z-1 mt-2 ml-7 grid gap-3; }
 .textarea {
-  @apply min-h-19.5 w-full resize-y rounded-md border border-border bg-input px-1.75 py-1.5 leading-4 text-inherit outline-none;
+  @apply min-h-28 w-full resize-y rounded-lg border border-border-subtle px-3 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted;
+  background: var(--pdf-control-background);
 }
-
-.textarea:focus { @apply border-accent; }
-.actions { @apply flex justify-end gap-1.25; }
-
-:global(:root[data-viewer-theme='nord']) .panel { @apply bg-app; }
-:global(:root[data-viewer-theme='nord']) .item { @apply border-border bg-surface-alt; }
-:global(:root[data-viewer-theme='nord']) .item[data-editing='true'],
-:global(:root[data-viewer-theme='nord']) .item:has(.cardTarget:hover) { @apply bg-selected; }
-:global(:root[data-viewer-theme='dark']) .item[data-editing='true'] { @apply border-border; }
+.textarea:focus { @apply border-accent shadow-control; }
+.actions { @apply flex justify-end gap-2; }
+@media (max-width: 640px) {
+  .list { @apply p-0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .item { transition: none; }
+}

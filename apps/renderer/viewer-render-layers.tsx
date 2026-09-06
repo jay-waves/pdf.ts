@@ -1,71 +1,16 @@
 import { useDocumentState } from '@embedpdf/core/react';
-import { PdfErrorCode, type PdfTask } from '@embedpdf/models';
 import { useRenderCapability } from '@embedpdf/plugin-render/react';
 import { useTilingCapability, type Tile } from '@embedpdf/plugin-tiling/react';
 import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type HTMLAttributes,
   type ImgHTMLAttributes,
 } from 'react';
-import { recordRenderTiming } from './viewer-diagnostics';
+import { useRenderUrl } from './use-render-url';
 import { completeStartupLog, writeStartupLogOnce } from '../viewer/startup-log';
-
-function useRenderUrl(
-  start: () => PdfTask<Blob> | null,
-  kind: 'base' | 'tile',
-  cancelMessage: string,
-) {
-  const [url, setUrl] = useState<string>();
-  const urlRef = useRef<string | null>(null);
-  const revoke = useCallback(() => {
-    if (!urlRef.current) return;
-    URL.revokeObjectURL(urlRef.current);
-    urlRef.current = null;
-  }, []);
-
-  useEffect(() => {
-    setUrl(undefined);
-    revoke();
-    const task = start();
-    if (!task) return;
-
-    const startedAt = performance.now();
-    let active = true;
-    let settled = false;
-    task.wait((blob) => {
-      settled = true;
-      if (!active) return;
-      const elapsed = performance.now() - startedAt;
-      recordRenderTiming(kind, elapsed);
-      if (kind === 'base') {
-        writeStartupLogOnce('first-raster-generated', 'Page raster generated', `${elapsed.toFixed(0)} ms`);
-      }
-      const nextUrl = URL.createObjectURL(blob);
-      urlRef.current = nextUrl;
-      setUrl(nextUrl);
-    }, (failure) => {
-      settled = true;
-      if (kind === 'base' && active && failure.reason.code !== PdfErrorCode.Cancelled) {
-        console.error('[pdf-ts] Page raster failed', {
-          code: failure.reason.code,
-          message: failure.reason.message,
-        });
-      }
-    });
-
-    return () => {
-      active = false;
-      revoke();
-      if (!settled) task.abort({ code: PdfErrorCode.Cancelled, message: cancelMessage });
-    };
-  }, [cancelMessage, kind, revoke, start]);
-
-  return [url, revoke] as const;
-}
 
 export function RasterLayer({
   documentId,
@@ -91,7 +36,7 @@ export function RasterLayer({
     }) ?? null,
     [documentId, dpr, pageIndex, refreshVersion, render, scale],
   );
-  const [imageUrl, releaseImage] = useRenderUrl(start, 'base', 'Raster layer changed');
+  const [imageUrl, releaseImage] = useRenderUrl(start, 'base');
 
   useEffect(() => {
     writeStartupLogOnce(
@@ -108,7 +53,7 @@ export function RasterLayer({
       src={imageUrl}
       style={{ width: '100%', height: '100%', ...style }}
       onLoad={(event) => {
-        releaseImage();
+        releaseImage?.();
         onLoad?.(event);
         completeStartupLog('First page ready', `page ${pageIndex + 1}`);
       }}
@@ -141,7 +86,7 @@ function TileImage({
     // restart rendering when the tiling plugin republishes equivalent tiles.
     [dpr, pageIndex, scope, tile.id],
   );
-  const [imageUrl, releaseImage] = useRenderUrl(start, 'tile', 'Tile layer changed');
+  const [imageUrl, releaseImage] = useRenderUrl(start, 'tile');
 
   if (!imageUrl) return null;
   return (

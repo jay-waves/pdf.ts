@@ -4,14 +4,14 @@ export type RenderDprMode = 'auto' | '1.25' | '1.5' | '1.75' | 'system';
 
 const AUTO_DPR_LIMIT = 1.75;
 export const PDF_TILE_SIZE_CSS_PX = 768;
-const systemDpr = window.devicePixelRatio || 1;
 
 export function getSystemDpr() {
-  return systemDpr;
+  return window.devicePixelRatio || 1;
 }
 
 export function getEffectiveRenderDpr(
   mode = viewerDiagnosticsStore.getState().renderDprMode,
+  systemDpr = getSystemDpr(),
 ) {
   if (mode === 'auto') return Math.min(systemDpr, AUTO_DPR_LIMIT);
   if (mode === 'system') return systemDpr;
@@ -21,30 +21,23 @@ export function getEffectiveRenderDpr(
 export function setRenderDprMode(mode: RenderDprMode) {
   viewerDiagnosticsStore.setState((state) => ({
     ...EMPTY_SNAPSHOT,
+    systemDpr: getSystemDpr(),
     renderDprMode: mode,
     errors: state.errors,
   }));
 }
 
-export function installRenderDprOverride() {
-  const ownDescriptor = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
-  try {
-    Object.defineProperty(window, 'devicePixelRatio', {
-      configurable: true,
-      get: getEffectiveRenderDpr,
-    });
-  } catch {
-    return () => undefined;
-  }
-
-  return () => {
-    try {
-      if (ownDescriptor) Object.defineProperty(window, 'devicePixelRatio', ownDescriptor);
-      else Reflect.deleteProperty(window, 'devicePixelRatio');
-    } catch {
-      // Keeping the render-only override is safer than failing viewer cleanup.
-    }
+export function installRenderDprMonitor() {
+  let query: MediaQueryList;
+  const update = () => {
+    query?.removeEventListener('change', update);
+    const systemDpr = getSystemDpr();
+    viewerDiagnosticsStore.setState({ systemDpr });
+    query = window.matchMedia(`(resolution: ${systemDpr}dppx)`);
+    query.addEventListener('change', update);
   };
+  update();
+  return () => query.removeEventListener('change', update);
 }
 
 type TimingStats = {
@@ -54,6 +47,7 @@ type TimingStats = {
 };
 
 type ViewerDiagnosticsSnapshot = {
+  systemDpr: number;
   renderDprMode: RenderDprMode;
   basePixels: number;
   tilePixels: number;
@@ -65,6 +59,7 @@ type ViewerDiagnosticsSnapshot = {
 
 const EMPTY_TIMING: TimingStats = { count: 0, last: 0, average: 0 };
 const EMPTY_SNAPSHOT: ViewerDiagnosticsSnapshot = {
+  systemDpr: getSystemDpr(),
   renderDprMode: 'auto',
   basePixels: 0,
   tilePixels: 0,
@@ -119,6 +114,7 @@ export function recordViewerError(value: unknown) {
 export function resetViewerDiagnostics() {
   viewerDiagnosticsStore.setState((state) => ({
     ...EMPTY_SNAPSHOT,
+    systemDpr: getSystemDpr(),
     renderDprMode: state.renderDprMode,
     errors: state.errors,
   }));

@@ -149,7 +149,6 @@ const workerScope = self as unknown as {
   postMessage(message: unknown, transfer?: Transferable[]): void;
   onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null;
 };
-const activeTasks = new Map<string, WorkerTask>();
 const originalSizes = new Map<string, number>();
 let native: PdfiumNative | null = null;
 let renderTheme: PdfRenderTheme | null = null;
@@ -269,15 +268,12 @@ function invoke(engine: PdfiumNative, request: ExecuteRequest) {
 }
 
 function forwardTask(id: string, task: WorkerTask) {
-  activeTasks.set(id, task);
   task.onProgress((progress) => respond(id, { type: 'progress', progress }));
   task.wait(
     (value) => {
-      activeTasks.delete(id);
       respond(id, { type: 'result', data: value }, getResultTransfer(value));
     },
     (error) => {
-      activeTasks.delete(id);
       respond(id, { type: 'error', error });
     },
   );
