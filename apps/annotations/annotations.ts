@@ -144,6 +144,13 @@ const SINGLE_COLOR_TOOL_IDS = new Set([
   'textComment',
 ]);
 
+const VECTOR_TOOL_IDS = new Set([
+  'square', 'circle', 'polygon', 'line', 'lineArrow', 'polyline', 'ink',
+  'underline', 'strikeout', 'squiggly', 'freeTextCallout',
+]);
+export const VECTOR_ANNOTATION_OPACITY = 0.75;
+export const VECTOR_ANNOTATION_STROKE_WIDTH = 1.25;
+
 const SHAPE_TOOL_IDS = new Set(['square', 'circle', 'polygon']);
 const STROKE_COLOR_ALIAS_TOOL_IDS = new Set([
   'highlight',
@@ -283,7 +290,7 @@ export function getAnnotationPresetPatch(
   const highlight = toolId === 'highlight' || toolId === 'inkHighlighter';
   return {
     ...getAnnotationColorPatch(toolId, field, color),
-    opacity: highlight ? 0.28 : 1,
+    opacity: highlight ? 0.28 : toolId && VECTOR_TOOL_IDS.has(toolId) ? VECTOR_ANNOTATION_OPACITY : 1,
     ...(highlight ? { blendMode: PdfBlendMode.Normal } : {}),
   };
 }
@@ -374,7 +381,7 @@ export function createTextMarkupAnnotations(
       rect: selection.rect,
       segmentRects: selection.segmentRects,
       strokeColor: ANNOTATION_PALETTES[viewerThemeStore.getState().theme][0],
-      opacity: isHighlight ? 0.28 : 1,
+      opacity: isHighlight ? 0.28 : VECTOR_ANNOTATION_OPACITY,
       ...(isHighlight ? { blendMode: PdfBlendMode.Normal } : {}),
       custom: slice ? { pdfTs: { textSlice: {
         charIndex: slice.start,
@@ -394,9 +401,9 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
     deactivateToolAfterCreate: true,
     colorPresets: DEFAULT_ANNOTATION_COLORS,
     tools: [
-      ...['square', 'lineArrow', 'ink'].map((id) => ({
+      ...[...VECTOR_TOOL_IDS].map((id) => ({
         id,
-        defaults: { strokeWidth: 2 },
+        defaults: { strokeWidth: VECTOR_ANNOTATION_STROKE_WIDTH, opacity: VECTOR_ANNOTATION_OPACITY },
       })),
       {
         id: 'highlight',

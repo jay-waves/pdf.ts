@@ -6,6 +6,7 @@ import { viewerThemeStore } from '../theme/theme';
 import { ANNOTATION_PALETTES, getAnnotationPaletteIndex } from './theme-palette';
 import {
   DEFAULT_HIGHLIGHT_COLOR,
+  TRANSPARENT_ANNOTATION_COLOR,
   getAnnotationCapability,
   getAnnotationColorFields,
   getAnnotationPresetPatch,
@@ -174,9 +175,18 @@ export function ColorPalette({
               aria-pressed={currentIndex === index}
             >
               <span className={styles.color} />
-              <span className={styles.number}>{number}</span>
             </button>;
           })}
+          {selectedField === 'color' || selectedField === 'backgroundColor' ? <button
+            type="button"
+            className={styles.swatch}
+            data-active={currentColor === TRANSPARENT_ANNOTATION_COLOR ? 'true' : undefined}
+            onClick={() => applyColor(TRANSPARENT_ANNOTATION_COLOR)}
+            aria-label="Transparent"
+            aria-pressed={currentColor === TRANSPARENT_ANNOTATION_COLOR}
+          >
+            <span className={`${styles.color} ${styles.transparent}`} />
+          </button> : null}
         </div>
 
       </div>;

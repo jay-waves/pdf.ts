@@ -37,7 +37,7 @@ import {
   Underline,
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
-import { getPluginCapability, normalizePdfText } from '../shared/utils';
+import { getPluginCapability, isEditableTarget, normalizePdfText } from '../shared/utils';
 import { getExternalUrl, getSelectedExternalUrl } from '../shared/url';
 import { platform } from '#platform';
 import { getDocument } from '../document/viewer-document';
@@ -70,6 +70,12 @@ async function copyText(value: string) {
   value = normalizePdfText(value);
   if (!value) return;
   await navigator.clipboard.writeText(value);
+}
+
+function copySelectedText(selection: ReturnType<SelectionCapability['forDocument']>) {
+  return selection.getSelectedText().toPromise()
+    .then((parts) => copyText(parts.join('\n')))
+    .catch((error) => console.error('[pdf-ts] failed to copy selected text', error));
 }
 
 function getPersistedTextSlice(annotation: PdfTextMarkupAnnotation) {
@@ -215,6 +221,45 @@ export function ContextMenu({
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
 
   useEffect(() => {
+    if (!registry || !documentId) return;
+    const selection = getPluginCapability<SelectionCapability>(registry, 'selection')
+      ?.forDocument(documentId);
+    const annotation = getAnnotationScope(registry, documentId)?.scope;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.altKey || event.shiftKey
+        || event.composedPath().some(isEditableTarget)
+        || isEditableTarget(window.document.activeElement)
+        || window.document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
+        if (window.getSelection()?.toString() || !selection
+          || !Object.values(selection.getState().slices).some(({ count }) => count > 0)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void copySelectedText(selection);
+      } else if (!event.ctrlKey && !event.metaKey
+        && (event.key === 'Delete' || event.key === 'Backspace')) {
+        const selected = annotation?.getSelectedAnnotations()
+          .filter(({ object }) => !annotation.isAnnotationStructurallyLocked(object));
+        if (!selected?.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        annotation?.deleteAnnotations(selected.map(({ object }) => ({
+          pageIndex: object.pageIndex,
+          id: object.id,
+        })));
+      } else {
+        return;
+      }
+      setMenu(null);
+    };
+
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [documentId, registry]);
+
+  useEffect(() => {
     if (!registry || !documentId || !scroll || !container) return;
     const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
     const annotation = getAnnotationScope(registry, documentId)?.scope;
@@ -289,11 +334,8 @@ export function ContextMenu({
 
   const selectionItems = [
     { label: 'Copy', icon: Copy, action: () => {
-      const selectedText = selectionScope?.getSelectedText();
       setMenu(null);
-      selectedText?.toPromise()
-        .then((parts) => copyText(parts.join('\n')))
-        .catch((error) => console.error('[pdf-ts] failed to copy selected text', error));
+      if (selectionScope) void copySelectedText(selectionScope);
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
     { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },

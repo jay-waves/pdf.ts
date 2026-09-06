@@ -48,7 +48,7 @@
   --pdf-border-default: #dbe3ef;
   --pdf-border-subtle: #e5e7eb;
   --pdf-accent-primary: #2563eb;
-  --pdf-text-selection-color: #2563eb;
+  --pdf-text-selection-color: rgb(71 120 188 / 22%);
   --pdf-danger-primary: #b42318;
   --pdf-scrollbar-thumb: #cbd5e1;
   --pdf-scrollbar-thumb-hover: #94a3b8;

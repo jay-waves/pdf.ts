@@ -12,10 +12,19 @@
 .target:hover { @apply bg-hover; }
 .target[data-active='true'] { @apply bg-selected text-foreground; }
 .target:focus-visible { @apply shadow-control; }
-.grid { @apply grid grid-cols-6 gap-2; }
-.swatch { @apply grid min-w-0 cursor-pointer gap-1.5 rounded-md border-0 bg-transparent p-0 text-secondary outline-none; }
+.grid {
+  @apply flex justify-between gap-2;
+}
+.swatch {
+  @apply grid min-w-0 cursor-pointer rounded-md border-0 bg-transparent p-0 text-secondary outline-none;
+  flex: 0 1 36px;
+}
 .color { @apply block aspect-square rounded-md; background: var(--pdf-swatch-color); }
-.number { @apply text-center text-[10px] leading-4 tabular-nums; }
-.swatch[data-active='true'] .number { @apply font-semibold text-foreground underline underline-offset-4; }
-.swatch:hover .number { @apply text-foreground; }
+.transparent {
+  background-color: var(--pdf-background-surface);
+  background-image: conic-gradient(from 90deg, transparent 25%, color-mix(in srgb, var(--pdf-foreground-primary) 18%, transparent) 0 50%, transparent 0 75%, color-mix(in srgb, var(--pdf-foreground-primary) 18%, transparent) 0);
+  background-size: 10px 10px;
+}
+.swatch[data-active='true'] { outline: 2px solid var(--pdf-foreground-primary); outline-offset: 3px; }
+.swatch:hover .color { box-shadow: inset 0 0 0 2px var(--pdf-foreground-primary); }
 .swatch:focus-visible { @apply shadow-control; }

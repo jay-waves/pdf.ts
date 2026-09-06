@@ -14,6 +14,8 @@ import type { ComponentProps } from 'react';
 import { MessageSquareMore } from 'lucide-react';
 import {
   getThemeHighlightPolicy,
+  VECTOR_ANNOTATION_OPACITY,
+  VECTOR_ANNOTATION_STROKE_WIDTH,
   hasAutoAnnotationStrokeColor,
   hasAutoHighlightColor,
   hasAutoAnnotationTextColor,
@@ -153,7 +155,7 @@ type ThemeLineMarkupProps = {
 };
 
 function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMarkupProps) {
-  const thickness = 1.5 * scale;
+  const thickness = VECTOR_ANNOTATION_STROKE_WIDTH * scale;
   return <>
     {annotation.segmentRects.map((segment, index) => <div
       key={index}
@@ -175,8 +177,11 @@ function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMar
         left: 0,
         width: '100%',
         height: thickness,
-        background: 'var(--pdf-annotation-auto-stroke)',
-        opacity: annotation.opacity ?? 0.5,
+        background: hasAutoAnnotationStrokeColor(annotation)
+          ? 'var(--pdf-annotation-auto-stroke)'
+          : annotation.strokeColor ?? annotation.color,
+        borderRadius: thickness / 2,
+        opacity: annotation.opacity ?? VECTOR_ANNOTATION_OPACITY,
         pointerEvents: 'none',
         ...(placement === 'bottom'
           ? { bottom: 0 }
@@ -190,7 +195,6 @@ export const themeUnderlineRenderer = createRenderer<PdfUnderlineAnnoObject>({
   id: 'themeUnderline',
   matches: (annotation): annotation is PdfUnderlineAnnoObject => (
     annotation.type === PdfAnnotationSubtype.UNDERLINE
-    && hasAutoAnnotationStrokeColor(annotation)
   ),
   useAppearanceStream: false,
   zIndex: 0,
@@ -211,7 +215,6 @@ export const themeStrikeoutRenderer = createRenderer<PdfStrikeOutAnnoObject>({
   id: 'themeStrikeout',
   matches: (annotation): annotation is PdfStrikeOutAnnoObject => (
     annotation.type === PdfAnnotationSubtype.STRIKEOUT
-    && hasAutoAnnotationStrokeColor(annotation)
   ),
   useAppearanceStream: false,
   zIndex: 0,

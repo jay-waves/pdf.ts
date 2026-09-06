@@ -298,7 +298,6 @@ function App({
     documentId,
     searchOpen,
     thumbnailsOpen: sidePanel?.type === 'thumbnails',
-    colorPaletteOpen: sidePanel?.type === 'colors',
     panMode,
     signatureCount: signatures.length,
     canSave: isDirty,

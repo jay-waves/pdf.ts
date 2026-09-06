@@ -21,7 +21,6 @@ import {
   MoveUpRight,
   Moon,
   Palette,
-  PaintBucket,
   PenLine,
   Pin,
   Plus,
@@ -66,7 +65,6 @@ interface ToolbarFeedback extends ViewerCapabilityFeedback {
   documentId?: string | null;
   searchOpen: boolean;
   thumbnailsOpen: boolean;
-  colorPaletteOpen: boolean;
   panMode: boolean;
   signatureCount: number;
   canSave: boolean;
@@ -193,7 +191,6 @@ export function Toolbar({
     documentId,
     searchOpen,
     thumbnailsOpen,
-    colorPaletteOpen,
     panMode,
     signatureCount,
     canSave,
@@ -555,13 +552,6 @@ export function Toolbar({
               />
             ))}
             <FloatingToolbarDivider />
-            <IconButton
-              label="Colors"
-              icon={PaintBucket}
-              active={colorPaletteOpen}
-              disabled={!canUseDocument}
-              onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'colors' })}
-            />
             <IconButton
               label="Undo"
               icon={Undo2}
