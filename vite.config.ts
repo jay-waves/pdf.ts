@@ -33,7 +33,7 @@ export default defineConfig({
         cpSync(resolve(import.meta.dirname, 'licenses'), resolve(resolvedOutputDir, 'licenses'), {
           recursive: true,
         });
-        cpSync(resolve(import.meta.dirname, 'assets/icon.png'), resolve(resolvedOutputDir, 'icon.png'));
+        cpSync(resolve(import.meta.dirname, 'assets/logo.png'), resolve(resolvedOutputDir, 'logo.png'));
       },
     },
   ],

@@ -1,7 +1,12 @@
-# PDF.ts
+<p align="center">
+  <img src="assets/logo.png" width="96" alt="PDF.ts logo">
+</p>
 
-A polished PDF viewer powered by EmbedPDF, available for the web, Chrome,
-Linux, Windows, and macOS.
+<h1 align="center">PDF.ts</h1>
+
+<p align="center">A polished PDF viewer powered by EmbedPDF.</p>
+
+Available for the web, Chrome, Linux, Windows, and macOS.
 
 The browser build targets ES2025 and requires Chrome/Edge 152+, Firefox 154+,
 Safari 26+, or iOS 26+.

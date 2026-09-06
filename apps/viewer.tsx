@@ -481,7 +481,7 @@ function Welcome({
         role="button"
         tabIndex={0}
       >
-        <img className="size-13.5" src="./icon.png" alt="" />
+        <img className="size-13.5" src="./logo.png" alt="" />
         <h1 className="mt-4.5 mb-0 text-[25px]">PDF.ts</h1>
         <p className="mt-3 mb-0 text-[13px] font-semibold text-muted">
           Click to choose or drop a PDF
