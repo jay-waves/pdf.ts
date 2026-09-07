@@ -34,7 +34,6 @@ import {
   Sun,
   TextSearch,
   Type,
-  Underline,
   Undo2,
   Wrench,
 } from 'lucide-react';
@@ -91,7 +90,6 @@ const PRIMARY_ITEMS: Array<{
 
 const DRAW_TOOLS = [
   { id: 'highlight', label: 'Highlight', icon: Highlighter },
-  { id: 'underline', label: 'Underline', icon: Underline },
   { id: 'strikeout', label: 'Strikeout', icon: Strikethrough },
   { id: 'square', label: 'Rectangle', icon: Square },
   { id: 'lineArrow', label: 'Arrow', icon: MoveUpRight },

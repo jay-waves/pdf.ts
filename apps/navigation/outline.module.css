@@ -12,8 +12,8 @@
   @apply text-left text-[11px] leading-4 text-inherit outline-none transition-[background-color,border-color,color] duration-150 ease-control motion-reduce:transition-none;
 }
 
-.bookmark[data-current='true'] { @apply bg-selected text-accent; }
 .bookmark:hover { @apply bg-hover; }
+.bookmark[data-current='true'] { @apply bg-selected text-accent; border-color: color-mix(in srgb, var(--pdf-accent-primary) 24%, transparent); }
 .bookmark:focus-visible { @apply border-accent shadow-control; }
 .bookmark:disabled { @apply cursor-default opacity-48; }
 

@@ -379,12 +379,16 @@ function BookmarkList({
         const title = bookmark.title || `Item ${index + 1}`;
         const bookmarkPath = [...path, index];
         const bookmarkKey = bookmarkPath.join('.');
-        const isCurrent = selectedBookmarkKey.length > 0 && bookmarkKey === selectedBookmarkKey;
+        const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
+        const isCurrent = selectedBookmarkKey.length > 0 && (
+          bookmarkKey === selectedBookmarkKey
+          || (children.length > 0 && !isExpanded && selectedBookmarkKey.startsWith(`${bookmarkKey}.`))
+        );
 
         if (children.length) {
           return (
             <li key={bookmarkKey}>
-              <details open={expandedBookmarkKeys.has(bookmarkKey)}>
+              <details open={isExpanded}>
                 <summary
                   className={styles.bookmark}
                   data-outline-bookmark

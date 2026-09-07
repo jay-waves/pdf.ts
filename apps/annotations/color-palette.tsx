@@ -3,9 +3,8 @@ import type { PluginRegistry } from '@embedpdf/core';
 import type { TrackedAnnotation } from '@embedpdf/plugin-annotation';
 import { useStore } from 'zustand';
 import { viewerThemeStore } from '../theme/theme';
-import { ANNOTATION_PALETTES, getAnnotationPaletteIndex } from './theme-palette';
+import { ANNOTATION_PALETTES, getAnnotationPaletteIndex, getDefaultAnnotationColor } from './theme-palette';
 import {
-  DEFAULT_HIGHLIGHT_COLOR,
   TRANSPARENT_ANNOTATION_COLOR,
   getAnnotationCapability,
   getAnnotationColorFields,
@@ -106,7 +105,7 @@ export function ColorPalette({
   const colorFields = getAnnotationColorFields(toolId, values);
   const currentColor =
     normalizeAnnotationColor(values[selectedField]) ??
-    DEFAULT_HIGHLIGHT_COLOR;
+    getDefaultAnnotationColor(theme);
   const currentIndex = getAnnotationPaletteIndex(currentColor);
 
   const applyPatch = (patch: Record<string, unknown>) => {

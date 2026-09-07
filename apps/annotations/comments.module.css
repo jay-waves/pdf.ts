@@ -18,11 +18,12 @@
   @apply transition-[border-color,background-color] duration-150 ease-control;
 }
 .item + .item::after { @apply pointer-events-none absolute -top-px right-3 left-3 h-px bg-border-subtle; content: ''; }
-.item[data-editing='true'] { background: color-mix(in srgb, var(--pdf-accent-primary) 5%, transparent); border-color: color-mix(in srgb, var(--pdf-accent-primary) 22%, transparent); }
+.item[data-editing='true'] { @apply bg-hover; }
+.item[data-editing='true'] .type { @apply text-accent; }
 .item:has(.cardTarget:hover) { @apply bg-hover; }
-.item:has(.cardTarget:focus-visible) { @apply border-accent; }
+.item:has(.cardTarget:focus-visible) :is(.type, .body) { @apply text-accent; }
 .cardTarget { @apply absolute inset-0 z-0 cursor-pointer rounded-[inherit] border-0 bg-transparent p-0 outline-none; }
-.heading { @apply pointer-events-none relative z-1 grid min-h-7 grid-cols-[28px_minmax(0,1fr)] items-center py-px text-left; }
+.heading { @apply pointer-events-none relative z-1 grid min-h-7 grid-cols-[28px_minmax(0,1fr)_auto] items-center py-px text-left; }
 .icon { @apply grid size-6 place-items-center text-accent; }
 .type { @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-medium text-secondary; }
 .body {
@@ -31,15 +32,15 @@
 }
 .editableBody { @apply cursor-text text-left outline-none; }
 .editableBody:hover { @apply text-accent; }
-.editableBody:focus-visible { @apply shadow-control; }
+.editableBody:focus-visible { @apply text-accent; }
 .readonlyBody { @apply pointer-events-none text-secondary; }
-.editor { @apply relative z-1 mt-2 ml-7 grid gap-3; }
+.editor { @apply relative z-1 mt-2 ml-7; }
 .textarea {
-  @apply min-h-28 w-full resize-y rounded-lg border border-border-subtle px-3 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted;
+  @apply h-28 w-full resize-none overflow-y-auto rounded-lg border-0 px-3 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted;
   background: var(--pdf-control-background);
 }
-.textarea:focus { @apply border-accent shadow-control; }
-.actions { @apply flex justify-end gap-2; }
+.textarea:focus { @apply text-accent; }
+.actions { @apply pointer-events-auto flex items-center justify-end gap-1 pl-2 text-secondary; }
 @media (max-width: 640px) {
   .list { @apply p-0; }
 }

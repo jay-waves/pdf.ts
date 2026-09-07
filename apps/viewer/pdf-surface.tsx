@@ -186,6 +186,16 @@ function PdfPageLayers({
           pageIndex={pageIndex}
           annotationRenderers={ANNOTATION_RENDERERS}
           customAnnotationRenderer={themeAnnotationColorRenderer}
+          selectionOutline={{ color: 'var(--pdf-accent-primary)' }}
+          groupSelectionOutline={{ color: 'var(--pdf-accent-primary)' }}
+          resizeUI={{ color: 'var(--pdf-accent-primary)' }}
+          vertexUI={{ color: 'var(--pdf-accent-primary)' }}
+          rotationUI={{
+            color: 'var(--pdf-background-surface)',
+            border: { color: 'var(--pdf-accent-primary)' },
+            connectorColor: 'var(--pdf-accent-primary)',
+            iconColor: 'var(--pdf-accent-primary)',
+          }}
         />
       </PagePointerProvider>
     </Rotate>

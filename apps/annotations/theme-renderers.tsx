@@ -12,6 +12,9 @@ import {
 import { createRenderer, type CustomAnnotationRenderer } from '@embedpdf/plugin-annotation/react';
 import type { ComponentProps } from 'react';
 import { MessageSquareMore } from 'lucide-react';
+import { useStore } from 'zustand';
+import { isDarkViewerTheme, viewerThemeStore } from '../theme/theme';
+import { getThemeAnnotationColor } from './theme-palette';
 import {
   getThemeHighlightPolicy,
   VECTOR_ANNOTATION_OPACITY,
@@ -109,13 +112,14 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
   id: 'themeHighlight',
   matches: (annotation): annotation is PdfHighlightAnnoObject => (
     isHighlight(annotation)
-    && hasAutoHighlightColor(annotation)
   ),
   useAppearanceStream: false,
   zIndex: 0,
   defaultBlendMode: PdfBlendMode.Multiply,
   containerStyle: (annotation) => ({
-    mixBlendMode: blendModeToCss(getHighlightAppearance(annotation).blendMode),
+    mixBlendMode: isDarkViewerTheme(viewerThemeStore.getState().theme)
+      ? 'normal'
+      : blendModeToCss(getHighlightAppearance(annotation).blendMode),
   }),
   interactionDefaults: {
     isDraggable: false,
@@ -123,8 +127,14 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
     isRotatable: false,
   },
   render: ({ currentObject, scale, onClick }) => {
+    const theme = useStore(viewerThemeStore, (state) => state.theme);
+    const dark = isDarkViewerTheme(theme);
     const policy = getThemeHighlightPolicy();
     const { opacity } = getHighlightAppearance(currentObject);
+    const color = hasAutoHighlightColor(currentObject)
+      ? policy.color
+      : getThemeAnnotationColor(currentObject.strokeColor ?? currentObject.color, theme)
+        ?? currentObject.strokeColor ?? currentObject.color ?? policy.color;
 
     return <>
       {currentObject.segmentRects.map((segment, index) => <div
@@ -136,13 +146,25 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
           top: (segment.origin.y - currentObject.rect.origin.y) * scale,
           width: segment.size.width * scale,
           height: segment.size.height * scale,
-          background: policy.color,
-          opacity,
+          background: dark ? 'transparent' : color,
+          opacity: dark ? 1 : opacity,
           pointerEvents: onClick ? 'auto' : 'none',
           cursor: onClick ? 'pointer' : 'default',
           zIndex: onClick ? 1 : undefined,
         }}
-      />)}
+      >
+        {dark ? <div style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: VECTOR_ANNOTATION_STROKE_WIDTH * scale,
+          borderRadius: VECTOR_ANNOTATION_STROKE_WIDTH * scale / 2,
+          background: color,
+          opacity: VECTOR_ANNOTATION_OPACITY,
+          pointerEvents: 'none',
+        }} /> : null}
+      </div>)}
     </>;
   },
 });

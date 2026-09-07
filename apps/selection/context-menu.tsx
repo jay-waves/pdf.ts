@@ -34,7 +34,6 @@ import {
   PaintBucket,
   Strikethrough,
   Trash2,
-  Underline,
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
 import { getPluginCapability, isEditableTarget, normalizePdfText } from '../shared/utils';
@@ -338,7 +337,6 @@ export function ContextMenu({
       if (selectionScope) void copySelectedText(selectionScope);
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
-    { label: 'Underline', icon: Underline, action: () => addTextMarkup(PdfAnnotationSubtype.UNDERLINE) },
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
     { label: 'Translate', icon: Languages, action: () => {
       dispatch({

@@ -29,7 +29,7 @@ import { ColorPalette } from './annotations/color-palette';
 import {
   installAnnotationDirty,
   installAnnotationLinks,
-  installAnnotationPreview,
+  installAnnotationPalette,
   installCommentEditor,
 } from './annotations/annotations';
 import { Comments } from './annotations/comments';
@@ -276,7 +276,7 @@ function App({
       }),
       () => installScrollAttribute(nextScroll),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
-      () => installAnnotationPreview(nextRegistry, DOCUMENT_ID),
+      () => installAnnotationPalette(nextRegistry, DOCUMENT_ID),
       () => installCommentEditor(nextRegistry, (annotationId) => {
         dispatchCommand({ type: 'ui/open-comments', annotationId, isNew: true });
       }),
@@ -357,7 +357,6 @@ function App({
             scroll={pdfScroll}
             currentPageNumber={currentPageNumber}
             targetAnnotationId={commentTarget?.annotationId}
-            targetAnnotationIsNew={commentTarget?.isNew}
           />
         ) : null}
       </Dialog>
