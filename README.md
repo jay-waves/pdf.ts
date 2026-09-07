@@ -6,7 +6,7 @@
 
 <p align="center">A polished, local-first PDF reader and editor powered by EmbedPDF.</p>
 
-Available for the web, Chrome, Linux, Windows, and macOS.
+Available for the Chrome, Linux, Windows, and macOS. [Try it now!](https://jay-waves.cn/pdf.ts)
 
 <table>
   <tr>
