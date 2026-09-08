@@ -4,6 +4,8 @@ import { useGesture } from '@use-gesture/react';
 import { useViewportCapability, useViewportElement } from '@embedpdf/plugin-viewport/react';
 import { useInteractionManagerCapability } from '@embedpdf/plugin-interaction-manager/react';
 import { useZoomCapability } from '@embedpdf/plugin-zoom/react';
+import { useScrollCapability } from '@embedpdf/plugin-scroll/react';
+import { ZoomDetents } from './zoom-detents';
 import type { PdfScroll } from './pdf-scroll';
 import {
   pointerInputSource,
@@ -12,7 +14,8 @@ import {
 } from '../viewer/viewer-activity';
 
 const WHEEL_DELTA_LIMIT_PX = 50;
-const WHEEL_ZOOM_SENSITIVITY = 0.0012;
+const WHEEL_ZOOM_SENSITIVITY = 0.002;
+const PINCH_ZOOM_GAIN = 1.3;
 const MIN_ZOOM_LEVEL = 0.2;
 const MAX_ZOOM_LEVEL = 60;
 const PAN_DRAG_THRESHOLD_PX = 4;
@@ -105,6 +108,7 @@ export function ViewportInput({
   scroll?: PdfScroll | null;
 }) {
   const { provides: zoom } = useZoomCapability();
+  const { provides: scrollCapability } = useScrollCapability();
   const { provides: viewportCapability } = useViewportCapability();
   const { provides: interactionManager } = useInteractionManagerCapability();
   const viewportElementRef = useViewportElement();
@@ -164,10 +168,33 @@ export function ViewportInput({
     let inertiaFrame = 0;
     let wheelEndTimer = 0;
     let pendingZoomDelta = 0;
-    let pendingZoomLevel: number | null = null;
+    let pendingPinchDelta: number | null = null;
     let pendingScroll: { left: number; top: number } | null = null;
     let zoomAnchor = { vx: 0, vy: 0 };
     let pinchStartZoom: number | null = null;
+    let lastPinchScale = 1;
+    let detents: ZoomDetents | null = null;
+    let lastAppliedZoom = zoomScope.getState().currentZoomLevel;
+
+    const getZoomNodes = () => {
+      const nodes = [1, 1.5, 2];
+      const spreads = scrollCapability?.forDocument(documentId).getSpreadPagesWithRotatedSize();
+      if (!spreads?.length) return nodes;
+      const gap = scrollCapability?.getPageGap() ?? 0;
+      const inset = 2 * viewportCapability.getViewportGap();
+      const metrics = viewportScope.getMetrics();
+      let width = 0;
+      let height = 0;
+      for (const spread of spreads) {
+        width = Math.max(width, spread.reduce((sum, page, i) =>
+          sum + page.rotatedSize.width + (i ? gap : 0), 0));
+        for (const page of spread) height = Math.max(height, page.rotatedSize.height);
+      }
+      const fitWidth = (metrics.clientWidth - inset) / width;
+      const fitPage = Math.min(fitWidth, (metrics.clientHeight - inset) / height);
+      // Match the zoom plugin's precision so these are exact fit scales.
+      return [...nodes, fitPage, fitWidth].map((n) => Math.floor(n * 1000) / 1000);
+    };
     const replayedTouchEvents = new WeakSet<Event>();
     let touchGesture: {
       pointerId: number;
@@ -287,14 +314,15 @@ export function ViewportInput({
 
     const flushZoom = () => {
       zoomFrame = 0;
-      const requestedLevel = pendingZoomLevel;
+      const pinchDelta = pendingPinchDelta;
       const delta = pendingZoomDelta;
-      pendingZoomLevel = null;
+      pendingPinchDelta = null;
       pendingZoomDelta = 0;
 
       const currentZoom = zoomScope.getState().currentZoomLevel;
+      if (!detents || currentZoom !== lastAppliedZoom) detents = new ZoomDetents(currentZoom);
       const targetZoom = clamp(
-        requestedLevel ?? currentZoom * Math.exp(-delta * WHEEL_ZOOM_SENSITIVITY),
+        detents.move(pinchDelta ?? -delta * WHEEL_ZOOM_SENSITIVITY, getZoomNodes()),
         MIN_ZOOM_LEVEL,
         MAX_ZOOM_LEVEL,
       );
@@ -303,7 +331,9 @@ export function ViewportInput({
       // EmbedPDF calculates the anchor scroll synchronously but applies it in a
       // later frame. Commit the matching React layout first, then scroll the DOM
       // immediately so scale and position become visible in the same frame.
-      flushSync(() => zoomScope.requestZoom(targetZoom, zoomAnchor));
+      // Avoid flooring an exact detent one unit low due to exp/log rounding.
+      flushSync(() => zoomScope.requestZoom(targetZoom + 1e-10, zoomAnchor));
+      lastAppliedZoom = zoomScope.getState().currentZoomLevel;
       const metrics = viewportScope.getMetrics();
       viewport.scrollTo(metrics.scrollLeft, metrics.scrollTop);
       // EmbedPDF also queues the same scroll for its next frame. Queue our
@@ -340,11 +370,13 @@ export function ViewportInput({
         wheelEndTimer = 0;
         wheelActivity?.end();
         wheelActivity = null;
+        flushPendingZoom();
+        detents = null;
       }, 120);
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
         flushPendingScroll();
-        pendingZoomLevel = null;
+        pendingPinchDelta = null;
         pendingZoomDelta += normalizedZoomDelta(event, viewport.clientHeight);
         setAnchor(event.clientX, event.clientY);
         scheduleZoom();
@@ -352,6 +384,7 @@ export function ViewportInput({
       }
 
       flushPendingZoom();
+      detents = null;
       flushPendingScroll();
     };
 
@@ -368,19 +401,27 @@ export function ViewportInput({
         dragActivity = null;
         flushPendingInput();
         pendingZoomDelta = 0;
-        pendingZoomLevel = null;
+        pendingPinchDelta = null;
         pinchStartZoom = zoomScope.getState().currentZoomLevel;
+        lastPinchScale = 1;
+        detents = null;
         viewerActivity.controls('hide', 'Touch', ['Viewport', 'Zoom']);
         pinchActivity = viewerActivity.begin('Touch', ['Viewport', 'Zoom']);
       }
 
       if (pinchStartZoom !== null && !canceled) {
-        pendingZoomLevel = pinchStartZoom * movement[0];
+        if (movement[0] > 0) {
+          pendingPinchDelta = (pendingPinchDelta ?? 0)
+            + Math.log(movement[0] / lastPinchScale) * PINCH_ZOOM_GAIN;
+          lastPinchScale = movement[0];
+        }
         setAnchor(origin[0], origin[1]);
         scheduleZoom();
       }
 
       if (last || canceled) {
+        flushPendingZoom();
+        detents = null;
         pinchStartZoom = null;
         pinchActivity?.end();
         pinchActivity = null;
@@ -569,7 +610,8 @@ export function ViewportInput({
       if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
       zoomFrame = scrollFrame = 0;
       pendingZoomDelta = 0;
-      pendingZoomLevel = null;
+      pendingPinchDelta = null;
+      detents = null;
       pendingScroll = null;
       if (wheelEndTimer) {
         window.clearTimeout(wheelEndTimer);
@@ -603,7 +645,7 @@ export function ViewportInput({
       pinchHandlerRef.current = null;
       cancelInput();
     };
-  }, [documentId, interactionManager, panMode, scroll, viewportCapability, viewportElementRef, zoom]);
+  }, [documentId, interactionManager, panMode, scroll, scrollCapability, viewportCapability, viewportElementRef, zoom]);
 
   return null;
 }
