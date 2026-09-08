@@ -320,7 +320,12 @@ export function ViewportInput({
       pendingZoomDelta = 0;
 
       const currentZoom = zoomScope.getState().currentZoomLevel;
-      if (!detents || currentZoom !== lastAppliedZoom) detents = new ZoomDetents(currentZoom);
+      if (!detents || currentZoom !== lastAppliedZoom) {
+        detents = new ZoomDetents(currentZoom);
+        // A preset may have changed the scale since the last gesture. Remember
+        // it even while held: no requestZoom is issued on an unchanged frame.
+        lastAppliedZoom = currentZoom;
+      }
       const targetZoom = clamp(
         detents.move(pinchDelta ?? -delta * WHEEL_ZOOM_SENSITIVITY, getZoomNodes()),
         MIN_ZOOM_LEVEL,

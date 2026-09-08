@@ -5,12 +5,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type HTMLAttributes,
   type ImgHTMLAttributes,
 } from 'react';
 import { useRenderUrl } from './use-render-url';
 import { completeStartupLog, writeStartupLogOnce } from '../viewer/startup-log';
+import { viewerActivity } from '../viewer/viewer-activity';
+
+const ZOOM_TILE_SETTLE_MS = 120;
 
 export function RasterLayer({
   documentId,
@@ -67,12 +71,14 @@ function TileImage({
   tile,
   dpr,
   scale,
+  onReady,
 }: {
   documentId: string;
   pageIndex: number;
   tile: Tile;
   dpr: number;
   scale: number;
+  onReady(): void;
 }) {
   const { provides: tiling } = useTilingCapability();
   const scope = useMemo(
@@ -94,7 +100,10 @@ function TileImage({
       src={imageUrl}
       alt=""
       draggable={false}
-      onLoad={releaseImage}
+      onLoad={() => {
+        releaseImage?.();
+        onReady();
+      }}
       style={{
         position: 'absolute',
         left: tile.screenRect.origin.x * relativeScale,
@@ -117,28 +126,106 @@ export function TileLayer({
   pageIndex: number;
   dpr: number;
 }) {
-  const { provides: tiling } = useTilingCapability();
   const documentState = useDocumentState(documentId);
-  const [tiles, setTiles] = useState<Tile[]>([]);
   const scale = documentState?.scale ?? 1;
+  const refresh = documentState?.pageRefreshVersions[pageIndex] ?? 0;
+  const rotation = (documentState?.rotation ?? 0)
+    + (documentState?.document?.pages[pageIndex]?.rotation ?? 0);
+
+  return <SettledTileLayer
+    {...props}
+    key={`${documentId}-${pageIndex}-${dpr}-${refresh}-${rotation}`}
+    documentId={documentId}
+    pageIndex={pageIndex}
+    dpr={dpr}
+    scale={scale}
+  />;
+}
+
+type TileBatch = { id: string; tiles: Tile[] };
+
+function SettledTileLayer({ documentId, pageIndex, dpr, scale, ...props }: {
+  documentId: string;
+  pageIndex: number;
+  dpr: number;
+  scale: number;
+} & HTMLAttributes<HTMLDivElement>) {
+  const { provides: tiling } = useTilingCapability();
+  // Keep one complete batch beneath the newest batch until every image loads.
+  const [batches, setBatches] = useState<{ front?: TileBatch; pending?: TileBatch }>({});
+  const loaded = useRef(new Set<string>());
+  const tiles = useMemo(() => [...new Map(
+    [...(batches.front?.tiles ?? []), ...(batches.pending?.tiles ?? [])]
+      .map((tile) => [tile.id, tile]),
+  ).values()], [batches]);
+  const promote = useCallback(() => {
+    setBatches((current) => current.pending?.tiles.every((tile) => loaded.current.has(tile.id))
+      ? { front: current.pending }
+      : current);
+  }, []);
+
+  useEffect(() => {
+    const retained = new Set(tiles.map((tile) => tile.id));
+    for (const id of loaded.current) if (!retained.has(id)) loaded.current.delete(id);
+    // A scroll may request only tiles that are already loaded.
+    promote();
+  }, [tiles, promote]);
 
   useEffect(() => {
     if (!tiling) return;
-    return tiling.onTileRendering((event) => {
-      if (event.documentId === documentId) setTiles(event.tiles[pageIndex] ?? []);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let latest: Tile[] = [];
+    let lastScale: number | undefined;
+    const publish = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      const batch = { id: latest.map((tile) => tile.id).join('|'), tiles: latest };
+      setBatches((current) => {
+        if (!batch.tiles.length) return current.front || current.pending ? {} : current;
+        if ((current.pending ?? current.front)?.id === batch.id) return current;
+        if (current.front?.id === batch.id) return { front: current.front };
+        return { front: current.front, pending: batch };
+      });
+    };
+    const unsubscribe = tiling.onTileRendering((event) => {
+      if (event.documentId !== documentId) return;
+      latest = event.tiles[pageIndex] ?? [];
+      const nextScale = latest[0]?.srcScale;
+      if (nextScale !== undefined && lastScale !== undefined && nextScale !== lastScale) {
+        clearTimeout(timer);
+        timer = setTimeout(publish, ZOOM_TILE_SETTLE_MS);
+        // Retire unfinished work at the old scale; the complete batch stays.
+        setBatches((current) => current.pending ? { front: current.front } : current);
+      } else if (!timer) {
+        // Scrolling already has a throttle in the tiling plugin.
+        publish();
+      }
+      lastScale = nextScale ?? lastScale;
     });
+    const unsubscribeActivity = viewerActivity.onEvent((event) => {
+      if (event.phase === 'end' && event.path.includes('Zoom') && timer) publish();
+    });
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+      unsubscribeActivity();
+    };
   }, [documentId, pageIndex, tiling]);
 
   return (
     <div {...props}>
       {tiles.map((tile) => (
         <TileImage
-          key={`${tile.id}-${dpr}`}
+          key={tile.id}
+          tile={tile}
           documentId={documentId}
           pageIndex={pageIndex}
-          tile={tile}
           dpr={dpr}
           scale={scale}
+          onReady={() => {
+            loaded.current.add(tile.id);
+            promote();
+          }}
         />
       ))}
     </div>
