@@ -2,7 +2,7 @@
   "name": "pdf.ts",
   "license": "MIT",
   "private": true,
-  "version": "0.8.9",
+  "version": "0.8.10",
   "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=24"
