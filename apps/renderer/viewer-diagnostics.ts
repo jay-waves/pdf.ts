@@ -1,9 +1,18 @@
 import { createStore } from 'zustand/vanilla';
+import { platform } from '#platform';
 
 export type RenderDprMode = 'auto' | '1.25' | '1.5' | '1.75' | 'system';
 
 const AUTO_DPR_LIMIT = 1.75;
+const RENDER_DPR_STORAGE_KEY = 'pdf-viewer-render-dpr-v1';
 export const PDF_TILE_SIZE_CSS_PX = 768;
+
+function getStoredRenderDprMode(): RenderDprMode {
+  const mode = platform.getPreference(RENDER_DPR_STORAGE_KEY);
+  return mode === '1.25' || mode === '1.5' || mode === '1.75' || mode === 'system'
+    ? mode
+    : 'auto';
+}
 
 export function getSystemDpr() {
   return window.devicePixelRatio || 1;
@@ -19,6 +28,7 @@ export function getEffectiveRenderDpr(
 }
 
 export function setRenderDprMode(mode: RenderDprMode) {
+  platform.setPreference(RENDER_DPR_STORAGE_KEY, mode);
   viewerDiagnosticsStore.setState((state) => ({
     ...EMPTY_SNAPSHOT,
     systemDpr: getSystemDpr(),
@@ -91,7 +101,10 @@ function appendTiming(current: TimingStats, duration: number): TimingStats {
   };
 }
 
-export const viewerDiagnosticsStore = createStore<ViewerDiagnosticsSnapshot>(() => EMPTY_SNAPSHOT);
+export const viewerDiagnosticsStore = createStore<ViewerDiagnosticsSnapshot>(() => ({
+  ...EMPTY_SNAPSHOT,
+  renderDprMode: getStoredRenderDprMode(),
+}));
 
 export function recordRenderTiming(kind: 'base' | 'tile', duration: number) {
   viewerDiagnosticsStore.setState((state) => kind === 'base'

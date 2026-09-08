@@ -17,7 +17,7 @@ const THEME_PREVIEWS: Record<ViewerTheme, readonly [string, string, string]> = {
   light: ['#f8fafc', '#ffffff', '#2563eb'],
   solar: ['#f7f5ef', '#fbfaf6', '#5f8f86'],
   'catppuccin-latte': ['#dce0e8', '#eff1f5', '#8839ef'],
-  dark: ['#161616', '#333333', '#f4f4f4'],
+  dark: ['#1b1b1b', '#333333', '#dedede'],
   nord: ['#2e3440', '#434c5e', '#88c0d0'],
   gruvbox: ['#2d2c2a', '#504945', '#c7ce94'],
   'catppuccin-mocha': ['#292c3c', '#383c4f', '#cba6f7'],

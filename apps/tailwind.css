@@ -124,26 +124,26 @@
 }
 
 :root[data-viewer-theme='dark'] {
-  --pdf-background-app: #161616;
+  --pdf-background-app: #1b1b1b;
   --pdf-background-surface: #333333;
   --pdf-background-surface-alt: #262626;
-  --pdf-background-input: #161616;
+  --pdf-background-input: #1b1b1b;
   --pdf-background-elevated: var(--pdf-background-surface);
   --pdf-toolbar-background: #242424;
   --pdf-toolbar-secondary-background: #2c2c2c;
-  --pdf-foreground-primary: #f4f4f4;
+  --pdf-foreground-primary: #dedede;
   --pdf-foreground-secondary: #e0e0e0;
   --pdf-foreground-muted: #a8a8a8;
   --pdf-border-default: #333333;
   --pdf-border-subtle: #262626;
   --pdf-border-strong: #525252;
   --pdf-control-border: #525252;
-  --pdf-accent-primary: #f4f4f4;
+  --pdf-accent-primary: #dedede;
   --pdf-text-selection-color: rgb(224 224 224 / 20%);
   --pdf-danger-primary: #ff8389;
   --pdf-scrollbar-thumb: #525252;
   --pdf-scrollbar-thumb-hover: #6f6f6f;
-  --pdf-page-background: #050505;
+  --pdf-page-background: #1e1e1e;
   --pdf-page-shadow: rgb(0 0 0 / 32%);
   --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 94%, transparent);
   --pdf-glass-border: rgb(255 255 255 / 14%);
@@ -159,7 +159,7 @@
     0 26px 76px rgb(0 0 0 / 44%),
     inset 0 1px 0 var(--pdf-glass-highlight);
   --pdf-overlay-background: rgb(0 0 0 / 30%);
-  --pdf-tooltip-background: rgb(10 10 10 / 84%);
+  --pdf-tooltip-background: rgb(27 27 27 / 94%);
   --pdf-annotation-auto-stroke: #c6c6c6;
   --pdf-annotation-auto-text: #e8e8e8;
 }

@@ -30,7 +30,9 @@ const VIEWER_THEME_METADATA = [
     colorMode: 'dark',
     renderTheme: {
       mode: 'forced-colors',
-      background: 0xff242424,
+      // Compensate for the shared dark-page filter so the displayed background
+      // stays near #1e1e1e instead of being crushed to near-black.
+      background: 0xff3f3f3f,
       // Keep filled regions lighter than the page while retaining enough
       // contrast for the light text forced inside reverse-color labels.
       pathFill: 0xff626262,
