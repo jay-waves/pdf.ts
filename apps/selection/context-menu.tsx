@@ -243,6 +243,23 @@ export function ContextMenu({
       target instanceof HTMLElement && target.classList.contains('viewer')
     ));
 
+    const preserveSelection = (event: MouseEvent) => {
+      if (event.button !== 2 || !isViewerEvent(event) || !selection
+        || !Object.values(selection.getState().slices).some(({ count }) => count > 0)) return;
+      // The selection plugin clears on pointerdown, before contextmenu fires.
+      event.stopPropagation();
+      event.preventDefault();
+    };
+
+    const openAnnotationMenu = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const layer = target?.closest('.pdf-annotation-layer');
+      if (event.button !== 0 || !layer || target === layer
+        || event.composedPath().some(isEditableTarget)
+        || !annotation?.getSelectedAnnotations().length) return;
+      setMenu({ kind: 'annotation', x: event.clientX + 8, y: event.clientY + 8 });
+    };
+
     const openContextMenu = (event: MouseEvent) => {
       if (!isViewerEvent(event)) return;
       event.preventDefault();
@@ -259,8 +276,12 @@ export function ContextMenu({
       });
     };
 
+    container.addEventListener('pointerdown', preserveSelection, { capture: true });
+    container.addEventListener('click', openAnnotationMenu);
     container.addEventListener('contextmenu', openContextMenu, { capture: true });
     return () => {
+      container.removeEventListener('pointerdown', preserveSelection, { capture: true });
+      container.removeEventListener('click', openAnnotationMenu);
       container.removeEventListener('contextmenu', openContextMenu, { capture: true });
     };
   }, [container, documentId, registry]);

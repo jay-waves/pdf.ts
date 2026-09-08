@@ -19,12 +19,6 @@ const VIEWER_THEME_METADATA = [
     renderTheme: { mode: 'background', background: 0xfffbfaf6 },
   },
   {
-    id: 'catppuccin-latte',
-    label: 'Latte',
-    colorMode: 'light',
-    renderTheme: { mode: 'background', background: 0xffeff1f5 },
-  },
-  {
     id: 'dark',
     label: 'Dark',
     colorMode: 'dark',
@@ -67,19 +61,6 @@ const VIEWER_THEME_METADATA = [
       textStroke: 0xffcbc7ab,
     },
   },
-  {
-    id: 'catppuccin-mocha',
-    label: 'Mocha',
-    colorMode: 'dark',
-    renderTheme: {
-      mode: 'forced-colors',
-      background: 0xff383c4f,
-      pathFill: 0xff484c60,
-      pathStroke: 0xff5a9d93,
-      textFill: 0xff9ca5c7,
-      textStroke: 0xff9ca5c7,
-    },
-  },
 ] as const satisfies readonly ViewerThemeMetadata[];
 
 type ViewerThemeDefinition = (typeof VIEWER_THEME_METADATA)[number];
@@ -99,17 +80,6 @@ const LIGHT_THEME_STORAGE_KEY = 'pdf-viewer-light-theme-v2';
 const DARK_THEME_STORAGE_KEY = 'pdf-viewer-dark-theme-v2';
 const TOOLBAR_PIN_STORAGE_KEY = 'pdf-toolbar-pinned-v1';
 
-// Keep these theme definitions available for a future re-enable, but do not
-// expose or restore them while support is paused.
-const DISABLED_VIEWER_THEMES = new Set<ViewerTheme>([
-  'catppuccin-latte',
-  'catppuccin-mocha',
-]);
-const VIEWER_THEME_REDIRECTS = {
-  'catppuccin-latte': 'light',
-  'catppuccin-mocha': 'dark',
-} as const satisfies Partial<Record<ViewerTheme, ViewerTheme>>;
-
 function findViewerTheme(value: unknown) {
   return typeof value === 'string'
     ? VIEWER_THEME_METADATA.find((theme) => theme.id === value)
@@ -124,21 +94,9 @@ function isDarkViewerThemeValue(value: unknown): value is DarkViewerTheme {
   return findViewerTheme(value)?.colorMode === 'dark';
 }
 
-function isSupportedViewerTheme(value: unknown): value is ViewerTheme {
-  const theme = findViewerTheme(value)?.id;
-  return theme !== undefined && !DISABLED_VIEWER_THEMES.has(theme);
-}
-
-function redirectDisabledViewerTheme(value: unknown) {
-  const theme = findViewerTheme(value)?.id;
-  return theme === undefined
-    ? undefined
-    : VIEWER_THEME_REDIRECTS[theme as keyof typeof VIEWER_THEME_REDIRECTS] ?? theme;
-}
-
 export function getViewerThemeOptions<Mode extends ViewerColorMode>(mode: Mode) {
   return VIEWER_THEME_METADATA
-    .filter((theme) => theme.colorMode === mode && isSupportedViewerTheme(theme.id))
+    .filter((theme) => theme.colorMode === mode)
     .map(({ id: value, label }) => ({ value, label })) as Array<{
       value: ViewerThemeForMode<Mode>;
       label: string;
@@ -156,27 +114,20 @@ export function setStoredToolbarPinned(pinned: boolean) {
 function loadViewerThemeSettings(): ViewerThemeSettings {
   const storedLight = platform.getPreference(LIGHT_THEME_STORAGE_KEY);
   const storedDark = platform.getPreference(DARK_THEME_STORAGE_KEY);
-  const redirectedLight = redirectDisabledViewerTheme(storedLight);
-  const redirectedDark = redirectDisabledViewerTheme(storedDark);
-  const light = isLightViewerTheme(redirectedLight) && isSupportedViewerTheme(redirectedLight)
-    ? redirectedLight
-    : 'light';
-  const dark = isDarkViewerThemeValue(redirectedDark) && isSupportedViewerTheme(redirectedDark)
-    ? redirectedDark
-    : 'dark';
+  const light = isLightViewerTheme(storedLight) ? storedLight : 'light';
+  const dark = isDarkViewerThemeValue(storedDark) ? storedDark : 'dark';
 
-  // Persist disabled legacy values so they are redirected only once.
-  if (redirectedLight !== undefined && storedLight !== redirectedLight) {
+  if (storedLight !== null && storedLight !== light) {
     platform.setPreference(LIGHT_THEME_STORAGE_KEY, light);
   }
-  if (redirectedDark !== undefined && storedDark !== redirectedDark) {
+  if (storedDark !== null && storedDark !== dark) {
     platform.setPreference(DARK_THEME_STORAGE_KEY, dark);
   }
   return { light, dark };
 }
 
 function getInitialViewerTheme(): ViewerTheme {
-  return redirectDisabledViewerTheme(document.documentElement.dataset.viewerTheme) ?? 'light';
+  return findViewerTheme(document.documentElement.dataset.viewerTheme)?.id ?? 'light';
 }
 
 export const viewerThemeStore = createStore<{

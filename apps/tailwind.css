@@ -214,32 +214,6 @@
   --pdf-annotation-auto-text: #f9f5d7;
 }
 
-:root[data-viewer-theme='catppuccin-mocha'] {
-  --pdf-background-app: #383c4f;
-  --pdf-background-surface: #383c4f;
-  --pdf-background-surface-alt: #292c3c;
-  --pdf-background-input: #51576d;
-  --pdf-background-elevated: #51576d;
-  --pdf-toolbar-background: #292c3c;
-  --pdf-toolbar-secondary-background: #383c4f;
-  --pdf-foreground-primary: #cdd6f4;
-  --pdf-foreground-secondary: #bac2de;
-  --pdf-foreground-muted: #9399b2;
-  --pdf-border-default: #51576d;
-  --pdf-border-subtle: #414559;
-  --pdf-border-strong: #737994;
-  --pdf-control-border: #626880;
-  --pdf-accent-primary: #cba6f7;
-  --pdf-text-selection-color: rgb(203 166 247 / 20%);
-  --pdf-danger-primary: #f38ba8;
-  --pdf-scrollbar-thumb: #51576d;
-  --pdf-scrollbar-thumb-hover: #626880;
-  --pdf-page-background: #383c4f;
-  --pdf-page-shadow: rgb(0 0 0 / 34%);
-  --pdf-annotation-auto-stroke: #94e2d5;
-  --pdf-annotation-auto-text: #c6d0f5;
-}
-
 :root[data-viewer-theme='solar'] {
   --pdf-background-app: #f7f5ef;
   --pdf-background-surface: #f7f4ee;
@@ -265,33 +239,6 @@
   --pdf-annotation-auto-text: #2d332f;
 }
 
-:root[data-viewer-theme='catppuccin-latte'] {
-  --pdf-background-app: #dce0e8;
-  --pdf-background-surface: #eff1f5;
-  --pdf-background-surface-alt: #e6e9ef;
-  --pdf-background-input: #eff1f5;
-  --pdf-background-elevated: #eff1f5;
-  --pdf-toolbar-background: #e6e9ef;
-  --pdf-toolbar-secondary-background: #eff1f5;
-  --pdf-foreground-primary: #4c4f69;
-  --pdf-foreground-secondary: #5c5f77;
-  --pdf-foreground-muted: #6c6f85;
-  --pdf-border-default: color-mix(in srgb, #4c4f69 18%, #eff1f5);
-  --pdf-border-subtle: color-mix(in srgb, #4c4f69 10%, #eff1f5);
-  --pdf-border-strong: #8839ef;
-  --pdf-control-border: color-mix(in srgb, #4c4f69 22%, #eff1f5);
-  --pdf-accent-primary: #04a5e5;
-  --pdf-text-selection-color: rgb(23 146 153 / 22%);
-  --pdf-interactive-hover: color-mix(in srgb, #04a5e5 8%, #eff1f5);
-  --pdf-interactive-selected: color-mix(in srgb, #04a5e5 14%, #eff1f5);
-  --pdf-danger-primary: #d20f39;
-  --pdf-scrollbar-thumb: #179299;
-  --pdf-scrollbar-thumb-hover: #04a5e5;
-  --pdf-page-background: #eff1f5;
-  --pdf-page-shadow: rgb(76 79 105 / 14%);
-  --pdf-annotation-auto-stroke: #04a5e5;
-  --pdf-annotation-auto-text: #8839ef;
-}
 @keyframes pdf-select-in {
   from { opacity: 0; transform: translateY(-2px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

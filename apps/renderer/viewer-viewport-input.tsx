@@ -177,9 +177,8 @@ export function ViewportInput({
     let lastAppliedZoom = zoomScope.getState().currentZoomLevel;
 
     const getZoomNodes = () => {
-      const nodes = [1, 1.5, 2];
       const spreads = scrollCapability?.forDocument(documentId).getSpreadPagesWithRotatedSize();
-      if (!spreads?.length) return nodes;
+      if (!spreads?.length) return [];
       const gap = scrollCapability?.getPageGap() ?? 0;
       const inset = 2 * viewportCapability.getViewportGap();
       const metrics = viewportScope.getMetrics();
@@ -193,7 +192,7 @@ export function ViewportInput({
       const fitWidth = (metrics.clientWidth - inset) / width;
       const fitPage = Math.min(fitWidth, (metrics.clientHeight - inset) / height);
       // Match the zoom plugin's precision so these are exact fit scales.
-      return [...nodes, fitPage, fitWidth].map((n) => Math.floor(n * 1000) / 1000);
+      return [fitPage, fitWidth].map((n) => Math.floor(n * 1000) / 1000);
     };
     const replayedTouchEvents = new WeakSet<Event>();
     let touchGesture: {

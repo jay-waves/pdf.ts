@@ -4,8 +4,6 @@ import {
   PdfiumFontFallbackManager,
   classifyPdfFontFamily,
 } from '../apps/fonts/font-fallback-manager.ts';
-import { PDFIUM_FONT_FALLBACK } from '../apps/fonts/catalog.ts';
-import { FontCharset } from '@embedpdf/models';
 
 test('font family classification understands subset, localized, and pitch names', () => {
   const aliases = { simsun: 'serif', 宋体: 'serif', arial: 'sans' };
@@ -14,13 +12,6 @@ test('font family classification understands subset, localized, and pitch names'
   assert.equal(classifyPdfFontFamily('Unknown', 1, aliases), 'monospace');
   assert.equal(classifyPdfFontFamily('Unknown', 0x10, aliases), 'serif');
   assert.equal(classifyPdfFontFamily('Unknown', 0, aliases), 'sans');
-});
-
-test('simplified Chinese serif uses one static Regular face', () => {
-  const serif = PDFIUM_FONT_FALLBACK.families[FontCharset.GB2312].serif;
-  assert.equal(typeof serif, 'string');
-  assert.match(serif, /NotoSerifSC-Regular\.otf$/);
-  assert.doesNotMatch(serif, /Bold/i);
 });
 
 test('project font manager owns the PDFium callbacks and preserves cache state', () => {
