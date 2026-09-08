@@ -48,14 +48,13 @@ export function getThemeHighlightPolicy(theme = viewerThemeStore.getState().them
   return {
     color: getDefaultAnnotationColor(theme),
     blendMode: dark ? PdfBlendMode.Normal : PdfBlendMode.Multiply,
-    // These values remain the PDF appearance; the dark reader renders an underline.
+    // Display policy only; saved highlights always use the Light appearance.
     opacity: dark ? 0.4 : 1,
   };
 }
 
-function getPresetHighlightAppearance(theme = viewerThemeStore.getState().theme) {
-  const { opacity, blendMode } = getThemeHighlightPolicy(theme);
-  return { opacity, blendMode };
+function getPresetHighlightAppearance() {
+  return { opacity: 1, blendMode: PdfBlendMode.Multiply };
 }
 
 export function hasAutoHighlightColor(annotation: PdfHighlightAnnoObject) {
@@ -268,26 +267,10 @@ export function getAnnotationPresetPatch(
 ) {
   const highlight = toolId === 'highlight' || toolId === 'inkHighlighter';
   return {
-    ...getAnnotationColorPatch(toolId, field, color),
+    ...getAnnotationColorPatch(toolId, field, getThemeAnnotationColor(color, 'light') ?? color),
     opacity: toolId && VECTOR_TOOL_IDS.has(toolId) ? VECTOR_ANNOTATION_OPACITY : 1,
     ...(highlight ? getPresetHighlightAppearance() : {}),
   };
-}
-
-export function hasAutoAnnotationStrokeColor(annotation: PdfAnnotationObject) {
-  const values = annotation as unknown as Record<string, unknown>;
-  const color = normalizeAnnotationColor(values.strokeColor ?? values.color);
-  const expected = annotation.type === PdfAnnotationSubtype.HIGHLIGHT
-    || annotation.type === PdfAnnotationSubtype.TEXT
-    || (annotation.type === PdfAnnotationSubtype.INK && annotation.intent === 'InkHighlight')
-    ? DEFAULT_HIGHLIGHT_COLOR
-    : DEFAULT_ANNOTATION_COLOR;
-  return color === expected;
-}
-
-export function hasAutoAnnotationTextColor(annotation: PdfAnnotationObject) {
-  return 'fontColor' in annotation
-    && normalizeAnnotationColor(annotation.fontColor) === DEFAULT_ANNOTATION_COLOR;
 }
 
 export function normalizeAnnotationColor(value: unknown) {
@@ -318,7 +301,7 @@ export function createCommentAnnotation(
     },
     contents: '',
     name: PdfAnnotationName.Comment,
-    strokeColor: getDefaultAnnotationColor(viewerThemeStore.getState().theme),
+    strokeColor: getDefaultAnnotationColor('light'),
     opacity: 1,
     flags: ['print', 'noRotate', 'noZoom'],
     created: new Date(),
@@ -342,7 +325,7 @@ export function createTextMarkupAnnotations(
       pageIndex: selection.pageIndex,
       rect: selection.rect,
       segmentRects: selection.segmentRects,
-      strokeColor: getDefaultAnnotationColor(viewerThemeStore.getState().theme),
+      strokeColor: getDefaultAnnotationColor('light'),
       opacity: VECTOR_ANNOTATION_OPACITY,
       ...(isHighlight ? getPresetHighlightAppearance() : {}),
       custom: slice ? { pdfTs: { textSlice: {
@@ -388,71 +371,29 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
   };
 }
 
-export function installAnnotationPalette(registry: PluginRegistry, documentId: string) {
+export function installAnnotationPalette(registry: PluginRegistry, documentId: string): undefined {
   const scoped = getAnnotationScope(registry, documentId);
   if (!scoped) return;
-  let syncing = false;
-  const sync = () => {
-    if (syncing) return;
-    syncing = true;
-    try {
-      const theme = viewerThemeStore.getState().theme;
-      const fields = ['strokeColor', 'color', 'fontColor', 'backgroundColor'] as const;
-      for (const tool of scoped.capability.getTools()) {
-        const defaults = (tool.defaults ?? {}) as Record<string, unknown>;
-        const patch: Record<string, unknown> = {};
-        for (const field of fields) {
-          const current = normalizeAnnotationColor(defaults[field]);
-          if (!current || current === TRANSPARENT_ANNOTATION_COLOR) continue;
-          const color = current === DEFAULT_HIGHLIGHT_COLOR || current === DEFAULT_ANNOTATION_COLOR
-            ? getDefaultAnnotationColor(theme)
-            : getThemeAnnotationColor(current, theme) ?? getDefaultAnnotationColor(theme);
-          if (color !== current) patch[field] = color;
-        }
-        if (tool.id === 'highlight' || tool.id === 'inkHighlighter') {
-          const appearance = getPresetHighlightAppearance(theme);
-          if (defaults.opacity !== appearance.opacity) patch.opacity = appearance.opacity;
-          if (defaults.blendMode !== appearance.blendMode) patch.blendMode = appearance.blendMode;
-        }
-        if (Object.keys(patch).length) scoped.capability.setToolDefaults(tool.id, patch);
-      }
-      const updates = scoped.scope.getAnnotations().flatMap(({ object }) => {
-        const values = object as unknown as Record<string, unknown>;
-        const patch: Record<string, unknown> = {};
-        for (const field of fields) {
-          const color = getThemeAnnotationColor(values[field], theme);
-          if (color && color !== values[field]) patch[field] = color;
-        }
-        // Upgrade old default highlights to the same fixed preset appearance.
-        if ((object.type === PdfAnnotationSubtype.HIGHLIGHT
-          || (object.type === PdfAnnotationSubtype.INK && object.intent === 'InkHighlight'))
-          && (hasAutoAnnotationStrokeColor(object)
-            || getThemeAnnotationColor(values.strokeColor ?? values.color, theme) !== null)) {
-          const appearance = getPresetHighlightAppearance(theme);
-          if (values.opacity !== appearance.opacity) patch.opacity = appearance.opacity;
-          if (values.blendMode !== appearance.blendMode) patch.blendMode = appearance.blendMode;
-        }
-        return Object.keys(patch).length ? [{ pageIndex: object.pageIndex, id: object.id, patch }] : [];
-      });
-      if (updates.length) scoped.scope.updateAnnotations(updates);
-    } finally {
-      syncing = false;
+  // Initialize creation defaults once. Existing annotations are never rewritten.
+  const fields = ['strokeColor', 'color', 'fontColor', 'backgroundColor'] as const;
+  for (const tool of scoped.capability.getTools()) {
+    const defaults = (tool.defaults ?? {}) as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+    for (const field of fields) {
+      const current = normalizeAnnotationColor(defaults[field]);
+      if (!current || current === TRANSPARENT_ANNOTATION_COLOR) continue;
+      const color = current === DEFAULT_HIGHLIGHT_COLOR || current === DEFAULT_ANNOTATION_COLOR
+        ? getDefaultAnnotationColor('light')
+        : getThemeAnnotationColor(current, 'light') ?? getDefaultAnnotationColor('light');
+      if (color !== current) patch[field] = color;
     }
-  };
-  sync();
-  const unsubscribeTheme = viewerThemeStore.subscribe((state, previous) => {
-    if (state.theme !== previous.theme) sync();
-  });
-  const unsubscribeAnnotations = scoped.scope.onAnnotationEvent((event) => {
-    // Do not turn undo/redo update events into new history commands.
-    if (event.type === 'loaded' || (event.type === 'create' && !event.committed)) sync();
-  });
-  const unsubscribeTools = scoped.capability.onToolsChange(sync);
-  return () => {
-    unsubscribeTheme();
-    unsubscribeAnnotations();
-    unsubscribeTools();
-  };
+    if (tool.id === 'highlight' || tool.id === 'inkHighlighter') {
+      const appearance = getPresetHighlightAppearance();
+      if (defaults.opacity !== appearance.opacity) patch.opacity = appearance.opacity;
+      if (defaults.blendMode !== appearance.blendMode) patch.blendMode = appearance.blendMode;
+    }
+    if (Object.keys(patch).length) scoped.capability.setToolDefaults(tool.id, patch);
+  }
 }
 
 export function installAnnotationDirty(

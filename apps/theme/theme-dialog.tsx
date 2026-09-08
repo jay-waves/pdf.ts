@@ -14,7 +14,7 @@ const LIGHT_THEME_OPTIONS = getViewerThemeOptions('light');
 const DARK_THEME_OPTIONS = getViewerThemeOptions('dark');
 
 const THEME_PREVIEWS: Record<ViewerTheme, readonly [string, string, string]> = {
-  light: ['#f8fafc', '#ffffff', '#2563eb'],
+  light: ['#fafafa', '#ffffff', '#454545'],
   solar: ['#f7f5ef', '#fbfaf6', '#5f8f86'],
   'catppuccin-latte': ['#dce0e8', '#eff1f5', '#8839ef'],
   dark: ['#1b1b1b', '#333333', '#dedede'],

@@ -28,6 +28,13 @@ export function isEditableTarget(target: EventTarget | null) {
   return target.matches('input, textarea, select, [contenteditable="true"]') || target.isContentEditable;
 }
 
+export function isViewerNavigationTarget(target: EventTarget | null) {
+  if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return false;
+  if (!(target instanceof Element)) return false;
+  if (target.closest('input, textarea, select, button, a[href], [contenteditable], [role="button"], [role="link"], [role="menu"], [role="menuitem"], [role="listbox"], [role="option"], [role="slider"], [role="spinbutton"], [role="checkbox"], [role="switch"], [role="radio"], [role="tab"]')) return false;
+  return target === document.body || target === document.documentElement || Boolean(target.closest('.viewer'));
+}
+
 export function getPluginCapability<T>(registry: PluginRegistry | undefined, pluginId: string) {
   return registry?.getPlugin(pluginId)?.provides?.() as T | undefined;
 }

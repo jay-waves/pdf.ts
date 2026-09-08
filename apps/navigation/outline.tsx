@@ -224,10 +224,10 @@ function scrollToBookmark(scroll: PdfScroll, bookmark: PdfBookmarkObject) {
   }
 
   const xyzZoom = destination.zoom.mode === PdfZoomMode.XYZ ? destination.zoom : undefined;
-  scroll.goToPosition(
-    destination.pageIndex,
-    xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : undefined,
-  );
+  scroll.reveal(destination.pageIndex, [{
+    origin: xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : { x: 0, y: 0 },
+    size: { width: 0, height: 0 },
+  }]);
 }
 
 export function Outline({

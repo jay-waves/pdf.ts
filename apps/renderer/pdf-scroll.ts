@@ -13,10 +13,9 @@ import {
 } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability, ViewportMetrics } from '@embedpdf/plugin-viewport';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
-import { getDocumentScrollStrategy, getPluginCapability, isEditableTarget } from '../shared/utils';
+import { getDocumentScrollStrategy, getPluginCapability, isViewerNavigationTarget } from '../shared/utils';
 import type { ViewerInputSource } from '../viewer/viewer-activity';
 
-const SIDE_BUTTON_LONG_PRESS_MS = 450;
 const TARGET_INSET = 12;
 const COMFORT_RATIO = 0.08;
 const MIN_COMFORT_PX = 24;
@@ -76,9 +75,13 @@ export class PdfScroll {
   }
 
   attachViewport(element: HTMLElement | null) {
-    if (!element && this.settleFrame) cancelAnimationFrame(this.settleFrame);
-    this.settleFrame = 0;
+    this.cancelPendingNavigation();
     this.viewportElement = element;
+  }
+
+  cancelPendingNavigation() {
+    if (this.settleFrame) cancelAnimationFrame(this.settleFrame);
+    this.settleFrame = 0;
   }
 
   getCurrentPage() {
@@ -143,8 +146,7 @@ export class PdfScroll {
     const metrics = this.getMetrics();
     if (!scope || !pdfRect || !metrics) return false;
 
-    if (this.settleFrame) cancelAnimationFrame(this.settleFrame);
-    this.settleFrame = 0;
+    this.cancelPendingNavigation();
 
     const gap = this.getViewportGap();
     const positionRect = (rect: Rect) => {
@@ -286,6 +288,7 @@ export class PdfScroll {
   }
 
   goToPage(pageNumber: number, behavior: ScrollBehavior = 'instant') {
+    this.cancelPendingNavigation();
     const scope = this.capability?.forDocument(this.documentId);
     if (!scope) return false;
 
@@ -336,6 +339,7 @@ export class PdfScroll {
     pageCoordinates?: { x: number; y: number },
     behavior: ScrollBehavior = 'instant',
   ) {
+    this.cancelPendingNavigation();
     const scope = this.capability?.forDocument(this.documentId);
     if (!scope) return false;
     scope.scrollToPage({ pageNumber: pageIndex + 1, pageCoordinates, behavior });
@@ -347,18 +351,21 @@ export class PdfScroll {
   }
 
   setStrategy(strategy: ScrollStrategy) {
+    this.cancelPendingNavigation();
     const anchor = this.getAnchor();
     this.capability?.setScrollStrategy(strategy, this.documentId);
     this.restoreAnchor(anchor);
   }
 
   preserveView(update: () => void) {
+    this.cancelPendingNavigation();
     const anchor = this.getAnchor();
     update();
     this.restoreAnchor(anchor);
   }
 
   restorePage(pageNumber: number) {
+    this.cancelPendingNavigation();
     this.capability?.forDocument(this.documentId).scrollToPage({
       pageNumber,
       behavior: 'instant',
@@ -366,61 +373,48 @@ export class PdfScroll {
   }
 
   installNavigationInput(onNavigate: (delta: number, source: ViewerInputSource) => void) {
-    let sideButtonPress: { button: 3 | 4; startedAt: number } | null = null;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (isEditableTarget(event.target)) return;
+      if (!isViewerNavigationTarget(event.target)) return;
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       event.stopPropagation();
       onNavigate(event.key === 'ArrowLeft' ? -1 : 1, 'Keyboard');
     };
     const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
+      if (!isViewerNavigationTarget(event.target)) return;
       if (event.button !== 3 && event.button !== 4) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-    };
-    const onSideButtonDown = (event: MouseEvent) => {
-      stopSideButtonEvent(event);
-      if (event.button === 3 || event.button === 4) {
-        sideButtonPress = { button: event.button, startedAt: performance.now() };
-      }
     };
     const onSideButtonUp = (event: MouseEvent) => {
+      if (!isViewerNavigationTarget(event.target)) return;
       if (event.button !== 3 && event.button !== 4) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      const duration = sideButtonPress?.button === event.button
-        ? performance.now() - sideButtonPress.startedAt
-        : 0;
-      sideButtonPress = null;
       onNavigate(
-        (event.button === 3 ? -1 : 1) * (duration >= SIDE_BUTTON_LONG_PRESS_MS ? 2 : 1),
+        event.button === 3 ? -1 : 1,
         'Mouse',
       );
     };
     const onPointerMove = (event: PointerEvent) => {
+      if (!isViewerNavigationTarget(event.target)) return;
       if (!(event.buttons & 24)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };
-    const clearSideButtonPress = () => {
-      sideButtonPress = null;
-    };
 
     window.addEventListener('keydown', onKeyDown, { capture: true });
-    window.addEventListener('mousedown', onSideButtonDown, { capture: true });
+    window.addEventListener('mousedown', stopSideButtonEvent, { capture: true });
     window.addEventListener('mouseup', onSideButtonUp, { capture: true });
     window.addEventListener('pointermove', onPointerMove, { capture: true });
     window.addEventListener('auxclick', stopSideButtonEvent, { capture: true });
-    window.addEventListener('blur', clearSideButtonPress);
     return () => {
       window.removeEventListener('keydown', onKeyDown, { capture: true });
-      window.removeEventListener('mousedown', onSideButtonDown, { capture: true });
+      window.removeEventListener('mousedown', stopSideButtonEvent, { capture: true });
       window.removeEventListener('mouseup', onSideButtonUp, { capture: true });
       window.removeEventListener('pointermove', onPointerMove, { capture: true });
       window.removeEventListener('auxclick', stopSideButtonEvent, { capture: true });
-      window.removeEventListener('blur', clearSideButtonPress);
     };
   }
 

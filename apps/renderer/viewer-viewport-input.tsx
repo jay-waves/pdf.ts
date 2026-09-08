@@ -3,7 +3,6 @@ import { flushSync } from 'react-dom';
 import { useGesture } from '@use-gesture/react';
 import { useViewportCapability, useViewportElement } from '@embedpdf/plugin-viewport/react';
 import { useInteractionManagerCapability } from '@embedpdf/plugin-interaction-manager/react';
-import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { useZoomCapability } from '@embedpdf/plugin-zoom/react';
 import type { PdfScroll } from './pdf-scroll';
 import {
@@ -14,8 +13,6 @@ import {
 
 const WHEEL_DELTA_LIMIT_PX = 50;
 const WHEEL_ZOOM_SENSITIVITY = 0.0012;
-const WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX = 24;
-const WHEEL_SCROLL_COMPRESSION_RATIO = 0.25;
 const MIN_ZOOM_LEVEL = 0.2;
 const MAX_ZOOM_LEVEL = 60;
 const PAN_DRAG_THRESHOLD_PX = 4;
@@ -59,15 +56,6 @@ function wheelDeltaInPixels(delta: number, event: WheelEvent, pageSize: number) 
 function normalizedZoomDelta(event: WheelEvent, pageHeight: number) {
   const delta = wheelDeltaInPixels(event.deltaY, event, pageHeight);
   return clamp(delta, -WHEEL_DELTA_LIMIT_PX, WHEEL_DELTA_LIMIT_PX);
-}
-
-function compressWheelDelta(delta: number) {
-  const magnitude = Math.abs(delta);
-  if (magnitude <= WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX) return delta;
-  return Math.sign(delta) * (
-    WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX
-    + (magnitude - WHEEL_SCROLL_COMPRESSION_THRESHOLD_PX) * WHEEL_SCROLL_COMPRESSION_RATIO
-  );
 }
 
 const TOUCH_INTERACTIVE_TARGET_SELECTOR = [
@@ -289,13 +277,6 @@ export function ViewportInput({
       inertiaFrame = window.requestAnimationFrame(step);
     };
 
-    const scrollHiddenAxisBy = (deltaX: number, deltaY: number) => {
-      viewport.scrollTo(
-        viewport.scrollLeft + compressWheelDelta(deltaX),
-        viewport.scrollTop + compressWheelDelta(deltaY),
-      );
-    };
-
     const setAnchor = (clientX: number, clientY: number) => {
       const bounds = viewport.getBoundingClientRect();
       zoomAnchor = {
@@ -347,6 +328,7 @@ export function ViewportInput({
     };
 
     const handleWheel = (event: WheelEvent) => {
+      scroll?.cancelPendingNavigation();
       cancelInertia();
       const path = event.ctrlKey || event.metaKey
         ? ['Viewport', 'Zoom'] as const
@@ -371,35 +353,13 @@ export function ViewportInput({
 
       flushPendingZoom();
       flushPendingScroll();
-      const horizontalLayout = scroll?.getStrategy() === ScrollStrategy.Horizontal;
-      // This axis is visible, so retain the browser's native Shift + wheel.
-      if (event.shiftKey && horizontalLayout) return;
-
-      const deltaX = wheelDeltaInPixels(event.deltaX, event, viewport.clientWidth);
-      const deltaY = wheelDeltaInPixels(event.deltaY, event, viewport.clientHeight);
-      if (event.shiftKey) {
-        event.preventDefault();
-        // Vertical layout hides the horizontal axis, so it still needs a
-        // programmatic fallback. Browsers differ on which delta carries Shift.
-        scrollHiddenAxisBy(Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY, 0);
-        return;
-      }
-
-      if (horizontalLayout && deltaY) {
-        // The vertical scrollbar is hidden in horizontal layout, but
-        // overflow:hidden remains programmatically scrollable.
-        scrollHiddenAxisBy(0, deltaY);
-      } else if (!horizontalLayout && deltaX) {
-        // Likewise, retain trackpad horizontal movement while the horizontal
-        // scrollbar is hidden in vertical layout.
-        scrollHiddenAxisBy(deltaX, 0);
-      }
     };
 
     const handlePinch = (state: PinchInputState) => {
       const { event, first, last, canceled, movement, origin } = state;
       event.preventDefault();
       if (first) {
+        scroll?.cancelPendingNavigation();
         cancelInertia();
         releaseTouchGesture();
         cancelActiveDrag?.();
@@ -435,6 +395,7 @@ export function ViewportInput({
       }
 
       if (first) {
+        scroll?.cancelPendingNavigation();
         cancelInertia();
         cancelActiveDrag = cancel;
       }
@@ -603,6 +564,13 @@ export function ViewportInput({
     };
 
     const cancelInput = () => {
+      scroll?.cancelPendingNavigation();
+      if (zoomFrame) window.cancelAnimationFrame(zoomFrame);
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+      zoomFrame = scrollFrame = 0;
+      pendingZoomDelta = 0;
+      pendingZoomLevel = null;
+      pendingScroll = null;
       if (wheelEndTimer) {
         window.clearTimeout(wheelEndTimer);
         wheelEndTimer = 0;
@@ -634,8 +602,6 @@ export function ViewportInput({
       dragHandlerRef.current = null;
       pinchHandlerRef.current = null;
       cancelInput();
-      if (zoomFrame) window.cancelAnimationFrame(zoomFrame);
-      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
     };
   }, [documentId, interactionManager, panMode, scroll, viewportCapability, viewportElementRef, zoom]);
 

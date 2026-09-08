@@ -236,12 +236,6 @@ export function Toolbar({
   }, []);
 
   useEffect(() => {
-    if (!touchInput) return;
-    setActiveSection((current) => current === 'draw' ? null : current);
-    if (activeTool) dispatch({ type: 'annotation/clear-tool' });
-  }, [activeTool, dispatch, touchInput]);
-
-  useEffect(() => {
     setActiveSection((current) => {
       if (searchOpen) return 'search';
       return current === 'search' ? null : current;
@@ -400,10 +394,8 @@ export function Toolbar({
                   key={id}
                   type="button"
                   className={styles.modeButton}
-                  disabled={id === 'draw' && touchInput}
                   onClick={() => openSection(id)}
-                  aria-label={id === 'draw' && touchInput ? 'Draw (mouse or pen only)' : label}
-                  title={id === 'draw' && touchInput ? 'Draw requires a mouse or pen' : undefined}
+                  aria-label={label}
                 >
                   <Icon
                     className={`${styles.icon} ${id === 'search' ? styles.searchModeIcon : ''}`}

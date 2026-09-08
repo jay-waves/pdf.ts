@@ -9,45 +9,49 @@ import {
   type PdfTextAnnoObject,
   type PdfUnderlineAnnoObject,
 } from '@embedpdf/models';
-import { createRenderer, type CustomAnnotationRenderer } from '@embedpdf/plugin-annotation/react';
-import type { ComponentProps } from 'react';
+import { createRenderer, type AnnotationRendererProps, type CustomAnnotationRenderer } from '@embedpdf/plugin-annotation/react';
+import { cloneElement, type ReactElement, type ComponentProps } from 'react';
 import { MessageSquareMore } from 'lucide-react';
 import { useStore } from 'zustand';
 import { isDarkViewerTheme, viewerThemeStore } from '../theme/theme';
-import { getThemeAnnotationColor } from './theme-palette';
+import { getAnnotationDisplayColors, getThemeAnnotationColor } from './theme-palette';
 import {
   getThemeHighlightPolicy,
   VECTOR_ANNOTATION_OPACITY,
   VECTOR_ANNOTATION_STROKE_WIDTH,
-  hasAutoAnnotationStrokeColor,
   hasAutoHighlightColor,
-  hasAutoAnnotationTextColor,
 } from './annotations';
 import styles from './theme-renderers.module.css';
 
 export const themeAnnotationColorRenderer: CustomAnnotationRenderer<PdfAnnotationObject> = ({
   annotation,
   children,
-}) => {
-  // Highlight and text-comment AUTO colors have dedicated renderers because
-  // their visuals need more than a simple stroke/text CSS override.
-  const dedicatedRenderer = annotation.type === PdfAnnotationSubtype.HIGHLIGHT
+}) => <ThemeAnnotationColors annotation={annotation}>{children}</ThemeAnnotationColors>;
+
+function ThemeAnnotationColors({ annotation, children }: {
+  annotation: PdfAnnotationObject;
+  children: ReactElement;
+}) {
+  const theme = useStore(viewerThemeStore, (state) => state.theme);
+  // These renderers already resolve their colors from the theme.
+  if (annotation.type === PdfAnnotationSubtype.HIGHLIGHT
     || annotation.type === PdfAnnotationSubtype.TEXT
     || annotation.type === PdfAnnotationSubtype.UNDERLINE
-    || annotation.type === PdfAnnotationSubtype.STRIKEOUT;
-  const autoStroke = !dedicatedRenderer && hasAutoAnnotationStrokeColor(annotation);
-  const autoText = hasAutoAnnotationTextColor(annotation);
-
-  if (!autoStroke && !autoText) return children;
-
-  return <span
-    className={styles.root}
-    data-auto-stroke={autoStroke ? 'true' : undefined}
-    data-auto-text={autoText ? 'true' : undefined}
-  >
-    {children}
+    || annotation.type === PdfAnnotationSubtype.STRIKEOUT) return children;
+  const display = getAnnotationDisplayColors(annotation, theme);
+  const mapped = display !== annotation;
+  const element = children as ReactElement<Record<string, unknown>>;
+  const tracked = element.props.annotation as { object: PdfAnnotationObject } | undefined;
+  // EmbedPDF's geometry renderers take colors directly; FreeText takes a
+  // tracked annotation. Change only visual props, retaining all edit handlers.
+  return <span className={styles.root} data-themed={mapped ? 'true' : undefined}>
+    {mapped ? cloneElement(element, {
+      ...getAnnotationDisplayColors(element.props, theme),
+      ...(tracked ? { annotation: { ...tracked, object: display } } : {}),
+      appearanceActive: false,
+    }) : children}
   </span>;
-};
+}
 
 function isComment(annotation: PdfAnnotationObject): annotation is PdfTextAnnoObject {
   return annotation.type === PdfAnnotationSubtype.TEXT && !annotation.inReplyToId;
@@ -56,7 +60,7 @@ function isComment(annotation: PdfAnnotationObject): annotation is PdfTextAnnoOb
 export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
   id: 'themeComment',
   matches: (annotation): annotation is PdfTextAnnoObject => (
-    isComment(annotation) && hasAutoAnnotationStrokeColor(annotation)
+    isComment(annotation) && getThemeAnnotationColor(annotation.strokeColor ?? annotation.color, 'light') !== null
   ),
   useAppearanceStream: false,
   interactionDefaults: {
@@ -64,8 +68,13 @@ export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
     isResizable: false,
     isRotatable: false,
   },
-  render: ({ currentObject, isSelected, onClick }) => {
-    const color = getThemeHighlightPolicy().color;
+  render: (props) => <ThemeComment {...props} />,
+});
+
+function ThemeComment({ currentObject, isSelected, onClick }: AnnotationRendererProps<PdfTextAnnoObject>) {
+    const theme = useStore(viewerThemeStore, (state) => state.theme);
+    const color = getThemeAnnotationColor(currentObject.strokeColor ?? currentObject.color, theme)
+      ?? currentObject.strokeColor ?? currentObject.color ?? getThemeHighlightPolicy().color;
     const lineColor = getContrastStrokeColor(color);
 
     return <div
@@ -92,8 +101,7 @@ export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
         }}
       />
     </div>;
-  },
-});
+}
 
 function isHighlight(annotation: PdfAnnotationObject): annotation is PdfHighlightAnnoObject {
   return annotation.type === PdfAnnotationSubtype.HIGHLIGHT;
@@ -126,7 +134,10 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
     isResizable: false,
     isRotatable: false,
   },
-  render: ({ currentObject, scale, onClick }) => {
+  render: (props) => <ThemeHighlight {...props} />,
+});
+
+function ThemeHighlight({ currentObject, scale, onClick }: AnnotationRendererProps<PdfHighlightAnnoObject>) {
     const theme = useStore(viewerThemeStore, (state) => state.theme);
     const dark = isDarkViewerTheme(theme);
     const policy = getThemeHighlightPolicy();
@@ -166,8 +177,7 @@ export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
         }} /> : null}
       </div>)}
     </>;
-  },
-});
+}
 
 type ThemeLineMarkupProps = {
   annotation: PdfUnderlineAnnoObject | PdfStrikeOutAnnoObject;
@@ -177,6 +187,7 @@ type ThemeLineMarkupProps = {
 };
 
 function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMarkupProps) {
+  const theme = useStore(viewerThemeStore, (state) => state.theme);
   const thickness = VECTOR_ANNOTATION_STROKE_WIDTH * scale;
   return <>
     {annotation.segmentRects.map((segment, index) => <div
@@ -199,9 +210,8 @@ function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMar
         left: 0,
         width: '100%',
         height: thickness,
-        background: hasAutoAnnotationStrokeColor(annotation)
-          ? 'var(--pdf-annotation-auto-stroke)'
-          : annotation.strokeColor ?? annotation.color,
+        background: getThemeAnnotationColor(annotation.strokeColor ?? annotation.color, theme)
+          ?? annotation.strokeColor ?? annotation.color,
         borderRadius: thickness / 2,
         opacity: annotation.opacity ?? VECTOR_ANNOTATION_OPACITY,
         pointerEvents: 'none',

@@ -67,7 +67,7 @@ export function createPdfSearchStore() {
       }
 
       cancel('new search');
-      set({ query: keyword, flags, results: [], activeResultIndex: -1, loading: true });
+      set({ query: keyword, flags, results: [], resultsByPage: new Map(), activeResultIndex: -1, loading: true });
 
       try {
         const current = pdfium.withDocument(documentId, (engine, document) => (
@@ -105,7 +105,7 @@ export function createPdfSearchStore() {
             task = null;
             if (error.reason.code !== PdfErrorCode.Cancelled) {
               console.error('[pdf-ts] PDF search failed', error);
-              set({ results: [], activeResultIndex: -1, loading: false });
+              set({ results: [], resultsByPage: new Map(), activeResultIndex: -1, loading: false });
             }
           },
         );

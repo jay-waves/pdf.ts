@@ -10,7 +10,7 @@ import {
 } from '@embedpdf/models';
 import type { RenderCapability } from '@embedpdf/plugin-render';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
-import { SelectionPlugin, type SelectionCapability } from '@embedpdf/plugin-selection';
+import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import {
   createCommentAnnotation,
   createTextMarkupAnnotations,
@@ -40,7 +40,6 @@ import { getPluginCapability, isEditableTarget, normalizePdfText } from '../shar
 import { getExternalUrl, getSelectedExternalUrl } from '../shared/url';
 import { platform } from '#platform';
 import { getDocument } from '../document/viewer-document';
-import type { PdfScroll } from '../renderer/pdf-scroll';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 
 type ContextMenuState = {
@@ -180,40 +179,16 @@ async function copyAnnotationImage(
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': image })]);
 }
 
-function getMenuAnchor(
-  scroll: PdfScroll,
-  container: HTMLElement,
-  pageIndex: number,
-  rect: Rect,
-) {
-  const positionedRect = scroll.getRectPosition(pageIndex, rect);
-  const scrollerElement = container.querySelector<HTMLElement>('.pdf-scroller');
-  if (!positionedRect || !scrollerElement) return null;
-
-  // The scroll plugin returns coordinates relative to the PDF content. Use the
-  // actual centered scroller as the viewport-space origin so wide VS Code
-  // webviews do not introduce an unaccounted horizontal offset.
-  const scrollerRect = scrollerElement.getBoundingClientRect();
-  const viewportGap = scroll.getViewportGap();
-
-  return {
-    x: scrollerRect.left + positionedRect.origin.x + viewportGap + positionedRect.size.width * 0.65,
-    y: scrollerRect.top + positionedRect.origin.y + viewportGap + positionedRect.size.height + 8,
-  };
-}
-
 export function ContextMenu({
   engine,
   registry,
   documentId,
-  scroll,
   container,
   dispatch,
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
   documentId?: string | null;
-  scroll?: PdfScroll | null;
   container: HTMLElement | null;
   dispatch: ViewerCommandDispatch;
 }) {
@@ -259,51 +234,36 @@ export function ContextMenu({
   }, [documentId, registry]);
 
   useEffect(() => {
-    if (!registry || !documentId || !scroll || !container) return;
-    const selectionPlugin = registry.getPlugin('selection') as SelectionPlugin | undefined;
+    if (!registry || !documentId || !container) return;
+    const selection = getPluginCapability<SelectionCapability>(registry, 'selection')
+      ?.forDocument(documentId);
     const annotation = getAnnotationScope(registry, documentId)?.scope;
-    let annotationMenuFrame = 0;
 
     const isViewerEvent = (event: Event) => event.composedPath().some((target) => (
       target instanceof HTMLElement && target.classList.contains('viewer')
     ));
 
-    const preventContextMenu = (event: MouseEvent) => {
+    const openContextMenu = (event: MouseEvent) => {
       if (!isViewerEvent(event)) return;
       event.preventDefault();
       event.stopPropagation();
-    };
 
-    const openAnnotationMenu = (event: PointerEvent) => {
-      if (!annotation || event.button !== 0 || !isViewerEvent(event)) return;
-      const anchor = { x: event.clientX + 12, y: event.clientY + 12 };
-      if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
-      annotationMenuFrame = requestAnimationFrame(() => {
-        annotationMenuFrame = 0;
-        const selected = annotation.getSelectedAnnotations();
-        if (!selected[0]) return;
-        setMenu({ kind: 'annotation', ...anchor });
+      const hasSelection = Boolean(selection
+        && Object.values(selection.getState().slices).some(({ count }) => count > 0));
+      const hasSelectedAnnotation = Boolean(annotation?.getSelectedAnnotations().length);
+      if (!hasSelection && !hasSelectedAnnotation) return;
+      setMenu({
+        kind: hasSelectedAnnotation ? 'annotation' : 'selection',
+        x: event.clientX + 8,
+        y: event.clientY + 8,
       });
     };
 
-    const unsubscribePlacement = selectionPlugin?.onMenuPlacement(documentId, (placement) => {
-      if (!placement?.isVisible) {
-        setMenu((current) => current?.kind === 'selection' ? null : current);
-        return;
-      }
-      const anchor = getMenuAnchor(scroll, container, placement.pageIndex, placement.rect);
-      if (anchor) setMenu({ kind: 'selection', ...anchor });
-    });
-
-    container.addEventListener('contextmenu', preventContextMenu, { capture: true });
-    container.addEventListener('pointerup', openAnnotationMenu, { capture: true });
+    container.addEventListener('contextmenu', openContextMenu, { capture: true });
     return () => {
-      if (annotationMenuFrame) cancelAnimationFrame(annotationMenuFrame);
-      unsubscribePlacement?.();
-      container.removeEventListener('contextmenu', preventContextMenu, { capture: true });
-      container.removeEventListener('pointerup', openAnnotationMenu, { capture: true });
+      container.removeEventListener('contextmenu', openContextMenu, { capture: true });
     };
-  }, [container, documentId, registry, scroll]);
+  }, [container, documentId, registry]);
 
   useEffect(() => {
     if (!menu) return;

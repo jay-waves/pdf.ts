@@ -30,15 +30,13 @@ const VIEWER_THEME_METADATA = [
     colorMode: 'dark',
     renderTheme: {
       mode: 'forced-colors',
-      // Compensate for the shared dark-page filter so the displayed background
-      // stays near #1e1e1e instead of being crushed to near-black.
-      background: 0xff3f3f3f,
+      background: 0xff1e1e1e,
       // Keep filled regions lighter than the page while retaining enough
       // contrast for the light text forced inside reverse-color labels.
-      pathFill: 0xff626262,
-      pathStroke: 0xff8d8d8d,
-      textFill: 0xffe8e8e8,
-      textStroke: 0xffe8e8e8,
+      pathFill: 0xff3f3f3f,
+      pathStroke: 0xff676767,
+      textFill: 0xffbbbbbb,
+      textStroke: 0xffbbbbbb,
     },
   },
   {
@@ -47,13 +45,11 @@ const VIEWER_THEME_METADATA = [
     colorMode: 'dark',
     renderTheme: {
       mode: 'forced-colors',
-      // Compensate for the shared page filter so the displayed background
-      // lands near Nord's darker #2e3440 blue-gray surface.
-      background: 0xff505662,
-      pathFill: 0xff5e6677,
-      pathStroke: 0xff8f99a8,
-      textFill: 0xfff4f4f4,
-      textStroke: 0xfff4f4f4,
+      background: 0xff2e3440,
+      pathFill: 0xff3b4352,
+      pathStroke: 0xff697280,
+      textFill: 0xffc6c6c6,
+      textStroke: 0xffc6c6c6,
     },
   },
   {
@@ -62,15 +58,13 @@ const VIEWER_THEME_METADATA = [
     colorMode: 'dark',
     renderTheme: {
       mode: 'forced-colors',
-      // Compensate for the shared dark-page filter so the rendered page lands
-      // near the theme background, #2d2c2a.
-      background: 0xff4f4e4c,
-      pathFill: 0xff857b6d,
+      background: 0xff2d2c2a,
+      pathFill: 0xff5f5649,
       // Keep vector outlines in a soft Gruvbox ochre while rendering text in a
       // brighter warm white, so fine diagrams do not visually merge with type.
-      pathStroke: 0xffc3b276,
-      textFill: 0xfff9f5d7,
-      textStroke: 0xfff9f5d7,
+      pathStroke: 0xff998951,
+      textFill: 0xffcbc7ab,
+      textStroke: 0xffcbc7ab,
     },
   },
   {
@@ -79,13 +73,11 @@ const VIEWER_THEME_METADATA = [
     colorMode: 'dark',
     renderTheme: {
       mode: 'forced-colors',
-      // Compensate for the shared dark-page filter so the rendered page lands
-      // near the slightly deeper #383c4f blue-gray base.
-      background: 0xff5a5f73,
-      pathFill: 0xff6c7086,
-      pathStroke: 0xff7fc8bd,
-      textFill: 0xffc6d0f5,
-      textStroke: 0xffc6d0f5,
+      background: 0xff383c4f,
+      pathFill: 0xff484c60,
+      pathStroke: 0xff5a9d93,
+      textFill: 0xff9ca5c7,
+      textStroke: 0xff9ca5c7,
     },
   },
 ] as const satisfies readonly ViewerThemeMetadata[];

@@ -370,7 +370,6 @@ function App({
         engine={engine}
         registry={registry}
         documentId={documentId}
-        scroll={pdfScroll}
         container={viewerRootRef.current}
         dispatch={dispatchCommand}
       />

@@ -76,7 +76,7 @@
 }
 
 :root[data-pdf-scroll-strategy="vertical"] .viewer {
-  overflow-x: hidden !important;
+  overflow-x: auto !important;
   overflow-y: auto !important;
 }
 
@@ -87,7 +87,7 @@
 
 :root[data-pdf-scroll-strategy="horizontal"] .viewer {
   overflow-x: scroll !important;
-  overflow-y: hidden !important;
+  overflow-y: auto !important;
 }
 
 .viewer img,
@@ -104,10 +104,6 @@
   box-shadow:
     0 0 0 1px var(--pdf-page-border),
     0 1px 2px var(--pdf-page-shadow);
-}
-
-:root[data-viewer-color-mode="dark"] :is(.pdf-page-render-image, .pdf-page-tiling-layer) {
-  filter: brightness(0.76) contrast(1.22) saturate(1);
 }
 
 .pdf-page-tiling-layer,

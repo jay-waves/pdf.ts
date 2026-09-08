@@ -308,6 +308,7 @@ export function useViewerController(dependencies: ViewerControllerDependencies) 
 export function installViewerCommandKeys(dispatch: ViewerCommandDispatch) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.altKey || (!event.ctrlKey && !event.metaKey)) return;
+    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
 
     const key = event.key.toLowerCase();
     let command: ViewerCommand | null = null;
