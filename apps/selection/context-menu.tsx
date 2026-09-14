@@ -51,6 +51,18 @@ type ContextMenuState = {
 const CAPTURE_PADDING = 3;
 const CAPTURE_SCALE = 4;
 const MAX_CAPTURE_PIXELS = 16_000_000;
+const TEXT_SELECTION_HIT_PADDING = 6;
+
+function isTextSelectionHit(container: HTMLElement, x: number, y: number) {
+  const page = container.ownerDocument.elementFromPoint(x, y)?.closest('.pdf-page-surface');
+  const selection = page?.querySelector<HTMLElement>('.pdf-text-selection-layer > div');
+  if (!selection) return false;
+  const rect = selection.getBoundingClientRect();
+  return x >= rect.left - TEXT_SELECTION_HIT_PADDING
+    && x <= rect.right + TEXT_SELECTION_HIT_PADDING
+    && y >= rect.top - TEXT_SELECTION_HIT_PADDING
+    && y <= rect.bottom + TEXT_SELECTION_HIT_PADDING;
+}
 
 function getExternalLink(annotation: PdfAnnotationObject | undefined) {
   if (
@@ -245,7 +257,8 @@ export function ContextMenu({
 
     const preserveSelection = (event: MouseEvent) => {
       if (event.button !== 2 || !isViewerEvent(event) || !selection
-        || !Object.values(selection.getState().slices).some(({ count }) => count > 0)) return;
+        || !Object.values(selection.getState().slices).some(({ count }) => count > 0)
+        || !isTextSelectionHit(container, event.clientX, event.clientY)) return;
       // The selection plugin clears on pointerdown, before contextmenu fires.
       event.stopPropagation();
       event.preventDefault();
@@ -265,16 +278,11 @@ export function ContextMenu({
       event.preventDefault();
       event.stopPropagation();
 
-      const target = event.target instanceof Element ? event.target : null;
-      const layer = target?.closest('.pdf-annotation-layer');
-      if (layer && target !== layer) return;
-
       const hasSelection = Boolean(selection
         && Object.values(selection.getState().slices).some(({ count }) => count > 0));
-      const hasSelectedAnnotation = Boolean(annotation?.getSelectedAnnotations().length);
-      if (!hasSelection && !hasSelectedAnnotation) return;
+      if (!hasSelection || !isTextSelectionHit(container, event.clientX, event.clientY)) return;
       setMenu({
-        kind: hasSelectedAnnotation ? 'annotation' : 'selection',
+        kind: 'selection',
         x: event.clientX + 8,
         y: event.clientY + 8,
       });
