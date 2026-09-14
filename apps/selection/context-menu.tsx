@@ -265,6 +265,10 @@ export function ContextMenu({
       event.preventDefault();
       event.stopPropagation();
 
+      const target = event.target instanceof Element ? event.target : null;
+      const layer = target?.closest('.pdf-annotation-layer');
+      if (layer && target !== layer) return;
+
       const hasSelection = Boolean(selection
         && Object.values(selection.getState().slices).some(({ count }) => count > 0));
       const hasSelectedAnnotation = Boolean(annotation?.getSelectedAnnotations().length);
