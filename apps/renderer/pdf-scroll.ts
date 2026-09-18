@@ -374,6 +374,7 @@ export class PdfScroll {
 
   installNavigationInput(onNavigate: (delta: number, source: ViewerInputSource) => void) {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (document.documentElement.dataset.pdfPresentation === 'true') return;
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (!isViewerNavigationTarget(event.target)) return;
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;

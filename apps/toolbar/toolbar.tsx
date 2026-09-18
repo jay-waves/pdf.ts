@@ -25,6 +25,7 @@ import {
   Pin,
   Plus,
   Printer,
+  Presentation,
   Redo2,
   RotateCw,
   Save,
@@ -75,6 +76,8 @@ interface ToolbarProps {
   scroll?: PdfScroll | null;
   feedback: ToolbarFeedback;
   dispatch: ViewerCommandDispatch;
+  onStartPresentation(): void;
+  canPresent: boolean;
 }
 
 const PRIMARY_ITEMS: Array<{
@@ -185,6 +188,8 @@ function ZoomControl({
 
 export function Toolbar({
   scroll,
+  onStartPresentation,
+  canPresent,
   feedback: {
     documentId,
     searchOpen,
@@ -483,6 +488,12 @@ export function Toolbar({
             </FloatingToolbarGroup>
             <FloatingToolbarDivider />
             <FloatingToolbarGroup>
+              <IconButton
+                label="Presentation mode"
+                icon={Presentation}
+                disabled={!canPresent}
+                onClick={onStartPresentation}
+              />
               <IconButton
                 label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'}
                 icon={GalleryHorizontal}

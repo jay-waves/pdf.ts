@@ -169,6 +169,7 @@ function App({
     bookmarks: [],
   });
   const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
+  const [presentationPage, setPresentationPage] = useState<number | null>(null);
   const [detectedDocumentLanguage, setDetectedDocumentLanguage] = useState<
     PlatformLanguageDetectionResult
   >();
@@ -214,6 +215,39 @@ function App({
   const closeOverlay = useCallback(() => {
     dispatchCommand({ type: 'ui/close-overlay' });
   }, [dispatchCommand]);
+
+  const navigatePresentation = useCallback((delta: -1 | 1) => {
+    if (presentationPage === null) return;
+    const next = Math.min(Math.max(1, presentationPage + delta), totalPages);
+    if (next === presentationPage) return;
+    setPresentationPage(next);
+    pdfScroll?.goToPage(next);
+  }, [pdfScroll, presentationPage, totalPages]);
+
+  useEffect(() => {
+    if (presentationPage === null) return;
+    document.documentElement.dataset.pdfPresentation = 'true';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setPresentationPage(null);
+        return;
+      }
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.target instanceof Element && event.target.closest('button, input, textarea, select, [contenteditable]')) return;
+      const delta = event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' '
+        ? 1
+        : event.key === 'ArrowLeft' || event.key === 'PageUp' ? -1 : null;
+      if (delta === null) return;
+      event.preventDefault();
+      navigatePresentation(delta);
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => {
+      delete document.documentElement.dataset.pdfPresentation;
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+    };
+  }, [navigatePresentation, presentationPage]);
 
   useEffect(() => installViewerCommandKeys(dispatchCommand), [dispatchCommand]);
 
@@ -264,6 +298,7 @@ function App({
     setPdfScroll(nextScroll);
     setOutlineCache({ status: 'idle', bookmarks: [] });
     setDocumentView(INITIAL_DOCUMENT_VIEW);
+    setPresentationPage(null);
     dispatchViewerUi({ type: 'ui/reset' });
     resetViewerDiagnostics();
     pdfSearchStore.getState().clear();
@@ -319,12 +354,22 @@ function App({
         onInitialized={initializePlugins}
         onResourceConsumed={onResourceConsumed}
         renderDpr={renderDpr}
+        presentationPage={presentationPage}
+        totalPages={totalPages}
+        onPresentationNavigate={navigatePresentation}
+        onPresentationExit={() => setPresentationPage(null)}
       />
-      <Toolbar
+      {presentationPage === null ? <Toolbar
         scroll={pdfScroll}
         feedback={toolbarFeedback}
         dispatch={dispatchCommand}
-      />
+        canPresent={totalPages > 0}
+        onStartPresentation={() => {
+          dispatchViewerUi({ type: 'ui/close-overlay' });
+          dispatchViewerUi({ type: 'ui/set-search', open: false });
+          setPresentationPage(currentPageNumber);
+        }}
+      /> : null}
       <Dialog
         open={documentPane !== null}
         onClose={closeOverlay}
@@ -419,13 +464,13 @@ function App({
         pdfium={pdfium}
         onClose={closeOverlay}
       />
-      <BottomNav
+      {presentationPage === null ? <BottomNav
         dispatch={dispatchCommand}
         title={currentTitle}
         pageNumber={currentPageNumber}
         totalPages={totalPages}
         outlineStatus={outlineCache.status}
-      />
+      /> : null}
     </main>
   );
 }

@@ -31,9 +31,7 @@ func (app *App) handleAIConfig(response http.ResponseWriter, request *http.Reque
 	}
 }
 
-const aiSystemPrompt = `You are a precise reading assistant. Use non-thinking mode and answer only with the requested result.
-For translation, translate the supplied text into the target language. Preserve meaning, tone, names, formatting, and paragraph breaks. Do not explain your choices.
-For dictionary lookup, give a concise definition in the target language, part of speech, and a short explanation of the word's usage. Keep the answer brief and do not use markdown headings.`
+const aiSystemPrompt = "Follow the user's reading request. Return only the requested result."
 
 func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
@@ -61,7 +59,11 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 	if input.Lookup {
 		prompt = strings.Replace(desktopAIConfig.LookupPrompt, "%s", input.Text, 1)
 	}
-	completion, err := client.CreateChatCompletion(request.Context(), openai.ChatCompletionRequest{Model: desktopAIConfig.Model, Messages: []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: aiSystemPrompt}, {Role: openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: prompt}}}, Temperature: 0})
+	completion, err := client.CreateChatCompletion(request.Context(), openai.ChatCompletionRequest{
+		Model:           desktopAIConfig.Model,
+		Messages:        []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: aiSystemPrompt}, {Role: openai.ChatMessageRoleUser, Content: prompt}},
+		ReasoningEffort: "none",
+	})
 	if err != nil {
 		writeJSON(response, http.StatusBadGateway, aiResponse{Message: err.Error()})
 		return
