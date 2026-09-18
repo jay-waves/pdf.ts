@@ -187,6 +187,7 @@ func (app *App) routes() http.Handler {
 	mux.HandleFunc("/api/control/stop", app.handleStop)
 	mux.HandleFunc("/api/control/documents", app.handleRegisterDocument)
 	mux.HandleFunc("/api/control/ai", app.handleAI)
+	mux.HandleFunc("/api/control/ai-config", app.handleAIConfig)
 	mux.HandleFunc("/api/documents/", app.handleDocument)
 
 	sub, err := fs.Sub(viewerFiles, "viewer")

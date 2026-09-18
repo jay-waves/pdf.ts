@@ -9,19 +9,26 @@ import (
 )
 
 type aiRequest struct {
-	Text              string `json:"text"`
-	TargetLanguage    string `json:"targetLanguage"`
-	Lookup            bool   `json:"lookup"`
-	APIKey            string `json:"apiKey"`
-	BaseURL           string `json:"baseUrl"`
-	Model             string `json:"model"`
-	TranslationPrompt string `json:"translationPrompt"`
-	LookupPrompt      string `json:"lookupPrompt"`
+	Text   string `json:"text"`
+	Lookup bool   `json:"lookup"`
 }
 
 type aiResponse struct {
 	Text    string `json:"text,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+type aiConfig struct { APIKey string `json:"-"`; APIKeyConfigured bool `json:"apiKeyConfigured"`; BaseURL string `json:"baseUrl"`; Model string `json:"model"`; TranslationPrompt string `json:"translationPrompt"`; LookupPrompt string `json:"lookupPrompt"` }
+type aiConfigUpdate struct { APIKey *string `json:"apiKey"`; BaseURL *string `json:"baseUrl"`; Model *string `json:"model"`; TranslationPrompt *string `json:"translationPrompt"`; LookupPrompt *string `json:"lookupPrompt"` }
+var desktopAIConfig aiConfig
+
+func (app *App) handleAIConfig(response http.ResponseWriter, request *http.Request) {
+	if !app.sameOrigin(request) { writeJSONError(response, http.StatusForbidden, "forbidden_origin", "The AI config request did not come from this pdf.ts instance."); return }
+	switch request.Method {
+	case http.MethodGet: config := desktopAIConfig; config.APIKeyConfigured = config.APIKey != ""; writeJSON(response, http.StatusOK, config)
+	case http.MethodPut: var input aiConfigUpdate; if err := json.NewDecoder(http.MaxBytesReader(response, request.Body, 64<<10)).Decode(&input); err != nil { writeJSONError(response, http.StatusBadRequest, "invalid_ai_config", "Invalid AI config."); return }; config := desktopAIConfig; if input.APIKey != nil && *input.APIKey != "" { config.APIKey = *input.APIKey }; if input.BaseURL != nil { config.BaseURL = *input.BaseURL }; if input.Model != nil { config.Model = *input.Model }; if input.TranslationPrompt != nil { config.TranslationPrompt = *input.TranslationPrompt }; if input.LookupPrompt != nil { config.LookupPrompt = *input.LookupPrompt }; desktopAIConfig = config; response.WriteHeader(http.StatusNoContent)
+	default: response.Header().Set("Allow", "GET, PUT"); http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 const aiSystemPrompt = `You are a precise reading assistant. Use non-thinking mode and answer only with the requested result.
@@ -43,18 +50,18 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 		writeJSONError(response, http.StatusBadRequest, "invalid_ai_request", "Invalid AI request.")
 		return
 	}
-	if input.Text == "" || input.APIKey == "" || input.BaseURL == "" || input.Model == "" {
+	if input.Text == "" || desktopAIConfig.APIKey == "" || desktopAIConfig.BaseURL == "" || desktopAIConfig.Model == "" {
 		writeJSONError(response, http.StatusBadRequest, "invalid_ai_request", "Text, API key, base URL, and model are required.")
 		return
 	}
-	config := openai.DefaultConfig(input.APIKey)
-	config.BaseURL = strings.TrimRight(input.BaseURL, "/")
+	config := openai.DefaultConfig(desktopAIConfig.APIKey)
+	config.BaseURL = strings.TrimRight(desktopAIConfig.BaseURL, "/")
 	client := openai.NewClientWithConfig(config)
-	prompt := input.TranslationPrompt + "\nTarget language: " + input.TargetLanguage + ". Text:\n" + input.Text
+	prompt := strings.Replace(desktopAIConfig.TranslationPrompt, "%s", input.Text, 1)
 	if input.Lookup {
-		prompt = input.LookupPrompt + "\nTarget language: " + input.TargetLanguage + ". Word: " + input.Text
+		prompt = strings.Replace(desktopAIConfig.LookupPrompt, "%s", input.Text, 1)
 	}
-	completion, err := client.CreateChatCompletion(request.Context(), openai.ChatCompletionRequest{Model: input.Model, Messages: []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: aiSystemPrompt}, {Role: openai.ChatMessageRoleUser, Content: prompt}}, Temperature: 0})
+	completion, err := client.CreateChatCompletion(request.Context(), openai.ChatCompletionRequest{Model: desktopAIConfig.Model, Messages: []openai.ChatCompletionMessage{{Role: openai.ChatMessageRoleSystem, Content: aiSystemPrompt}, {Role: openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: prompt}}}, Temperature: 0})
 	if err != nil {
 		writeJSON(response, http.StatusBadGateway, aiResponse{Message: err.Error()})
 		return

@@ -191,8 +191,14 @@ function executeViewerCommand(
       if (!spread || !documentId) return;
       const scope = spread.forDocument(documentId);
       const next = scope.getSpreadMode() === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd;
-      if (scroll) scroll.preserveView(() => scope.setSpreadMode(next));
-      else scope.setSpreadMode(next);
+      const update = () => {
+        scope.setSpreadMode(next);
+        if (next === SpreadMode.Odd) {
+          getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(ZoomMode.FitWidth);
+        }
+      };
+      if (scroll) scroll.preserveView(update);
+      else update();
       return;
     }
     case 'view/set-scroll':
