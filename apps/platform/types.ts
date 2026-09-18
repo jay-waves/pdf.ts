@@ -85,7 +85,17 @@ export interface ViewerPlatform {
   setPreference(key: string, value: string): void;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
   writeReadingProgress(documentKey: string, progress: ReadingProgress): Promise<void>;
+  requestAi?(request: AiRequest): Promise<string>;
 }
+
+export type AiRequest = {
+  text: string;
+  targetLanguage: string;
+  lookup: boolean;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+};
 
 export class LanguageDetectionDownloadRequired extends Error {
   readonly downloading: boolean;

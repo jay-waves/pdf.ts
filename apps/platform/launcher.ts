@@ -5,6 +5,7 @@ import { getExternalUrl } from '../shared/url';
 import type {
   PlatformDocument,
   ViewerPlatform,
+  AiRequest,
 } from './types';
 
 type WriteResponse = {
@@ -191,4 +192,16 @@ export const platform: ViewerPlatform = {
   },
   ...browserTranslationCapabilities,
   ...browserPersistence,
+  requestAi: async (request: AiRequest) => {
+    if (!launcher) throw new Error('The desktop launcher is unavailable.');
+    const response = await fetch(new URL('/api/control/ai', window.location.origin), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    const result = await response.json().catch(() => ({})) as { text?: string; message?: string };
+    if (!response.ok) throw new Error(result.message ?? `AI request failed (${response.status}).`);
+    if (typeof result.text !== 'string') throw new Error('The launcher returned an invalid AI response.');
+    return result.text;
+  },
 };
