@@ -2,6 +2,7 @@
 
 .card { @apply grid gap-3 rounded-lg border border-border-subtle bg-transparent p-4; }
 .editorPanel { @apply grid min-w-0 gap-4 rounded-lg border border-border-subtle p-4; }
+.card, .editorPanel { background: var(--pdf-section-background); box-shadow: var(--pdf-section-shadow); }
 .heading { @apply flex items-center justify-between gap-4; }
 .heading h2 { @apply m-0 text-xs font-semibold text-foreground; }
 .heading p { @apply mt-1 mb-0 text-[11px] leading-4 text-muted; }
@@ -11,6 +12,7 @@
 .providers button strong { @apply text-[11px] font-medium; }
 .providers button span { @apply text-[10px] leading-4 text-muted; }
 .providers button[aria-pressed='true'] { @apply bg-surface text-foreground; }
+.providers button[aria-pressed='true'] { box-shadow: var(--pdf-option-shadow); }
 .providers button:hover:not(:disabled) { @apply text-foreground; }
 .providers button:disabled { @apply cursor-default opacity-45; }
 .providers button:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: 2px; }
@@ -19,6 +21,8 @@
 .field { @apply grid min-w-0 gap-2 text-[11px] font-medium text-secondary; }
 .field input, .field textarea { @apply w-full min-w-0 rounded-md border border-border-subtle bg-transparent px-3 py-2 text-xs font-normal text-foreground shadow-none outline-none focus:border-accent disabled:opacity-50; }
 .field textarea { @apply resize-y leading-5; }
+.field input, .field textarea { background: var(--pdf-control-background); }
+.field input:focus-visible, .field textarea:focus-visible { box-shadow: var(--pdf-control-ring); }
 .field input::placeholder { @apply text-muted; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
 .textButton { @apply flex w-fit cursor-pointer items-center gap-1.5 text-[11px] text-secondary underline-offset-2 hover:underline disabled:cursor-default disabled:opacity-40; }

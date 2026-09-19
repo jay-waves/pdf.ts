@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { HistoryCapability } from '@embedpdf/plugin-history';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
-import { ZoomMode, type ZoomCapability, type ZoomLevel } from '@embedpdf/plugin-zoom';
+import { SpreadMode } from '@embedpdf/plugin-spread';
+import type { ZoomCapability, ZoomLevel } from '@embedpdf/plugin-zoom';
 import { getAnnotationScope } from '../annotations/annotations';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import { EMPTY_PAGE_VIEW, type PageController } from './page-controller';
+
+const subscribeEmptyView = () => () => {};
+const getEmptyView = () => EMPTY_PAGE_VIEW;
 import { toggleViewerColorMode } from '../theme/theme';
-import { getDocumentScope, getPluginCapability, isEditableTarget } from '../shared/utils';
+import { getDocumentScope, getPluginCapability } from '../shared/utils';
 import { viewerActivity, type ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer';
@@ -110,6 +113,7 @@ export function reduceViewerUi(state: ViewerUiState, action: ViewerUiAction): Vi
 }
 
 export type ViewerCommand = ViewerUiCommand
+  | { type: 'view/set-presentation'; enabled: boolean }
   | { type: 'navigation/go-to-page'; pageNumber: number }
   | { type: 'navigation/move-pages'; delta: number; source?: ViewerInputSource }
   | { type: 'view/zoom-step'; direction: -1 | 1 }
@@ -137,7 +141,7 @@ export type ViewerCapabilityFeedback = {
 type ViewerControllerDependencies = {
   registry?: PluginRegistry;
   documentId?: string | null;
-  scroll?: PdfScroll | null;
+  pages?: PageController | null;
   updateUi(command: ViewerUiCommand): void;
   saveDocument(): void;
   exportDocument(): void;
@@ -147,7 +151,15 @@ function executeViewerCommand(
   command: ViewerCommand,
   dependencies: ViewerControllerDependencies,
 ) {
-  const { registry, documentId, scroll, updateUi } = dependencies;
+  const { registry, documentId, updateUi } = dependencies;
+
+  // Presentation accepts navigation and exit; reading-only commands must not
+  // change the inactive viewport through global keyboard shortcuts.
+  if (dependencies.pages?.getSnapshot().mode === 'presentation'
+    && command.type !== 'view/set-presentation'
+    && !command.type.startsWith('navigation/')
+    && !command.type.startsWith('document/')
+    && command.type !== 'theme/toggle') return;
 
   switch (command.type) {
     case 'ui/set-pan':
@@ -171,10 +183,10 @@ function executeViewerCommand(
       updateUi(command);
       return;
     case 'navigation/go-to-page':
-      scroll?.goToPage(command.pageNumber);
+      dependencies.pages?.goToPage(command.pageNumber);
       return;
     case 'navigation/move-pages':
-      scroll?.movePages(command.delta);
+      dependencies.pages?.movePages(command.delta);
       if (command.source) viewerActivity.pulse(command.source, ['Navigation', 'Page']);
       return;
     case 'view/zoom-step': {
@@ -186,23 +198,19 @@ function executeViewerCommand(
     case 'view/set-zoom':
       getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(command.level);
       return;
-    case 'view/toggle-spread': {
-      const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-      if (!spread || !documentId) return;
-      const scope = spread.forDocument(documentId);
-      const next = scope.getSpreadMode() === SpreadMode.Odd ? SpreadMode.None : SpreadMode.Odd;
-      const update = () => {
-        scope.setSpreadMode(next);
-        if (next === SpreadMode.Odd) {
-          getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(ZoomMode.FitWidth);
-        }
-      };
-      if (scroll) scroll.preserveView(update);
-      else update();
+    case 'view/set-presentation':
+      if (command.enabled) {
+        updateUi({ type: 'ui/close-overlay' });
+        updateUi({ type: 'ui/set-search', open: false });
+        getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+      }
+      dependencies.pages?.setPresentation(command.enabled);
       return;
-    }
+    case 'view/toggle-spread':
+      dependencies.pages?.toggleSpread();
+      return;
     case 'view/set-scroll':
-      scroll?.setStrategy(command.strategy);
+      dependencies.pages?.setStrategy(command.strategy);
       return;
     case 'view/rotate':
       getPluginCapability<RotateCapability>(registry, 'rotate')?.rotateForward();
@@ -239,13 +247,10 @@ function executeViewerCommand(
 function useViewerCapabilityFeedback(
   registry: PluginRegistry | undefined,
   documentId: string | null | undefined,
-  scroll: PdfScroll | null | undefined,
-): ViewerCapabilityFeedback {
+): Omit<ViewerCapabilityFeedback, 'spreadMode' | 'scrollStrategy'> {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [activeTool, setActiveTool] = useState<string | null>(null);
-  const [spreadMode, setSpreadMode] = useState(SpreadMode.None);
-  const [scrollStrategy, setScrollStrategy] = useState(ScrollStrategy.Vertical);
 
   useEffect(() => {
     const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
@@ -273,27 +278,7 @@ function useViewerCapabilityFeedback(
     return annotation.scope.onActiveToolChange(sync);
   }, [documentId, registry]);
 
-  useEffect(() => {
-    const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-    if (!spread || !documentId) {
-      setSpreadMode(SpreadMode.None);
-      return;
-    }
-    const scope = spread.forDocument(documentId);
-    setSpreadMode(scope.getSpreadMode());
-    return scope.onSpreadChange(setSpreadMode);
-  }, [documentId, registry]);
-
-  useEffect(() => {
-    if (!scroll) {
-      setScrollStrategy(ScrollStrategy.Vertical);
-      return;
-    }
-    setScrollStrategy(scroll.getStrategy());
-    return scroll.onStrategyChange(setScrollStrategy);
-  }, [scroll]);
-
-  return { zoomPercent, zoomLevel, activeTool, spreadMode, scrollStrategy };
+  return { zoomPercent, zoomLevel, activeTool };
 }
 
 export function useViewerController(dependencies: ViewerControllerDependencies) {
@@ -305,43 +290,11 @@ export function useViewerController(dependencies: ViewerControllerDependencies) 
   const feedback = useViewerCapabilityFeedback(
     dependencies.registry,
     dependencies.documentId,
-    dependencies.scroll,
   );
 
-  return { dispatch, feedback };
-}
-
-export function installViewerCommandKeys(dispatch: ViewerCommandDispatch) {
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.altKey || (!event.ctrlKey && !event.metaKey)) return;
-    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
-
-    const key = event.key.toLowerCase();
-    let command: ViewerCommand | null = null;
-    if (!event.shiftKey && key === 'f') {
-      command = { type: 'ui/set-search', open: true };
-    } else if (!event.shiftKey && key === 's') {
-      command = { type: 'document/save' };
-    } else if (key === '0') {
-      command = { type: 'view/set-zoom', level: ZoomMode.FitPage };
-    } else if (key === '+' || key === '=') {
-      command = { type: 'view/zoom-step', direction: 1 };
-    } else if (key === '-' || key === '_') {
-      command = { type: 'view/zoom-step', direction: -1 };
-    } else if (!isEditableTarget(event.target)) {
-      if (key === 'y' || (key === 'z' && event.shiftKey)) {
-        command = { type: 'annotation/history', direction: 'redo' };
-      } else if (key === 'z') {
-        command = { type: 'annotation/history', direction: 'undo' };
-      }
-    }
-    if (!command) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    dispatch(command);
-  };
-
-  window.addEventListener('keydown', onKeyDown, { capture: true });
-  return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  const view = useSyncExternalStore(
+    dependencies.pages?.subscribe ?? subscribeEmptyView,
+    dependencies.pages?.getSnapshot ?? getEmptyView,
+  );
+  return { dispatch, view, feedback: { ...feedback, spreadMode: view.spread, scrollStrategy: view.strategy } };
 }

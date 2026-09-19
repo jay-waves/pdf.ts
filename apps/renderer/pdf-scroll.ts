@@ -13,8 +13,7 @@ import {
 } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability, ViewportMetrics } from '@embedpdf/plugin-viewport';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
-import { getDocumentScrollStrategy, getPluginCapability, isViewerNavigationTarget } from '../shared/utils';
-import type { ViewerInputSource } from '../viewer/viewer-activity';
+import { getDocumentScrollStrategy, getPluginCapability } from '../shared/utils';
 
 const TARGET_INSET = 12;
 const COMFORT_RATIO = 0.08;
@@ -350,13 +349,6 @@ export class PdfScroll {
     return this.goToPage(this.getCurrentPage() + delta, behavior);
   }
 
-  setStrategy(strategy: ScrollStrategy) {
-    this.cancelPendingNavigation();
-    const anchor = this.getAnchor();
-    this.capability?.setScrollStrategy(strategy, this.documentId);
-    this.restoreAnchor(anchor);
-  }
-
   preserveView(update: () => void) {
     this.cancelPendingNavigation();
     const anchor = this.getAnchor();
@@ -370,53 +362,6 @@ export class PdfScroll {
       pageNumber,
       behavior: 'instant',
     });
-  }
-
-  installNavigationInput(onNavigate: (delta: number, source: ViewerInputSource) => void) {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (document.documentElement.dataset.pdfPresentation === 'true') return;
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (!isViewerNavigationTarget(event.target)) return;
-      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-      event.preventDefault();
-      event.stopPropagation();
-      onNavigate(event.key === 'ArrowLeft' ? -1 : 1, 'Keyboard');
-    };
-    const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
-      if (!isViewerNavigationTarget(event.target)) return;
-      if (event.button !== 3 && event.button !== 4) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    };
-    const onSideButtonUp = (event: MouseEvent) => {
-      if (!isViewerNavigationTarget(event.target)) return;
-      if (event.button !== 3 && event.button !== 4) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      onNavigate(
-        event.button === 3 ? -1 : 1,
-        'Mouse',
-      );
-    };
-    const onPointerMove = (event: PointerEvent) => {
-      if (!isViewerNavigationTarget(event.target)) return;
-      if (!(event.buttons & 24)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    };
-
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    window.addEventListener('mousedown', stopSideButtonEvent, { capture: true });
-    window.addEventListener('mouseup', onSideButtonUp, { capture: true });
-    window.addEventListener('pointermove', onPointerMove, { capture: true });
-    window.addEventListener('auxclick', stopSideButtonEvent, { capture: true });
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, { capture: true });
-      window.removeEventListener('mousedown', stopSideButtonEvent, { capture: true });
-      window.removeEventListener('mouseup', onSideButtonUp, { capture: true });
-      window.removeEventListener('pointermove', onPointerMove, { capture: true });
-      window.removeEventListener('auxclick', stopSideButtonEvent, { capture: true });
-    };
   }
 
   private getMetrics(): ViewportMetrics | null {

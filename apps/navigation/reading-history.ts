@@ -1,9 +1,8 @@
-import type { PluginRegistry } from '@embedpdf/core';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
+import { SpreadMode } from '@embedpdf/plugin-spread';
 import { platform } from '#platform';
 import type { PdfScroll } from '../renderer/pdf-scroll';
-import { getPluginCapability } from '../shared/utils';
+import type { PageController } from '../viewer/page-controller';
 
 function isScrollStrategy(value: unknown): value is ScrollStrategy {
   return value === ScrollStrategy.Vertical || value === ScrollStrategy.Horizontal;
@@ -18,25 +17,21 @@ function isValidPageNumber(value: unknown): value is number {
 }
 
 export function installReadingHistory(
-  registry: PluginRegistry,
   scroll: PdfScroll,
+  pages: PageController,
   documentKey?: string,
 ) {
   if (!documentKey) return;
 
-  const spread = getPluginCapability<SpreadCapability>(registry, 'spread');
-  const spreadScope = spread?.forDocument(scroll.documentId);
   let historyReady = false;
   let disposed = false;
   let pendingWriteId = 0;
   let finalWrite: Promise<void> | null = null;
-  let lastScrollStrategy = scroll.getStrategy();
 
   const getProgress = () => {
-    const strategy = scroll.getStrategy();
-    const spreadMode = spreadScope?.getSpreadMode();
+    const { strategy, spread: spreadMode } = pages.getSnapshot();
     return {
-      pageNumber: scroll.getCurrentPage(),
+      pageNumber: pages.getSnapshot().pageNumber,
       scrollStrategy: strategy,
       spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
     };
@@ -45,9 +40,10 @@ export function installReadingHistory(
   const getViewSnapshot = () => {
     const position = scroll.getPosition();
     return {
-      pageNumber: scroll.getCurrentPage(),
-      scrollStrategy: scroll.getStrategy(),
-      spreadMode: spreadScope?.getSpreadMode(),
+      pageNumber: pages.getSnapshot().pageNumber,
+      mode: pages.getSnapshot().mode,
+      scrollStrategy: pages.getSnapshot().strategy,
+      spreadMode: pages.getSnapshot().spread,
       ...position,
     };
   };
@@ -57,6 +53,7 @@ export function installReadingHistory(
     after: ReturnType<typeof getViewSnapshot>,
   ) => (
     before.pageNumber !== after.pageNumber
+    || before.mode !== after.mode
     || before.scrollStrategy !== after.scrollStrategy
     || before.spreadMode !== after.spreadMode
     || (
@@ -84,14 +81,7 @@ export function installReadingHistory(
     }, 300);
   };
 
-  const unsubscribePageChange = scroll.onPageChange(scheduleHistoryWrite);
-  const unsubscribeSpreadChange = spread?.onSpreadChange(scheduleHistoryWrite);
-  const unsubscribeScrollStateChange = scroll.onStrategyChange((strategy) => {
-    if (strategy === lastScrollStrategy) return;
-    lastScrollStrategy = strategy;
-    scheduleHistoryWrite();
-  });
-
+  const unsubscribePageChange = pages.subscribe(scheduleHistoryWrite);
   let layoutReadyHandled = false;
   let unsubscribeLayoutReady: (() => void) | null = null;
   const handleLayoutReady = () => {
@@ -109,9 +99,12 @@ export function installReadingHistory(
           getViewSnapshot(),
         );
         if (!viewChangedWhileReading && saved && isValidPageNumber(saved.pageNumber)) {
-          if (isSpreadMode(saved.spreadMode)) spreadScope?.setSpreadMode(saved.spreadMode);
-          if (isScrollStrategy(saved.scrollStrategy)) scroll.setStrategy(saved.scrollStrategy);
-          scroll.restorePage(saved.pageNumber);
+          const view = pages.getSnapshot();
+          pages.applyLayout(
+            isScrollStrategy(saved.scrollStrategy) ? saved.scrollStrategy : view.strategy,
+            isSpreadMode(saved.spreadMode) ? saved.spreadMode : view.spread,
+          );
+          pages.goToPage(saved.pageNumber);
         }
         historyReady = true;
         if (viewChangedWhileReading) scheduleHistoryWrite();
@@ -150,8 +143,6 @@ export function installReadingHistory(
     disposed = true;
     window.removeEventListener('pagehide', onClose);
     unsubscribePageChange();
-    unsubscribeSpreadChange?.();
-    unsubscribeScrollStateChange();
     unsubscribeLayoutReady?.();
   };
 }

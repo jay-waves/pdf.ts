@@ -4,7 +4,7 @@ import type { AiConfig, AiConfigUpdate } from '../platform/types';
 import { TRANSLATOR_PREFERENCE } from '../selection/translation-settings';
 import styles from './llm-settings.module.css';
 
-const DEFAULT_PROMPT = 'Translate the following text into {{targetLanguage}}. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n%s';
+const DEFAULT_PROMPT = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
 const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, prompt: DEFAULT_PROMPT };
 // Keep saves ordered even when the settings dialog is closed and reopened.
 let saveQueue: Promise<void> = Promise.resolve();
@@ -133,7 +133,6 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
       <label className={styles.field}>Prompt
         <textarea rows={9} value={config.prompt} onChange={(event) => edit('prompt', event.target.value)} />
       </label>
-      <p className={styles.hint}>%s inserts selected text. {'{{targetLanguage}}'} inserts the target language. Leave blank to restore the default translation prompt.</p>
     </fieldset>
     {error && <p className={styles.error} role="alert">{error}</p>}
     {supportsLlm && status && <div className={styles.footer}>

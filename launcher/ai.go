@@ -36,7 +36,7 @@ type aiConfigUpdate struct {
 	Prompt  *string `json:"prompt"`
 }
 
-const defaultTranslationPrompt = "Translate the following text into {{targetLanguage}}. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n%s"
+const defaultTranslationPrompt = "Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}"
 
 var desktopAIConfig = aiConfig{Model: "deepseek-flash", BaseURL: "https://api.deepseek.com", Prompt: defaultTranslationPrompt}
 var desktopAIConfigMutex sync.RWMutex
@@ -108,8 +108,13 @@ func (app *App) handleAIConfig(response http.ResponseWriter, request *http.Reque
 	}
 }
 
-func translationPrompt(template, text, target string) string {
-	prompt := strings.ReplaceAll(template, "{{targetLanguage}}", target)
+func translationPrompt(template, text string) string {
+	// LLM translation is intentionally fixed to Chinese and does not follow
+	// the target language selected for built-in or Google translation.
+	prompt := strings.ReplaceAll(template, "{{targetLanguage}}", "Chinese")
+	if strings.Contains(prompt, "{{selectedText}}") {
+		return strings.Replace(prompt, "{{selectedText}}", text, 1)
+	}
 	// Insert source text last so placeholders inside the selection remain literal.
 	if strings.Contains(prompt, "%s") {
 		return strings.Replace(prompt, "%s", text, 1)
@@ -144,7 +149,7 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 		Model: config.Model,
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: "Follow the user's translation instructions. Return only the translation."},
-			{Role: openai.ChatMessageRoleUser, Content: translationPrompt(config.Prompt, input.Text, input.TargetLanguage)},
+			{Role: openai.ChatMessageRoleUser, Content: translationPrompt(config.Prompt, input.Text)},
 		},
 	})
 	if err != nil {

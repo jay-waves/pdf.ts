@@ -3,7 +3,15 @@ import test from 'node:test';
 import {
   PdfiumFontFallbackManager,
   classifyPdfFontFamily,
+  isPdfStandardFont,
 } from '../apps/fonts/font-fallback-manager.ts';
+
+test('leaves PDF Standard 14 fonts to PDFium', () => {
+  assert.equal(isPdfStandardFont('Helvetica-BoldOblique'), true);
+  assert.equal(isPdfStandardFont('Times-Roman'), true);
+  assert.equal(isPdfStandardFont('ABCDEF+Helvetica'), true);
+  assert.equal(isPdfStandardFont('Arial'), false);
+});
 
 test('font family classification understands subset, localized, and pitch names', () => {
   const aliases = { simsun: 'serif', 宋体: 'serif', arial: 'sans' };

@@ -65,6 +65,11 @@
   --pdf-control-ring: 0 0 0 2px color-mix(in srgb, var(--pdf-accent-primary) 32%, transparent);
   --pdf-control-background: color-mix(in srgb, var(--pdf-background-input) 88%, transparent);
   --pdf-inset-background: color-mix(in srgb, var(--pdf-background-surface-alt) 82%, transparent);
+  --pdf-panel-background: color-mix(in srgb, var(--pdf-background-surface) 94%, var(--pdf-background-surface-alt));
+  --pdf-section-background: color-mix(in srgb, var(--pdf-background-surface) 65%, var(--pdf-background-surface-alt));
+  --pdf-panel-shadow: 0 2px 6px rgb(0 0 0 / 5%), 0 14px 36px rgb(0 0 0 / 12%);
+  --pdf-section-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  --pdf-option-shadow: 0 1px 3px rgb(0 0 0 / 9%);
   --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 94%, transparent);
   --pdf-glass-border: color-mix(in srgb, var(--pdf-foreground-primary) 11%, transparent);
   --pdf-glass-highlight: rgb(255 255 255 / 72%);
@@ -286,10 +291,10 @@
   -webkit-backdrop-filter: var(--pdf-mica-filter);
 }
 
-.pdf-mica-surface.pdf-flat-panel {
+.pdf-mica-surface.pdf-dialog-content {
   border-color: var(--pdf-border-subtle);
-  background-color: var(--pdf-background-surface);
-  box-shadow: 0 8px 28px color-mix(in srgb, var(--pdf-foreground-primary) 10%, transparent);
+  background-color: var(--pdf-panel-background);
+  box-shadow: var(--pdf-panel-shadow);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -351,6 +356,9 @@
 
 /* All dark palettes use the same restrained edge lighting and shadow depth. */
 :root[data-viewer-color-mode='dark'] {
+  --pdf-panel-shadow: 0 2px 6px rgb(0 0 0 / 16%), 0 14px 36px rgb(0 0 0 / 28%);
+  --pdf-section-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+  --pdf-option-shadow: 0 1px 3px rgb(0 0 0 / 20%);
   --pdf-glass-highlight: rgb(255 255 255 / 10%);
   --pdf-glass-shadow: 0 2px 6px rgb(0 0 0 / 16%), 0 12px 32px rgb(0 0 0 / 26%), inset 0 1px 0 var(--pdf-glass-highlight);
   --pdf-mica-shadow: 0 4px 12px rgb(0 0 0 / 18%), 0 24px 64px rgb(0 0 0 / 36%), inset 0 1px 0 var(--pdf-glass-highlight);

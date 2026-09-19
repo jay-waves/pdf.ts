@@ -32,6 +32,7 @@
   @apply hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:bg-transparent;
 }
 .themeOption[data-state='checked'] { @apply border-accent bg-hover text-foreground; }
+.themeOption[data-state='checked'] { box-shadow: var(--pdf-option-shadow); }
 .themePreview { @apply relative flex aspect-[2/1] overflow-hidden rounded-md border border-border-subtle; }
 .themePreview > span { @apply flex-1; }
 .themeOptionLabel { @apply overflow-hidden text-center text-[11px] leading-4 font-medium text-ellipsis whitespace-nowrap; }

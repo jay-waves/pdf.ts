@@ -12,6 +12,7 @@
   min-height: 0;
   place-items: center;
   overflow: hidden;
+  touch-action: none;
 }
 
 .page {

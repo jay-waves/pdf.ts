@@ -9,7 +9,7 @@ import (
 )
 
 func testAIConfig(endpoint string) aiConfig {
-	return aiConfig{Model: "test-model", BaseURL: endpoint, APIKey: "test-only-token", Prompt: "Translate into {{targetLanguage}}: %s"}
+	return aiConfig{Model: "test-model", BaseURL: endpoint, APIKey: "test-only-token", Prompt: "Translate into {{targetLanguage}}: {{selectedText}}"}
 }
 
 func installTestAIConfig(t *testing.T, config aiConfig) {
@@ -95,7 +95,7 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 	if received.Model != "test-model" || received.ReasoningEffort != "" {
 		t.Fatal("configured model or provider-default reasoning was not applied")
 	}
-	if len(received.Messages) != 2 || received.Messages[1].Content != "Translate into fr: Hello %s {{targetLanguage}}" {
+	if len(received.Messages) != 2 || received.Messages[1].Content != "Translate into Chinese: Hello %s {{targetLanguage}}" {
 		t.Fatalf("unexpected prompt: %+v", received.Messages)
 	}
 	if !strings.Contains(response.Body.String(), "Bonjour") {
@@ -122,7 +122,7 @@ func TestAIUnconfiguredBlocksRequestsAndRejectsCrossOrigin(t *testing.T) {
 }
 
 func TestTranslationPromptWithoutPlaceholder(t *testing.T) {
-	if got := translationPrompt("Translate into {{targetLanguage}}", "Hello", "fr"); got != "Translate into fr\n\nHello" {
+	if got := translationPrompt("Translate into {{targetLanguage}}", "Hello"); got != "Translate into Chinese\n\nHello" {
 		t.Fatalf("unexpected prompt: %q", got)
 	}
 }

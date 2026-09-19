@@ -44,6 +44,20 @@ function normalizeFaceName(value: string) {
     .replace(/[^\p{L}\p{N}]/gu, '');
 }
 
+// PDF's Standard 14 fonts are handled by PDFium itself. Do not replace them
+// with the project fallback fonts before PDFium gets a chance to use its
+// built-in metrics and glyphs.
+const PDF_STANDARD_FONTS = new Set([
+  'courier', 'courierbold', 'courieroblique', 'courierboldoblique',
+  'helvetica', 'helveticabold', 'helveticaoblique', 'helveticaboldoblique',
+  'timesroman', 'timesbold', 'timesitalic', 'timesbolditalic',
+  'symbol', 'zapfdingbats',
+]);
+
+export function isPdfStandardFont(face: string) {
+  return PDF_STANDARD_FONTS.has(normalizeFaceName(face));
+}
+
 export function classifyPdfFontFamily(
   face: string,
   pitchFamily: number,
@@ -202,6 +216,7 @@ export class PdfiumFontFallbackManager {
     pitchFamily: number,
     face: string,
   ) {
+    if (isPdfStandardFont(face)) return 0;
     const family = classifyPdfFontFamily(face, pitchFamily, this.config.faceFamilies ?? {});
     const match = this.findBestFontMatch(charset, weight, italic, family);
     if (!match) return 0;

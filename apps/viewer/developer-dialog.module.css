@@ -6,6 +6,7 @@
 }
 .content { @apply min-h-0 flex-1 flex flex-col gap-4 bg-transparent px-3.5 pb-3.5 text-xs; height: auto; }
 .section { @apply grid gap-3 rounded-lg border border-border-subtle bg-transparent p-4; }
+.section { background: var(--pdf-section-background); box-shadow: var(--pdf-section-shadow); }
 .pdfPage { @apply grid gap-4; }
 .pdfPage[hidden] { display: none; }
 .breadcrumbs { @apply flex items-center gap-4 text-xs; }
@@ -13,6 +14,7 @@
 .pageToggle button { @apply min-w-14 cursor-pointer rounded-md border border-transparent bg-transparent px-3 py-1.5 text-[11px] font-medium text-muted transition-colors hover:text-foreground; }
 .pageToggle button[aria-pressed='true'] {
   @apply bg-surface text-foreground shadow-none;
+  box-shadow: var(--pdf-option-shadow);
 }
 .pageToggle button:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: 2px; }
 .sectionTitle { @apply m-0 text-xs font-semibold text-foreground; }
@@ -22,6 +24,7 @@
 .stats dd { @apply m-0 text-right text-[11px] text-foreground tabular-nums; }
 .control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,240px)] items-center gap-4 pt-1 max-[480px]:grid-cols-1; }
 .select { @apply w-full border-border-subtle bg-transparent text-foreground shadow-none; }
+.select { background: var(--pdf-control-background); }
 .selectContent { @apply bg-surface; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
 @media (max-width: 640px) {

@@ -11,13 +11,14 @@ import { getFileNameFromUrl } from './shared/url';
 import {
   Outline,
   getCurrentBookmark,
-  installPageTracker,
   installOutlinePrefetch,
   type OutlineCache,
 } from './navigation/outline';
 import { BottomNav } from './navigation/bottom-navigation';
 import { pdfSearchStore } from './search/pdf-search';
 import { PdfScroll } from './renderer/pdf-scroll';
+import { PageController } from './viewer/page-controller';
+import { installPageNavigationInput, installViewerCommandKeys } from './renderer/viewer-viewport-input';
 import {
   initializeViewerTheme,
   isDarkViewerTheme,
@@ -70,11 +71,11 @@ import { DOCUMENT_ID, onDocumentLoaded } from './document/viewer-document';
 import { detectDocumentLanguage } from './selection/document-language';
 import {
   INITIAL_VIEWER_UI,
-  installViewerCommandKeys,
   reduceViewerUi,
   useViewerController,
 } from './viewer/viewer-controller';
 import { PDFIUM_FONT_FALLBACK } from './fonts';
+import type { ViewerInputSource } from './viewer/viewer-activity';
 import {
   beginStartupLog,
   completeStartupLog,
@@ -141,7 +142,6 @@ const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
   comments: 'PDF Comments',
 };
 
-const INITIAL_DOCUMENT_VIEW = { pageNumber: 1, totalPages: 0 };
 
 function App({
   pdfium,
@@ -168,8 +168,7 @@ function App({
     status: 'idle',
     bookmarks: [],
   });
-  const [documentView, setDocumentView] = useState(INITIAL_DOCUMENT_VIEW);
-  const [presentationPage, setPresentationPage] = useState<number | null>(null);
+  const [pages, setPages] = useState<PageController | null>(null);
   const [detectedDocumentLanguage, setDetectedDocumentLanguage] = useState<
     PlatformLanguageDetectionResult
   >();
@@ -183,10 +182,10 @@ function App({
     fileHandle,
     title: resolvedDocumentName ?? 'PDF',
   });
-  const { dispatch: dispatchCommand, feedback: capabilityFeedback } = useViewerController({
+  const { dispatch: dispatchCommand, feedback: capabilityFeedback, view: documentView } = useViewerController({
     registry,
     documentId,
-    scroll: pdfScroll,
+    pages,
     updateUi: dispatchViewerUi,
     saveDocument: () => void saveDocument(),
     exportDocument: () => {
@@ -196,6 +195,7 @@ function App({
     },
   });
   const { pageNumber: currentPageNumber, totalPages } = documentView;
+  const presentationPage = documentView.mode === 'presentation' ? documentView.pageNumber : null;
   const { panMode, searchOpen } = viewerUi;
   const sidePanel = viewerUi.overlay?.type === 'side-panel' ? viewerUi.overlay.panel : null;
   const activeDialog = viewerUi.overlay?.type === 'dialog' ? viewerUi.overlay.dialog : null;
@@ -216,38 +216,15 @@ function App({
     dispatchCommand({ type: 'ui/close-overlay' });
   }, [dispatchCommand]);
 
-  const navigatePresentation = useCallback((delta: -1 | 1) => {
-    if (presentationPage === null) return;
-    const next = Math.min(Math.max(1, presentationPage + delta), totalPages);
-    if (next === presentationPage) return;
-    setPresentationPage(next);
-    pdfScroll?.goToPage(next);
-  }, [pdfScroll, presentationPage, totalPages]);
+  const navigatePresentation = useCallback((delta: -1 | 1, source: ViewerInputSource) => {
+    dispatchCommand({ type: 'navigation/move-pages', delta, source });
+  }, [dispatchCommand]);
 
   useEffect(() => {
-    if (presentationPage === null) return;
-    document.documentElement.dataset.pdfPresentation = 'true';
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setPresentationPage(null);
-        return;
-      }
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (event.target instanceof Element && event.target.closest('button, input, textarea, select, [contenteditable]')) return;
-      const delta = event.key === 'ArrowRight'
-        ? 1
-        : event.key === 'ArrowLeft' ? -1 : null;
-      if (delta === null) return;
-      event.preventDefault();
-      navigatePresentation(delta);
-    };
-    window.addEventListener('keydown', onKeyDown, { capture: true });
-    return () => {
-      delete document.documentElement.dataset.pdfPresentation;
-      window.removeEventListener('keydown', onKeyDown, { capture: true });
-    };
-  }, [navigatePresentation, presentationPage]);
+    if (presentationPage === null) delete document.documentElement.dataset.viewerPresentation;
+    else document.documentElement.dataset.viewerPresentation = 'true';
+    return () => { delete document.documentElement.dataset.viewerPresentation; };
+  }, [presentationPage]);
 
   useEffect(() => installViewerCommandKeys(dispatchCommand), [dispatchCommand]);
 
@@ -294,11 +271,11 @@ function App({
     registryCleanupRef.current = null;
 
     const nextScroll = new PdfScroll(nextRegistry, DOCUMENT_ID);
+    const nextPages = new PageController(nextRegistry, nextScroll);
+    setPages(nextPages);
     setRegistry(nextRegistry);
     setPdfScroll(nextScroll);
     setOutlineCache({ status: 'idle', bookmarks: [] });
-    setDocumentView(INITIAL_DOCUMENT_VIEW);
-    setPresentationPage(null);
     dispatchViewerUi({ type: 'ui/reset' });
     resetViewerDiagnostics();
     pdfSearchStore.getState().clear();
@@ -306,9 +283,8 @@ function App({
 
     const installers = [
       () => pdfium.bindRegistry(nextRegistry),
-      () => nextScroll.installNavigationInput((delta, source) => {
-        dispatchCommand({ type: 'navigation/move-pages', delta, source });
-      }),
+      () => nextPages.install(),
+      () => installPageNavigationInput(nextPages, dispatchCommand),
       () => installScrollAttribute(nextScroll),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
       () => installAnnotationPalette(nextRegistry, DOCUMENT_ID),
@@ -317,8 +293,7 @@ function App({
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
       () => installFormDirty(nextRegistry, () => setDirty(true)),
-      () => installPlatformReadingHistory(nextRegistry, nextScroll, documentKey),
-      () => installPageTracker(nextScroll, setDocumentView),
+      () => installPlatformReadingHistory(nextScroll, nextPages, documentKey),
       () => installOutlinePrefetch(pdfium, {
         documentId: DOCUMENT_ID,
         scroll: nextScroll,
@@ -355,17 +330,15 @@ function App({
         onResourceConsumed={onResourceConsumed}
         renderDpr={renderDpr}
         presentationPage={presentationPage}
+        onNavigatePresentation={navigatePresentation}
+        onExitPresentation={() => dispatchCommand({ type: 'view/set-presentation', enabled: false })}
       />
       {presentationPage === null ? <Toolbar
         scroll={pdfScroll}
         feedback={toolbarFeedback}
         dispatch={dispatchCommand}
         canPresent={totalPages > 0}
-        onStartPresentation={() => {
-          dispatchViewerUi({ type: 'ui/close-overlay' });
-          dispatchViewerUi({ type: 'ui/set-search', open: false });
-          setPresentationPage(currentPageNumber);
-        }}
+        onStartPresentation={() => dispatchCommand({ type: 'view/set-presentation', enabled: true })}
       /> : null}
       <Dialog
         open={documentPane !== null}
@@ -462,13 +435,13 @@ function App({
         pdfium={pdfium}
         onClose={closeOverlay}
       />
-      {presentationPage === null ? <BottomNav
+      <BottomNav
         dispatch={dispatchCommand}
         title={currentTitle}
         pageNumber={currentPageNumber}
         totalPages={totalPages}
         outlineStatus={outlineCache.status}
-      /> : null}
+      />
     </main>
   );
 }

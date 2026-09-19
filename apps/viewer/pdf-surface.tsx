@@ -212,6 +212,8 @@ function LoadedPdfDocument({
   onResourceConsumed,
   renderDpr,
   presentationPage,
+  onNavigatePresentation,
+  onExitPresentation,
 }: {
   documentId: string;
   panMode: boolean;
@@ -221,6 +223,8 @@ function LoadedPdfDocument({
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
   presentationPage: number | null;
+  onNavigatePresentation(delta: -1 | 1, source: 'Mouse'): void;
+  onExitPresentation(): void;
 }) {
   useEffect(() => onResourceConsumed(resource), [onResourceConsumed, resource]);
 
@@ -230,9 +234,11 @@ function LoadedPdfDocument({
         documentId={documentId}
         scroll={scroll}
         className={`viewer${panMode ? ' is-pan-mode' : ''}`}
+        inert={presentationPage !== null}
+        aria-hidden={presentationPage !== null}
         onDragStart={(event) => event.preventDefault()}
       >
-        <ViewportInput documentId={documentId} panMode={panMode} scroll={scroll} />
+        {presentationPage === null ? <ViewportInput documentId={documentId} panMode={panMode} scroll={scroll} /> : null}
         <Scroller
           documentId={documentId}
           className="pdf-scroller"
@@ -253,6 +259,8 @@ function LoadedPdfDocument({
           documentId={documentId}
           pageNumber={presentationPage}
           renderDpr={renderDpr}
+          onNavigate={onNavigatePresentation}
+          onExit={onExitPresentation}
         />
       ) : null}
     </GlobalPointerProvider>
@@ -270,6 +278,8 @@ export const PdfSurface = memo(function PdfSurface({
   onResourceConsumed,
   renderDpr,
   presentationPage,
+  onNavigatePresentation,
+  onExitPresentation,
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
@@ -281,6 +291,8 @@ export const PdfSurface = memo(function PdfSurface({
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
   presentationPage: number | null;
+  onNavigatePresentation(delta: -1 | 1, source: 'Mouse'): void;
+  onExitPresentation(): void;
 }) {
   const fileUrl = documentResource?.url;
   const plugins = useMemo(() => createPlugins(fileUrl), [fileUrl]);
@@ -317,6 +329,8 @@ export const PdfSurface = memo(function PdfSurface({
                   onResourceConsumed={onResourceConsumed}
                   renderDpr={renderDpr}
                   presentationPage={presentationPage}
+                  onNavigatePresentation={onNavigatePresentation}
+                  onExitPresentation={onExitPresentation}
                 />
               ) : null}
             </>

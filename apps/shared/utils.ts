@@ -32,7 +32,8 @@ export function isViewerNavigationTarget(target: EventTarget | null) {
   if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return false;
   if (!(target instanceof Element)) return false;
   if (target.closest('input, textarea, select, button, a[href], [contenteditable], [role="button"], [role="link"], [role="menu"], [role="menuitem"], [role="listbox"], [role="option"], [role="slider"], [role="spinbutton"], [role="checkbox"], [role="switch"], [role="radio"], [role="tab"]')) return false;
-  return target === document.body || target === document.documentElement || Boolean(target.closest('.viewer'));
+  return target === document.body || target === document.documentElement
+    || Boolean(target.closest('.viewer, [data-viewer-presentation]'));
 }
 
 export function getPluginCapability<T>(registry: PluginRegistry | undefined, pluginId: string) {

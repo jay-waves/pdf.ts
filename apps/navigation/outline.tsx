@@ -90,40 +90,6 @@ export function getCurrentBookmark(bookmarks: PdfBookmarkObject[], pageNumber: n
   return current ? { key: current.key, title: current.title } : null;
 }
 
-export function installPageTracker(
-  scroll: PdfScroll,
-  onChange: (value: { pageNumber: number; totalPages: number }) => void,
-) {
-  let currentPageNumber = 1;
-  let totalPages = 0;
-
-  const refresh = () => {
-    onChange({
-      pageNumber: currentPageNumber,
-      totalPages,
-    });
-  };
-
-  const unsubscribePageChange = scroll.onPageChange((pageNumber, pageCount) => {
-    currentPageNumber = pageNumber;
-    totalPages = pageCount;
-    refresh();
-  });
-
-  const unsubscribeLayoutReady = scroll.onLayoutReady((pageCount) => {
-    currentPageNumber = scroll.getCurrentPage();
-    totalPages = pageCount || scroll.getTotalPages();
-    refresh();
-  });
-
-  refresh();
-
-  return () => {
-    unsubscribePageChange();
-    unsubscribeLayoutReady();
-  };
-}
-
 function isCurrentLoadedDocument(pdfium: PdfRuntime, documentId: string) {
   return Boolean(pdfium.getDocument(documentId));
 }

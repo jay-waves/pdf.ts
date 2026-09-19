@@ -3,7 +3,6 @@ import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode } from '@embedpdf/plugin-spread';
 import { ZoomMode, type ZoomLevel } from '@embedpdf/plugin-zoom';
 import {
-  ArrowDownUp,
   ArrowLeft,
   ArrowLeftRight,
   BookImage,
@@ -502,18 +501,16 @@ export function Toolbar({
                 onClick={() => dispatch({ type: 'view/toggle-spread' })}
               />
               <IconButton
-                label="Vertical scroll"
-                icon={ArrowDownUp}
-                active={scrollStrategy === ScrollStrategy.Vertical}
-                disabled={!canUseDocument}
-                onClick={() => dispatch({ type: 'view/set-scroll', strategy: ScrollStrategy.Vertical })}
-              />
-              <IconButton
                 label="Horizontal scroll"
                 icon={ArrowLeftRight}
                 active={scrollStrategy === ScrollStrategy.Horizontal}
                 disabled={!canUseDocument}
-                onClick={() => dispatch({ type: 'view/set-scroll', strategy: ScrollStrategy.Horizontal })}
+                onClick={() => dispatch({
+                  type: 'view/set-scroll',
+                  strategy: scrollStrategy === ScrollStrategy.Horizontal
+                    ? ScrollStrategy.Vertical
+                    : ScrollStrategy.Horizontal,
+                })}
               />
               <IconButton
                 label="Rotate"

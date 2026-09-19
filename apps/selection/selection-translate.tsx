@@ -56,7 +56,7 @@ export function SelectionTranslate({
     setResult({ status: 'loading' });
     try {
       if (getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'llm') {
-        const translated = await platform.requestAi!({ text, targetLanguage: getTranslationTargetLanguage(platform.getPreference) }, controller.signal);
+        const translated = await platform.requestAi!({ text }, controller.signal);
         if (!controller.signal.aborted) setResult({ status: 'success', text: translated });
         return;
       }
