@@ -117,7 +117,7 @@ export function BottomNav({
           disabled={!canGoPrevious}
           aria-label="Previous page"
         >
-          <CornerDownLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+          <CornerDownLeft size={14} strokeWidth={1.8} aria-hidden="true" />
         </ControlButton>
         <ControlButton
           className="min-w-0 leading-none"
@@ -125,7 +125,7 @@ export function BottomNav({
           disabled={!canGoNext}
           aria-label="Next page"
         >
-          <CornerUpRight size={16} strokeWidth={1.8} aria-hidden="true" />
+          <CornerUpRight size={14} strokeWidth={1.8} aria-hidden="true" />
         </ControlButton>
       </div>
       <div className={styles.navigationContent}>
@@ -141,11 +141,12 @@ export function BottomNav({
           >
             <ListTree
               className={styles.navigationTitleIcon}
-              size={14}
+              size={13}
               strokeWidth={1.8}
               aria-hidden="true"
             />
             <span className={styles.navigationTitle}>{outlineTitle}</span>
+            <span className={styles.navigationCompactTitle}>Outline</span>
           </button>
         ) : shouldShowThumbnails ? (
           <button
@@ -160,10 +161,11 @@ export function BottomNav({
           >
             <BookImage
               className="block flex-none"
-              size={14}
+              size={13}
               strokeWidth={1.8}
               aria-hidden="true"
             />
+            <span className={styles.navigationCompactTitle}>Thumbnails</span>
           </button>
         ) : null}
         <form

@@ -11,12 +11,16 @@
   @apply block w-full overflow-hidden rounded border border-border-subtle bg-input;
 }
 
-.card:hover { @apply bg-hover; }
+.card:hover { background-color: color-mix(in srgb, var(--pdf-foreground-primary) 5%, transparent); }
 
 .card:focus-visible {
-  @apply border-accent shadow-control;
+  outline: 2px solid var(--pdf-accent-primary);
+  outline-offset: 2px;
 }
 
 .card[data-current='true'] {
-  @apply border-accent bg-selected;
+  background-color: color-mix(in srgb, var(--pdf-accent-primary) 10%, transparent);
 }
+
+.card[data-current='true'] .frame { border-color: color-mix(in srgb, var(--pdf-accent-primary) 55%, transparent); }
+.card[data-current='true']:hover { background-color: color-mix(in srgb, var(--pdf-accent-primary) 14%, transparent); }

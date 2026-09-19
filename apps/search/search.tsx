@@ -165,15 +165,31 @@ export function Search({
             className={styles.input}
             value={query}
             type="search"
-            placeholder={canSearch ? 'Find in document' : 'Search is not ready'}
+            placeholder={canSearch ? 'Search' : 'Search is not ready'}
             disabled={!canSearch}
             onChange={(event) => setQuery(event.currentTarget.value)}
           />
-          {query || total || state.loading ? (
-            <button type="button" className={styles.clear} aria-label="Clear search" onClick={clearSearch}>
-              <X size={13} strokeWidth={2} />
-            </button>
-          ) : null}
+          <div className={styles.inputActions}>
+            {query || total || state.loading ? (
+              <button type="button" className={styles.clear} aria-label="Clear search" onClick={clearSearch}>
+                <X size={13} strokeWidth={2} />
+              </button>
+            ) : null}
+            <SearchFlagButton
+              label="Match case"
+              icon="Aa"
+              active={state.flags.includes(MatchFlag.MatchCase)}
+              disabled={!canSearch}
+              onClick={() => toggleFlag(MatchFlag.MatchCase)}
+            />
+            <SearchFlagButton
+              label="Match whole word"
+              icon="'ab'"
+              active={state.flags.includes(MatchFlag.MatchWholeWord)}
+              disabled={!canSearch}
+              onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
+            />
+          </div>
         </div>
         <Tooltip content="Search">
           <ControlButton type="submit" className={styles.button} disabled={!canSearch} aria-label="Search">
@@ -181,20 +197,6 @@ export function Search({
           </ControlButton>
         </Tooltip>
       </form>
-      <SearchFlagButton
-        label="Match case"
-        icon="Aa"
-        active={state.flags.includes(MatchFlag.MatchCase)}
-        disabled={!canSearch}
-        onClick={() => toggleFlag(MatchFlag.MatchCase)}
-      />
-      <SearchFlagButton
-        label="Match whole word"
-        icon="'ab'"
-        active={state.flags.includes(MatchFlag.MatchWholeWord)}
-        disabled={!canSearch}
-        onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
-      />
     </div>
   );
 }
@@ -214,16 +216,17 @@ function SearchFlagButton({
 }) {
   return (
     <Tooltip content={label}>
-      <ControlButton
-        className={styles.button}
-        data-active={active ? 'true' : undefined}
-        onClick={onClick}
-        disabled={disabled}
+      <button
+        type="button"
+        className={styles.matchButton}
         aria-label={label}
         aria-pressed={active}
+        data-active={active ? 'true' : undefined}
+        disabled={disabled}
+        onClick={onClick}
       >
-        <span className={styles.matchIcon} aria-hidden="true">{icon}</span>
-      </ControlButton>
+        <span aria-hidden="true">{icon}</span>
+      </button>
     </Tooltip>
   );
 }

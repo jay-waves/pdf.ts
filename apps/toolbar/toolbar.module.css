@@ -16,8 +16,8 @@
 }
 
 .drawTools { @apply my-[-2px] inline-flex min-w-0 max-w-[min(720px,calc(100vw-18px))] items-center gap-0.75 overflow-auto py-0.5; }
-.icon { @apply block size-3.5 flex-none; }
-.searchModeIcon { @apply size-4; }
+.icon { @apply block size-[13px] flex-none; }
+.searchModeIcon { @apply size-[15px]; }
 
 .modeButton {
   @apply cursor-pointer rounded-md border border-transparent bg-transparent text-inherit outline-none;
@@ -33,9 +33,10 @@
 .modeLabel { @apply inline-flex h-3.5 items-center text-left leading-3.5 whitespace-nowrap max-[640px]:hidden; }
 
 .zoomControl {
-  @apply inline-flex h-6.5 w-18.5 items-stretch overflow-hidden rounded-md border border-border-subtle bg-[var(--pdf-control-background)];
-  @apply transition-[border-color,box-shadow] duration-150 ease-control focus-within:border-accent focus-within:shadow-control;
+  @apply inline-flex h-6.5 w-18.5 items-stretch overflow-hidden rounded-md border border-border-subtle bg-transparent;
+  @apply transition-colors duration-150 ease-control;
 }
+.zoomControl:focus-within { border-color: color-mix(in srgb, var(--pdf-accent-primary) 35%, var(--pdf-border-subtle)); }
 .zoomControl:hover { @apply border-border; }
 .zoomInput { @apply min-w-0 flex-1 border-0 bg-transparent px-1.5 text-center text-inherit outline-none tabular-nums; }
 .zoomInput:disabled { @apply opacity-50; }
@@ -43,3 +44,4 @@
   @apply h-auto w-5.5 flex-none justify-center rounded-none border-0 border-l border-border-subtle bg-transparent p-0 shadow-none;
 }
 .zoomMenu:hover { @apply border-border-subtle bg-hover shadow-none; }
+.zoomMenu svg { @apply size-[11px]; }

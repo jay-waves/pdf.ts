@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from 'react';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode } from '@embedpdf/plugin-spread';
 import { ZoomMode, type ZoomLevel } from '@embedpdf/plugin-zoom';
@@ -53,10 +53,14 @@ import {
   FloatingToolbar,
   FloatingToolbarDivider,
   FloatingToolbarGroup,
-  IconButton,
+  IconButton as BaseIconButton,
   PortalProvider,
   Select,
 } from '../components';
+
+function IconButton(props: ComponentProps<typeof BaseIconButton>) {
+  return <BaseIconButton iconSize={13} {...props} />;
+}
 
 type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 
@@ -341,7 +345,7 @@ export function Toolbar({
           <IconButton
             label={darkAppearance ? 'Light theme' : 'Dark theme'}
             icon={darkAppearance ? Sun : Moon}
-            iconSize={15.5}
+            iconSize={14.5}
             onClick={() => dispatch({ type: 'theme/toggle' })}
           />
         ) : null}
@@ -403,7 +407,7 @@ export function Toolbar({
                 >
                   <Icon
                     className={`${styles.icon} ${id === 'search' ? styles.searchModeIcon : ''}`}
-                    size={id === 'search' ? 16 : 14}
+                    size={id === 'search' ? 15 : 13}
                     strokeWidth={2}
                   />
                   <span className={styles.modeLabel}>{label}</span>

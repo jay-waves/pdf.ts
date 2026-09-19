@@ -343,6 +343,8 @@ function App({
       <Dialog
         open={documentPane !== null}
         variant="flatPanel"
+        contentClassName={documentPane === 'thumbnails' || documentPane === 'outline' ? 'pdf-navigation-panel' : ''}
+        overlayClassName={documentPane === 'thumbnails' || documentPane === 'outline' ? 'pdf-navigation-overlay' : ''}
         onClose={closeOverlay}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
       >

@@ -8,7 +8,7 @@ body {
   margin: 0;
   --pdf-ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-family: var(--pdf-ui-font);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 400;
 }
 
