@@ -85,17 +85,17 @@ export interface ViewerPlatform {
   setPreference(key: string, value: string): void;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
   writeReadingProgress(documentKey: string, progress: ReadingProgress): Promise<void>;
-  requestAi?(request: AiRequest): Promise<string>;
+  requestAi?(request: AiRequest, signal?: AbortSignal): Promise<string>;
   getAiConfig?(): Promise<AiConfig>;
   setAiConfig?(config: AiConfigUpdate): Promise<void>;
 }
 
-export type AiConfig = { apiKeyConfigured: boolean; baseUrl: string; model: string; translationPrompt: string; lookupPrompt: string };
+export type AiConfig = { model: string; baseUrl: string; apiKeyConfigured: boolean; prompt: string };
 export type AiConfigUpdate = Partial<Omit<AiConfig, 'apiKeyConfigured'>> & { apiKey?: string };
 
 export type AiRequest = {
   text: string;
-  lookup: boolean;
+  targetLanguage?: string;
 };
 
 export class LanguageDetectionDownloadRequired extends Error {

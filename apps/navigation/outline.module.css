@@ -8,7 +8,7 @@
 }
 
 .bookmark {
-  @apply flex min-h-9 items-center gap-2.75 overflow-hidden rounded-md border border-transparent bg-transparent px-2.25 py-1.75;
+  @apply flex min-h-8 items-center gap-2.5 overflow-hidden rounded-md border border-transparent bg-transparent px-2.25 py-1.5;
   @apply text-left text-[11px] leading-4 text-inherit outline-none transition-[background-color,border-color,color] duration-150 ease-control motion-reduce:transition-none;
 }
 

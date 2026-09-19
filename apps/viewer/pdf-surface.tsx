@@ -212,9 +212,6 @@ function LoadedPdfDocument({
   onResourceConsumed,
   renderDpr,
   presentationPage,
-  totalPages,
-  onPresentationNavigate,
-  onPresentationExit,
 }: {
   documentId: string;
   panMode: boolean;
@@ -224,9 +221,6 @@ function LoadedPdfDocument({
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
   presentationPage: number | null;
-  totalPages: number;
-  onPresentationNavigate(delta: -1 | 1): void;
-  onPresentationExit(): void;
 }) {
   useEffect(() => onResourceConsumed(resource), [onResourceConsumed, resource]);
 
@@ -258,10 +252,7 @@ function LoadedPdfDocument({
         <PresentationView
           documentId={documentId}
           pageNumber={presentationPage}
-          totalPages={totalPages}
           renderDpr={renderDpr}
-          onNavigate={onPresentationNavigate}
-          onExit={onPresentationExit}
         />
       ) : null}
     </GlobalPointerProvider>
@@ -279,9 +270,6 @@ export const PdfSurface = memo(function PdfSurface({
   onResourceConsumed,
   renderDpr,
   presentationPage,
-  totalPages,
-  onPresentationNavigate,
-  onPresentationExit,
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
@@ -293,9 +281,6 @@ export const PdfSurface = memo(function PdfSurface({
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
   presentationPage: number | null;
-  totalPages: number;
-  onPresentationNavigate(delta: -1 | 1): void;
-  onPresentationExit(): void;
 }) {
   const fileUrl = documentResource?.url;
   const plugins = useMemo(() => createPlugins(fileUrl), [fileUrl]);
@@ -332,9 +317,6 @@ export const PdfSurface = memo(function PdfSurface({
                   onResourceConsumed={onResourceConsumed}
                   renderDpr={renderDpr}
                   presentationPage={presentationPage}
-                  totalPages={totalPages}
-                  onPresentationNavigate={onPresentationNavigate}
-                  onPresentationExit={onPresentationExit}
                 />
               ) : null}
             </>

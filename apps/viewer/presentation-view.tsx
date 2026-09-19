@@ -1,24 +1,17 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useDocumentState } from '@embedpdf/core/react';
 import { Rotate } from '@embedpdf/plugin-rotate/react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { RasterLayer } from '../renderer/viewer-render-layers';
 import styles from './presentation-view.module.css';
 
 export function PresentationView({
   documentId,
   pageNumber,
-  totalPages,
   renderDpr,
-  onNavigate,
-  onExit,
 }: {
   documentId: string;
   pageNumber: number;
-  totalPages: number;
   renderDpr: number;
-  onNavigate(delta: -1 | 1): void;
-  onExit(): void;
 }) {
   const documentState = useDocumentState(documentId);
   const page = documentState?.document?.pages[pageNumber - 1];
@@ -42,8 +35,8 @@ export function PresentationView({
   const rotatedWidth = rotated ? pageHeight : pageWidth;
   const rotatedHeight = rotated ? pageWidth : pageHeight;
   const scale = Math.min(
-    (stageSize.width - 48) / rotatedWidth,
-    (stageSize.height - 128) / rotatedHeight,
+    (stageSize.width - 32) / rotatedWidth,
+    (stageSize.height - 32) / rotatedHeight,
   );
   const ready = page && Number.isFinite(scale) && scale > 0;
 
@@ -69,19 +62,6 @@ export function PresentationView({
           </div>
         ) : null}
       </div>
-      <nav className={styles.controls} aria-label="Presentation controls">
-        <button type="button" aria-label="Previous page" disabled={pageNumber <= 1} onClick={() => onNavigate(-1)}>
-          <ChevronLeft size={18} />
-        </button>
-        <span className={styles.counter}>{pageNumber} / {totalPages}</span>
-        <button type="button" aria-label="Next page" disabled={pageNumber >= totalPages} onClick={() => onNavigate(1)}>
-          <ChevronRight size={18} />
-        </button>
-        <span className={styles.divider} />
-        <button type="button" aria-label="Exit presentation" onClick={onExit}>
-          <X size={17} />
-        </button>
-      </nav>
     </section>
   );
 }

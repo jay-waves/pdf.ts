@@ -286,6 +286,14 @@
   -webkit-backdrop-filter: var(--pdf-mica-filter);
 }
 
+.pdf-mica-surface.pdf-flat-panel {
+  border-color: var(--pdf-border-subtle);
+  background-color: var(--pdf-background-surface);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--pdf-foreground-primary) 10%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .pdf-dialog-overlay {
   background: var(--pdf-overlay-background);
   backdrop-filter: blur(4px) saturate(110%);

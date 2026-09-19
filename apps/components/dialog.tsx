@@ -1,10 +1,11 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Dialog as RadixDialog } from 'radix-ui';
 
-type DialogVariant = 'panel' | 'panelCompact' | 'popup' | 'popupWide';
+type DialogVariant = 'panel' | 'flatPanel' | 'panelCompact' | 'popup' | 'popupWide';
 type DialogTitleVariant = 'hidden' | 'panel' | 'popup';
 
 const VARIANT_CLASSES: Record<DialogVariant, string> = {
+  flatPanel: 'pdf-flat-panel h-[min(680px,calc(100dvh-48px))] w-[min(680px,calc(100vw-48px))] p-1 max-[640px]:h-[min(680px,calc(100dvh-32px))] max-[640px]:w-[calc(100vw-32px)]',
   panel: 'h-[min(720px,calc(100vh-42px))] w-[min(720px,calc(100vw-42px))] max-[640px]:h-[min(640px,calc(100vh-22px))] max-[640px]:w-[calc(100vw-22px)]',
   panelCompact: 'w-[min(332px,calc(100vw-42px))]',
   popup: 'w-[min(360px,calc(100vw-32px))]',

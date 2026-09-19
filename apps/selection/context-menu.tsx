@@ -41,6 +41,7 @@ import { getExternalUrl, getSelectedExternalUrl } from '../shared/url';
 import { platform } from '#platform';
 import { getDocument } from '../document/viewer-document';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
+import { getTranslatorMode, googleTranslationUrl, getTranslationTargetLanguage, getTranslationSourceLanguage } from './translation-settings';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
@@ -205,6 +206,17 @@ export function ContextMenu({
   dispatch: ViewerCommandDispatch;
 }) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [translationText, setTranslationText] = useState<{ menu: ContextMenuState; text: string } | null>(null);
+
+  useEffect(() => {
+    if (menu?.kind !== 'selection' || !registry || !documentId) return;
+    let active = true;
+    const scope = getPluginCapability<SelectionCapability>(registry, 'selection')?.forDocument(documentId);
+    void scope?.getSelectedText().toPromise().then((parts) => {
+      if (active) setTranslationText({ menu, text: normalizePdfText(parts.join(' ')).trim() });
+    }).catch((error) => console.error('[pdf-ts] failed to prepare selected translation text', error));
+    return () => { active = false; };
+  }, [documentId, menu, registry]);
 
   useEffect(() => {
     if (!registry || !documentId) return;
@@ -331,7 +343,17 @@ export function ContextMenu({
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    { label: 'Translate', icon: Languages, action: () => {
+    { label: 'Translate', icon: Languages,
+      disabled: getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'google'
+        && (translationText?.menu !== menu || !translationText.text),
+      action: () => {
+      if (getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'google') {
+        if (translationText?.menu !== menu || !translationText.text) return;
+        // Open directly in the click handler so popup blockers preserve user activation.
+        platform.openExternal(googleTranslationUrl(translationText.text, getTranslationTargetLanguage(platform.getPreference), getTranslationSourceLanguage(platform.getPreference)));
+        setMenu(null);
+        return;
+      }
       dispatch({
         type: 'ui/open-translation',
         documentId,
@@ -418,14 +440,15 @@ export function ContextMenu({
       label={menu.kind === 'selection' ? 'Text selection actions' : 'Annotation actions'}
       align={menu.kind === 'selection' ? 'center' : 'start'}
     >
-      {items.map(({ label, icon, action }) => (
+      {items.map((item) => (
         <IconButton
-          key={label}
+          key={item.label}
           className="size-6 rounded active:bg-selected active:shadow-none"
-          label={label}
-          icon={icon}
+          label={item.label}
+          icon={item.icon}
           iconSize={13}
-          onClick={action}
+          onClick={item.action}
+          disabled={'disabled' in item && Boolean(item.disabled)}
         />
       ))}
     </FloatingPopover>

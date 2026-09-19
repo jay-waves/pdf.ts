@@ -235,9 +235,9 @@ function App({
       }
       if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.target instanceof Element && event.target.closest('button, input, textarea, select, [contenteditable]')) return;
-      const delta = event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' '
+      const delta = event.key === 'ArrowRight'
         ? 1
-        : event.key === 'ArrowLeft' || event.key === 'PageUp' ? -1 : null;
+        : event.key === 'ArrowLeft' ? -1 : null;
       if (delta === null) return;
       event.preventDefault();
       navigatePresentation(delta);
@@ -355,9 +355,6 @@ function App({
         onResourceConsumed={onResourceConsumed}
         renderDpr={renderDpr}
         presentationPage={presentationPage}
-        totalPages={totalPages}
-        onPresentationNavigate={navigatePresentation}
-        onPresentationExit={() => setPresentationPage(null)}
       />
       {presentationPage === null ? <Toolbar
         scroll={pdfScroll}
@@ -372,6 +369,7 @@ function App({
       /> : null}
       <Dialog
         open={documentPane !== null}
+        variant="flatPanel"
         onClose={closeOverlay}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
       >

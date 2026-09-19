@@ -1,22 +1,30 @@
 @reference '../tailwind.css';
 
-.overlay {
-  background: var(--pdf-overlay-background);
-}
+.overlay { background: var(--pdf-overlay-background); }
 .dialog {
   @apply flex flex-col;
 }
-.content { @apply min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 bg-transparent text-[11px]; display: grid; }
-.section { @apply grid gap-2; }
-.sectionTitle { @apply m-0 text-[11px] font-semibold text-foreground; }
-.stats { @apply m-0 grid overflow-hidden rounded-md bg-surface-alt; }
-.stats > div { @apply grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-3 py-2; }
-.stats dt { @apply text-secondary; }
-.stats dd { @apply m-0 text-right text-foreground tabular-nums; }
-.control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,220px)] items-center gap-4; }
-.select { @apply w-full border-border bg-surface-alt text-foreground; }
-.input { @apply h-6.5 w-full rounded-md border border-border bg-surface-alt px-2 text-foreground outline-none focus:border-accent; }
-.input::placeholder { @apply text-muted opacity-100; }
-.selectContent { @apply bg-surface-alt; }
+.content { @apply min-h-0 flex-1 flex flex-col gap-4 bg-transparent px-3.5 pb-3.5 text-xs; height: auto; }
+.section { @apply grid gap-3 rounded-lg border border-border-subtle bg-transparent p-4; }
+.pdfPage { @apply grid gap-4; }
+.pdfPage[hidden] { display: none; }
+.breadcrumbs { @apply flex items-center gap-4 text-xs; }
+.pageToggle { @apply inline-flex items-center gap-0.5 rounded-lg bg-surface-alt p-0.5; }
+.pageToggle button { @apply min-w-14 cursor-pointer rounded-md border border-transparent bg-transparent px-3 py-1.5 text-[11px] font-medium text-muted transition-colors hover:text-foreground; }
+.pageToggle button[aria-pressed='true'] {
+  @apply bg-surface text-foreground shadow-none;
+}
+.pageToggle button:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: 2px; }
+.sectionTitle { @apply m-0 text-xs font-semibold text-foreground; }
+.stats { @apply m-0 grid grid-cols-2 gap-x-8 max-[480px]:grid-cols-1; }
+.stats > div { @apply grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-border-subtle py-2; }
+.stats dt { @apply text-[11px] text-secondary; }
+.stats dd { @apply m-0 text-right text-[11px] text-foreground tabular-nums; }
+.control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,240px)] items-center gap-4 pt-1 max-[480px]:grid-cols-1; }
+.select { @apply w-full border-border-subtle bg-transparent text-foreground shadow-none; }
+.selectContent { @apply bg-surface; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
-.details { @apply h-full min-h-29 resize-none rounded-md border border-border bg-surface-alt p-2.5 font-mono text-[10.5px] leading-4 text-foreground outline-none focus:border-accent; }
+@media (max-width: 640px) {
+  .content { @apply px-3 pb-3; }
+  .section { @apply p-4; }
+}

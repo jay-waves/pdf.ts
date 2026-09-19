@@ -6,6 +6,7 @@ import type {
   PlatformDocument,
   ViewerPlatform,
   AiConfig,
+  AiConfigUpdate,
   AiRequest,
 } from './types';
 
@@ -193,18 +194,31 @@ export const platform: ViewerPlatform = {
   },
   ...browserTranslationCapabilities,
   ...browserPersistence,
-  requestAi: async (request: AiRequest) => {
+  requestAi: async (request: AiRequest, signal?: AbortSignal) => {
     if (!launcher) throw new Error('The desktop launcher is unavailable.');
     const response = await fetch(new URL('/api/control/ai', window.location.origin), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
+      signal,
     });
     const result = await response.json().catch(() => ({})) as { text?: string; message?: string };
     if (!response.ok) throw new Error(result.message ?? `AI request failed (${response.status}).`);
     if (typeof result.text !== 'string') throw new Error('The launcher returned an invalid AI response.');
     return result.text;
   },
-  getAiConfig: async () => { const response = await fetch(new URL('/api/control/ai-config', window.location.origin)); if (!response.ok) throw new Error(`Could not read AI settings (${response.status}).`); return await response.json() as AiConfig; },
-  setAiConfig: async (config: AiConfig) => { const response = await fetch(new URL('/api/control/ai-config', window.location.origin), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) }); if (!response.ok) throw new Error(`Could not save AI settings (${response.status}).`); },
+  getAiConfig: async () => {
+    const response = await fetch(new URL('/api/control/ai-config', window.location.origin), { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Could not read AI settings (${response.status}).`);
+    return await response.json() as AiConfig;
+  },
+  setAiConfig: async (config: AiConfigUpdate) => {
+    const response = await fetch(new URL('/api/control/ai-config', window.location.origin), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as ErrorResponse;
+      throw new Error(result.message ?? `Could not save AI settings (${response.status}).`);
+    }
+  },
 };

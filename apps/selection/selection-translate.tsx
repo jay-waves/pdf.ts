@@ -12,6 +12,7 @@ import {
   getLanguageName,
   getTranslationSourceLanguage,
   getTranslationTargetLanguage,
+  getTranslatorMode,
 } from './translation-settings';
 import styles from './selection-translate.module.css';
 
@@ -54,6 +55,11 @@ export function SelectionTranslate({
     activeController.current = controller;
     setResult({ status: 'loading' });
     try {
+      if (getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'llm') {
+        const translated = await platform.requestAi!({ text, targetLanguage: getTranslationTargetLanguage(platform.getPreference) }, controller.signal);
+        if (!controller.signal.aborted) setResult({ status: 'success', text: translated });
+        return;
+      }
       const translation = await platform.translate(text, {
         allowModelDownload,
         signal: controller.signal,
@@ -97,7 +103,7 @@ export function SelectionTranslate({
         if (!cancelled) setSourceText(normalizeText(parts));
         return parts;
       }),
-      configuredSourceLanguage
+      configuredSourceLanguage || getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) !== 'builtin'
         ? Promise.resolve(configuredSourceLanguage)
         : detectDocumentLanguage(registry.getEngine(), document)
           .then((result) => result.detectedLanguage),
