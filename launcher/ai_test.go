@@ -49,12 +49,16 @@ func TestAIConfigUpdates(t *testing.T) {
 		t.Fatal("API key leaked in JSON")
 	}
 	empty := ""
-	cleared, err := applyAIConfigUpdate(config, aiConfigUpdate{APIKey: &empty, Prompt: &empty})
+	retained, err := applyAIConfigUpdate(config, aiConfigUpdate{APIKey: &empty, Prompt: &empty})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cleared.APIKey != "" || cleared.APIKeyConfigured || cleared.Prompt != defaultTranslationPrompt {
-		t.Fatal("key clearing or default prompt restoration failed")
+	if retained.APIKey != config.APIKey || !retained.APIKeyConfigured || retained.Prompt != defaultTranslationPrompt {
+		t.Fatal("empty key update changed the key or prompt restoration failed")
+	}
+	reset, err := applyAIConfigUpdate(retained, aiConfigUpdate{Reset: true})
+	if err != nil || reset.APIKey != "" || reset.APIKeyConfigured {
+		t.Fatal("reset did not clear the configured key")
 	}
 	badURL := "https://user:password@example.test/v1"
 	if _, err := applyAIConfigUpdate(config, aiConfigUpdate{BaseURL: &badURL}); err == nil {
@@ -81,7 +85,7 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 			t.Error(err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Bonjour"}}]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"Bonjour"}}],"usage":{"total_tokens":12}}`))
 	}))
 	defer upstream.Close()
 	config := testAIConfig(upstream.URL)
@@ -100,6 +104,14 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), "Bonjour") {
 		t.Fatal("missing translation")
+	}
+	if currentAIConfig().TotalTokens != 12 {
+		t.Fatalf("total tokens = %d", currentAIConfig().TotalTokens)
+	}
+	clearResponse := httptest.NewRecorder()
+	(&App{}).handleAIConfig(clearResponse, httptest.NewRequest(http.MethodPut, "/api/control/ai-config", strings.NewReader(`{"model":"another-model"}`)))
+	if clearResponse.Code != http.StatusNoContent || currentAIConfig().TotalTokens != 0 {
+		t.Fatal("token count was not cleared")
 	}
 }
 
@@ -124,5 +136,36 @@ func TestAIUnconfiguredBlocksRequestsAndRejectsCrossOrigin(t *testing.T) {
 func TestTranslationPromptWithoutPlaceholder(t *testing.T) {
 	if got := translationPrompt("Translate into {{targetLanguage}}", "Hello"); got != "Translate into Chinese\n\nHello" {
 		t.Fatalf("unexpected prompt: %q", got)
+	}
+}
+
+func TestAIUsageResetRules(t *testing.T) {
+	previous := currentAIConfig()
+	t.Cleanup(func() { desktopAIConfigMutex.Lock(); desktopAIConfig = previous; desktopAIConfigMutex.Unlock() })
+	for _, test := range []struct {
+		name, body string
+		want       int
+		reset      bool
+	}{
+		{"same model", `{"model":"original"}`, 42, false},
+		{"trimmed model", `{"model":" original "}`, 42, false},
+		{"other setting", `{"apiKey":"new-key"}`, 42, false},
+		{"changed model", `{"model":"different"}`, 0, true},
+		{"reset", `{"reset":true}`, 0, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			desktopAIConfigMutex.Lock()
+			desktopAIConfig = aiConfig{Model: "original", TotalTokens: 42, usageGeneration: 7}
+			desktopAIConfigMutex.Unlock()
+			response := httptest.NewRecorder()
+			(&App{}).handleAIConfig(response, httptest.NewRequest(http.MethodPut, "/api/control/ai-config", strings.NewReader(test.body)))
+			actual := currentAIConfig()
+			if response.Code != http.StatusNoContent || actual.TotalTokens != test.want {
+				t.Fatalf("status %d, tokens %d; want %d", response.Code, actual.TotalTokens, test.want)
+			}
+			if (actual.usageGeneration != 7) != test.reset {
+				t.Fatal("usage generation did not match reset behavior")
+			}
+		})
 	}
 }

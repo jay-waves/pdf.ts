@@ -5,7 +5,7 @@ import { TRANSLATOR_PREFERENCE } from '../selection/translation-settings';
 import styles from './llm-settings.module.css';
 
 const DEFAULT_PROMPT = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
-const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, prompt: DEFAULT_PROMPT };
+const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, prompt: DEFAULT_PROMPT, totalTokens: 0 };
 // Keep saves ordered even when the settings dialog is closed and reopened.
 let saveQueue: Promise<void> = Promise.resolve();
 const supportsLlm = Boolean(platform.getAiConfig && platform.setAiConfig && platform.requestAi);
@@ -13,12 +13,11 @@ const supportsLlm = Boolean(platform.getAiConfig && platform.setAiConfig && plat
 export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(available: boolean): void }) {
   const [config, setConfig] = useState<AiConfig>(EMPTY_CONFIG);
   const [apiKey, setApiKey] = useState('');
-  const [clearKey, setClearKey] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
 
-  const draft = useRef({ config: EMPTY_CONFIG, apiKey: '', clearKey: false, revision: 0 });
+  const draft = useRef({ config: EMPTY_CONFIG, apiKey: '', revision: 0 });
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mounted = useRef(false);
@@ -64,7 +63,7 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
       model: snapshot.config.model.trim(),
       baseUrl: snapshot.config.baseUrl.trim().replace(/\/+$/, ''),
       prompt: snapshot.config.prompt.trim() ? snapshot.config.prompt : DEFAULT_PROMPT,
-      ...(snapshot.apiKey.trim() ? { apiKey: snapshot.apiKey.trim() } : snapshot.clearKey ? { apiKey: '' } : {}),
+      ...(snapshot.apiKey.trim() ? { apiKey: snapshot.apiKey.trim() } : {}),
     };
     if (mounted.current) { setError(''); setStatus('Saving…'); }
     saveQueue = saveQueue.then(async () => {
@@ -79,8 +78,8 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
         onAvailabilityChange(available);
         // A slow response must never replace text typed after this save began.
         if (draft.current.revision !== snapshot.revision) return;
-        draft.current = { config: saved, apiKey: '', clearKey: false, revision: snapshot.revision };
-        setConfig(saved); setApiKey(''); setClearKey(false);
+        draft.current = { config: saved, apiKey: '', revision: snapshot.revision };
+        setConfig(saved); setApiKey('');
         setStatus('Automatically saved for this launcher session.');
       } catch (failure) {
         if (!mounted.current || draft.current.revision !== snapshot.revision) return;
@@ -106,6 +105,25 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
     scheduleSave();
   };
 
+  const runAction = async (action: 'test' | 'reset') => {
+    clearTimeout(timer.current);
+    save();
+    setError(''); setStatus(action === 'test' ? 'Testing…' : 'Saving…');
+    try {
+      await saveQueue;
+      if (action === 'test') await platform.requestAi!({ text: 'hello', targetLanguage: 'zh-CN' });
+      if (action === 'reset') await platform.setAiConfig!({ reset: true });
+      const value = await platform.getAiConfig!();
+      draft.current = { config: value, apiKey: '', revision: draft.current.revision + 1 };
+      setConfig(value); setApiKey('');
+      onAvailabilityChange(Boolean(value.model && value.baseUrl && value.apiKeyConfigured));
+      setStatus(action === 'test' ? 'LLM connection successful.' : '');
+    } catch (failure) {
+      setStatus('');
+      setError(failure instanceof Error ? failure.message : 'LLM action failed.');
+    }
+  };
+
   return <form className={styles.editorPanel} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
     <div className={styles.heading}><div><h2>Translate</h2><p>{supportsLlm
       ? 'Configure the model used when Translator is set to LLM.'
@@ -119,20 +137,21 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
       </label>
       <label className={styles.field}>API key
         <input type="password" autoComplete="off" value={apiKey}
-          placeholder={clearKey ? 'Clearing…' : config.apiKeyConfigured ? 'Configured · leave blank to keep' : 'Enter API key'}
+          placeholder={config.apiKeyConfigured ? '*****' : 'API key'}
           onChange={(event) => {
             const value = event.target.value;
-            draft.current = { ...draft.current, apiKey: value, clearKey: false };
-            setApiKey(value); setClearKey(false); scheduleSave();
+            draft.current = { ...draft.current, apiKey: value };
+            setApiKey(value); scheduleSave();
           }} />
       </label>
-      {config.apiKeyConfigured && <button className={styles.textButton} type="button" onClick={() => {
-        draft.current = { ...draft.current, clearKey: true, apiKey: '' };
-        setClearKey(true); setApiKey(''); scheduleSave(); save();
-      }}>{clearKey ? 'Clearing…' : 'Clear saved key'}</button>}
       <label className={styles.field}>Prompt
         <textarea rows={9} value={config.prompt} onChange={(event) => edit('prompt', event.target.value)} />
       </label>
+      <div className={styles.actions}>
+        <button type="button" onClick={() => void runAction('test')}>Test</button>
+        <button type="button" onClick={() => void runAction('reset')}>Reset</button>
+        <span className={styles.tokenCount}><strong>{config.totalTokens.toLocaleString()}</strong><span>tokens</span></span>
+      </div>
     </fieldset>
     {error && <p className={styles.error} role="alert">{error}</p>}
     {supportsLlm && status && <div className={styles.footer}>

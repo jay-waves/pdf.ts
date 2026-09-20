@@ -22,6 +22,8 @@ type aiResponse struct {
 }
 
 type aiConfig struct {
+	TotalTokens      int `json:"totalTokens"`
+	usageGeneration  uint64
 	Model            string `json:"model"`
 	BaseURL          string `json:"baseUrl"`
 	APIKey           string `json:"-"`
@@ -30,6 +32,7 @@ type aiConfig struct {
 }
 
 type aiConfigUpdate struct {
+	Reset   bool    `json:"reset"`
 	Model   *string `json:"model"`
 	BaseURL *string `json:"baseUrl"`
 	APIKey  *string `json:"apiKey"`
@@ -49,17 +52,24 @@ func currentAIConfig() aiConfig {
 
 func applyAIConfigUpdate(previous aiConfig, update aiConfigUpdate) (aiConfig, error) {
 	config := previous
+	if update.Reset {
+		config = aiConfig{Model: "deepseek-flash", BaseURL: "https://api.deepseek.com", Prompt: defaultTranslationPrompt, usageGeneration: previous.usageGeneration}
+	}
 	if update.Model != nil {
 		config.Model = strings.TrimSpace(*update.Model)
 	}
 	if update.BaseURL != nil {
 		config.BaseURL = strings.TrimRight(strings.TrimSpace(*update.BaseURL), "/")
 	}
-	if update.APIKey != nil {
+	if update.APIKey != nil && strings.TrimSpace(*update.APIKey) != "" {
 		config.APIKey = strings.TrimSpace(*update.APIKey)
 	}
 	if update.Prompt != nil {
 		config.Prompt = *update.Prompt
+	}
+	if update.Reset || config.Model != previous.Model {
+		config.TotalTokens = 0
+		config.usageGeneration++
 	}
 	if config.BaseURL != "" {
 		endpoint, err := url.Parse(config.BaseURL)
@@ -156,6 +166,13 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 		// Upstream errors can echo request credentials; expose a bounded message.
 		writeJSON(response, http.StatusBadGateway, aiResponse{Message: "The LLM provider rejected the request. Check the model name, base URL, and API key."})
 		return
+	}
+	if completion.Usage.TotalTokens > 0 {
+		desktopAIConfigMutex.Lock()
+		if desktopAIConfig.usageGeneration == config.usageGeneration {
+			desktopAIConfig.TotalTokens += completion.Usage.TotalTokens
+		}
+		desktopAIConfigMutex.Unlock()
 	}
 	if len(completion.Choices) == 0 || strings.TrimSpace(completion.Choices[0].Message.Content) == "" {
 		writeJSON(response, http.StatusBadGateway, aiResponse{Message: "The AI service returned an empty response."})

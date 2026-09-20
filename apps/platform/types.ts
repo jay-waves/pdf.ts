@@ -90,8 +90,8 @@ export interface ViewerPlatform {
   setAiConfig?(config: AiConfigUpdate): Promise<void>;
 }
 
-export type AiConfig = { model: string; baseUrl: string; apiKeyConfigured: boolean; prompt: string };
-export type AiConfigUpdate = Partial<Omit<AiConfig, 'apiKeyConfigured'>> & { apiKey?: string };
+export type AiConfig = { model: string; baseUrl: string; apiKeyConfigured: boolean; prompt: string; totalTokens: number };
+export type AiConfigUpdate = Partial<Omit<AiConfig, 'apiKeyConfigured' | 'totalTokens'>> & { apiKey?: string; reset?: boolean };
 
 export type AiRequest = {
   text: string;
