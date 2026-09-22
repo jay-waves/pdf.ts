@@ -29,6 +29,7 @@ type persistentState struct {
 	Version       int                 `json:"version"`
 	ListenAddress string              `json:"listenAddress,omitempty"`
 	Documents     map[string]Document `json:"documents"`
+	AI            *storedAIConfig     `json:"ai,omitempty"`
 }
 
 type Registry struct {

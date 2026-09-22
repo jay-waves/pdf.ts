@@ -103,14 +103,20 @@ func (app *App) handleAIConfig(response http.ResponseWriter, request *http.Reque
 		}
 		desktopAIConfigMutex.Lock()
 		config, err := applyAIConfigUpdate(desktopAIConfig, input)
-		if err == nil {
-			desktopAIConfig = config
-		}
-		desktopAIConfigMutex.Unlock()
 		if err != nil {
+			desktopAIConfigMutex.Unlock()
 			writeJSONError(response, http.StatusBadRequest, "invalid_ai_config", err.Error())
 			return
 		}
+		if app.registry != nil {
+			if err := app.registry.saveAIConfig(config); err != nil {
+				desktopAIConfigMutex.Unlock()
+				writeJSONError(response, http.StatusInternalServerError, "save_ai_config_failed", "Could not save AI config.")
+				return
+			}
+		}
+		desktopAIConfig = config
+		desktopAIConfigMutex.Unlock()
 		response.WriteHeader(http.StatusNoContent)
 	default:
 		response.Header().Set("Allow", "GET, PUT")

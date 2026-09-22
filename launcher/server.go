@@ -56,6 +56,13 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	config, err := registry.loadAIConfig(aiConfig{Model: "deepseek-flash", BaseURL: "https://api.deepseek.com", Prompt: defaultTranslationPrompt})
+	if err != nil {
+		return nil, err
+	}
+	desktopAIConfigMutex.Lock()
+	desktopAIConfig = config
+	desktopAIConfigMutex.Unlock()
 	return &App{
 		registry:  registry,
 		resources: make(map[string]*Resource),

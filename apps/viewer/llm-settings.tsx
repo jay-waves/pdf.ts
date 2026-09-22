@@ -80,7 +80,7 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
         if (draft.current.revision !== snapshot.revision) return;
         draft.current = { config: saved, apiKey: '', revision: snapshot.revision };
         setConfig(saved); setApiKey('');
-        setStatus('Automatically saved for this launcher session.');
+        setStatus('Automatically saved.');
       } catch (failure) {
         if (!mounted.current || draft.current.revision !== snapshot.revision) return;
         dirty.current = true;
