@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { useGesture } from '@use-gesture/react';
 import { useViewportCapability, useViewportElement } from '@embedpdf/plugin-viewport/react';
 import { useInteractionManagerCapability } from '@embedpdf/plugin-interaction-manager/react';
-import { useZoomCapability, ZoomMode } from '@embedpdf/plugin-zoom/react';
+import { useZoomCapability } from '@embedpdf/plugin-zoom/react';
 import { useScrollCapability } from '@embedpdf/plugin-scroll/react';
 import { ZoomDetents } from './zoom-detents';
 import type { PdfScroll } from './pdf-scroll';
@@ -44,12 +44,6 @@ export function installViewerCommandKeys(dispatch: ViewerCommandDispatch) {
       command = { type: 'ui/set-search', open: true };
     } else if (!event.shiftKey && key === 's') {
       command = { type: 'document/save' };
-    } else if (key === '0') {
-      command = { type: 'view/set-zoom', level: ZoomMode.FitPage };
-    } else if (key === '+' || key === '=') {
-      command = { type: 'view/zoom-step', direction: 1 };
-    } else if (key === '-' || key === '_') {
-      command = { type: 'view/zoom-step', direction: -1 };
     } else if (!isEditableTarget(event.target)) {
       if (key === 'y' || (key === 'z' && event.shiftKey)) {
         command = { type: 'annotation/history', direction: 'redo' };
@@ -506,6 +500,13 @@ export function ViewportInput({
       flushPendingScroll();
     };
 
+    const handleGlobalZoomWheel = (event: WheelEvent) => {
+      if ((!event.ctrlKey && !event.metaKey) || event.composedPath().includes(viewport)) return;
+      // Pinching over floating chrome should still manipulate the document.
+      // The anchor is clamped to the nearest viewport edge by setAnchor().
+      handleWheel(event);
+    };
+
     const handlePinch = (state: PinchInputState) => {
       const { event, first, last, canceled, movement, origin } = state;
       event.preventDefault();
@@ -751,11 +752,13 @@ export function ViewportInput({
     };
 
     viewport.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('wheel', handleGlobalZoomWheel, { capture: true, passive: false });
     viewport.addEventListener('mousedown', stopMiddleMouseDefault, { capture: true });
     viewport.addEventListener('auxclick', stopMiddleMouseDefault, { capture: true });
     window.addEventListener('blur', cancelInput);
     return () => {
       viewport.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('wheel', handleGlobalZoomWheel, { capture: true });
       viewport.removeEventListener('mousedown', stopMiddleMouseDefault, { capture: true });
       viewport.removeEventListener('auxclick', stopMiddleMouseDefault, { capture: true });
       window.removeEventListener('blur', cancelInput);
