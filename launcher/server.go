@@ -19,8 +19,19 @@ import (
 )
 
 const (
-	DefaultListenAddress = "127.0.0.1:23119"
-	DefaultPublicHost    = "pdf.ts.localhost"
+	DefaultListenAddress  = "127.0.0.1:23119"
+	DefaultPublicHost     = "pdf.ts.localhost"
+	contentSecurityPolicy = "default-src 'self'; " +
+		"script-src 'self' 'wasm-unsafe-eval'; " +
+		"style-src 'self' 'unsafe-inline' blob:; " +
+		"img-src 'self' blob: data: http: https:; " +
+		"font-src 'self' blob: data: http: https:; " +
+		"media-src 'self' blob: data: http: https:; " +
+		"connect-src 'self' blob: http: https:; " +
+		"worker-src 'self' blob:; " +
+		"frame-src 'self' blob: data: http: https:; " +
+		"object-src 'self' blob: data: http: https:; " +
+		"base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 )
 
 type App struct {
@@ -234,6 +245,7 @@ func (app *App) securityHeaders(next http.Handler) http.Handler {
 		response.Header().Set("Referrer-Policy", "no-referrer")
 		response.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 		response.Header().Set("X-Frame-Options", "DENY")
+		response.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 		if strings.HasPrefix(request.URL.Path, "/api/") {
 			response.Header().Set("Cache-Control", "no-store")
 		}

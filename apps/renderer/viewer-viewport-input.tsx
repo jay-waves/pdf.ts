@@ -17,6 +17,22 @@ import {
 } from '../viewer/viewer-activity';
 
 const WHEEL_DELTA_LIMIT_PX = 50;
+export function installBrowserZoomGuard() {
+  const preventModifierWheelZoom = (event: WheelEvent) => {
+    if (event.ctrlKey || event.metaKey) event.preventDefault();
+  };
+  const preventGestureZoom = (event: Event) => event.preventDefault();
+
+  window.addEventListener('wheel', preventModifierWheelZoom, { capture: true, passive: false });
+  window.addEventListener('gesturestart', preventGestureZoom, { capture: true, passive: false });
+  window.addEventListener('gesturechange', preventGestureZoom, { capture: true, passive: false });
+  return () => {
+    window.removeEventListener('wheel', preventModifierWheelZoom, { capture: true });
+    window.removeEventListener('gesturestart', preventGestureZoom, { capture: true });
+    window.removeEventListener('gesturechange', preventGestureZoom, { capture: true });
+  };
+}
+
 export function installViewerCommandKeys(dispatch: ViewerCommandDispatch) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.altKey || (!event.ctrlKey && !event.metaKey)) return;

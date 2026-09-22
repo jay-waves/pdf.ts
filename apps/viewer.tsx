@@ -18,7 +18,11 @@ import { BottomNav } from './navigation/bottom-navigation';
 import { pdfSearchStore } from './search/pdf-search';
 import { PdfScroll } from './renderer/pdf-scroll';
 import { PageController } from './viewer/page-controller';
-import { installPageNavigationInput, installViewerCommandKeys } from './renderer/viewer-viewport-input';
+import {
+  installBrowserZoomGuard,
+  installPageNavigationInput,
+  installViewerCommandKeys,
+} from './renderer/viewer-viewport-input';
 import {
   initializeViewerTheme,
   isDarkViewerTheme,
@@ -149,6 +153,7 @@ function App({
   onResourceConsumed,
 }: AppProps) {
   const engine = pdfium.engine;
+  useEffect(() => installBrowserZoomGuard(), []);
   const {
     resource: documentResource,
     key: documentKey,
