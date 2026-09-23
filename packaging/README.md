@@ -31,7 +31,7 @@ Artifacts are written to `release/`:
 
 - `pdf-ts-chrome-v<version>.zip`
 - `pdf.ts` and `pdf.ts.exe`
-- `pdf-ts_<version>_amd64.deb`
+- `pdf-ts-<version>-amd64.deb`
 - `pdf-ts-<version>-1.x86_64.rpm`
 - `pdf-ts-setup-v<version>.exe`
 - `macos-arm64/pdf.ts.app`

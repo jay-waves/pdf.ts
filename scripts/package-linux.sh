@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 format=$1
 version=$(node -p "require('./package.json').version")
 case "$format" in
-  deb) output="release/pdf-ts_${version}_amd64.deb" ;;
+  deb) output="release/pdf-ts-${version}-amd64.deb" ;;
   rpm) output="release/pdf-ts-${version}-1.x86_64.rpm" ;;
 esac
 

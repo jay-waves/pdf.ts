@@ -140,8 +140,10 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
           placeholder={config.apiKeyConfigured ? '*****' : 'API key'}
           onChange={(event) => {
             const value = event.target.value;
-            draft.current = { ...draft.current, apiKey: value };
-            setApiKey(value); scheduleSave();
+            clearTimeout(timer.current);
+            draft.current = { ...draft.current, apiKey: value, revision: draft.current.revision + 1 };
+            dirty.current = true;
+            setApiKey(value); setError(''); setStatus('');
           }} />
       </label>
       <label className={styles.field}>Prompt
