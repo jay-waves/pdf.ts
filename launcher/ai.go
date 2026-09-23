@@ -162,7 +162,8 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 	clientConfig.BaseURL = config.BaseURL
 	client := openai.NewClientWithConfig(clientConfig)
 	completion, err := client.CreateChatCompletion(request.Context(), openai.ChatCompletionRequest{
-		Model: config.Model,
+		Model:           config.Model,
+		ReasoningEffort: "none",
 		Messages: []openai.ChatCompletionMessage{
 			{Role: openai.ChatMessageRoleSystem, Content: "Follow the user's translation instructions. Return only the translation."},
 			{Role: openai.ChatMessageRoleUser, Content: translationPrompt(config.Prompt, input.Text)},

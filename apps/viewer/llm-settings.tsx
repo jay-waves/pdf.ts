@@ -126,7 +126,7 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
 
   return <form className={styles.editorPanel} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
     <div className={styles.heading}><div><h2>Translate</h2><p>{supportsLlm
-      ? 'Configure the model used when Translator is set to LLM.'
+      ? 'Configure the OpenAI-compatible model for LLM translation.'
       : 'LLM translation is available in the desktop launcher. API keys are disabled on the web.'}</p></div></div>
     <fieldset disabled={!supportsLlm || !loaded} className={styles.fieldset}>
       <label className={styles.field}>Model name

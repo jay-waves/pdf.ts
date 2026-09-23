@@ -96,8 +96,8 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("request failed: %s", response.Body.String())
 	}
-	if received.Model != "test-model" || received.ReasoningEffort != "" {
-		t.Fatal("configured model or provider-default reasoning was not applied")
+	if received.Model != "test-model" || received.ReasoningEffort != "none" {
+		t.Fatal("configured model or disabled reasoning was not applied")
 	}
 	if len(received.Messages) != 2 || received.Messages[1].Content != "Translate into Chinese: Hello %s {{targetLanguage}}" {
 		t.Fatalf("unexpected prompt: %+v", received.Messages)
