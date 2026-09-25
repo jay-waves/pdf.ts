@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { BookImage, CornerDownLeft, CornerUpRight, ListTree } from 'lucide-react';
+import { BookImage, CornerDownLeft, CornerUpRight, Menu } from 'lucide-react';
 import { ControlButton, FloatingSurface } from '../components';
 import type { OutlineCache } from './outline';
 import { useViewerActivityAutoHide } from '../components/use-auto-hide';
@@ -26,7 +26,8 @@ export function BottomNav({
   const canGoPrevious = canNavigate && pageNumber > 1;
   const canGoNext = canNavigate && pageNumber < totalPages;
   const outlineTitle = title.trim();
-  const shouldShowOutlineTitle = outlineStatus === 'ready' && outlineTitle.length > 0;
+  const shouldShowOutline = outlineStatus === 'ready';
+  const isOutlinePlaceholder = outlineTitle.length === 0;
   const shouldShowThumbnails = outlineStatus === 'empty';
   const pageInputDigits = Math.max(pageInput.length, 1);
 
@@ -129,23 +130,23 @@ export function BottomNav({
         </ControlButton>
       </div>
       <div className={styles.navigationContent}>
-        {shouldShowOutlineTitle ? (
+        {shouldShowOutline ? (
           <button
             type="button"
-            className={styles.outlineButton}
+            className={`${styles.outlineButton} ${isOutlinePlaceholder ? styles.outlinePlaceholder : ''}`}
             aria-label="Open outline"
             onClick={() => {
               reveal();
               dispatch({ type: 'ui/open-panel', panel: 'outline' });
             }}
           >
-            <ListTree
+            <Menu
               className={styles.navigationTitleIcon}
               size={13}
               strokeWidth={1.8}
               aria-hidden="true"
             />
-            <span className={styles.navigationTitle}>{outlineTitle}</span>
+            {outlineTitle ? <span className={styles.navigationTitle}>{outlineTitle}</span> : null}
             <span className={styles.navigationCompactTitle}>Outline</span>
           </button>
         ) : shouldShowThumbnails ? (

@@ -5,7 +5,7 @@ import {
 } from '@embedpdf/models';
 import { PanelContent, PanelState } from '../components';
 import type { PdfRuntime } from '../renderer/pdf-engine';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import type { ViewerStage } from '../viewer/viewer-stage';
 import { getDestinationFromTarget } from '../shared/utils';
 import styles from './outline.module.css';
 
@@ -113,12 +113,12 @@ export function installOutlinePrefetch(
   pdfium: PdfRuntime,
   {
     documentId,
-    scroll,
+    stage,
     cacheKey,
     onLoaded,
   }: {
     documentId: string;
-    scroll: PdfScroll;
+    stage: ViewerStage;
     cacheKey?: string;
     onLoaded(cache: OutlineCache): void;
   },
@@ -170,7 +170,7 @@ export function installOutlinePrefetch(
       });
   };
 
-  const unsubscribeLayoutReady = scroll.onLayoutReady((_totalPages, initial) => {
+  const unsubscribeLayoutReady = stage.onLayoutReady((_totalPages, initial) => {
     if (!initial) return;
     loadForDocument(documentId);
   });
@@ -183,14 +183,14 @@ export function installOutlinePrefetch(
   };
 }
 
-function scrollToBookmark(scroll: PdfScroll, bookmark: PdfBookmarkObject) {
+function revealBookmark(stage: ViewerStage, bookmark: PdfBookmarkObject) {
   const destination = getDestinationFromTarget(bookmark.target);
   if (!destination) {
     return;
   }
 
   const xyzZoom = destination.zoom.mode === PdfZoomMode.XYZ ? destination.zoom : undefined;
-  scroll.reveal(destination.pageIndex, [{
+  stage.reveal(destination.pageIndex, [{
     origin: xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : { x: 0, y: 0 },
     size: { width: 0, height: 0 },
   }]);
@@ -199,14 +199,14 @@ function scrollToBookmark(scroll: PdfScroll, bookmark: PdfBookmarkObject) {
 export function Outline({
   pdfium,
   documentId,
-  scroll,
+  stage,
   cache,
   currentBookmarkKey,
   onCacheChange,
 }: {
   pdfium: PdfRuntime;
   documentId?: string | null;
-  scroll?: PdfScroll | null;
+  stage?: ViewerStage | null;
   cache: OutlineCache;
   currentBookmarkKey: string;
   onCacheChange: (cache: OutlineCache) => void;
@@ -282,7 +282,7 @@ export function Outline({
         expandedBookmarkKeys={expandedBookmarkKeys}
         path={[]}
         onSelect={(bookmark, bookmarkKey, hasChildren) => {
-          if (!scroll) return;
+          if (!stage) return;
 
           const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
           const destination = getDestinationFromTarget(bookmark.target);
@@ -310,7 +310,7 @@ export function Outline({
           }
 
           setSelectedBookmarkKey(bookmarkKey);
-          scrollToBookmark(scroll, bookmark);
+          revealBookmark(stage, bookmark);
         }}
       />
     );

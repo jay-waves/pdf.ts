@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	openai "github.com/sashabaranov/go-openai"
 )
@@ -41,13 +40,10 @@ type aiConfigUpdate struct {
 
 const defaultTranslationPrompt = "Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}"
 
-var desktopAIConfig = aiConfig{Model: "deepseek-flash", BaseURL: "https://api.deepseek.com", Prompt: defaultTranslationPrompt}
-var desktopAIConfigMutex sync.RWMutex
-
-func currentAIConfig() aiConfig {
-	desktopAIConfigMutex.RLock()
-	defer desktopAIConfigMutex.RUnlock()
-	return desktopAIConfig
+func (app *App) currentAIConfig() aiConfig {
+	app.aiMutex.RLock()
+	defer app.aiMutex.RUnlock()
+	return app.aiConfig
 }
 
 func applyAIConfigUpdate(previous aiConfig, update aiConfigUpdate) (aiConfig, error) {
@@ -92,7 +88,7 @@ func (app *App) handleAIConfig(response http.ResponseWriter, request *http.Reque
 	}
 	switch request.Method {
 	case http.MethodGet:
-		config := currentAIConfig()
+		config := app.currentAIConfig()
 		config.APIKeyConfigured = config.APIKey != ""
 		writeJSON(response, http.StatusOK, config)
 	case http.MethodPut:
@@ -101,22 +97,22 @@ func (app *App) handleAIConfig(response http.ResponseWriter, request *http.Reque
 			writeJSONError(response, http.StatusBadRequest, "invalid_ai_config", "Invalid AI config.")
 			return
 		}
-		desktopAIConfigMutex.Lock()
-		config, err := applyAIConfigUpdate(desktopAIConfig, input)
+		app.aiMutex.Lock()
+		config, err := applyAIConfigUpdate(app.aiConfig, input)
 		if err != nil {
-			desktopAIConfigMutex.Unlock()
+			app.aiMutex.Unlock()
 			writeJSONError(response, http.StatusBadRequest, "invalid_ai_config", err.Error())
 			return
 		}
 		if app.registry != nil {
 			if err := app.registry.saveAIConfig(config); err != nil {
-				desktopAIConfigMutex.Unlock()
+				app.aiMutex.Unlock()
 				writeJSONError(response, http.StatusInternalServerError, "save_ai_config_failed", "Could not save AI config.")
 				return
 			}
 		}
-		desktopAIConfig = config
-		desktopAIConfigMutex.Unlock()
+		app.aiConfig = config
+		app.aiMutex.Unlock()
 		response.WriteHeader(http.StatusNoContent)
 	default:
 		response.Header().Set("Allow", "GET, PUT")
@@ -148,7 +144,7 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 		writeJSONError(response, http.StatusForbidden, "forbidden_origin", "The AI request did not come from this pdf.ts instance.")
 		return
 	}
-	config := currentAIConfig()
+	config := app.currentAIConfig()
 	if config.Model == "" || config.BaseURL == "" || config.APIKey == "" {
 		writeJSONError(response, http.StatusBadRequest, "ai_unconfigured", "Configure Model name, Base URL, and API key in Developer > LLM.")
 		return
@@ -175,11 +171,11 @@ func (app *App) handleAI(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	if completion.Usage.TotalTokens > 0 {
-		desktopAIConfigMutex.Lock()
-		if desktopAIConfig.usageGeneration == config.usageGeneration {
-			desktopAIConfig.TotalTokens += completion.Usage.TotalTokens
+		app.aiMutex.Lock()
+		if app.aiConfig.usageGeneration == config.usageGeneration {
+			app.aiConfig.TotalTokens += completion.Usage.TotalTokens
 		}
-		desktopAIConfigMutex.Unlock()
+		app.aiMutex.Unlock()
 	}
 	if len(completion.Choices) == 0 || strings.TrimSpace(completion.Choices[0].Message.Content) == "" {
 		writeJSON(response, http.StatusBadGateway, aiResponse{Message: "The AI service returned an empty response."})

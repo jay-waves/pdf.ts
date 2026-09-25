@@ -30,12 +30,12 @@ import {
   themeUnderlineRenderer,
 } from '../annotations/theme-renderers';
 import type { ManagedResource } from '../platform/types';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import type { ViewerStage } from './viewer-stage';
 import { SearchLayer } from '../search/search';
-import { ViewerViewport } from '../renderer/viewer-viewport';
-import { ViewportInput } from '../renderer/viewer-viewport-input';
-import { PDF_TILE_SIZE_CSS_PX } from '../renderer/viewer-diagnostics';
-import { RasterLayer, TileLayer } from '../renderer/viewer-render-layers';
+import { StageViewport } from '../renderer/stage-viewport';
+import { StageSurface } from '../renderer/stage-surface';
+import { PDF_TILE_SIZE_CSS_PX } from '../renderer/render-settings';
+import { RenderLayer } from '../renderer/viewer-render-layers';
 import { DOCUMENT_ID } from '../document/viewer-document';
 import './pdf-surface.css';
 import styles from './viewer.module.css';
@@ -125,7 +125,7 @@ function createPlugins(fileUrl?: string) {
   ];
 }
 
-function PdfPageLayers({
+function PageSurface({
   documentId,
   pageIndex,
   width,
@@ -145,6 +145,7 @@ function PdfPageLayers({
       <PagePointerProvider
         documentId={documentId}
         pageIndex={pageIndex}
+        data-pdf-page-index={pageIndex}
         className="pdf-page-surface"
         style={{
           position: 'relative',
@@ -153,22 +154,12 @@ function PdfPageLayers({
           backgroundColor: 'var(--pdf-page-background)',
         }}
       >
-        <RasterLayer
+        <RenderLayer
           key={`render-${renderThemeVersion}`}
           documentId={documentId}
           pageIndex={pageIndex}
-          scale={0.5}
           dpr={renderDpr}
-          className="pdf-page-render-image"
-          draggable={false}
-          style={{ pointerEvents: 'none' }}
-        />
-        <TileLayer
-          key={`tiles-${renderThemeVersion}`}
-          documentId={documentId}
-          pageIndex={pageIndex}
-          dpr={renderDpr}
-          className="pdf-page-tiling-layer"
+          baseScale={0.5}
         />
         <SearchLayer
           documentId={documentId}
@@ -207,7 +198,7 @@ function LoadedPdfDocument({
   documentId,
   panMode,
   renderThemeVersion,
-  scroll,
+  stage,
   resource,
   onResourceConsumed,
   renderDpr,
@@ -218,7 +209,7 @@ function LoadedPdfDocument({
   documentId: string;
   panMode: boolean;
   renderThemeVersion: number;
-  scroll?: PdfScroll | null;
+  stage?: ViewerStage | null;
   resource?: ManagedResource;
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
@@ -230,20 +221,20 @@ function LoadedPdfDocument({
 
   return (
     <GlobalPointerProvider documentId={documentId}>
-      <ViewerViewport
+      <StageViewport
         documentId={documentId}
-        scroll={scroll}
+        stage={stage}
         className={`viewer${panMode ? ' is-pan-mode' : ''}`}
         inert={presentationPage !== null}
         aria-hidden={presentationPage !== null}
         onDragStart={(event) => event.preventDefault()}
       >
-        {presentationPage === null ? <ViewportInput documentId={documentId} panMode={panMode} scroll={scroll} /> : null}
+        {presentationPage === null ? <StageSurface documentId={documentId} panMode={panMode} stage={stage} /> : null}
         <Scroller
           documentId={documentId}
           className="pdf-scroller"
           renderPage={({ pageIndex, width, height }) => (
-            <PdfPageLayers
+            <PageSurface
               documentId={documentId}
               pageIndex={pageIndex}
               width={width}
@@ -253,7 +244,7 @@ function LoadedPdfDocument({
             />
           )}
         />
-      </ViewerViewport>
+      </StageViewport>
       {presentationPage !== null ? (
         <PresentationView
           documentId={documentId}
@@ -272,7 +263,7 @@ export const PdfSurface = memo(function PdfSurface({
   registry,
   panMode,
   renderThemeVersion,
-  scroll,
+  stage,
   documentResource,
   onInitialized,
   onResourceConsumed,
@@ -285,7 +276,7 @@ export const PdfSurface = memo(function PdfSurface({
   registry?: PluginRegistry;
   panMode: boolean;
   renderThemeVersion: number;
-  scroll?: PdfScroll | null;
+  stage?: ViewerStage | null;
   documentResource?: ManagedResource;
   onInitialized(registry: PluginRegistry): Promise<void>;
   onResourceConsumed(resource?: ManagedResource): void;
@@ -324,7 +315,7 @@ export const PdfSurface = memo(function PdfSurface({
                   documentId={documentId}
                   panMode={panMode}
                   renderThemeVersion={renderThemeVersion}
-                  scroll={scroll}
+                  stage={stage}
                   resource={documentResource}
                   onResourceConsumed={onResourceConsumed}
                   renderDpr={renderDpr}

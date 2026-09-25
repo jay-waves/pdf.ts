@@ -17,7 +17,7 @@ import {
   getAnnotationScope,
   rectsIntersect,
 } from './annotations';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import type { ViewerStage } from '../viewer/viewer-stage';
 import { getDocument } from '../document/viewer-document';
 import styles from './comments.module.css';
 
@@ -98,14 +98,14 @@ function getEntryIcon(annotation: PdfAnnotationObject) {
 function navigateToAnnotation(
   registry: PluginRegistry,
   documentId: string,
-  scroll: PdfScroll | null | undefined,
+  stage: ViewerStage | null | undefined,
   annotation: PdfAnnotationObject,
 ) {
   const scoped = getAnnotationScope(registry, documentId);
   if (!scoped) return;
 
   scoped.scope.selectAnnotation(annotation.pageIndex, annotation.id);
-  scroll?.reveal(annotation.pageIndex, getAnnotationRects(annotation));
+  stage?.reveal(annotation.pageIndex, getAnnotationRects(annotation));
 }
 
 function scrollCommentItemIntoView(root: HTMLElement, item: HTMLElement) {
@@ -160,14 +160,14 @@ export function Comments({
   engine,
   registry,
   documentId,
-  scroll,
+  stage,
   currentPageNumber,
   targetAnnotationId,
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
   documentId?: string | null;
-  scroll?: PdfScroll | null;
+  stage?: ViewerStage | null;
   currentPageNumber: number;
   targetAnnotationId?: string | null;
 }) {
@@ -418,7 +418,7 @@ export function Comments({
                             className={styles.cardTarget}
                             onClick={() => {
                               if (registry && documentId) {
-                                navigateToAnnotation(registry, documentId, scroll, annotation);
+                                navigateToAnnotation(registry, documentId, stage, annotation);
                               }
                             }}
                             aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}

@@ -8,16 +8,17 @@ import { ZoomMode } from '@embedpdf/plugin-zoom';
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    return nextResolve(specifier === '../shared/utils' ? `${specifier}.ts` : specifier, context);
+    const sourceModules = new Set(['../shared/utils', '../renderer/stage-scroll-adapter']);
+    return nextResolve(sourceModules.has(specifier) ? `${specifier}.ts` : specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url.endsWith('/viewer/page-controller.ts')) {
+    if (url.endsWith('/viewer/viewer-stage.ts') || url.endsWith('/renderer/stage-scroll-adapter.ts')) {
       return { format: 'module', source: stripTypeScriptTypes(readFileSync(new URL(url), 'utf8'), { mode: 'transform' }), shortCircuit: true };
     }
     return nextLoad(url, context);
   },
 });
-const { PageController } = await import('../apps/viewer/page-controller.ts');
+const { ViewerStage } = await import('../apps/viewer/viewer-stage.ts');
 hooks.deregister();
 
 function setup(t) {
@@ -48,50 +49,54 @@ function setup(t) {
     viewport: { getViewportGap: () => 10, forDocument: () => ({ getMetrics: () => ({ clientHeight: 820 }) }) },
     zoom: { forDocument: () => ({ requestZoom(value) { zooms.push(value); } }) },
   };
-  const controller = new PageController({ getPlugin: (name) => ({ provides: () => capabilities[name] }) }, scroll);
-  t.after(controller.install());
-  return { controller, jumps, zooms, emit, anchors: () => anchors };
+  const stage = new ViewerStage(
+    { getPlugin: (name) => ({ provides: () => capabilities[name] }) },
+    'doc',
+    scroll,
+  );
+  t.after(stage.install());
+  return { stage, jumps, zooms, emit, anchors: () => anchors };
 }
 
 test('layout changes publish only a valid combination and preserve one anchor', (t) => {
-  const { controller, zooms, anchors } = setup(t);
-  controller.toggleSpread();
+  const { stage, zooms, anchors } = setup(t);
+  stage.toggleSpread();
   assert.equal(zooms.at(-1), ZoomMode.FitWidth);
   const snapshots = [];
-  const unsubscribe = controller.subscribe(() => snapshots.push(controller.getSnapshot()));
-  controller.setStrategy(ScrollStrategy.Horizontal);
+  const unsubscribe = stage.subscribe(() => snapshots.push(stage.getSnapshot()));
+  stage.setStrategy(ScrollStrategy.Horizontal);
   unsubscribe();
   assert.equal(snapshots.length, 1);
   assert.equal(snapshots[0].spread, SpreadMode.None);
   assert.equal(snapshots[0].strategy, ScrollStrategy.Horizontal);
   assert.equal(zooms.at(-1), 0.8);
   assert.equal(anchors(), 2);
-  controller.toggleSpread();
-  assert.equal(controller.getSnapshot().strategy, ScrollStrategy.Vertical);
-  assert.equal(controller.getSnapshot().spread, SpreadMode.Odd);
+  stage.toggleSpread();
+  assert.equal(stage.getSnapshot().strategy, ScrollStrategy.Vertical);
+  assert.equal(stage.getSnapshot().spread, SpreadMode.Odd);
 });
 
 test('restored horizontal + double page is normalized through the same entry point', (t) => {
-  const { controller, zooms } = setup(t);
-  controller.applyLayout(ScrollStrategy.Horizontal, SpreadMode.Even);
-  assert.equal(controller.getSnapshot().spread, SpreadMode.None);
+  const { stage, zooms } = setup(t);
+  stage.applyLayout(ScrollStrategy.Horizontal, SpreadMode.Even);
+  assert.equal(stage.getSnapshot().spread, SpreadMode.None);
   assert.equal(zooms.at(-1), 0.8);
 });
 
 test('presentation accumulates rapid navigation without scrolling the inactive viewport', (t) => {
-  const { controller, jumps, emit } = setup(t);
-  controller.setPresentation(true);
-  controller.movePages(1);
-  controller.movePages(1);
+  const { stage, jumps, emit } = setup(t);
+  stage.setPresentation(true);
+  stage.movePages(1);
+  stage.movePages(1);
   emit(); // An inactive viewport notification must not overwrite the slide.
-  assert.equal(controller.getSnapshot().pageNumber, 4);
+  assert.equal(stage.getSnapshot().pageNumber, 4);
   assert.deepEqual(jumps, []);
-  controller.toggleSpread();
-  assert.equal(controller.getSnapshot().spread, SpreadMode.None);
-  controller.goToPage(100);
-  controller.movePages(1);
-  assert.equal(controller.getSnapshot().pageNumber, 11);
-  controller.setPresentation(false);
+  stage.toggleSpread();
+  assert.equal(stage.getSnapshot().spread, SpreadMode.None);
+  stage.goToPage(100);
+  stage.movePages(1);
+  assert.equal(stage.getSnapshot().pageNumber, 11);
+  stage.setPresentation(false);
   assert.deepEqual(jumps, [10]);
-  assert.equal(controller.getSnapshot().mode, 'reading');
+  assert.equal(stage.getSnapshot().mode, 'reading');
 });

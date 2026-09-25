@@ -6,19 +6,20 @@ import {
   useViewportRef,
 } from '@embedpdf/plugin-viewport/react';
 import { ScrollArea } from 'radix-ui';
-import type { PdfScroll } from './pdf-scroll';
+import type { ViewerStage } from '../viewer/viewer-stage';
 
-export function ViewerViewport({
+/** The DOM viewport attached to a ViewerStage. */
+export function StageViewport({
   children,
   documentId,
-  scroll,
+  stage,
   className,
   style,
   ...props
 }: HTMLAttributes<HTMLDivElement> & {
   children: ReactNode;
   documentId: string;
-  scroll?: PdfScroll | null;
+  stage?: ViewerStage | null;
 }) {
   const viewportRef = useViewportRef(documentId);
   const { provides: viewport } = useViewportCapability();
@@ -26,9 +27,9 @@ export function ViewerViewport({
   const viewportGap = viewport?.getViewportGap() ?? 0;
 
   useLayoutEffect(() => {
-    scroll?.attachViewport(viewportRef.current);
-    return () => scroll?.attachViewport(null);
-  }, [scroll, viewportRef]);
+    stage?.attachSurface(viewportRef.current);
+    return () => stage?.attachSurface(null);
+  }, [stage, viewportRef]);
 
   return (
     <ViewportElementContext.Provider value={viewportRef}>

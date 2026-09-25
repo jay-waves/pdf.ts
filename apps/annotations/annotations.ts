@@ -371,7 +371,7 @@ export function createAnnotationPluginConfig(): AnnotationPluginConfig {
   };
 }
 
-export function installAnnotationPalette(registry: PluginRegistry, documentId: string): undefined {
+export function initializeAnnotationPalette(registry: PluginRegistry, documentId: string) {
   const scoped = getAnnotationScope(registry, documentId);
   if (!scoped) return;
   // Initialize creation defaults once. Existing annotations are never rewritten.

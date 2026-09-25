@@ -118,6 +118,7 @@ packageExtensionsChecksum: sha256-zOzhC7cQiiqSAO0yUvetOh2xf+UstfDZWWpN3KavZ2M=
 
 patchedDependencies:
   '@embedpdf/engines@2.15.0': 4e4e81190fa82c98c4b59452b8c88492b4293ac8298d095bc83f73bbfa116278
+  '@embedpdf/plugin-selection@2.15.0': e873cc7fde1e6232df7ad60dc86455dab346a7abcbf43e0340e3fd5f4cf27b8b
 
 importers:
 
@@ -137,13 +138,13 @@ importers:
         version: 2.15.0
       '@embedpdf/plugin-annotation':
         specifier: 2.15.0
-        version: 2.15.0(a27445bd4bb5c69ab7ffea783098bfc7)
+        version: 2.15.0(41b2ada3ef8d9d9f74ce3b1e8cd30675)
       '@embedpdf/plugin-document-manager':
         specifier: 2.15.0
         version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/plugin-form':
         specifier: 2.15.0
-        version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-annotation@2.15.0(a27445bd4bb5c69ab7ffea783098bfc7))(@embedpdf/plugin-history@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-annotation@2.15.0(41b2ada3ef8d9d9f74ce3b1e8cd30675))(@embedpdf/plugin-history@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/plugin-history':
         specifier: 2.15.0
         version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -161,7 +162,7 @@ importers:
         version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-viewport@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/plugin-selection':
         specifier: 2.15.0
-        version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-interaction-manager@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 2.15.0(patch_hash=e873cc7fde1e6232df7ad60dc86455dab346a7abcbf43e0340e3fd5f4cf27b8b)(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-interaction-manager@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/plugin-spread':
         specifier: 2.15.0
         version: 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1916,14 +1917,14 @@ snapshots:
 
   '@embedpdf/pdfium@2.15.0': {}
 
-  '@embedpdf/plugin-annotation@2.15.0(a27445bd4bb5c69ab7ffea783098bfc7)':
+  '@embedpdf/plugin-annotation@2.15.0(41b2ada3ef8d9d9f74ce3b1e8cd30675)':
     dependencies:
       '@embedpdf/core': 2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/models': 2.15.0
       '@embedpdf/plugin-history': 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/plugin-interaction-manager': 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/plugin-scroll': 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-viewport@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@embedpdf/plugin-selection': 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-interaction-manager@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@embedpdf/plugin-selection': 2.15.0(patch_hash=e873cc7fde1e6232df7ad60dc86455dab346a7abcbf43e0340e3fd5f4cf27b8b)(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-interaction-manager@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/utils': 2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
@@ -1935,11 +1936,11 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@embedpdf/plugin-form@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-annotation@2.15.0(a27445bd4bb5c69ab7ffea783098bfc7))(@embedpdf/plugin-history@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@embedpdf/plugin-form@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-annotation@2.15.0(41b2ada3ef8d9d9f74ce3b1e8cd30675))(@embedpdf/plugin-history@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@embedpdf/core': 2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/models': 2.15.0
-      '@embedpdf/plugin-annotation': 2.15.0(a27445bd4bb5c69ab7ffea783098bfc7)
+      '@embedpdf/plugin-annotation': 2.15.0(41b2ada3ef8d9d9f74ce3b1e8cd30675)
       '@embedpdf/plugin-history': 2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/utils': 2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
@@ -1981,7 +1982,7 @@ snapshots:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
 
-  '@embedpdf/plugin-selection@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-interaction-manager@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@embedpdf/plugin-selection@2.15.0(patch_hash=e873cc7fde1e6232df7ad60dc86455dab346a7abcbf43e0340e3fd5f4cf27b8b)(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@embedpdf/plugin-interaction-manager@2.15.0(@embedpdf/core@2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@embedpdf/core': 2.15.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@embedpdf/models': 2.15.0

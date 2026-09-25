@@ -5,12 +5,18 @@ import { PdfiumNative } from '@embedpdf/engines/pdfium';
 import { RemoteExecutor } from '@embedpdf/engines/pdfium-worker-engine';
 import { Task } from '@embedpdf/models';
 import { init } from '@embedpdf/pdfium';
+import { SelectionPlugin } from '@embedpdf/plugin-selection';
 
 const orchestratorUrl = new URL(
   './pdf-engine-D9v0RfKe.js',
   import.meta.resolve('@embedpdf/engines'),
 );
 const { P: PdfEngine } = await import(orchestratorUrl);
+
+test('EmbedPDF selection patch exposes the long-press transaction', () => {
+  assert.equal(typeof SelectionPlugin.prototype.beginLongPressSelection, 'function');
+  assert.equal(typeof SelectionPlugin.prototype.updateLongPressSelection, 'function');
+});
 
 class FakeWorker {
   messages = [];

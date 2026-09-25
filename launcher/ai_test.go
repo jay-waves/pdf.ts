@@ -12,17 +12,8 @@ func testAIConfig(endpoint string) aiConfig {
 	return aiConfig{Model: "test-model", BaseURL: endpoint, APIKey: "test-only-token", Prompt: "Translate into {{targetLanguage}}: {{selectedText}}"}
 }
 
-func installTestAIConfig(t *testing.T, config aiConfig) {
-	t.Helper()
-	previous := currentAIConfig()
-	desktopAIConfigMutex.Lock()
-	desktopAIConfig = config
-	desktopAIConfigMutex.Unlock()
-	t.Cleanup(func() {
-		desktopAIConfigMutex.Lock()
-		desktopAIConfig = previous
-		desktopAIConfigMutex.Unlock()
-	})
+func newTestAIApp(config aiConfig) *App {
+	return &App{aiConfig: config}
 }
 
 func TestAIConfigUpdates(t *testing.T) {
@@ -89,10 +80,10 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 	}))
 	defer upstream.Close()
 	config := testAIConfig(upstream.URL)
-	installTestAIConfig(t, config)
+	app := newTestAIApp(config)
 	request := httptest.NewRequest(http.MethodPost, "/api/control/ai", strings.NewReader(`{"text":"Hello %s {{targetLanguage}}","targetLanguage":"fr"}`))
 	response := httptest.NewRecorder()
-	(&App{}).handleAI(response, request)
+	app.handleAI(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("request failed: %s", response.Body.String())
 	}
@@ -105,12 +96,12 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 	if !strings.Contains(response.Body.String(), "Bonjour") {
 		t.Fatal("missing translation")
 	}
-	if currentAIConfig().TotalTokens != 12 {
-		t.Fatalf("total tokens = %d", currentAIConfig().TotalTokens)
+	if app.currentAIConfig().TotalTokens != 12 {
+		t.Fatalf("total tokens = %d", app.currentAIConfig().TotalTokens)
 	}
 	clearResponse := httptest.NewRecorder()
-	(&App{}).handleAIConfig(clearResponse, httptest.NewRequest(http.MethodPut, "/api/control/ai-config", strings.NewReader(`{"model":"another-model"}`)))
-	if clearResponse.Code != http.StatusNoContent || currentAIConfig().TotalTokens != 0 {
+	app.handleAIConfig(clearResponse, httptest.NewRequest(http.MethodPut, "/api/control/ai-config", strings.NewReader(`{"model":"another-model"}`)))
+	if clearResponse.Code != http.StatusNoContent || app.currentAIConfig().TotalTokens != 0 {
 		t.Fatal("token count was not cleared")
 	}
 }
@@ -118,9 +109,9 @@ func TestAITranslationUsesConfiguration(t *testing.T) {
 func TestAIUnconfiguredBlocksRequestsAndRejectsCrossOrigin(t *testing.T) {
 	config := testAIConfig("https://example.test/v1")
 	config.APIKey = ""
-	installTestAIConfig(t, config)
+	app := newTestAIApp(config)
 	response := httptest.NewRecorder()
-	(&App{}).handleAI(response, httptest.NewRequest(http.MethodPost, "/api/control/ai", strings.NewReader(`{"text":"Hello"}`)))
+	app.handleAI(response, httptest.NewRequest(http.MethodPost, "/api/control/ai", strings.NewReader(`{"text":"Hello"}`)))
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "ai_unconfigured") {
 		t.Fatal("unconfigured LLM accepted a request")
 	}
@@ -140,8 +131,6 @@ func TestTranslationPromptWithoutPlaceholder(t *testing.T) {
 }
 
 func TestAIUsageResetRules(t *testing.T) {
-	previous := currentAIConfig()
-	t.Cleanup(func() { desktopAIConfigMutex.Lock(); desktopAIConfig = previous; desktopAIConfigMutex.Unlock() })
 	for _, test := range []struct {
 		name, body string
 		want       int
@@ -154,12 +143,10 @@ func TestAIUsageResetRules(t *testing.T) {
 		{"reset", `{"reset":true}`, 0, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			desktopAIConfigMutex.Lock()
-			desktopAIConfig = aiConfig{Model: "original", TotalTokens: 42, usageGeneration: 7}
-			desktopAIConfigMutex.Unlock()
+			app := newTestAIApp(aiConfig{Model: "original", TotalTokens: 42, usageGeneration: 7})
 			response := httptest.NewRecorder()
-			(&App{}).handleAIConfig(response, httptest.NewRequest(http.MethodPut, "/api/control/ai-config", strings.NewReader(test.body)))
-			actual := currentAIConfig()
+			app.handleAIConfig(response, httptest.NewRequest(http.MethodPut, "/api/control/ai-config", strings.NewReader(test.body)))
+			actual := app.currentAIConfig()
 			if response.Code != http.StatusNoContent || actual.TotalTokens != test.want {
 				t.Fatalf("status %d, tokens %d; want %d", response.Code, actual.TotalTokens, test.want)
 			}

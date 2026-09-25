@@ -37,7 +37,7 @@ import {
   Undo2,
   Wrench,
 } from 'lucide-react';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import type { ViewerStage } from '../viewer/viewer-stage';
 import {
   getStoredToolbarPinned,
   setStoredToolbarPinned,
@@ -45,7 +45,8 @@ import {
 import { Search } from '../search/search';
 import { useViewerActivityAutoHide } from '../components/use-auto-hide';
 import type {
-  ViewerCapabilityFeedback,
+  ToolbarSection,
+  ViewerCapabilitySnapshot,
   ViewerCommandDispatch,
 } from '../viewer/viewer-controller';
 import styles from './toolbar.module.css';
@@ -62,25 +63,21 @@ function IconButton(props: ComponentProps<typeof BaseIconButton>) {
   return <BaseIconButton iconSize={13} {...props} />;
 }
 
-type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
-
-interface ToolbarFeedback extends ViewerCapabilityFeedback {
+export interface ToolbarSnapshot extends ViewerCapabilitySnapshot {
+  section: ToolbarSection | null;
   documentId?: string | null;
-  searchOpen: boolean;
   thumbnailsOpen: boolean;
   panMode: boolean;
   signatureCount: number;
   canSave: boolean;
-  canConfigureTheme: boolean;
+  canPresent: boolean;
   darkAppearance: boolean;
 }
 
 interface ToolbarProps {
-  scroll?: PdfScroll | null;
-  feedback: ToolbarFeedback;
+  stage?: ViewerStage | null;
+  snapshot: ToolbarSnapshot;
   dispatch: ViewerCommandDispatch;
-  onStartPresentation(): void;
-  canPresent: boolean;
 }
 
 const PRIMARY_ITEMS: Array<{
@@ -190,17 +187,15 @@ function ZoomControl({
 }
 
 export function Toolbar({
-  scroll,
-  onStartPresentation,
-  canPresent,
-  feedback: {
+  stage,
+  snapshot: {
+    section: activeSection,
     documentId,
-    searchOpen,
     thumbnailsOpen,
     panMode,
     signatureCount,
     canSave,
-    canConfigureTheme,
+    canPresent,
     darkAppearance,
     zoomPercent,
     zoomLevel,
@@ -210,27 +205,26 @@ export function Toolbar({
   },
   dispatch,
 }: ToolbarProps) {
-  const [activeSection, setActiveSection] = useState<ToolbarSection | null>(null);
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const [touchInput, setTouchInput] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
-  const searchWasOpenRef = useRef(false);
   const pointerHoveringRef = useRef(false);
   const canUseDocument = Boolean(documentId);
+  const searchOpen = activeSection === 'search';
   const {
     visible: toolbarVisible,
     reveal: showToolbar,
     scheduleHide: scheduleToolbarHide,
   } = useViewerActivityAutoHide(
     'toolbar',
-    () => !pinned && !pointerHoveringRef.current && !portalContainer?.matches(':focus-within'),
+    () => !pinned && !searchOpen && !pointerHoveringRef.current && !portalContainer?.matches(':focus-within'),
   );
 
   useEffect(() => {
     if (activeTool && !searchOpen && !touchInput) {
-      setActiveSection('draw');
+      dispatch({ type: 'ui/set-toolbar-section', section: 'draw' });
     }
-  }, [activeTool, searchOpen, touchInput]);
+  }, [activeTool, dispatch, searchOpen, touchInput]);
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -244,22 +238,6 @@ export function Toolbar({
   }, []);
 
   useEffect(() => {
-    setActiveSection((current) => {
-      if (searchOpen) return 'search';
-      return current === 'search' ? null : current;
-    });
-  }, [searchOpen]);
-
-  useEffect(() => {
-    const searchWasOpen = searchWasOpenRef.current;
-    if (!searchOpen && searchWasOpen && pinned) {
-      setPinned(false);
-      setStoredToolbarPinned(false);
-    }
-    searchWasOpenRef.current = searchOpen;
-  }, [pinned, searchOpen]);
-
-  useEffect(() => {
     if (searchOpen) showToolbar();
     else scheduleToolbarHide();
   }, [scheduleToolbarHide, searchOpen, showToolbar]);
@@ -268,22 +246,13 @@ export function Toolbar({
     if (!pinned) scheduleToolbarHide();
   }, [pinned, scheduleToolbarHide]);
 
-  const closeSearch = () => dispatch({ type: 'ui/set-search', open: false });
   const openSection = (section: ToolbarSection) => {
-    setActiveSection(section);
-
-    if (section === 'search') {
-      dispatch({ type: 'ui/set-search', open: true });
-      return;
-    }
-
+    dispatch({ type: 'ui/set-toolbar-section', section });
     if (section === 'page') dispatch({ type: 'annotation/clear-tool' });
-    if (section !== 'document') closeSearch();
   };
 
   const returnToPrimaryToolbar = () => {
-    setActiveSection(null);
-    if (searchOpen) closeSearch();
+    dispatch({ type: 'ui/set-toolbar-section', section: null });
   };
 
   const togglePan = () => {
@@ -294,12 +263,6 @@ export function Toolbar({
     const nextPinned = !pinned;
     setPinned(nextPinned);
     setStoredToolbarPinned(nextPinned);
-  };
-
-  const pinForSearch = () => {
-    if (pinned) return;
-    setPinned(true);
-    setStoredToolbarPinned(true);
   };
 
   const selectDrawTool = (toolId: string) => {
@@ -341,14 +304,12 @@ export function Toolbar({
           disabled={!canSave}
           onClick={() => dispatch({ type: 'document/save' })}
         />
-        {canConfigureTheme ? (
-          <IconButton
-            label={darkAppearance ? 'Light theme' : 'Dark theme'}
-            icon={darkAppearance ? Sun : Moon}
-            iconSize={14.5}
-            onClick={() => dispatch({ type: 'theme/toggle' })}
-          />
-        ) : null}
+        <IconButton
+          label={darkAppearance ? 'Light theme' : 'Dark theme'}
+          icon={darkAppearance ? Sun : Moon}
+          iconSize={14.5}
+          onClick={() => dispatch({ type: 'theme/toggle' })}
+        />
         <IconButton
           label="Pan"
           icon={Hand}
@@ -444,13 +405,11 @@ export function Toolbar({
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'metadata' })}
             />
-            {canConfigureTheme ? (
-              <IconButton
-                label="Themes"
-                icon={Palette}
-                onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'theme' })}
-              />
-            ) : null}
+            <IconButton
+              label="Themes"
+              icon={Palette}
+              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'theme' })}
+            />
             <IconButton
               label="Developer"
               icon={Wrench}
@@ -495,7 +454,7 @@ export function Toolbar({
                 label="Presentation mode"
                 icon={Presentation}
                 disabled={!canPresent}
-                onClick={onStartPresentation}
+                onClick={() => dispatch({ type: 'view/set-presentation', enabled: true })}
               />
               <IconButton
                 label={spreadMode === SpreadMode.Odd ? 'Single page' : 'Two page'}
@@ -535,9 +494,8 @@ export function Toolbar({
 
         {activeSection === 'search' ? renderSection('Search toolbar', (
           <Search
-            scroll={scroll}
+            stage={stage}
             documentId={documentId}
-            onSearch={pinForSearch}
           />
         ), true) : null}
 

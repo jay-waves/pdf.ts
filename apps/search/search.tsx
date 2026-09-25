@@ -11,7 +11,7 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { ControlButton, Tooltip } from '../components';
 import { pdfSearchStore } from './pdf-search';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import type { ViewerStage } from '../viewer/viewer-stage';
 import styles from './search.module.css';
 
 const HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38%, transparent)';
@@ -66,25 +66,23 @@ export function SearchLayer({
   );
 }
 
-function scrollToResult(
-  scroll: PdfScroll | null | undefined,
+function revealResult(
+  stage: ViewerStage | null | undefined,
   result?: SearchResult,
 ) {
-  if (!scroll || !result) return;
-  scroll.reveal(result.pageIndex, result.rects, {
+  if (!stage || !result) return;
+  stage.reveal(result.pageIndex, result.rects, {
     behavior: 'smooth',
     insets: { top: 64 },
   });
 }
 
 export function Search({
-  scroll,
+  stage,
   documentId,
-  onSearch,
 }: {
-  scroll?: PdfScroll | null;
+  stage?: ViewerStage | null;
   documentId?: string | null;
-  onSearch(): void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -110,12 +108,11 @@ export function Search({
   }, [canSearch]);
 
   useEffect(() => {
-    scrollToResult(scroll, state.results[state.activeResultIndex]);
-  }, [scroll, state.activeResultIndex, state.results]);
+    revealResult(stage, state.results[state.activeResultIndex]);
+  }, [stage, state.activeResultIndex, state.results]);
 
   const runSearch = () => {
-    if (canSearch && query.trim()) onSearch();
-    run(query, state.flags, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
+    run(query, state.flags, Math.max(0, (stage?.getCurrentPage() ?? 1) - 1));
   };
   const clearSearch = () => {
     setQuery('');
@@ -123,8 +120,7 @@ export function Search({
     inputRef.current?.focus();
   };
   const toggleFlag = (flag: MatchFlag) => {
-    if (canSearch && query.trim()) onSearch();
-    toggleSearchFlag(flag, query, Math.max(0, (scroll?.getCurrentPage() ?? 1) - 1));
+    toggleSearchFlag(flag, query, Math.max(0, (stage?.getCurrentPage() ?? 1) - 1));
   };
 
   return (

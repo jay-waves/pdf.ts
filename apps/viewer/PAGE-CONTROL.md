@@ -1,13 +1,15 @@
 # Page control boundaries
 
-Input → ViewerCommand → PageController → PdfScroll / layout plugins → PageView → React
+Input → ViewerCommand → ViewerStage → v2 spatial capabilities → StageSnapshot → React
 
-- `viewer-viewport-input.tsx` owns DOM keyboard, pointer and wheel listeners, gesture lifetimes and input cancellation. It emits navigation commands; reading pan and zoom retain their frame-level viewport implementation.
+- `viewer-input.ts` owns app-level keyboard and page-navigation bindings. It emits semantic commands and contains no spatial implementation.
+- `stage-surface.tsx` is the thin React binding that obtains capabilities and forwards normalized `@use-gesture/react` drag/pinch samples.
+- `stage-input-controller.ts` owns the pointer state machine, wheel input, frame-coalesced pan/zoom, timers, activity lifetimes and cancellation. It has no React dependency.
 - `viewer-controller.ts` routes application commands, coordinates overlays and annotation tools, and exposes React feedback. It does not install DOM listeners or calculate layout geometry.
-- `page-controller.ts` owns page navigation, reading/presentation transitions and layout policy. Its synchronous, immutable snapshot is exposed through `useSyncExternalStore`. Plugin notifications update reading feedback; they cannot replace the current presentation page.
-- `pdf-scroll.ts` handles viewport geometry, anchor preservation, scrolling and reveal animations. It does not interpret keyboard events or decide reading modes.
+- `viewer-stage.ts` is the app's single spatial owner. It owns page navigation, reading/presentation transitions and layout policy, and delegates geometry to the v2 adapter. Its synchronous immutable `StageSnapshot` is exposed through `useSyncExternalStore`.
+- `stage-scroll-adapter.ts` is the private v2 spatial adapter behind `ViewerStage`: rect reveal, anchor preservation and DOM/plugin scroll access. App features depend on `ViewerStage`, not this adapter.
 - `pdf-surface.tsx` and `presentation-view.tsx` consume the view. During presentation the ordinary viewport remains mounted to preserve layout and reading settings, but is inert and its input component is unmounted. Presentation navigation does not scroll that inactive viewport. Exiting synchronizes its page once.
-- `reading-history.ts` persists the controller snapshot and restores through `applyLayout` and `goToPage`; it does not write plugin layout state directly.
+- `reading-history.ts` persists the stage snapshot and restores through `applyLayout` and `goToPage`; it does not write plugin layout state directly.
 
 ## Transition rules
 
@@ -22,4 +24,4 @@ Input → ViewerCommand → PageController → PdfScroll / layout plugins → Pa
 | Exit presentation | Restore reading interaction and navigate to the last presentation page |
 | Restore history | Apply the same layout constraints as toolbar actions |
 
-Add new layout rules in `PageController`, not toolbar callbacks or persistence code. Keep input-specific thresholds in the input layer. Use the controller snapshot for visible page/layout UI instead of subscribing to plugins again.
+Add new spatial/layout rules in `ViewerStage`, not toolbar callbacks or persistence code. Keep modality-specific input rules in the stage input controller. Use `StageSnapshot` for visible page/layout UI instead of subscribing to spatial plugins again.

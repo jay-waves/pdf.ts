@@ -1,0 +1,167 @@
+diff --git a/dist/index.js b/dist/index.js
+index 396ed08284fc85a081096877c053f2212c625181..a7d127ef11160f561ca40df216d1dcd97fc60f53 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -657,6 +657,7 @@ const _SelectionPlugin = class _SelectionPlugin extends BasePlugin {
+     this.enabledModesPerDoc = /* @__PURE__ */ new Map();
+     this.selecting = /* @__PURE__ */ new Map();
+     this.anchor = /* @__PURE__ */ new Map();
++    this.longPressWord = /* @__PURE__ */ new Map();
+     this.hasTextAnchor = /* @__PURE__ */ new Map();
+     this.marqueePage = /* @__PURE__ */ new Map();
+     this.pageCallbacks = /* @__PURE__ */ new Map();
+@@ -762,6 +763,7 @@ const _SelectionPlugin = class _SelectionPlugin extends BasePlugin {
+     this.geoAccessOrder.set(documentId, []);
+     this.selecting.set(documentId, false);
+     this.anchor.set(documentId, void 0);
++    this.longPressWord.delete(documentId);
+     this.hasTextAnchor.set(documentId, false);
+   }
+   onDocumentClosed(documentId) {
+@@ -772,6 +774,7 @@ const _SelectionPlugin = class _SelectionPlugin extends BasePlugin {
+     this.selecting.delete(documentId);
+     this.hasTextAnchor.delete(documentId);
+     this.anchor.delete(documentId);
++    this.longPressWord.delete(documentId);
+     this.marqueePage.delete(documentId);
+     this.selChange$.clearScope(documentId);
+     this.textRetrieved$.clearScope(documentId);
+@@ -810,6 +813,9 @@ const _SelectionPlugin = class _SelectionPlugin extends BasePlugin {
+       getBoundingRects: (docId) => selectBoundingRectsForAllPages(this.getDocumentState(getDocId(docId))),
+       getSelectedText: (docId) => this.getSelectedText(getDocId(docId)),
+       setSelection: (range, docId) => this.applySelection(getDocId(docId), range),
++      beginLongPressSelection: (page, point, docId) => this.beginLongPressSelection(getDocId(docId), page, point),
++      updateLongPressSelection: (page, point, docId) => this.updateLongPressSelection(getDocId(docId), page, point),
++      endLongPressSelection: (docId) => this.endSelection(getDocId(docId), this.interactionManagerCapability.forDocument(getDocId(docId)).getActiveMode()),
+       clear: (docId) => this.clearSelection(getDocId(docId)),
+       copyToClipboard: (docId) => this.copyToClipboard(getDocId(docId)),
+       getState: (docId) => this.getDocumentState(getDocId(docId)),
+@@ -848,6 +854,9 @@ const _SelectionPlugin = class _SelectionPlugin extends BasePlugin {
+       getBoundingRects: () => selectBoundingRectsForAllPages(this.getDocumentState(documentId)),
+       getSelectedText: () => this.getSelectedText(documentId),
+       setSelection: (range) => this.applySelection(documentId, range),
++      beginLongPressSelection: (page, point) => this.beginLongPressSelection(documentId, page, point),
++      updateLongPressSelection: (page, point) => this.updateLongPressSelection(documentId, page, point),
++      endLongPressSelection: () => this.endSelection(documentId, this.interactionManagerCapability.forDocument(documentId).getActiveMode()),
+       clear: () => this.clearSelection(documentId),
+       copyToClipboard: () => this.copyToClipboard(documentId),
+       getState: () => this.getDocumentState(documentId),
+@@ -1203,13 +1212,66 @@ const _SelectionPlugin = class _SelectionPlugin extends BasePlugin {
+   endSelection(documentId, modeId) {
+     this.selecting.set(documentId, false);
+     this.anchor.set(documentId, void 0);
++    this.longPressWord.delete(documentId);
++    this.hasTextAnchor.set(documentId, false);
+     this.dispatch(endSelection(documentId));
+     this.endSelection$.emit(documentId, { modeId });
+     this.recalculateMenuPlacement(documentId);
+   }
++  beginLongPressSelection(documentId, page, point) {
++    const geo = this.getDocumentState(documentId).geometry[page];
++    if (!geo) return false;
++    const index = glyphAt(geo, point, this.config.toleranceFactor);
++    if (index < 0) return false;
++    const bounds = expandToWordBoundary(geo, index);
++    if (!bounds) return false;
++    const modeId = this.interactionManagerCapability.forDocument(documentId).getActiveMode();
++    const range = {
++      start: { page, index: bounds.from },
++      end: { page, index: bounds.to }
++    };
++    const previouslyHighlighted = Object.keys(this.getDocumentState(documentId).rects).map(Number);
++    this.selecting.set(documentId, true);
++    this.anchor.set(documentId, { page, index });
++    this.longPressWord.set(documentId, { page, from: bounds.from, to: bounds.to });
++    this.hasTextAnchor.set(documentId, true);
++    this.dispatch(startSelection(documentId));
++    this.dispatch(setSelection(documentId, range));
++    this.updateRectsAndSlices(documentId, range);
++    this.selChange$.emit(documentId, range);
++    this.beginSelection$.emit(documentId, { page, index, modeId });
++    new Set([...previouslyHighlighted, page]).forEach((p) => this.notifyPage(documentId, p));
++    this.recalculateMenuPlacement(documentId);
++    return true;
++  }
++  updateLongPressSelection(documentId, page, point) {
++    const geo = this.getDocumentState(documentId).geometry[page];
++    if (!geo) return false;
++    const index = glyphAt(geo, point, this.config.toleranceFactor);
++    if (index < 0) return false;
++    const word = this.longPressWord.get(documentId);
++    if (!word || !this.selecting.get(documentId)) return false;
++    const previouslyHighlighted = Object.keys(this.getDocumentState(documentId).rects).map(Number);
++    const beforeWord = page < word.page || page === word.page && index < word.from;
++    const range = beforeWord ? {
++      start: { page, index },
++      end: { page: word.page, index: word.to }
++    } : {
++      start: { page: word.page, index: word.from },
++      end: { page, index: page === word.page ? Math.max(index, word.to) : index }
++    };
++    this.dispatch(setSelection(documentId, range));
++    this.updateRectsAndSlices(documentId, range);
++    this.selChange$.emit(documentId, range);
++    const pagesToNotify = new Set(previouslyHighlighted);
++    for (let p = range.start.page; p <= range.end.page; p++) pagesToNotify.add(p);
++    pagesToNotify.forEach((p) => this.notifyPage(documentId, p));
++    return true;
++  }
+   clearSelection(documentId, _modeId) {
+     this.selecting.set(documentId, false);
+     this.anchor.set(documentId, void 0);
++    this.longPressWord.delete(documentId);
+     this.dispatch(clearSelection(documentId));
+     this.selChange$.emit(documentId, null);
+     this.emitMenuPlacement(documentId, null);
+diff --git a/dist/lib/selection-plugin.d.ts b/dist/lib/selection-plugin.d.ts
+index b0b19cce1f956248da7079d45bea678018994add..4676bd1a4ce364b2945b527ec6b2854a64ae2a91 100644
+--- a/dist/lib/selection-plugin.d.ts
++++ b/dist/lib/selection-plugin.d.ts
+@@ -7,6 +7,7 @@ export declare class SelectionPlugin extends BasePlugin<SelectionPluginConfig, S
+     private enabledModesPerDoc;
+     private selecting;
+     private anchor;
++    private longPressWord;
+     /** Whether the text handler has a pending anchor (before drag threshold is met) */
+     private hasTextAnchor;
+     /** Tracks the page a marquee drag started on, per document */
+@@ -69,6 +70,8 @@ export declare class SelectionPlugin extends BasePlugin<SelectionPluginConfig, S
+     private evictGeometryIfNeeded;
+     private beginSelection;
+     private endSelection;
++    private beginLongPressSelection;
++    private updateLongPressSelection;
+     private clearSelection;
+     /**
+      * Programmatically apply (or restore) a text selection without going through
+diff --git a/dist/lib/types.d.ts b/dist/lib/types.d.ts
+index c43bcdb9919d4e0c05d84a4d218276bd7b6c7ebe..b82abb17429d2d854aadd60ce2688e5be24c8584 100644
+--- a/dist/lib/types.d.ts
++++ b/dist/lib/types.d.ts
+@@ -1,5 +1,5 @@
+ import { BasePluginConfig, EventHook } from '@embedpdf/core';
+-import { PdfPageGeometry, PdfTask, Rect } from '@embedpdf/models';
++import { PdfPageGeometry, PdfTask, Position, Rect } from '@embedpdf/models';
+ export interface MarqueeSelectionConfig {
+     /** Minimum drag distance in pixels before considering it a marquee */
+     minDragPx?: number;
+@@ -205,6 +205,9 @@ export interface SelectionScope {
+     }[];
+     getSelectedText(): PdfTask<string[]>;
+     setSelection(range: SelectionRangeX | null): PdfTask<void>;
++    beginLongPressSelection(page: number, point: Position): boolean;
++    updateLongPressSelection(page: number, point: Position): boolean;
++    endLongPressSelection(): void;
+     clear(): void;
+     copyToClipboard(): void;
+     getState(): SelectionDocumentState;
+@@ -243,6 +246,9 @@ export interface SelectionCapability {
+     }[];
+     getSelectedText(documentId?: string): PdfTask<string[]>;
+     setSelection(range: SelectionRangeX | null, documentId?: string): PdfTask<void>;
++    beginLongPressSelection(page: number, point: Position, documentId?: string): boolean;
++    updateLongPressSelection(page: number, point: Position, documentId?: string): boolean;
++    endLongPressSelection(documentId?: string): void;
+     clear(documentId?: string): void;
+     copyToClipboard(documentId?: string): void;
+     getState(documentId?: string): SelectionDocumentState;

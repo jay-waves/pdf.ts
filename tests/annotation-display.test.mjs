@@ -32,7 +32,7 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
-const { installAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation, createTextMarkupAnnotations } = await import('../apps/annotations/annotations.ts');
+const { initializeAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation, createTextMarkupAnnotations } = await import('../apps/annotations/annotations.ts');
 const { themeAnnotationColorRenderer, themeCommentRenderer, themeHighlightRenderer } = await import(rendererUrl.href);
 hooks.deregister();
 
@@ -69,7 +69,7 @@ test('initialization and theme changes never read or edit existing annotations',
     getTools: () => [{ id: 'highlight', defaults: { strokeColor: '#ffcd45', opacity: 0.4, blendMode: PdfBlendMode.Normal } }],
     setToolDefaults: (id, patch) => defaults.push({ id, patch }),
   };
-  installAnnotationPalette({ getPlugin: () => ({ provides: () => capability }) }, 'doc');
+  initializeAnnotationPalette({ getPlugin: () => ({ provides: () => capability }) }, 'doc');
   assert.equal(defaults.length, 1);
   assert.equal(defaults[0].patch.strokeColor, ANNOTATION_PALETTES.light[2]);
   globalThis.annotationTestTheme.setState({ theme: 'light' });

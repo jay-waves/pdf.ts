@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useDocumentState } from '@embedpdf/core/react';
 import { Rotate } from '@embedpdf/plugin-rotate/react';
-import { RasterLayer } from '../renderer/viewer-render-layers';
+import { RenderLayer } from '../renderer/viewer-render-layers';
 import styles from './presentation-view.module.css';
 
 export function PresentationView({
@@ -58,12 +58,12 @@ export function PresentationView({
           >
             <Rotate documentId={documentId} pageIndex={pageNumber - 1} scale={scale}>
               <div style={{ width: pageWidth * scale, height: pageHeight * scale }}>
-                <RasterLayer
+                <RenderLayer
                   documentId={documentId}
                   pageIndex={pageNumber - 1}
-                  scale={scale}
                   dpr={renderDpr}
-                  draggable={false}
+                  baseScale={scale}
+                  tiles={false}
                 />
               </div>
             </Rotate>

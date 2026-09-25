@@ -7,7 +7,7 @@ import { useStore } from 'zustand';
 import { PanelContent, PanelState } from '../components';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import { getDocumentScope } from '../shared/utils';
-import { viewerDiagnosticsStore } from '../renderer/viewer-diagnostics';
+import { renderSettingsStore } from '../renderer/render-settings';
 import { useRenderUrl } from '../renderer/use-render-url';
 import { getDocumentState } from '../document/viewer-document';
 import styles from './thumbnails.module.css';
@@ -69,7 +69,7 @@ function ThumbnailCard({
 }) {
   const cardRef = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(false);
-  const systemDpr = useStore(viewerDiagnosticsStore, (state) => state.systemDpr);
+  const systemDpr = useStore(renderSettingsStore, (state) => state.systemDpr);
 
   useEffect(() => {
     const card = cardRef.current;

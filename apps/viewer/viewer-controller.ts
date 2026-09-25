@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { HistoryCapability } from '@embedpdf/plugin-history';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
@@ -6,16 +6,17 @@ import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode } from '@embedpdf/plugin-spread';
 import type { ZoomCapability, ZoomLevel } from '@embedpdf/plugin-zoom';
 import { getAnnotationScope } from '../annotations/annotations';
-import { EMPTY_PAGE_VIEW, type PageController } from './page-controller';
+import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from './viewer-stage';
 
 const subscribeEmptyView = () => () => {};
-const getEmptyView = () => EMPTY_PAGE_VIEW;
+const getEmptyView = () => EMPTY_STAGE_SNAPSHOT;
 import { toggleViewerColorMode } from '../theme/theme';
 import { getDocumentScope, getPluginCapability } from '../shared/utils';
 import { viewerActivity, type ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer';
 type ViewerPanel = 'outline' | 'thumbnails' | 'colors';
+export type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 export type ViewerTranslationRequest = {
   documentId: string;
   anchor: { x: number; y: number };
@@ -23,7 +24,7 @@ export type ViewerTranslationRequest = {
 
 type ViewerSidePanel =
   | { type: ViewerPanel }
-  | { type: 'comments'; target: { annotationId: string; isNew: boolean } };
+  | { type: 'comments'; target: { annotationId: string } };
 
 type ViewerOverlay =
   | { type: 'side-panel'; panel: ViewerSidePanel }
@@ -33,47 +34,48 @@ type ViewerOverlay =
 
 type ViewerUiState = {
   panMode: boolean;
-  searchOpen: boolean;
+  toolbarSection: ToolbarSection | null;
   overlay: ViewerOverlay;
 };
 
 type ViewerUiCommand =
+  | { type: 'ui/reset' }
   | { type: 'ui/set-pan'; enabled: boolean }
-  | { type: 'ui/set-search'; open: boolean }
+  | { type: 'ui/set-toolbar-section'; section: ToolbarSection | null }
   | { type: 'ui/toggle-panel'; panel: Extract<ViewerPanel, 'thumbnails' | 'colors'> }
   | { type: 'ui/open-panel'; panel: ViewerPanel }
-  | { type: 'ui/open-comments'; annotationId: string; isNew: boolean }
+  | { type: 'ui/open-comments'; annotationId: string }
   | { type: 'ui/open-translation'; documentId: string; anchor: { x: number; y: number } }
   | { type: 'ui/open-dialog'; dialog: ViewerDialog }
   | { type: 'ui/close-overlay' };
 
-type ViewerUiAction = ViewerUiCommand | { type: 'ui/reset' };
-
-export const INITIAL_VIEWER_UI: ViewerUiState = {
+const INITIAL_VIEWER_UI: ViewerUiState = {
   panMode: false,
-  searchOpen: false,
+  toolbarSection: null,
   overlay: null,
 };
 
-export function reduceViewerUi(state: ViewerUiState, action: ViewerUiAction): ViewerUiState {
+function reduceViewerUi(state: ViewerUiState, action: ViewerUiCommand): ViewerUiState {
   switch (action.type) {
     case 'ui/reset': return INITIAL_VIEWER_UI;
     case 'ui/set-pan': return {
       ...state,
       panMode: action.enabled,
-      searchOpen: action.enabled ? false : state.searchOpen,
+      toolbarSection: action.enabled && state.toolbarSection === 'search'
+        ? null
+        : state.toolbarSection,
     };
-    case 'ui/set-search': return {
+    case 'ui/set-toolbar-section': return {
       ...state,
-      panMode: action.open ? false : state.panMode,
-      searchOpen: action.open,
-      overlay: action.open ? null : state.overlay,
+      panMode: action.section === 'search' ? false : state.panMode,
+      toolbarSection: action.section,
+      overlay: action.section === 'search' ? null : state.overlay,
     };
     case 'ui/toggle-panel': {
       const current = state.overlay?.type === 'side-panel' ? state.overlay.panel : null;
       return {
         ...state,
-        searchOpen: false,
+        toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
         overlay: current?.type === action.panel
           ? null
           : { type: 'side-panel', panel: { type: action.panel } },
@@ -81,28 +83,28 @@ export function reduceViewerUi(state: ViewerUiState, action: ViewerUiAction): Vi
     }
     case 'ui/open-panel': return {
       ...state,
-      searchOpen: false,
+      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
       overlay: { type: 'side-panel', panel: { type: action.panel } },
     };
     case 'ui/open-comments': return {
       ...state,
-      searchOpen: false,
+      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
       overlay: {
         type: 'side-panel',
         panel: {
           type: 'comments',
-          target: { annotationId: action.annotationId, isNew: action.isNew },
+          target: { annotationId: action.annotationId },
         },
       },
     };
     case 'ui/open-dialog': return {
       ...state,
-      searchOpen: false,
+      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
       overlay: { type: 'dialog', dialog: action.dialog },
     };
     case 'ui/open-translation': return {
       ...state,
-      searchOpen: false,
+      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
       overlay: {
         type: 'translation',
         request: { documentId: action.documentId, anchor: action.anchor },
@@ -130,7 +132,7 @@ export type ViewerCommand = ViewerUiCommand
 
 export type ViewerCommandDispatch = (command: ViewerCommand) => void;
 
-export type ViewerCapabilityFeedback = {
+export type ViewerCapabilitySnapshot = {
   zoomPercent: number;
   zoomLevel: ZoomLevel;
   activeTool: string | null;
@@ -141,35 +143,42 @@ export type ViewerCapabilityFeedback = {
 type ViewerControllerDependencies = {
   registry?: PluginRegistry;
   documentId?: string | null;
-  pages?: PageController | null;
-  updateUi(command: ViewerUiCommand): void;
+  stage?: ViewerStage | null;
   saveDocument(): void;
   exportDocument(): void;
 };
 
+type ViewerCommandContext = ViewerControllerDependencies & {
+  updateUi(command: ViewerUiCommand): void;
+};
+
 function executeViewerCommand(
   command: ViewerCommand,
-  dependencies: ViewerControllerDependencies,
+  dependencies: ViewerCommandContext,
 ) {
   const { registry, documentId, updateUi } = dependencies;
 
   // Presentation accepts navigation and exit; reading-only commands must not
   // change the inactive viewport through global keyboard shortcuts.
-  if (dependencies.pages?.getSnapshot().mode === 'presentation'
+  if (dependencies.stage?.getSnapshot().mode === 'presentation'
     && command.type !== 'view/set-presentation'
+    && command.type !== 'ui/reset'
     && !command.type.startsWith('navigation/')
     && !command.type.startsWith('document/')
     && command.type !== 'theme/toggle') return;
 
   switch (command.type) {
+    case 'ui/reset':
+      updateUi(command);
+      return;
     case 'ui/set-pan':
       if (command.enabled) {
         getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
       }
       updateUi(command);
       return;
-    case 'ui/set-search':
-      if (command.open) {
+    case 'ui/set-toolbar-section':
+      if (command.section === 'search') {
         getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
       }
       updateUi(command);
@@ -183,10 +192,10 @@ function executeViewerCommand(
       updateUi(command);
       return;
     case 'navigation/go-to-page':
-      dependencies.pages?.goToPage(command.pageNumber);
+      dependencies.stage?.goToPage(command.pageNumber);
       return;
     case 'navigation/move-pages':
-      dependencies.pages?.movePages(command.delta);
+      dependencies.stage?.movePages(command.delta);
       if (command.source) viewerActivity.pulse(command.source, ['Navigation', 'Page']);
       return;
     case 'view/zoom-step': {
@@ -201,16 +210,16 @@ function executeViewerCommand(
     case 'view/set-presentation':
       if (command.enabled) {
         updateUi({ type: 'ui/close-overlay' });
-        updateUi({ type: 'ui/set-search', open: false });
+        updateUi({ type: 'ui/set-toolbar-section', section: null });
         getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
       }
-      dependencies.pages?.setPresentation(command.enabled);
+      dependencies.stage?.setPresentation(command.enabled);
       return;
     case 'view/toggle-spread':
-      dependencies.pages?.toggleSpread();
+      dependencies.stage?.toggleSpread();
       return;
     case 'view/set-scroll':
-      dependencies.pages?.setStrategy(command.strategy);
+      dependencies.stage?.setStrategy(command.strategy);
       return;
     case 'view/rotate':
       getPluginCapability<RotateCapability>(registry, 'rotate')?.rotateForward();
@@ -218,7 +227,7 @@ function executeViewerCommand(
     case 'annotation/toggle-tool': {
       const annotation = getAnnotationScope(registry, documentId);
       if (!annotation) return;
-      updateUi({ type: 'ui/set-search', open: false });
+      updateUi({ type: 'ui/set-toolbar-section', section: null });
       updateUi({ type: 'ui/set-pan', enabled: false });
       const current = annotation.scope.getActiveTool()?.id ?? null;
       annotation.scope.setActiveTool(current === command.toolId ? null : command.toolId);
@@ -244,10 +253,10 @@ function executeViewerCommand(
   }
 }
 
-function useViewerCapabilityFeedback(
+function useViewerCapabilitySnapshot(
   registry: PluginRegistry | undefined,
   documentId: string | null | undefined,
-): Omit<ViewerCapabilityFeedback, 'spreadMode' | 'scrollStrategy'> {
+): Omit<ViewerCapabilitySnapshot, 'spreadMode' | 'scrollStrategy'> {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -282,19 +291,29 @@ function useViewerCapabilityFeedback(
 }
 
 export function useViewerController(dependencies: ViewerControllerDependencies) {
-  const dependenciesRef = useRef(dependencies);
-  dependenciesRef.current = dependencies;
+  const [uiSnapshot, updateUi] = useReducer(reduceViewerUi, INITIAL_VIEWER_UI);
+  const dependenciesRef = useRef<ViewerCommandContext>({ ...dependencies, updateUi });
+  dependenciesRef.current = { ...dependencies, updateUi };
   const dispatch = useCallback<ViewerCommandDispatch>((command) => {
     executeViewerCommand(command, dependenciesRef.current);
   }, []);
-  const feedback = useViewerCapabilityFeedback(
+  const capabilitySnapshot = useViewerCapabilitySnapshot(
     dependencies.registry,
     dependencies.documentId,
   );
 
-  const view = useSyncExternalStore(
-    dependencies.pages?.subscribe ?? subscribeEmptyView,
-    dependencies.pages?.getSnapshot ?? getEmptyView,
+  const stageSnapshot = useSyncExternalStore(
+    dependencies.stage?.subscribe ?? subscribeEmptyView,
+    dependencies.stage?.getSnapshot ?? getEmptyView,
   );
-  return { dispatch, view, feedback: { ...feedback, spreadMode: view.spread, scrollStrategy: view.strategy } };
+  return {
+    dispatch,
+    uiSnapshot,
+    stageSnapshot,
+    capabilitySnapshot: {
+      ...capabilitySnapshot,
+      spreadMode: stageSnapshot.spread,
+      scrollStrategy: stageSnapshot.strategy,
+    },
+  };
 }

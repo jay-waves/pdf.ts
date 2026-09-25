@@ -2,14 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { Dialog, PanelContent, Select } from '../components';
 import {
+  sampleRasterPixels,
+  viewerDiagnosticsStore,
+} from '../renderer/viewer-diagnostics';
+import {
   getEffectiveRenderDpr,
   getSystemDpr,
   PDF_TILE_SIZE_CSS_PX,
-  sampleRasterPixels,
+  renderSettingsStore,
   setRenderDprMode,
-  viewerDiagnosticsStore,
   type RenderDprMode,
-} from '../renderer/viewer-diagnostics';
+} from '../renderer/render-settings';
 import {
   describeFallbackFont,
   describeFontCharset,
@@ -65,9 +68,10 @@ export function DeveloperDialog({
   const updateLlmAvailability = useCallback((available: boolean) => setLlmAvailability({ available }), []);
   const loggedOpenRef = useRef(false);
   const snapshot = useStore(viewerDiagnosticsStore);
+  const renderSettings = useStore(renderSettingsStore);
   const startupSnapshot = useStore(startupLogStore);
-  const dprMode = snapshot.renderDprMode;
-  const dpr = getEffectiveRenderDpr(dprMode);
+  const dprMode = renderSettings.dprMode;
+  const dpr = getEffectiveRenderDpr(dprMode, renderSettings.systemDpr);
   const totalPixels = snapshot.basePixels + snapshot.tilePixels;
   useEffect(() => {
     if (!open) return;

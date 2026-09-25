@@ -1,54 +1,4 @@
 import { createStore } from 'zustand/vanilla';
-import { platform } from '#platform';
-
-export type RenderDprMode = 'auto' | '1.25' | '1.5' | '1.75' | 'system';
-
-const AUTO_DPR_LIMIT = 1.75;
-const RENDER_DPR_STORAGE_KEY = 'pdf-viewer-render-dpr-v1';
-export const PDF_TILE_SIZE_CSS_PX = 768;
-
-function getStoredRenderDprMode(): RenderDprMode {
-  const mode = platform.getPreference(RENDER_DPR_STORAGE_KEY);
-  return mode === '1.25' || mode === '1.5' || mode === '1.75' || mode === 'system'
-    ? mode
-    : 'auto';
-}
-
-export function getSystemDpr() {
-  return window.devicePixelRatio || 1;
-}
-
-export function getEffectiveRenderDpr(
-  mode = viewerDiagnosticsStore.getState().renderDprMode,
-  systemDpr = getSystemDpr(),
-) {
-  if (mode === 'auto') return Math.min(systemDpr, AUTO_DPR_LIMIT);
-  if (mode === 'system') return systemDpr;
-  return Number(mode);
-}
-
-export function setRenderDprMode(mode: RenderDprMode) {
-  platform.setPreference(RENDER_DPR_STORAGE_KEY, mode);
-  viewerDiagnosticsStore.setState((state) => ({
-    ...EMPTY_SNAPSHOT,
-    systemDpr: getSystemDpr(),
-    renderDprMode: mode,
-    errors: state.errors,
-  }));
-}
-
-export function installRenderDprMonitor() {
-  let query: MediaQueryList;
-  const update = () => {
-    query?.removeEventListener('change', update);
-    const systemDpr = getSystemDpr();
-    viewerDiagnosticsStore.setState({ systemDpr });
-    query = window.matchMedia(`(resolution: ${systemDpr}dppx)`);
-    query.addEventListener('change', update);
-  };
-  update();
-  return () => query.removeEventListener('change', update);
-}
 
 type TimingStats = {
   count: number;
@@ -57,8 +7,6 @@ type TimingStats = {
 };
 
 type ViewerDiagnosticsSnapshot = {
-  systemDpr: number;
-  renderDprMode: RenderDprMode;
   basePixels: number;
   tilePixels: number;
   activeTiles: number;
@@ -69,8 +17,6 @@ type ViewerDiagnosticsSnapshot = {
 
 const EMPTY_TIMING: TimingStats = { count: 0, last: 0, average: 0 };
 const EMPTY_SNAPSHOT: ViewerDiagnosticsSnapshot = {
-  systemDpr: getSystemDpr(),
-  renderDprMode: 'auto',
   basePixels: 0,
   tilePixels: 0,
   activeTiles: 0,
@@ -101,10 +47,7 @@ function appendTiming(current: TimingStats, duration: number): TimingStats {
   };
 }
 
-export const viewerDiagnosticsStore = createStore<ViewerDiagnosticsSnapshot>(() => ({
-  ...EMPTY_SNAPSHOT,
-  renderDprMode: getStoredRenderDprMode(),
-}));
+export const viewerDiagnosticsStore = createStore<ViewerDiagnosticsSnapshot>(() => EMPTY_SNAPSHOT);
 
 export function recordRenderTiming(kind: 'base' | 'tile', duration: number) {
   viewerDiagnosticsStore.setState((state) => kind === 'base'
@@ -127,8 +70,6 @@ export function recordViewerError(value: unknown) {
 export function resetViewerDiagnostics() {
   viewerDiagnosticsStore.setState((state) => ({
     ...EMPTY_SNAPSHOT,
-    systemDpr: getSystemDpr(),
-    renderDprMode: state.renderDprMode,
     errors: state.errors,
   }));
 }

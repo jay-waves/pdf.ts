@@ -59,7 +59,8 @@ function restorePagePosition(
   }
 }
 
-export class PdfScroll {
+/** Adapts EmbedPDF v2 scroll/viewport capabilities to ViewerStage. */
+export class StageScrollAdapter {
   private viewportElement: HTMLElement | null = null;
   private settleFrame = 0;
   private readonly capability: ScrollCapability | undefined;

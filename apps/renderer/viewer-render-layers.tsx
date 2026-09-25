@@ -16,7 +16,7 @@ import { viewerActivity } from '../viewer/viewer-activity';
 
 const ZOOM_TILE_SETTLE_MS = 120;
 
-export function RasterLayer({
+function BaseRasterPlane({
   documentId,
   pageIndex,
   scale,
@@ -116,7 +116,7 @@ function TileImage({
   );
 }
 
-export function TileLayer({
+function TilePlane({
   documentId,
   pageIndex,
   dpr,
@@ -132,7 +132,7 @@ export function TileLayer({
   const rotation = (documentState?.rotation ?? 0)
     + (documentState?.document?.pages[pageIndex]?.rotation ?? 0);
 
-  return <SettledTileLayer
+  return <SettledTilePlane
     {...props}
     key={`${documentId}-${pageIndex}-${dpr}-${refresh}-${rotation}`}
     documentId={documentId}
@@ -142,9 +142,50 @@ export function TileLayer({
   />;
 }
 
+/**
+ * The page raster is one layer with two planes: an always-available full-page
+ * base and an optional high-resolution tile plane. Consumers choose the layer;
+ * the render strategy and stacking stay internal.
+ */
+export function RenderLayer({
+  documentId,
+  pageIndex,
+  dpr,
+  baseScale,
+  tiles = true,
+}: {
+  documentId: string;
+  pageIndex: number;
+  dpr: number;
+  baseScale: number;
+  tiles?: boolean;
+}) {
+  return (
+    <>
+      <BaseRasterPlane
+        documentId={documentId}
+        pageIndex={pageIndex}
+        scale={baseScale}
+        dpr={dpr}
+        className="pdf-page-render-image"
+        draggable={false}
+        style={{ pointerEvents: 'none' }}
+      />
+      {tiles ? (
+        <TilePlane
+          documentId={documentId}
+          pageIndex={pageIndex}
+          dpr={dpr}
+          className="pdf-page-tiling-layer"
+        />
+      ) : null}
+    </>
+  );
+}
+
 type TileBatch = { id: string; tiles: Tile[] };
 
-function SettledTileLayer({ documentId, pageIndex, dpr, scale, ...props }: {
+function SettledTilePlane({ documentId, pageIndex, dpr, scale, ...props }: {
   documentId: string;
   pageIndex: number;
   dpr: number;

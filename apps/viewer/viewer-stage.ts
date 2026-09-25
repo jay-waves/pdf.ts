@@ -3,10 +3,11 @@ import { ScrollStrategy, type ScrollBehavior, type ScrollCapability } from '@emb
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
 import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import { ZoomMode, type ZoomCapability } from '@embedpdf/plugin-zoom';
-import type { PdfScroll } from '../renderer/pdf-scroll';
+import { StageScrollAdapter } from '../renderer/stage-scroll-adapter';
+import type { Rect } from '@embedpdf/models';
 import { getPluginCapability } from '../shared/utils';
 
-export type PageView = Readonly<{
+export type StageSnapshot = Readonly<{
   mode: 'reading' | 'presentation';
   pageNumber: number;
   totalPages: number;
@@ -14,19 +15,31 @@ export type PageView = Readonly<{
   spread: SpreadMode;
 }>;
 
-export const EMPTY_PAGE_VIEW: PageView = {
+export const EMPTY_STAGE_SNAPSHOT: StageSnapshot = {
   mode: 'reading', pageNumber: 1, totalPages: 0,
   strategy: ScrollStrategy.Vertical, spread: SpreadMode.None,
 };
 
-/** Owns view transitions. PdfScroll owns viewport geometry; plugins own layout. */
-export class PageController {
-  private state: PageView = EMPTY_PAGE_VIEW;
+/**
+ * Owns the viewer's spatial state and navigation vocabulary.
+ * EmbedPDF v2 capabilities remain the source of truth for layout and zoom;
+ * this stage provides one lifecycle and one coherent snapshot to the app.
+ */
+export class ViewerStage {
+  private state: StageSnapshot = EMPTY_STAGE_SNAPSHOT;
   private listeners = new Set<() => void>();
   private cleanup: Array<() => void> = [];
   private transitioning = false;
 
-  constructor(private registry: PluginRegistry, readonly scroll: PdfScroll) {}
+  private readonly scroll: StageScrollAdapter;
+
+  constructor(
+    private readonly registry: PluginRegistry,
+    readonly documentId: string,
+    scroll = new StageScrollAdapter(registry, documentId),
+  ) {
+    this.scroll = scroll;
+  }
 
   getSnapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -34,15 +47,43 @@ export class PageController {
     return () => { this.listeners.delete(listener); };
   };
 
-  private publish(patch: Partial<PageView>) {
+  private publish(patch: Partial<StageSnapshot>) {
     const next = { ...this.state, ...patch };
-    if ((Object.keys(next) as Array<keyof PageView>).every((key) => next[key] === this.state[key])) return;
+    if ((Object.keys(next) as Array<keyof StageSnapshot>).every((key) => next[key] === this.state[key])) return;
     this.state = next;
     this.listeners.forEach((listener) => listener());
   }
 
   private get spread() {
     return getPluginCapability<SpreadCapability>(this.registry, 'spread')?.forDocument(this.scroll.documentId);
+  }
+
+  attachSurface(element: HTMLElement | null) {
+    this.scroll.attachViewport(element);
+  }
+
+  cancelPendingNavigation() {
+    this.scroll.cancelPendingNavigation();
+  }
+
+  getPosition() {
+    return this.scroll.getPosition();
+  }
+
+  getCurrentPage() {
+    return this.scroll.getCurrentPage();
+  }
+
+  onLayoutReady(listener: (totalPages: number, initial: boolean) => void) {
+    return this.scroll.onLayoutReady(listener);
+  }
+
+  onStrategyChange(listener: (strategy: ScrollStrategy) => void) {
+    return this.scroll.onStrategyChange(listener);
+  }
+
+  reveal(pageIndex: number, rects: Rect[], options?: Parameters<StageScrollAdapter['reveal']>[2]) {
+    return this.scroll.reveal(pageIndex, rects, options);
   }
 
   install() {

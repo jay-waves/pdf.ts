@@ -1,8 +1,7 @@
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode } from '@embedpdf/plugin-spread';
 import { platform } from '#platform';
-import type { PdfScroll } from '../renderer/pdf-scroll';
-import type { PageController } from '../viewer/page-controller';
+import type { ViewerStage } from '../viewer/viewer-stage';
 
 function isScrollStrategy(value: unknown): value is ScrollStrategy {
   return value === ScrollStrategy.Vertical || value === ScrollStrategy.Horizontal;
@@ -17,8 +16,7 @@ function isValidPageNumber(value: unknown): value is number {
 }
 
 export function installReadingHistory(
-  scroll: PdfScroll,
-  pages: PageController,
+  stage: ViewerStage,
   documentKey?: string,
 ) {
   if (!documentKey) return;
@@ -29,21 +27,22 @@ export function installReadingHistory(
   let finalWrite: Promise<void> | null = null;
 
   const getProgress = () => {
-    const { strategy, spread: spreadMode } = pages.getSnapshot();
+    const { pageNumber, strategy, spread: spreadMode } = stage.getSnapshot();
     return {
-      pageNumber: pages.getSnapshot().pageNumber,
+      pageNumber,
       scrollStrategy: strategy,
       spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
     };
   };
 
   const getViewSnapshot = () => {
-    const position = scroll.getPosition();
+    const view = stage.getSnapshot();
+    const position = stage.getPosition();
     return {
-      pageNumber: pages.getSnapshot().pageNumber,
-      mode: pages.getSnapshot().mode,
-      scrollStrategy: pages.getSnapshot().strategy,
-      spreadMode: pages.getSnapshot().spread,
+      pageNumber: view.pageNumber,
+      mode: view.mode,
+      scrollStrategy: view.strategy,
+      spreadMode: view.spread,
       ...position,
     };
   };
@@ -81,7 +80,7 @@ export function installReadingHistory(
     }, 300);
   };
 
-  const unsubscribePageChange = pages.subscribe(scheduleHistoryWrite);
+  const unsubscribePageChange = stage.subscribe(scheduleHistoryWrite);
   let layoutReadyHandled = false;
   let unsubscribeLayoutReady: (() => void) | null = null;
   const handleLayoutReady = () => {
@@ -99,12 +98,12 @@ export function installReadingHistory(
           getViewSnapshot(),
         );
         if (!viewChangedWhileReading && saved && isValidPageNumber(saved.pageNumber)) {
-          const view = pages.getSnapshot();
-          pages.applyLayout(
+          const view = stage.getSnapshot();
+          stage.applyLayout(
             isScrollStrategy(saved.scrollStrategy) ? saved.scrollStrategy : view.strategy,
             isSpreadMode(saved.spreadMode) ? saved.spreadMode : view.spread,
           );
-          pages.goToPage(saved.pageNumber);
+          stage.goToPage(saved.pageNumber);
         }
         historyReady = true;
         if (viewChangedWhileReading) scheduleHistoryWrite();
@@ -115,7 +114,7 @@ export function installReadingHistory(
         console.warn('[pdf-ts] failed to read reading history', error);
       });
   };
-  unsubscribeLayoutReady = scroll.onLayoutReady(handleLayoutReady);
+  unsubscribeLayoutReady = stage.onLayoutReady(handleLayoutReady);
   if (layoutReadyHandled) {
     unsubscribeLayoutReady();
     unsubscribeLayoutReady = null;

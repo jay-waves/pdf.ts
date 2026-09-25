@@ -22,6 +22,8 @@
 .navigationTitleIcon { @apply hidden flex-none max-[640px]:block; }
 .navigationTitle { @apply inline-flex h-3.5 items-center overflow-hidden text-ellipsis whitespace-nowrap max-[640px]:hidden; }
 .navigationCompactTitle { @apply hidden h-3.5 items-center whitespace-nowrap max-[640px]:inline-flex; }
+.outlinePlaceholder .navigationTitleIcon { @apply block; }
+.outlinePlaceholder .navigationCompactTitle { @apply inline-flex; }
 .thumbnailButton .navigationCompactTitle { @apply inline-flex; }
 
 .pageForm {

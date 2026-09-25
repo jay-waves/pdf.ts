@@ -9,13 +9,13 @@ const hooks = registerHooks({
     return nextResolve(specifier === '../shared/utils' ? `${specifier}.ts` : specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url.endsWith('/renderer/pdf-scroll.ts')) {
+    if (url.endsWith('/renderer/stage-scroll-adapter.ts')) {
       return { format: 'module', source: stripTypeScriptTypes(readFileSync(new URL(url), 'utf8'), { mode: 'transform' }), shortCircuit: true };
     }
     return nextLoad(url, context);
   },
 });
-const { PdfScroll } = await import('../apps/renderer/pdf-scroll.ts');
+const { StageScrollAdapter } = await import('../apps/renderer/stage-scroll-adapter.ts');
 hooks.deregister();
 
 function setup(t) {
@@ -42,7 +42,7 @@ function setup(t) {
     scroll: { forDocument: () => scope },
     viewport: { forDocument: () => viewport, getViewportGap: () => 0 },
   };
-  const scroll = new PdfScroll({
+  const scroll = new StageScrollAdapter({
     getPlugin: (id) => ({ provides: () => capabilities[id] }),
     getStore: () => ({ getState: () => ({ plugins: { scroll: { documents: { doc: { strategy: ScrollStrategy.Vertical } } } } }) }),
   }, 'doc');

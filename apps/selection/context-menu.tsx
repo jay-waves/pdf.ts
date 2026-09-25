@@ -408,11 +408,10 @@ export function ContextMenu({
     } }] : []),
     { label: commentTarget?.type === PdfAnnotationSubtype.TEXT ? 'Open comment' : 'Add comment', icon: MessageSquareMore, action: () => {
       if (annotation && commentTarget) {
-        const isNew = commentTarget.type !== PdfAnnotationSubtype.TEXT;
-        const commentId = isNew
+        const commentId = commentTarget.type !== PdfAnnotationSubtype.TEXT
           ? createCommentAnnotation(annotation, commentTarget)
           : commentTarget.id;
-        dispatch({ type: 'ui/open-comments', annotationId: commentId, isNew });
+        dispatch({ type: 'ui/open-comments', annotationId: commentId });
       }
       setMenu(null);
     } },

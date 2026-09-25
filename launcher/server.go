@@ -38,6 +38,8 @@ type App struct {
 	registry   *Registry
 	resources  map[string]*Resource
 	mutex      sync.Mutex
+	aiConfig   aiConfig
+	aiMutex    sync.RWMutex
 	server     *http.Server
 	listener   net.Listener
 	origin     string
@@ -60,12 +62,10 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	desktopAIConfigMutex.Lock()
-	desktopAIConfig = config
-	desktopAIConfigMutex.Unlock()
 	return &App{
 		registry:  registry,
 		resources: make(map[string]*Resource),
+		aiConfig:  config,
 		done:      make(chan error, 1),
 	}, nil
 }
