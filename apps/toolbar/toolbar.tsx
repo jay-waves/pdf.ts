@@ -11,7 +11,6 @@ import {
   GalleryHorizontal,
   Hand,
   Highlighter,
-  Info,
   LayoutTemplate,
   LineSquiggle,
   Lock,
@@ -398,12 +397,6 @@ export function Toolbar({
               icon={Download}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'document/export' })}
-            />
-            <IconButton
-              label="Metadata"
-              icon={Info}
-              disabled={!canUseDocument}
-              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'metadata' })}
             />
             <IconButton
               label="Themes"

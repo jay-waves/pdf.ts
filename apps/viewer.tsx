@@ -34,7 +34,6 @@ import {
   installCommentEditor,
 } from './annotations/annotations';
 import { Comments } from './annotations/comments';
-import { MetadataDialog } from './document/metadata-dialog';
 import { PrintDialog } from './document/print-dialog';
 import { ProtectDialog } from './document/protection-dialogs';
 import { ThemeDialog } from './theme/theme-dialog';
@@ -434,14 +433,6 @@ function App({
         onClose={closeOverlay}
         onProtectionChanged={() => setDirty(true, true)}
       />
-      <MetadataDialog
-        registry={registry}
-        documentId={documentId}
-        open={activeDialog === 'metadata'}
-        fileName={resolvedDocumentName}
-        pageCount={totalPages}
-        onClose={closeOverlay}
-      />
       <SignatureDialog
         signatures={signatures}
         resource={documentResource}
@@ -454,6 +445,10 @@ function App({
       />
       <DeveloperDialog
         detectedDocumentLanguage={detectedDocumentLanguage}
+        registry={registry}
+        documentId={documentId}
+        fileName={resolvedDocumentName}
+        pageCount={totalPages}
         open={activeDialog === 'developer'}
         pdfium={pdfium}
         onClose={closeOverlay}

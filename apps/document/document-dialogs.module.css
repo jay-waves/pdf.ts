@@ -12,12 +12,6 @@
 .flatDialog .input { @apply border-border-subtle bg-[var(--pdf-control-background)]; }
 .flatDialog .input:focus, .input:focus { @apply border-accent shadow-control; }
 .error { @apply leading-3.75 text-danger; }
-.metadataContent { @apply grid gap-3 bg-transparent px-3.25 pt-3 pb-5; }
-.metadataStatus { @apply text-secondary; }
-.metadataDetails { @apply m-0 grid overflow-hidden rounded-lg bg-[var(--pdf-inset-background)] text-[11px]; }
-.metadataDetails > div { @apply grid grid-cols-[76px_minmax(0,1fr)] gap-2 px-2.5 py-2; }
-.metadataDetails dt { @apply text-secondary; }
-.metadataDetails dd { @apply m-0 min-w-0 text-foreground; overflow-wrap: anywhere; }
 .optionGroup { @apply grid gap-1; }
 .themeDialog { @apply w-[min(24rem,calc(100vw-2rem))]; }
 .themeForm { @apply gap-4.5 px-4 pt-1.5 pb-4; }

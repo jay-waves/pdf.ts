@@ -14,7 +14,7 @@ import { toggleViewerColorMode } from '../theme/theme';
 import { getDocumentScope, getPluginCapability } from '../shared/utils';
 import { viewerActivity, type ViewerInputSource } from './viewer-activity';
 
-type ViewerDialog = 'print' | 'protect' | 'metadata' | 'signatures' | 'theme' | 'developer';
+type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
 type ViewerPanel = 'outline' | 'thumbnails' | 'colors';
 export type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 export type ViewerTranslationRequest = {
