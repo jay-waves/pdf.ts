@@ -70,6 +70,15 @@ export class ViewerStage {
     return this.scroll.getPosition();
   }
 
+  captureReadingPosition() {
+    return this.scroll.getAnchor();
+  }
+
+  restoreReadingPosition(position: ReturnType<StageScrollAdapter['getAnchor']>) {
+    this.scroll.cancelPendingNavigation();
+    this.scroll.restoreAnchor(position);
+  }
+
   getCurrentPage() {
     return this.scroll.getCurrentPage();
   }

@@ -59,6 +59,38 @@ globalThis.requestAnimationFrame = () => 0;
 globalThis.cancelAnimationFrame = () => {};
 const rects = [{ origin: { x: 10, y: 100 }, size: { width: 20, height: 20 } }];
 
+test('document replacement preserves page-local position and clamps removed pages', () => {
+  const jumps = [];
+  let totalPages = 10;
+  const scope = {
+    getTotalPages: () => totalPages,
+    getMetrics: () => ({
+      currentPage: 6,
+      pageVisibilityMetrics: [{
+        pageNumber: 6,
+        original: { pageX: 25, pageY: 305 },
+        scaled: { scale: 2 },
+      }],
+    }),
+    scrollToPage: (options) => jumps.push(options),
+  };
+  const capabilities = {
+    scroll: { forDocument: () => scope },
+    viewport: { getViewportGap: () => 10, forDocument: () => ({ getMetrics: () => ({}) }) },
+  };
+  const adapter = new StageScrollAdapter({
+    getPlugin: (id) => ({ provides: () => capabilities[id] }),
+  }, 'doc');
+  const position = adapter.getAnchor();
+  adapter.restoreAnchor(position);
+  assert.deepEqual(jumps[0], {
+    pageNumber: 6, pageCoordinates: { x: 25, y: 300 }, behavior: 'instant',
+  });
+  totalPages = 3;
+  adapter.restoreAnchor(position);
+  assert.equal(jumps[1].pageNumber, 3);
+});
+
 test('distant target reveal jumps first and then smoothly settles within the destination', (t) => {
   const { scroll, jumps, scrolls, frame } = setup(t);
   assert.equal(scroll.reveal(9, rects), true);

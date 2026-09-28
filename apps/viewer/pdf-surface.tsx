@@ -53,6 +53,17 @@ const ANNOTATION_RENDERERS = [
   themeCommentRenderer,
   signatureWidgetRenderer,
 ];
+const documentInstanceKeys = new WeakMap<object, number>();
+let nextDocumentInstanceKey = 1;
+
+function getDocumentInstanceKey(document: object) {
+  let key = documentInstanceKeys.get(document);
+  if (key === undefined) {
+    key = nextDocumentInstanceKey++;
+    documentInstanceKeys.set(document, key);
+  }
+  return key;
+}
 
 function StartupDocumentStatus({
   status,
@@ -312,6 +323,7 @@ export const PdfSurface = memo(function PdfSurface({
               ) : null}
               {isLoaded ? (
                 <LoadedPdfDocument
+                  key={getDocumentInstanceKey(documentState.document!)}
                   documentId={documentId}
                   panMode={panMode}
                   renderThemeVersion={renderThemeVersion}

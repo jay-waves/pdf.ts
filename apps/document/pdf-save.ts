@@ -48,6 +48,19 @@ export async function exportPdf(
   return true;
 }
 
+export async function savePdfCopy(
+  engine: PdfEngine<Blob>,
+  registry: PluginRegistry | undefined,
+  documentId: string | null | undefined,
+  fileHandle: PdfFileHandle | undefined,
+) {
+  if (!fileHandle?.saveCopy) return null;
+  const document = await getDocumentForSerialization(registry, documentId);
+  if (!document) return null;
+  const data = await engine.saveAsCopy(document).toPromise();
+  return data ? fileHandle.saveCopy(data) : null;
+}
+
 export async function savePdf(
   engine: PdfEngine<Blob>,
   registry: PluginRegistry | undefined,

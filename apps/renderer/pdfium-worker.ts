@@ -255,6 +255,9 @@ function invoke(engine: PdfiumNative, request: ExecuteRequest) {
     originalSizes.set(file.id, file.content.byteLength);
   } else if (request.method === 'saveIncremental') {
     return saveIncremental(engine, request.args[0] as PdfDocumentObject);
+  } else if (request.method === 'closeDocument') {
+    const document = request.args[0] as PdfDocumentObject;
+    originalSizes.delete(document.id);
   } else if (request.method === 'destroy') {
     fontFallbackManager?.disable();
     fontFallbackManager = null;

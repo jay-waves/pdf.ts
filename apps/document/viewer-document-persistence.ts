@@ -93,7 +93,9 @@ export function useDocumentPersistence({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
-  return { isDirty, saveDocument, setDirty };
+  const hasUnsavedChanges = useCallback(() => changesRef.current.dirty, []);
+
+  return { isDirty, saveDocument, setDirty, hasUnsavedChanges };
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {

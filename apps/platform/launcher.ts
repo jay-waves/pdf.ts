@@ -4,6 +4,7 @@ import { browserTranslationCapabilities } from './browser-translation';
 import { getExternalUrl } from '../shared/url';
 import type {
   PlatformDocument,
+  ExternalDocumentChange,
   ViewerPlatform,
   AiConfig,
   AiConfigUpdate,
@@ -44,6 +45,8 @@ class PdfLauncherSession {
   private baseVersion = '';
   private baseSize = 0;
   private incrementalAvailable = true;
+  private pendingExternalVersion = '';
+  private writeInProgress = false;
 
   constructor(documentId: string) {
     this.resourceUrl = new URL(
@@ -89,6 +92,76 @@ class PdfLauncherSession {
       key: `pdf.ts:${this.resourceUrl}`,
       name: filenameFromDisposition(response.headers.get('Content-Disposition')),
       fileHandle: this,
+      watchForChanges: (listener) => this.watchForChanges(listener),
+    };
+  }
+
+  watchForChanges(listener: (change: ExternalDocumentChange) => void) {
+    let active = true;
+    let checking = false;
+    let controller: AbortController | null = null;
+    let candidateVersion = '';
+    let candidateSize = 0;
+    const check = async () => {
+      if (!active || checking || this.writeInProgress || document.visibilityState === 'hidden') return;
+      checking = true;
+      controller = new AbortController();
+      try {
+        const response = await fetch(this.resourceUrl, {
+          method: 'HEAD',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!active || !response.ok) return;
+        const version = stripEtag(response.headers.get('ETag'));
+        const size = Number(response.headers.get('Content-Length'));
+        if (!version || version === this.version || version === this.pendingExternalVersion
+          || !Number.isSafeInteger(size) || size <= 0) {
+          candidateVersion = '';
+          candidateSize = 0;
+          return;
+        }
+
+        // In-place writers can expose a transient, incomplete PDF. Require the
+        // same fingerprint on two consecutive checks before attempting reload.
+        if (version !== candidateVersion || size !== candidateSize) {
+          candidateVersion = version;
+          candidateSize = size;
+          return;
+        }
+
+        this.pendingExternalVersion = version;
+        candidateVersion = '';
+        candidateSize = 0;
+        const url = new URL(this.resourceUrl);
+        url.searchParams.set('version', version);
+        listener({
+          resource: { url: url.href },
+          accept: () => {
+            this.version = version;
+            this.baseVersion = version;
+            this.baseSize = size;
+            this.incrementalAvailable = true;
+            this.pendingExternalVersion = '';
+          },
+        });
+      } catch {
+        // The launcher may be briefly unavailable while waking or shutting down.
+      } finally {
+        controller = null;
+        checking = false;
+      }
+    };
+    const timer = window.setInterval(() => void check(), 1_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void check();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      active = false;
+      controller?.abort();
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }
 
@@ -96,12 +169,12 @@ class PdfLauncherSession {
     return {
       saveIncremental: this.incrementalAvailable
         ? async (revision: { baseSize: number; delta: ArrayBuffer }) => (
-            this.saveIncremental(revision)
+            this.trackWrite(() => this.saveIncremental(revision))
           )
         : undefined,
       save: async (data: ArrayBuffer) => {
         try {
-          const saved = await this.save(data);
+          const saved = await this.trackWrite(() => this.save(data));
           if (saved) this.incrementalAvailable = false;
           return saved;
         } catch (error) {
@@ -110,6 +183,15 @@ class PdfLauncherSession {
         }
       },
     };
+  }
+
+  private async trackWrite<T>(operation: () => Promise<T>) {
+    this.writeInProgress = true;
+    try {
+      return await operation();
+    } finally {
+      this.writeInProgress = false;
+    }
   }
 
   async saveIncremental(revision: { baseSize: number; delta: ArrayBuffer }) {
@@ -174,6 +256,19 @@ class PdfLauncherSession {
 
     const failure = await response.json().catch(() => ({})) as ErrorResponse;
     throw new Error(failure.message ?? `PDF.ts could not save the PDF (${response.status}).`);
+  }
+
+  async saveCopy(data: ArrayBuffer) {
+    const response = await fetch(`${this.resourceUrl}/copy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/pdf' },
+      body: data,
+    });
+    if (!response.ok) {
+      throw new Error(`PDF.ts could not save a conflict copy (${response.status}).`);
+    }
+    const copy = await response.json() as CopyResponse;
+    return copy.name;
   }
 }
 

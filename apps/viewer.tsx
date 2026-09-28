@@ -4,6 +4,9 @@ import { useStore } from 'zustand';
 import type { PluginRegistry } from '@embedpdf/core';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import type { FormCapability } from '@embedpdf/plugin-form';
+import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
+import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import type { ZoomCapability } from '@embedpdf/plugin-zoom';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
 import './viewer.css';
 import { getPluginCapability } from './shared/utils';
@@ -35,12 +38,13 @@ import {
 } from './annotations/annotations';
 import { Comments } from './annotations/comments';
 import { PrintDialog } from './document/print-dialog';
+import { ExternalChangeDialog } from './document/external-change-dialog';
 import { ProtectDialog } from './document/protection-dialogs';
 import { ThemeDialog } from './theme/theme-dialog';
 import { DeveloperDialog } from './viewer/developer-dialog';
 import { ContextMenu } from './selection/context-menu';
 import { Dialog, TooltipProvider } from './components';
-import { exportPdf } from './document/pdf-save';
+import { exportPdf, savePdfCopy } from './document/pdf-save';
 import { usePdfRuntime, useRenderThemeVersion, type PdfRuntime } from './renderer/pdf-engine';
 import { useDocumentPersistence } from './document/viewer-document-persistence';
 import { SelectionTranslate } from './selection/selection-translate';
@@ -51,7 +55,12 @@ import {
   useDocumentSignatures,
 } from './document/signatures';
 import { platform } from '#platform';
-import type { ManagedResource, PlatformDocument, ViewerResources } from './platform/types';
+import type {
+  ExternalDocumentChange,
+  ManagedResource,
+  PlatformDocument,
+  ViewerResources,
+} from './platform/types';
 import type { PlatformLanguageDetectionResult } from './platform/types';
 import {
   LoadingStatus,
@@ -195,7 +204,7 @@ function App({
   const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
   const viewerTheme = useStore(viewerThemeStore, (state) => state.theme);
-  const { isDirty, saveDocument, setDirty } = useDocumentPersistence({
+  const { isDirty, saveDocument, setDirty, hasUnsavedChanges } = useDocumentPersistence({
     engine,
     registry,
     documentId,
@@ -236,6 +245,8 @@ function App({
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const sessionCleanupRef = useRef<(() => void) | null>(null);
+  const reloadInProgressRef = useRef(false);
+  const [externalChange, setExternalChange] = useState<ExternalDocumentChange | null>(null);
   const closeOverlay = useCallback(() => {
     dispatchCommand({ type: 'ui/close-overlay' });
   }, [dispatchCommand]);
@@ -251,6 +262,70 @@ function App({
   }, [presentationPage]);
 
   useEffect(() => installViewerCommandKeys(dispatchCommand), [dispatchCommand]);
+
+  const reloadExternalDocument = useCallback(async (change: ExternalDocumentChange) => {
+    if (!registry || !stage || reloadInProgressRef.current) return;
+    const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
+    if (!manager?.isDocumentOpen(DOCUMENT_ID)) return;
+
+    reloadInProgressRef.current = true;
+    const snapshot = stage.getSnapshot();
+    const readingPosition = stage.captureReadingPosition();
+    const zoomLevel = getPluginCapability<ZoomCapability>(registry, 'zoom')
+      ?.forDocument(DOCUMENT_ID).getState().zoomLevel;
+    const rotation = getPluginCapability<RotateCapability>(registry, 'rotate')
+      ?.forDocument(DOCUMENT_ID).getRotation();
+    try {
+      await manager.closeDocument(DOCUMENT_ID).toPromise();
+      const opened = await manager.openDocumentUrl({
+        url: change.resource.url,
+        documentId: DOCUMENT_ID,
+        name: resolvedDocumentName ?? 'document.pdf',
+        autoActivate: true,
+        mode: 'full-fetch',
+      }).toPromise();
+      await opened.task.toPromise();
+      change.accept();
+      setDirty(false);
+      setExternalChange(null);
+      setOutlineCache({ status: 'idle', bookmarks: [] });
+      pdfSearchStore.getState().clear();
+
+      const restore = () => {
+        stage.applyLayout(snapshot.strategy, snapshot.spread);
+        if (rotation !== undefined) {
+          getPluginCapability<RotateCapability>(registry, 'rotate')
+            ?.forDocument(DOCUMENT_ID).setRotation(rotation);
+        }
+        if (zoomLevel !== undefined) {
+          getPluginCapability<ZoomCapability>(registry, 'zoom')
+            ?.forDocument(DOCUMENT_ID).requestZoom(zoomLevel);
+        }
+        // Zoom/layout requests enqueue their own scroll operations. Restore the
+        // page-local anchor after those operations and the DOM layout commit.
+        window.requestAnimationFrame(() => {
+          if (snapshot.mode === 'presentation') stage.goToPage(snapshot.pageNumber);
+          else stage.restoreReadingPosition(readingPosition);
+        });
+      };
+      // onLayoutReady is a behavior emitter: subscribing can synchronously
+      // replay the previous document's event. Do not restore from that replay.
+      window.requestAnimationFrame(restore);
+    } finally {
+      reloadInProgressRef.current = false;
+    }
+  }, [registry, resolvedDocumentName, setDirty, stage]);
+
+  useEffect(() => sourceDocument?.watchForChanges?.((change) => {
+    if (hasUnsavedChanges()) {
+      dispatchCommand({ type: 'ui/close-overlay' });
+      setExternalChange(change);
+      return;
+    }
+    void reloadExternalDocument(change).catch((error) => {
+      console.error('[pdf-ts] failed to reload externally updated PDF', error);
+    });
+  }), [dispatchCommand, hasUnsavedChanges, reloadExternalDocument, sourceDocument]);
 
   useEffect(() => {
     return () => {
@@ -425,6 +500,19 @@ function App({
         currentPageNumber={currentPageNumber}
         totalPages={totalPages}
         onClose={closeOverlay}
+      />
+      <ExternalChangeDialog
+        open={externalChange !== null}
+        onDiscard={async () => {
+          if (externalChange) await reloadExternalDocument(externalChange);
+        }}
+        onSaveCopy={async () => {
+          if (!externalChange) return;
+          const name = await savePdfCopy(engine, registry, documentId, fileHandle);
+          if (!name) throw new Error('Saving a copy is not available.');
+          await reloadExternalDocument(externalChange);
+          window.alert(`Your changes were saved as:\n${name}`);
+        }}
       />
       <ProtectDialog
         registry={registry}

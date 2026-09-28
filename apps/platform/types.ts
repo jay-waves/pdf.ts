@@ -12,6 +12,11 @@ interface PdfFileWriter {
   }): Promise<boolean>;
 }
 
+export interface ExternalDocumentChange {
+  readonly resource: ManagedResource;
+  accept(): void;
+}
+
 /**
  * Cross-platform reference to the PDF currently being edited.
  *
@@ -22,6 +27,7 @@ interface PdfFileWriter {
  */
 export interface PdfFileHandle {
   prepareWrite(): Promise<PdfFileWriter | null>;
+  saveCopy?(data: ArrayBuffer): Promise<string>;
 }
 
 export interface ManagedResource {
@@ -36,6 +42,7 @@ export interface PlatformDocument {
   readonly key?: string;
   readonly name?: string;
   readonly fileHandle: PdfFileHandle;
+  watchForChanges?(listener: (change: ExternalDocumentChange) => void): () => void;
 }
 
 export interface ViewerResources {

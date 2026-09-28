@@ -393,7 +393,7 @@ export class StageScrollAdapter {
     this.viewportCapability?.forDocument(this.documentId).scrollTo({ x, y, behavior });
   }
 
-  private getAnchor(): ScrollAnchor | null {
+  getAnchor(): ScrollAnchor | null {
     const scope = this.capability?.forDocument(this.documentId);
     const metrics = this.getMetrics();
     if (!scope || !metrics) return null;
@@ -410,10 +410,10 @@ export class StageScrollAdapter {
     };
   }
 
-  private restoreAnchor(anchor: ScrollAnchor | null) {
+  restoreAnchor(anchor: ScrollAnchor | null) {
     if (!anchor) return;
     this.capability?.forDocument(this.documentId).scrollToPage({
-      pageNumber: anchor.pageNumber,
+      pageNumber: Math.min(anchor.pageNumber, this.getTotalPages()),
       pageCoordinates: anchor.pageCoordinates,
       behavior: 'instant',
     });
