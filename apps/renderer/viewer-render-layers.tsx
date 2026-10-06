@@ -2,6 +2,7 @@ import { useDocumentState } from '@embedpdf/core/react';
 import { useRenderCapability } from '@embedpdf/plugin-render/react';
 import { useTilingCapability, type Tile } from '@embedpdf/plugin-tiling/react';
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -11,6 +12,7 @@ import {
   type ImgHTMLAttributes,
 } from 'react';
 import { useRenderUrl } from './use-render-url';
+import { getDisplayTiles } from './tile-rendering';
 import { completeStartupLog, writeStartupLogOnce } from '../viewer/startup-log';
 import { viewerActivity } from '../viewer/viewer-activity';
 
@@ -65,27 +67,24 @@ function BaseRasterPlane({
   );
 }
 
-function TileImage({
+const TileImage = memo(function TileImage({
   documentId,
   pageIndex,
   tile,
   dpr,
-  scale,
   onReady,
 }: {
   documentId: string;
   pageIndex: number;
   tile: Tile;
   dpr: number;
-  scale: number;
-  onReady(): void;
+  onReady(tileId: string): void;
 }) {
   const { provides: tiling } = useTilingCapability();
   const scope = useMemo(
     () => tiling?.forDocument(documentId),
     [documentId, tiling],
   );
-  const relativeScale = scale / tile.srcScale;
   const start = useCallback(
     () => scope?.renderTile({ pageIndex, tile, dpr }) ?? null,
     // Tile identity is stable by id; depending on the whole object would
@@ -102,19 +101,19 @@ function TileImage({
       draggable={false}
       onLoad={() => {
         releaseImage?.();
-        onReady();
+        onReady(tile.id);
       }}
       style={{
         position: 'absolute',
-        left: tile.screenRect.origin.x * relativeScale,
-        top: tile.screenRect.origin.y * relativeScale,
-        width: tile.screenRect.size.width * relativeScale,
-        height: tile.screenRect.size.height * relativeScale,
+        left: tile.screenRect.origin.x,
+        top: tile.screenRect.origin.y,
+        width: tile.screenRect.size.width,
+        height: tile.screenRect.size.height,
         display: 'block',
       }}
     />
   );
-}
+});
 
 function TilePlane({
   documentId,
@@ -195,15 +194,27 @@ function SettledTilePlane({ documentId, pageIndex, dpr, scale, ...props }: {
   // Keep one complete batch beneath the newest batch until every image loads.
   const [batches, setBatches] = useState<{ front?: TileBatch; pending?: TileBatch }>({});
   const loaded = useRef(new Set<string>());
-  const tiles = useMemo(() => [...new Map(
-    [...(batches.front?.tiles ?? []), ...(batches.pending?.tiles ?? [])]
-      .map((tile) => [tile.id, tile]),
-  ).values()], [batches]);
+  const tiles = useMemo(() => getDisplayTiles(
+    batches.front?.tiles ?? [], batches.pending?.tiles ?? [], scale, loaded.current,
+  ), [batches, scale]);
+  const tileGroups = useMemo(() => {
+    const groups = new Map<number, Tile[]>();
+    for (const tile of tiles) {
+      const group = groups.get(tile.srcScale) ?? [];
+      group.push(tile);
+      groups.set(tile.srcScale, group);
+    }
+    return [...groups];
+  }, [tiles]);
   const promote = useCallback(() => {
     setBatches((current) => current.pending?.tiles.every((tile) => loaded.current.has(tile.id))
       ? { front: current.pending }
       : current);
   }, []);
+  const onTileReady = useCallback((tileId: string) => {
+    loaded.current.add(tileId);
+    promote();
+  }, [promote]);
 
   useEffect(() => {
     const retained = new Set(tiles.map((tile) => tile.id));
@@ -231,12 +242,12 @@ function SettledTilePlane({ documentId, pageIndex, dpr, scale, ...props }: {
     const unsubscribe = tiling.onTileRendering((event) => {
       if (event.documentId !== documentId) return;
       latest = event.tiles[pageIndex] ?? [];
-      const nextScale = latest[0]?.srcScale;
+      const nextScale = latest.find((tile) => !tile.isFallback)?.srcScale;
       if (nextScale !== undefined && lastScale !== undefined && nextScale !== lastScale) {
         clearTimeout(timer);
         timer = setTimeout(publish, ZOOM_TILE_SETTLE_MS);
-        // Retire unfinished work at the old scale; the complete batch stays.
-        setBatches((current) => current.pending ? { front: current.front } : current);
+        // Keep the displayed tiles until the replacement batch is published.
+        // A partially loaded batch may already be sharper than the front batch.
       } else if (!timer) {
         // Scrolling already has a throttle in the tiling plugin.
         publish();
@@ -255,19 +266,25 @@ function SettledTilePlane({ documentId, pageIndex, dpr, scale, ...props }: {
 
   return (
     <div {...props}>
-      {tiles.map((tile) => (
-        <TileImage
-          key={tile.id}
-          tile={tile}
-          documentId={documentId}
-          pageIndex={pageIndex}
-          dpr={dpr}
-          scale={scale}
-          onReady={() => {
-            loaded.current.add(tile.id);
-            promote();
-          }}
-        />
+      {tileGroups.map(([sourceScale, group]) => (
+        <div key={sourceScale} style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          transformOrigin: '0 0',
+          transform: `scale(${scale / sourceScale})`,
+        }}>
+          {group.map((tile) => (
+            <TileImage
+              key={tile.id}
+              tile={tile}
+              documentId={documentId}
+              pageIndex={pageIndex}
+              dpr={dpr}
+              onReady={onTileReady}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );

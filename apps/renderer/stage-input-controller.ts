@@ -411,8 +411,9 @@ export function createStageInputController({
     commitZoom(() => zoomScope.requestZoom(targetZoom + 1e-10, pending.anchor));
     zoomSession.lastAppliedZoom = zoomScope.getState().currentZoomLevel;
     const metrics = viewportScope.getMetrics();
+    // Correct the anchor before paint. EmbedPDF already repeats this scroll
+    // on the next animation frame, so do not schedule another copy here.
     viewport.scrollTo(metrics.scrollLeft, metrics.scrollTop);
-    scrollTo(metrics.scrollLeft, metrics.scrollTop);
   };
 
   const flushPendingZoom = () => {
