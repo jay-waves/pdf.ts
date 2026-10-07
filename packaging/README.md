@@ -22,6 +22,9 @@ ARM64 (DMG). Chrome packaging remains available locally but is not included in
 this initial workflow. The three platforms build in parallel on Ubuntu 24.04,
 Windows Server 2022, and Apple Silicon macOS 15 runners. Node/pnpm and Go are set up on the runners; nFPM and NSIS
 are needed only for optional local native packaging, not frontend development.
+Only the frontend job installs pnpm dependencies. Native packaging jobs run the
+scripts directly with Node.js and reuse the shared web artifact, so they do not
+install the frontend dependency tree or apply its patches again.
 
 After all four packages succeed, Actions updates one release per version series (minor versions for 0.x,
 major versions for 1.x and later):

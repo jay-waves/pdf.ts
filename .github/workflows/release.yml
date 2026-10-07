@@ -16,21 +16,17 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
       - name: Validate version tag
-        id: version
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
           [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$GITHUB_REF_NAME" == "v$version" ]]
-          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
       - run: pnpm install --frozen-lockfile
       # Tests and type checking are performed locally before pushing the tag.
@@ -64,8 +60,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - uses: pnpm/action-setup@v4
-      - run: pnpm install --frozen-lockfile
+      # Native packaging uses Node built-ins and the shared web artifact only.
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -80,7 +75,9 @@ jobs:
       - name: Package Debian and Fedora
         if: runner.os == 'Linux'
         run: |
-          pnpm package:linux
+          node scripts/package-launcher.mjs linux-amd64
+          sh scripts/package-linux.sh deb
+          sh scripts/package-linux.sh rpm
       - name: Locate Windows packaging tools
         if: runner.os == 'Windows'
         shell: pwsh
@@ -104,10 +101,14 @@ jobs:
           "PDF_TS_MAKENSIS=$makensis" >> $env:GITHUB_ENV
       - name: Package Windows x64
         if: runner.os == 'Windows'
-        run: pnpm package:windows
+        run: |
+          node scripts/package-launcher.mjs windows-amd64
+          node scripts/package-windows.mjs
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
-        run: pnpm package:macos
+        run: |
+          node scripts/package-launcher.mjs darwin-arm64
+          sh scripts/package-macos.sh
       - uses: actions/upload-artifact@v6
         with:
           name: packages-${{ matrix.platform }}

@@ -1,0 +1,5 @@
+# pnpm's patch parser requires LF, including on Windows with core.autocrlf=true.
+patches/*.patch text eol=lf
+
+# Shell scripts must also retain LF when checked out on Windows.
+*.sh text eol=lf

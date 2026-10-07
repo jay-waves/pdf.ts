@@ -43,16 +43,15 @@ if git show-ref --verify --quiet "refs/tags/$rolling_tag"; then
   fi
 fi
 
-shopt -s nullglob
-assets=(release/installers/*.deb release/installers/*.rpm release/installers/*.exe release/installers/*.dmg)
-[[ ${#assets[@]} -eq 4 ]] || { echo 'Expected exactly four platform installers.' >&2; exit 1; }
-expected=(
+assets=(
   "release/installers/pdf-ts-${version}-amd64.deb"
   "release/installers/pdf-ts-${version}-1.x86_64.rpm"
   "release/installers/pdf-ts-setup-v${version}.exe"
   "release/installers/pdf-ts-v${version}-macos-arm64.dmg"
 )
-for path in "${expected[@]}"; do [[ -s "$path" ]]; done
+for path in "${assets[@]}"; do
+  [[ -s "$path" ]] || { echo "Missing or empty installer: $path" >&2; exit 1; }
+done
 
 notes=$(mktemp)
 trap 'rm -f "$notes"' EXIT

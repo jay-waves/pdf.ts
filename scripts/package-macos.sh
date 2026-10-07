@@ -49,7 +49,6 @@ ditto "$bundle" "$image_root/pdf.ts.app"
 ln -s /Applications "$image_root/Applications"
 
 output="$repo_root/release/pdf-ts-v${version}-macos-${arch}.dmg"
-rm -f "$output"
 "${PDF_TS_HDIUTIL:-hdiutil}" create \
   -volname pdf.ts \
   -srcfolder "$image_root" \
