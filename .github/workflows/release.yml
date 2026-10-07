@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+# Serialize publishing and Pages deployments; never interrupt an active release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Validate version tag
+        id: version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$GITHUB_REF_NAME" == "v$version" ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      # Tests and type checking are performed locally before pushing the tag.
+      - run: pnpm exec vite build
+      - uses: actions/upload-artifact@v6
+        with:
+          name: web
+          path: release/web
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: release/web
+          retention-days: 1
+
+  packages:
+    needs: web
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-windows
+          - os: macos-15
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v6
+        with:
+          name: web
+          path: release/web
+      - name: Install Linux and Windows packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis binutils-mingw-w64-x86-64
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+      - name: Package Debian, Fedora and Windows
+        if: runner.os == 'Linux'
+        run: |
+          pnpm package:linux
+          pnpm package:windows
+      - name: Package macOS ARM64
+        if: runner.os == 'macOS'
+        run: pnpm package:macos
+      - uses: actions/upload-artifact@v6
+        with:
+          name: packages-${{ matrix.platform }}
+          path: |
+            release/*.deb
+            release/*.rpm
+            release/pdf-ts-setup-*.exe
+            release/*.dmg
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: [web, packages]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
+      deploy_pages: ${{ steps.publish.outputs.deploy_pages }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: packages-*
+          path: release/installers
+          merge-multiple: true
+      - name: Update the version series release
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-release.sh
+
+  pages:
+    needs: publish
+    if: needs.publish.outputs.published == 'true' && needs.publish.outputs.deploy_pages == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy web viewer
+        id: deployment
+        uses: actions/deploy-pages@v4

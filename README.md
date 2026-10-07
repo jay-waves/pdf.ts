@@ -51,7 +51,8 @@ Download a package for your platform from
 code-signed, so your operating system may ask you to confirm that you trust
 them.
 
-For Chrome, extract the extension ZIP and load the extracted directory through
+Chrome extension ZIPs can be built locally (the automated release currently
+includes only native installers). Extract the extension ZIP and load the extracted directory through
 `chrome://extensions` with Developer mode enabled.
 
 On desktop, open a PDF through its file association. Native launchers also
@@ -89,10 +90,10 @@ to check model availability.
 
 ## Build from source
 
-Development requires Node.js 24 LTS and pnpm 11.
+Development requires Node.js 24 LTS and pnpm 12.
 
 ```sh
-corepack install --global pnpm@11.24.0
+corepack install --global pnpm@12.3.4
 pnpm install
 
 pnpm compile

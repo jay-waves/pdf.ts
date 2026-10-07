@@ -1,14 +1,68 @@
 # Packaging
 
+## Automated releases
+
+Run checks and compile locally before publishing. Only version tag pushes trigger
+`.github/workflows/release.yml`; branch pushes and pull requests do not build.
+
+```sh
+pnpm check
+pnpm compile
+# After committing all changes (example for package.json version 0.9.4):
+bash scripts/release.sh v0.9.4
+```
+
+The helper validates the version and clean working tree, then atomically pushes
+the branch and tag using your existing Git authentication. `GITHUB_TOKEN` is
+optional. It does not build or deploy locally.
+
+Actions builds the frontend once without rerunning local tests/type checking,
+then packages Windows x64 (NSIS), Debian x64 (deb), Fedora x64 (rpm), and macOS
+ARM64 (DMG). Chrome packaging remains available locally but is not included in
+this initial workflow. Node/pnpm and Go are set up on the runners; nFPM and NSIS
+are needed only for optional local native packaging, not frontend development.
+
+After all four packages succeed, Actions updates one release per version series (minor versions for 0.x,
+major versions for 1.x and later):
+`v0.9.4` updates `v0.9-latest`, while `v1.2.3` updates `v1-latest`. Version tags stay
+unchanged; rolling tags point to the installed version's commit. New attachments
+are uploaded before old attachments are removed. Re-running a successful tag is
+supported; older versions and ancestor tags cannot overwrite a newer published version, and divergent
+histories are rejected. Updates to an existing Release are not atomic, so an
+interrupted upload can temporarily leave attachments from both versions; rerun
+the failed job to complete it. Do not enable immutable releases for these rolling
+Releases or protect rolling tags against workflow updates.
+
+The same frontend is deployed to GitHub Pages after successful publication.
+Pages follows the newest published version series; maintenance releases for older
+version series update their installers without replacing the web viewer. Intermediate artifacts expire after one day;
+rerun all jobs if they have expired.
+
+One-time repository setup:
+
+- In Settings → Pages, select **GitHub Actions** as the build source. Keep the
+  existing custom domain configuration.
+- Allow the `github-pages` environment to deploy version tags (adjust deployment
+  branch/tag restrictions if necessary).
+- Allow the workflow's `GITHUB_TOKEN` to write repository contents. No personal
+  access token, Apple credentials, or signing certificates are required.
+
+The workflow deliberately does not mark maintenance releases as GitHub's global
+“Latest”; each version series has its own stable Release URL. Packages remain
+unsigned and macOS is not notarized. The initial successful run creates the
+rolling Release; existing releases on other tags are left in place.
+
+## Optional local packaging
+
 Compile the shared viewer before creating any package:
 
 ```sh
-corepack install --global pnpm@11.24.0
+corepack install --global pnpm@12.3.4
 pnpm install
 pnpm compile
 ```
 
-All builds require Node.js 24 LTS and pnpm 11. Native launchers additionally
+All builds require Node.js 24 LTS and pnpm 12. Native launchers additionally
 require Go 1.27 or later.
 
 ## Commands

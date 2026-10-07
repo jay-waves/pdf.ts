@@ -5,14 +5,15 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 remote="origin"
 
 usage() {
-  echo "Usage: GITHUB_TOKEN=... $0 <tag>" >&2
+  echo "Usage: $0 <vMAJOR.MINOR.PATCH> (optional GITHUB_TOKEN)" >&2
 }
 
 [[ $# -eq 1 ]] || { usage; exit 2; }
 release_tag="$1"
 
-[[ -n "${GITHUB_TOKEN:-}" ]] || {
-  echo 'GITHUB_TOKEN is required.' >&2
+version=$(node -p "require('$repo_root/package.json').version")
+[[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ && "$release_tag" == "v$version" ]] || {
+  echo "Release tag must match package.json: v$version" >&2
   exit 2
 }
 
@@ -37,17 +38,19 @@ remote_url="$(git -C "$repo_root" remote get-url "$remote")"
   exit 1
 }
 
-auth_header="$(printf '%s' "x-access-token:$GITHUB_TOKEN" | base64 | tr -d '\n')"
-config_index="${GIT_CONFIG_COUNT:-0}"
-[[ "$config_index" =~ ^[0-9]+$ ]] || {
-  echo 'GIT_CONFIG_COUNT must be a non-negative integer.' >&2
-  exit 1
-}
-printf -v "GIT_CONFIG_KEY_$config_index" '%s' 'http.https://github.com/.extraheader'
-printf -v "GIT_CONFIG_VALUE_$config_index" '%s' "AUTHORIZATION: basic $auth_header"
-export "GIT_CONFIG_KEY_$config_index" "GIT_CONFIG_VALUE_$config_index"
-export GIT_CONFIG_COUNT="$((config_index + 1))"
-unset auth_header
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  auth_header="$(printf '%s' "x-access-token:$GITHUB_TOKEN" | base64 | tr -d '\n')"
+  config_index="${GIT_CONFIG_COUNT:-0}"
+  [[ "$config_index" =~ ^[0-9]+$ ]] || {
+    echo 'GIT_CONFIG_COUNT must be a non-negative integer.' >&2
+    exit 1
+  }
+  printf -v "GIT_CONFIG_KEY_$config_index" '%s' 'http.https://github.com/.extraheader'
+  printf -v "GIT_CONFIG_VALUE_$config_index" '%s' "AUTHORIZATION: basic $auth_header"
+  export "GIT_CONFIG_KEY_$config_index" "GIT_CONFIG_VALUE_$config_index"
+  export GIT_CONFIG_COUNT="$((config_index + 1))"
+  unset auth_header
+fi
 
 if git -C "$repo_root" rev-parse --verify --quiet "refs/tags/$release_tag"; then
   echo "Tag already exists locally: $release_tag" >&2
@@ -70,4 +73,4 @@ if ! git -C "$repo_root" push --atomic "$remote" \
   exit 1
 fi
 
-pnpm --dir "$repo_root" deploy:web
+echo "Pushed $release_tag. GitHub Actions will build and publish the packages and web viewer."
