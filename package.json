@@ -33,7 +33,6 @@
     "package:macos": "pnpm package:macos:binary && sh scripts/package-macos.sh",
     "package:all": "pnpm package:chrome && pnpm package:linux && pnpm package:windows",
     "build:all": "pnpm compile && pnpm package:all",
-    "deploy:web": "bash scripts/deploy-web.sh",
     "check": "pnpm typecheck && pnpm test"
   },
   "dependencies": {
