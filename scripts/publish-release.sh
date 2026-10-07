@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 # Called by the tag workflow after every platform has built successfully.
 version=$(node -p "require('./package.json').version")
-[[ "${GITHUB_REF_NAME:?}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-[[ "$GITHUB_REF_NAME" == "v$version" ]]
+[[ "${GITHUB_REF_NAME:?}" == "v$version" ||
+   ( "$GITHUB_REF_NAME" == "v$version-"* && "$GITHUB_REF_NAME" =~ -[0-9A-Za-z]+([.-][0-9A-Za-z]+)*$ ) ]]
 series=${version%%.*}
 if [[ "$series" == 0 ]]; then
   series=${version%.*}

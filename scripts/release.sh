@@ -5,15 +5,16 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 remote="origin"
 
 usage() {
-  echo "Usage: $0 <vMAJOR.MINOR.PATCH> (optional GITHUB_TOKEN)" >&2
+  echo "Usage: $0 <vMAJOR.MINOR.PATCH[-suffix]> (optional GITHUB_TOKEN)" >&2
 }
 
 [[ $# -eq 1 ]] || { usage; exit 2; }
 release_tag="$1"
 
 version=$(node -p "require('$repo_root/package.json').version")
-[[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ && "$release_tag" == "v$version" ]] || {
-  echo "Release tag must match package.json: v$version" >&2
+[[ "$release_tag" == "v$version" ||
+   ( "$release_tag" == "v$version-"* && "$release_tag" =~ -[0-9A-Za-z]+([.-][0-9A-Za-z]+)*$ ) ]] || {
+  echo "Release tag must match package.json: v$version or v$version-<suffix>" >&2
   exit 2
 }
 
