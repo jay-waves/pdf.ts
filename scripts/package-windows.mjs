@@ -18,7 +18,9 @@ if (!statSync(launcher, { throwIfNoEntry: false })?.size) {
 const result = spawnSync(makensis, [
   `${prefix}DAPP_VERSION=${version}`,
   `${prefix}DAPP_VERSION_QUAD=${versionQuad}`,
-  `${prefix}DREPO_ROOT=${root}`,
+  `${prefix}DLAUNCHER_FILE=${launcher}`,
+  `${prefix}DSTARTUP_FILE=${resolve(root, 'packaging/windows/pdf.ts-startup.cmd')}`,
+  `${prefix}DICON_FILE=${resolve(root, 'assets/icon.ico')}`,
   `${prefix}DOUTPUT_FILE=${output}`,
   `${prefix}V2`,
   resolve(root, 'packaging/windows/pdf.ts.nsi'),

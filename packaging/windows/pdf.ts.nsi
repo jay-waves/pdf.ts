@@ -9,8 +9,14 @@ Unicode True
 !ifndef APP_VERSION_QUAD
   !error "APP_VERSION_QUAD must be provided with -DAPP_VERSION_QUAD=<version>"
 !endif
-!ifndef REPO_ROOT
-  !error "REPO_ROOT must be provided with -DREPO_ROOT=<path>"
+!ifndef LAUNCHER_FILE
+  !error "LAUNCHER_FILE must be provided"
+!endif
+!ifndef STARTUP_FILE
+  !error "STARTUP_FILE must be provided"
+!endif
+!ifndef ICON_FILE
+  !error "ICON_FILE must be provided"
 !endif
 !ifndef OUTPUT_FILE
   !error "OUTPUT_FILE must be provided with -DOUTPUT_FILE=<path>"
@@ -34,12 +40,12 @@ VIAddVersionKey /LANG=1033 "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1033 "FileVersion" "${APP_VERSION}"
 VIAddVersionKey /LANG=1033 "FileDescription" "${APP_NAME} installer"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "MIT License"
-Icon "${REPO_ROOT}/assets/icon.ico"
-UninstallIcon "${REPO_ROOT}/assets/icon.ico"
+Icon "${ICON_FILE}"
+UninstallIcon "${ICON_FILE}"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON "${REPO_ROOT}/assets/icon.ico"
-!define MUI_UNICON "${REPO_ROOT}/assets/icon.ico"
+!define MUI_ICON "${ICON_FILE}"
+!define MUI_UNICON "${ICON_FILE}"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
@@ -69,8 +75,8 @@ Section "pdf.ts" SEC_MAIN
 
 install_files:
   SetOutPath "$INSTDIR"
-  File "/oname=${APP_EXE}" "${REPO_ROOT}/release/${APP_EXE}"
-  File "${REPO_ROOT}/packaging/windows/pdf.ts-startup.cmd"
+  File "${LAUNCHER_FILE}"
+  File "${STARTUP_FILE}"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   WriteRegStr HKLM "Software\Classes\${APP_ID}.Document" "" "pdf.ts Document"
