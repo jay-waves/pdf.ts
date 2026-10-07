@@ -19,7 +19,8 @@ optional. It does not build or deploy locally.
 Actions builds the frontend once without rerunning local tests/type checking,
 then packages Windows x64 (NSIS), Debian x64 (deb), Fedora x64 (rpm), and macOS
 ARM64 (DMG). Chrome packaging remains available locally but is not included in
-this initial workflow. Node/pnpm and Go are set up on the runners; nFPM and NSIS
+this initial workflow. The three platforms build in parallel on Ubuntu 24.04,
+Windows Server 2022, and Apple Silicon macOS 15 runners. Node/pnpm and Go are set up on the runners; nFPM and NSIS
 are needed only for optional local native packaging, not frontend development.
 
 After all four packages succeed, Actions updates one release per version series (minor versions for 0.x,
@@ -92,7 +93,7 @@ Artifacts are written to `release/`:
 - `pdf-ts-v<version>-macos-arm64.dmg`
 
 Custom tool locations can be supplied through `PDF_TS_GO`, `PDF_TS_WINDRES`,
-`PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, and `PDF_TS_HDIUTIL`.
+`PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, `PDF_TS_RC`, `PDF_TS_CVTRES`, and `PDF_TS_HDIUTIL`.
 
 Native packages are intentionally unsigned. They install the launcher and file
 association, while viewer data remains in the per-user application data directory.
@@ -144,16 +145,25 @@ the package.
 
 ## Windows
 
-[NSIS](https://nsis.sourceforge.io/) and a Windows launcher cross-build
-toolchain are required. Both run on Linux.
+The release workflow builds on Windows using the preinstalled Windows SDK
+`rc.exe`, Visual C++ `cvtres.exe`, and [NSIS](https://nsis.sourceforge.io/).
+It discovers tool paths and sets `PDF_TS_RC`, `PDF_TS_CVTRES`, and
+`PDF_TS_MAKENSIS`; no MinGW or GCC is required for this native build.
+`pnpm package:windows` uses Node.js to invoke NSIS directly, without a POSIX shell.
+For local Windows packaging, supply these tool paths or put them on PATH.
+
+Optional cross-builds on Linux remain supported with windres and NSIS:
 
 ```sh
 # Debian / Ubuntu
-sudo apt install golang-go binutils-mingw-w64-x86-64 nsis
+sudo apt install golang-go binutils-mingw-w64-x86-64 gcc-mingw-w64-x86-64 nsis
 
 # Fedora
-sudo dnf install golang mingw64-binutils mingw32-nsis
+sudo dnf install golang mingw64-binutils mingw64-gcc mingw32-nsis
 ```
+
+GNU windres requires the matching MinGW GCC preprocessor to compile resource
+files. Installing binutils alone is insufficient.
 
 The Fedora `mingw32-nsis` package is intentional. NSIS uses a traditional x86
 installer bootstrap to install the 64-bit launcher into `%ProgramFiles%`.

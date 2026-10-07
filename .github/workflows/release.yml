@@ -53,7 +53,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            platform: linux-windows
+            platform: linux
+          - os: windows-2022
+            platform: windows-x64
           - os: macos-15
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
@@ -71,17 +73,38 @@ jobs:
         with:
           name: web
           path: release/web
-      - name: Install Linux and Windows packaging tools
+      - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y nsis binutils-mingw-w64-x86-64
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
-      - name: Package Debian, Fedora and Windows
+      - name: Package Debian and Fedora
         if: runner.os == 'Linux'
         run: |
           pnpm package:linux
-          pnpm package:windows
+      - name: Locate Windows packaging tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $sdkRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+          $sdk = Get-ChildItem $sdkRoot -Directory |
+            Where-Object { $_.Name -match '^10\.' -and (Test-Path "$($_.FullName)\x64\rc.exe") } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          if (-not $sdk) { throw 'Windows SDK resource compiler not found' }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vsRoot) { throw 'Visual C++ build tools not found' }
+          $msvc = Get-ChildItem "$vsRoot\VC\Tools\MSVC" -Directory |
+            Where-Object { Test-Path "$($_.FullName)\bin\Hostx64\x64\cvtres.exe" } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          if (-not $msvc) { throw 'Visual C++ resource converter not found' }
+          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $makensis)) { throw 'NSIS not found' }
+          "PDF_TS_RC=$($sdk.FullName)\x64\rc.exe" >> $env:GITHUB_ENV
+          "PDF_TS_CVTRES=$($msvc.FullName)\bin\Hostx64\x64\cvtres.exe" >> $env:GITHUB_ENV
+          "PDF_TS_MAKENSIS=$makensis" >> $env:GITHUB_ENV
+      - name: Package Windows x64
+        if: runner.os == 'Windows'
+        run: pnpm package:windows
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
         run: pnpm package:macos

@@ -46,24 +46,37 @@ const output = resolve(root, 'release', outputName);
 mkdirSync(resolve(root, 'release'), { recursive: true });
 const linkerFlags = windows ? '-s -w -H=windowsgui' : '-s -w';
 let windowsResource = null;
+let windowsRes = null;
 cleanEmbeddedViewer();
 try {
   copy(source, embedded);
   if (windows) {
-    const candidates = [process.env.PDF_TS_WINDRES, 'llvm-windres', 'x86_64-w64-mingw32-windres', 'windres'].filter(Boolean);
-    const windres = candidates.find((candidate) => {
-      const check = spawnSync(candidate, ['--version'], { stdio: 'ignore' });
-      return !check.error && check.status === 0;
-    });
-    if (!windres) throw new Error('package:windows requires llvm-windres or windres');
     windowsResource = resolve(root, 'launcher', 'icon_windows_amd64.syso');
-    const compiled = spawnSync(windres, [
-      '--input', resolve(root, 'launcher', 'icon.rc'),
-      '--output', windowsResource,
-      '--output-format', 'coff',
-      '--target', 'pe-x86-64',
-    ], { cwd: root, stdio: 'inherit' });
-    requireSuccess(compiled, windres);
+    if (process.platform === 'win32') {
+      windowsRes = resolve(root, 'release', 'icon_windows_amd64.res');
+      const rc = process.env.PDF_TS_RC ?? 'rc.exe';
+      const cvtres = process.env.PDF_TS_CVTRES ?? 'cvtres.exe';
+      requireSuccess(spawnSync(rc, [
+        '/nologo', '/fo', windowsRes, resolve(root, 'launcher', 'icon.rc'),
+      ], { cwd: root, stdio: 'inherit' }), rc);
+      requireSuccess(spawnSync(cvtres, [
+        '/nologo', '/machine:x64', `/out:${windowsResource}`, windowsRes,
+      ], { cwd: root, stdio: 'inherit' }), cvtres);
+    } else {
+      const candidates = [process.env.PDF_TS_WINDRES, 'llvm-windres', 'x86_64-w64-mingw32-windres', 'windres'].filter(Boolean);
+      const windres = candidates.find((candidate) => {
+        const check = spawnSync(candidate, ['--version'], { stdio: 'ignore' });
+        return !check.error && check.status === 0;
+      });
+      if (!windres) throw new Error('package:windows requires llvm-windres or windres');
+      const compiled = spawnSync(windres, [
+        '--input', resolve(root, 'launcher', 'icon.rc'),
+        '--output', windowsResource,
+        '--output-format', 'coff',
+        '--target', 'pe-x86-64',
+      ], { cwd: root, stdio: 'inherit' });
+      requireSuccess(compiled, windres);
+    }
   }
   const result = spawnSync(process.env.PDF_TS_GO ?? 'go', ['build', '-trimpath', `-ldflags=${linkerFlags}`, '-o', output, './launcher'], {
     cwd: root,
@@ -74,5 +87,6 @@ try {
   console.log(`Packaged ${output}`);
 } finally {
   if (windowsResource) rmSync(windowsResource, { force: true });
+  if (windowsRes) rmSync(windowsRes, { force: true });
   cleanEmbeddedViewer();
 }
