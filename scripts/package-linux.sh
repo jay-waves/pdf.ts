@@ -6,8 +6,8 @@ cd "$(dirname "$0")/.."
 format=$1
 version=$(node -p "require('./package.json').version")
 case "$format" in
-  deb) output="release/pdf-ts-${version}-amd64.deb" ;;
-  rpm) output="release/pdf-ts-${version}-1.x86_64.rpm" ;;
+  deb) output="release/pdf-ts-${version}-x86_64-unknown-linux-gnu.deb" ;;
+  rpm) output="release/pdf-ts-${version}-x86_64-unknown-linux-gnu.rpm" ;;
 esac
 
 PDF_TS_VERSION=$version "${PDF_TS_NFPM:-nfpm}" package \

@@ -115,7 +115,7 @@ jobs:
           path: |
             release/*.deb
             release/*.rpm
-            release/pdf-ts-setup-*.exe
+            release/pdf-ts-*-x86_64-pc-windows.exe
             release/*.dmg
           retention-days: 1
           if-no-files-found: error

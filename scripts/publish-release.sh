@@ -44,10 +44,10 @@ if git show-ref --verify --quiet "refs/tags/$rolling_tag"; then
 fi
 
 assets=(
-  "release/installers/pdf-ts-${version}-amd64.deb"
-  "release/installers/pdf-ts-${version}-1.x86_64.rpm"
-  "release/installers/pdf-ts-setup-v${version}.exe"
-  "release/installers/pdf-ts-v${version}-macos-arm64.dmg"
+  "release/installers/pdf-ts-${version}-x86_64-unknown-linux-gnu.deb"
+  "release/installers/pdf-ts-${version}-x86_64-unknown-linux-gnu.rpm"
+  "release/installers/pdf-ts-${version}-x86_64-pc-windows.exe"
+  "release/installers/pdf-ts-${version}-aarch64-apple-darwin.dmg"
 )
 for path in "${assets[@]}"; do
   [[ -s "$path" ]] || { echo "Missing or empty installer: $path" >&2; exit 1; }
@@ -87,14 +87,7 @@ while IFS= read -r name; do
   fi
 done <<< "$asset_names"
 
-# The permanent version tag remains untouched; only the release-series alias moves.
-git tag --force "$rolling_tag" "$source_commit"
-git push origin "refs/tags/$rolling_tag" --force
-gh release edit "$rolling_tag" --draft=false --latest=false \
-  --title "PDF.ts $GITHUB_REF_NAME" --notes-file "$notes"
-echo 'published=true' >> "$GITHUB_OUTPUT"
-
-# Older release series must not replace the current web version.
+# Older release series must not replace Latest or the current web version.
 deploy_pages=true
 while IFS= read -r tag; do
   other_series=${tag#v}
@@ -110,4 +103,12 @@ while IFS= read -r tag; do
     deploy_pages=false
   fi
 done < <(git tag --list 'v*-latest')
+
+# The permanent version tag remains untouched; only the release-series alias moves.
+git tag --force "$rolling_tag" "$source_commit"
+git push origin "refs/tags/$rolling_tag" --force
+gh release edit "$rolling_tag" --draft=false --latest="$deploy_pages" \
+  --title "PDF.ts $GITHUB_REF_NAME" --notes-file "$notes"
+echo 'published=true' >> "$GITHUB_OUTPUT"
+
 echo "deploy_pages=$deploy_pages" >> "$GITHUB_OUTPUT"

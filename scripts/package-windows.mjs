@@ -9,7 +9,7 @@ if (!numericVersion) throw new Error(`Invalid Windows package version: ${version
 const versionQuad = [...numericVersion.split('.'), '0', '0', '0'].slice(0, 4).join('.');
 const prefix = process.platform === 'win32' ? '/' : '-';
 const makensis = process.env.PDF_TS_MAKENSIS ?? 'makensis';
-const output = resolve(root, 'release', `pdf-ts-setup-v${version}.exe`);
+const output = resolve(root, 'release', `pdf-ts-${version}-x86_64-pc-windows.exe`);
 rmSync(output, { force: true });
 const launcher = resolve(root, 'release', 'pdf.ts.exe');
 if (!statSync(launcher, { throwIfNoEntry: false })?.size) {

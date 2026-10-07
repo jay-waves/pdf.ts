@@ -39,19 +39,19 @@ process.exit(Number(process.env.COMPILER_STATUS ?? 0));
       `${prefix}DLAUNCHER_FILE=${join(root, 'release/pdf.ts.exe')}`,
       `${prefix}DSTARTUP_FILE=${join(root, 'packaging/windows/pdf.ts-startup.cmd')}`,
       `${prefix}DICON_FILE=${join(root, 'assets/icon.ico')}`,
-      `${prefix}DOUTPUT_FILE=${join(root, 'release/pdf-ts-setup-v0.9.5.exe')}`,
+      `${prefix}DOUTPUT_FILE=${join(root, 'release/pdf-ts-0.9.5-x86_64-pc-windows.exe')}`,
       `${prefix}V2`, join(root, 'packaging/windows/pdf.ts.nsi'),
     ]);
     const failed = run(7);
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /exited with status 7/);
-    assert.equal(existsSync(join(root, 'release/pdf-ts-setup-v0.9.5.exe')), false);
+    assert.equal(existsSync(join(root, 'release/pdf-ts-0.9.5-x86_64-pc-windows.exe')), false);
     rmSync(join(root, 'release/pdf.ts.exe'));
-    writeFileSync(join(root, 'release/pdf-ts-setup-v0.9.5.exe'), 'stale');
+    writeFileSync(join(root, 'release/pdf-ts-0.9.5-x86_64-pc-windows.exe'), 'stale');
     const missing = run(0);
     assert.notEqual(missing.status, 0);
     assert.match(missing.stderr, /launcher is missing or empty/);
-    assert.equal(existsSync(join(root, 'release/pdf-ts-setup-v0.9.5.exe')), false);
+    assert.equal(existsSync(join(root, 'release/pdf-ts-0.9.5-x86_64-pc-windows.exe')), false);
   });
 }
 

@@ -6,7 +6,7 @@ if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or -not $env:RUNNER_TEMP
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json).version
-$installer = Join-Path $repoRoot "release\pdf-ts-setup-v$version.exe"
+$installer = Join-Path $repoRoot "release\pdf-ts-$version-x86_64-pc-windows.exe"
 $source = Join-Path $repoRoot 'release\pdf.ts.exe'
 $installDir = Join-Path $env:RUNNER_TEMP 'pdf ts package check\app'
 $installed = Join-Path $installDir 'pdf.ts.exe'

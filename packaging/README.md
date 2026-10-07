@@ -34,7 +34,9 @@ After all four packages succeed, Actions updates one release per version series 
 major versions for 1.x and later):
 `v0.9.4` updates `v0.9-latest`, while `v1.2.3` updates `v1-latest`. Version tags stay
 unchanged; rolling tags point to the installed version's commit. New attachments
-are uploaded before old attachments are removed. Re-running a successful tag is
+are uploaded before old attachments are removed. The highest version series is
+marked as GitHub's Latest release; maintenance releases of older series do not
+replace it. Re-running a successful tag is
 supported; older versions and ancestor tags cannot overwrite a newer published version, and divergent
 histories are rejected. Updates to an existing Release are not atomic, so an
 interrupted upload can temporarily leave attachments from both versions; rerun
@@ -89,15 +91,18 @@ Packaging reuses `release/web`; individual package commands do not rebuild the
 frontend. `package:all` and `build:all` omit macOS because app bundles and DMGs
 must be created on macOS.
 
-Artifacts are written to `release/`:
+Artifacts are written to `release/`. Native installers use
+`pdf-ts-<version>-<triplet>.<extension>`; the version comes from `package.json`.
+Windows uses `x86_64-pc-windows` without a compiler ABI suffix because the launcher
+is built with Go.
 
 - `pdf-ts-chrome-v<version>.zip`
 - `pdf.ts` and `pdf.ts.exe`
-- `pdf-ts-<version>-amd64.deb`
-- `pdf-ts-<version>-1.x86_64.rpm`
-- `pdf-ts-setup-v<version>.exe`
+- `pdf-ts-<version>-x86_64-unknown-linux-gnu.deb`
+- `pdf-ts-<version>-x86_64-unknown-linux-gnu.rpm`
+- `pdf-ts-<version>-x86_64-pc-windows.exe`
 - `macos-arm64/pdf.ts.app`
-- `pdf-ts-v<version>-macos-arm64.dmg`
+- `pdf-ts-<version>-aarch64-apple-darwin.dmg`
 
 Custom tool locations can be supplied through `PDF_TS_GO`,
 `PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, `PDF_TS_RSRC`, and `PDF_TS_HDIUTIL`.

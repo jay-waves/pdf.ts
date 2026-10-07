@@ -30,7 +30,7 @@ function fixture(t, version = '1.0.0') {
   };
   const first = commit(version);
   mkdirSync(join(cwd, 'release/installers'), { recursive: true });
-  for (const name of [`pdf-ts-${version}-amd64.deb`, `pdf-ts-${version}-1.x86_64.rpm`, `pdf-ts-setup-v${version}.exe`, `pdf-ts-v${version}-macos-arm64.dmg`]) {
+  for (const name of [`pdf-ts-${version}-x86_64-unknown-linux-gnu.deb`, `pdf-ts-${version}-x86_64-unknown-linux-gnu.rpm`, `pdf-ts-${version}-x86_64-pc-windows.exe`, `pdf-ts-${version}-aarch64-apple-darwin.dmg`]) {
     writeFileSync(join(cwd, 'release/installers', name), 'installer');
   }
   const bin = join(dir, 'bin');
@@ -59,7 +59,7 @@ test('publishes four installers and updates only the rolling tag', (t) => {
   assert.equal(f.git('rev-parse', 'v1.0.0'), f.first);
   const calls = readFileSync(f.calls, 'utf8');
   assert.ok(calls.indexOf('release upload') < calls.indexOf('release delete-asset'));
-  assert.match(calls, /release edit v1-latest --draft=false/);
+  assert.match(calls, /release edit v1-latest --draft=false --latest=true/);
   assert.match(readFileSync(f.output, 'utf8'), /published=true\ndeploy_pages=true/);
   assert.equal(f.run().status, 0, 'same-tag rerun should succeed');
 });
@@ -88,11 +88,12 @@ test('older major updates installers without deploying Pages', (t) => {
   f.git('tag', 'v2-latest');
   assert.equal(f.run().status, 0);
   assert.match(readFileSync(f.output, 'utf8'), /deploy_pages=false/);
+  assert.match(readFileSync(f.calls, 'utf8'), /release edit v1-latest --draft=false --latest=false/);
 });
 
 test('missing platform installer prevents release mutation', (t) => {
   const f = fixture(t);
-  rmSync(join(f.cwd, 'release/installers/pdf-ts-v1.0.0-macos-arm64.dmg'));
+  rmSync(join(f.cwd, 'release/installers/pdf-ts-1.0.0-aarch64-apple-darwin.dmg'));
   assert.notEqual(f.run().status, 0);
   assert.equal(f.git('tag', '--list', 'v1-latest'), '');
 });
@@ -112,6 +113,7 @@ for (const newer of ['v0.10-latest', 'v1-latest']) {
     assert.equal(f.run().status, 0);
     assert.equal(f.git('rev-parse', 'v0.9-latest'), f.first);
     assert.match(readFileSync(f.output, 'utf8'), /deploy_pages=false/);
+    assert.match(readFileSync(f.calls, 'utf8'), /release edit v0\.9-latest --draft=false --latest=false/);
   });
 }
 
