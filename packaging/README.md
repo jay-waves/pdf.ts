@@ -23,9 +23,11 @@ optional. It does not build or deploy locally.
 Actions builds the frontend once without rerunning local tests/type checking,
 then packages Windows x64 (NSIS), Debian x64 (deb), Fedora x64 (rpm), and macOS
 ARM64 (DMG). Chrome packaging remains available locally but is not included in
-this initial workflow. The three platforms build in parallel on Ubuntu 24.04,
-Windows Server 2022, and Apple Silicon macOS 15 runners. Node/pnpm and Go are set up on the runners; nFPM and NSIS
-are needed only for optional local native packaging, not frontend development.
+this initial workflow. Linux packages and the Windows cross-build run on Ubuntu
+24.04; macOS runs on Apple Silicon macOS 15. A separate Windows Server 2022
+runner verifies the Windows install, upgrade, and uninstall. Node/pnpm and Go
+are set up on the runners; nFPM, `rsrc`, and NSIS are installed only in the
+Linux packaging job, not the frontend job.
 Only the frontend job installs pnpm dependencies. Native packaging jobs run the
 scripts directly with Node.js and reuse the shared web artifact, so they do not
 install the frontend dependency tree or apply its patches again.
@@ -103,6 +105,10 @@ is built with Go.
 - `pdf-ts-<version>-x86_64-pc-windows.exe`
 - `macos-arm64/pdf.ts.app`
 - `pdf-ts-<version>-aarch64-apple-darwin.dmg`
+
+Linux can cross-build the Windows launcher and installer with Go, `rsrc`, and
+NSIS. Install them with `go install github.com/akavel/rsrc@v0.10.2` and
+`sudo apt install nsis`. Windows verification still runs natively in CI.
 
 Custom tool locations can be supplied through `PDF_TS_GO`,
 `PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, `PDF_TS_RSRC`, and `PDF_TS_HDIUTIL`.

@@ -52,8 +52,6 @@ jobs:
         include:
           - os: ubuntu-24.04
             platform: linux
-          - os: windows-2022
-            platform: windows-x64
           - os: macos-15
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
@@ -66,44 +64,38 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           name: web
           path: release/web
-      - name: Install Linux packaging tools
+      - name: Install packaging tools
         if: runner.os == 'Linux'
         run: |
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+          go install github.com/akavel/rsrc@v0.10.2
+          sudo apt-get update
+          sudo apt-get install --yes nsis
       - name: Package Debian and Fedora
         if: runner.os == 'Linux'
         run: |
           node scripts/package-launcher.mjs linux-amd64
           sh scripts/package-linux.sh deb
           sh scripts/package-linux.sh rpm
-      - name: Set up Windows packaging tools
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $env:GOBIN = Join-Path $env:RUNNER_TEMP 'pdf-ts-tools'
-          go install github.com/akavel/rsrc@v0.10.2
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $rsrc = Join-Path $env:GOBIN 'rsrc.exe'
-          if (-not (Test-Path $rsrc)) { throw 'rsrc installation produced no executable' }
-          "PDF_TS_RSRC=$rsrc" >> $env:GITHUB_ENV
-          $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
-          if (-not (Test-Path $makensis)) { throw 'NSIS not found' }
-          "PDF_TS_MAKENSIS=$makensis" >> $env:GITHUB_ENV
       - name: Build Windows x64 launcher
-        if: runner.os == 'Windows'
+        if: runner.os == 'Linux'
         run: node scripts/package-launcher.mjs windows-amd64
       - name: Package Windows installer
-        if: runner.os == 'Windows'
+        if: runner.os == 'Linux'
         run: node scripts/package-windows.mjs
-      - name: Verify Windows install, upgrade and uninstall
-        if: runner.os == 'Windows'
-        timeout-minutes: 10
-        shell: pwsh
-        run: ./scripts/verify-windows-package.ps1
+      - uses: actions/upload-artifact@v6
+        if: runner.os == 'Linux'
+        with:
+          name: windows-installer
+          path: |
+            release/pdf.ts.exe
+            release/pdf-ts-*-x86_64-pc-windows.exe
+          retention-days: 1
+          if-no-files-found: error
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
         run: |
@@ -115,14 +107,27 @@ jobs:
           path: |
             release/*.deb
             release/*.rpm
-            release/pdf-ts-*-x86_64-pc-windows.exe
             release/*.dmg
           retention-days: 1
           if-no-files-found: error
 
+  verify-windows:
+    needs: packages
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-installer
+          path: release
+      - name: Verify Windows install, upgrade and uninstall
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./scripts/verify-windows-package.ps1
+
   publish:
     if: github.event_name == 'push'
-    needs: [web, packages]
+    needs: [web, packages, verify-windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -133,11 +138,15 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           pattern: packages-*
           path: release/installers
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-installer
+          path: release/installers
       - name: Update the version series release
         id: publish
         env:
