@@ -55,7 +55,8 @@ try {
     if (process.platform === 'win32') {
       windowsRes = resolve(root, 'release', 'icon_windows_amd64.res');
       const rc = process.env.PDF_TS_RC ?? 'rc.exe';
-      const cvtres = process.env.PDF_TS_CVTRES ?? 'cvtres.exe';
+      // Use LLVM's COFF output, which is compatible with Go's internal linker.
+      const cvtres = process.env.PDF_TS_CVTRES ?? 'llvm-cvtres.exe';
       requireSuccess(spawnSync(rc, [
         '/nologo', '/fo', windowsRes, resolve(root, 'launcher', 'icon.rc'),
       ], { cwd: root, stdio: 'inherit' }), rc);

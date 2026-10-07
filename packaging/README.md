@@ -149,7 +149,7 @@ the package.
 ## Windows
 
 The release workflow builds on Windows using the preinstalled Windows SDK
-`rc.exe`, Visual C++ `cvtres.exe`, and [NSIS](https://nsis.sourceforge.io/).
+`rc.exe`, LLVM `llvm-cvtres.exe`, and [NSIS](https://nsis.sourceforge.io/).
 It discovers tool paths and sets `PDF_TS_RC`, `PDF_TS_CVTRES`, and
 `PDF_TS_MAKENSIS`; no MinGW or GCC is required for this native build.
 `pnpm package:windows` uses Node.js to invoke NSIS directly, without a POSIX shell.

@@ -87,23 +87,20 @@ jobs:
             Where-Object { $_.Name -match '^10\.' -and (Test-Path "$($_.FullName)\x64\rc.exe") } |
             Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
           if (-not $sdk) { throw 'Windows SDK resource compiler not found' }
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsRoot = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          if (-not $vsRoot) { throw 'Visual C++ build tools not found' }
-          $msvc = Get-ChildItem "$vsRoot\VC\Tools\MSVC" -Directory |
-            Where-Object { Test-Path "$($_.FullName)\bin\Hostx64\x64\cvtres.exe" } |
-            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-          if (-not $msvc) { throw 'Visual C++ resource converter not found' }
+          # Microsoft's cvtres can emit absolute COFF symbols rejected by Go.
+          $cvtres = "$env:ProgramFiles\LLVM\bin\llvm-cvtres.exe"
+          if (-not (Test-Path $cvtres)) { throw 'LLVM resource converter not found' }
           $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (-not (Test-Path $makensis)) { throw 'NSIS not found' }
           "PDF_TS_RC=$($sdk.FullName)\x64\rc.exe" >> $env:GITHUB_ENV
-          "PDF_TS_CVTRES=$($msvc.FullName)\bin\Hostx64\x64\cvtres.exe" >> $env:GITHUB_ENV
+          "PDF_TS_CVTRES=$cvtres" >> $env:GITHUB_ENV
           "PDF_TS_MAKENSIS=$makensis" >> $env:GITHUB_ENV
-      - name: Package Windows x64
+      - name: Build Windows x64 launcher
         if: runner.os == 'Windows'
-        run: |
-          node scripts/package-launcher.mjs windows-amd64
-          node scripts/package-windows.mjs
+        run: node scripts/package-launcher.mjs windows-amd64
+      - name: Package Windows installer
+        if: runner.os == 'Windows'
+        run: node scripts/package-windows.mjs
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
         run: |
