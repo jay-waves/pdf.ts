@@ -4,6 +4,10 @@
 
 Run checks and compile locally before publishing. Only version tag pushes trigger
 `.github/workflows/release.yml`; branch pushes and pull requests do not build.
+To validate packaging before tagging, run **Actions → Release → Run workflow**
+on a branch containing these changes. Manual runs build artifacts and verify the
+Windows installer, but never update rolling tags, Releases, or Pages. The workflow
+must be present on the default branch for GitHub to show the manual run button.
 
 ```sh
 pnpm check
@@ -95,8 +99,8 @@ Artifacts are written to `release/`:
 - `macos-arm64/pdf.ts.app`
 - `pdf-ts-v<version>-macos-arm64.dmg`
 
-Custom tool locations can be supplied through `PDF_TS_GO`, `PDF_TS_WINDRES`,
-`PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, `PDF_TS_RC`, `PDF_TS_CVTRES`, and `PDF_TS_HDIUTIL`.
+Custom tool locations can be supplied through `PDF_TS_GO`,
+`PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, `PDF_TS_RSRC`, and `PDF_TS_HDIUTIL`.
 
 Native packages are intentionally unsigned. They install the launcher and file
 association, while viewer data remains in the per-user application data directory.
@@ -148,28 +152,21 @@ the package.
 
 ## Windows
 
-The release workflow builds on Windows using the preinstalled Windows SDK
-`rc.exe`, LLVM `llvm-cvtres.exe`, and [NSIS](https://nsis.sourceforge.io/).
-It discovers tool paths and sets `PDF_TS_RC`, `PDF_TS_CVTRES`, and
-`PDF_TS_MAKENSIS`; no MinGW or GCC is required for this native build.
+The release workflow builds on Windows using Go's `rsrc` tool (pinned to
+v0.10.2) and [NSIS](https://nsis.sourceforge.io/). `rsrc` generates the icon
+resource object directly for Go; no Windows SDK, LLVM, MinGW, or GCC is required.
+The workflow installs `rsrc` into a runner temporary directory and explicitly
+passes its path, then locates the preinstalled NSIS executable. Before publishing,
+the Windows job silently installs the package, checks its icon and registration,
+runs the launcher, reinstalls it to exercise upgrades, and uninstalls it. This
+package smoke check runs only on the disposable Windows runner; application tests
+remain local.
 `pnpm package:windows` uses Node.js to invoke NSIS directly, without a POSIX shell.
-For local Windows packaging, supply these tool paths or put them on PATH.
+For local Windows packaging, run `go install github.com/akavel/rsrc@v0.10.2`
+and put it and NSIS on PATH, or set `PDF_TS_RSRC` and `PDF_TS_MAKENSIS`.
 
-Optional cross-builds on Linux remain supported with windres and NSIS:
-
-```sh
-# Debian / Ubuntu
-sudo apt install golang-go binutils-mingw-w64-x86-64 gcc-mingw-w64-x86-64 nsis
-
-# Fedora
-sudo dnf install golang mingw64-binutils mingw64-gcc mingw32-nsis
-```
-
-GNU windres requires the matching MinGW GCC preprocessor to compile resource
-files. Installing binutils alone is insufficient.
-
-The Fedora `mingw32-nsis` package is intentional. NSIS uses a traditional x86
-installer bootstrap to install the 64-bit launcher into `%ProgramFiles%`.
+Linux cross-builds use the same `rsrc` version and Go resource generation path,
+plus Linux NSIS. No alternate windres resource compiler is used.
 
 The all-users installer requests administrator permission, writes to
 `%ProgramFiles%\pdf.ts`, registers the PDF file association, and appears in

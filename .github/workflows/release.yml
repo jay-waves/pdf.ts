@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
@@ -22,6 +23,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate version tag
+        if: github.event_name == 'push'
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
@@ -78,22 +80,18 @@ jobs:
           node scripts/package-launcher.mjs linux-amd64
           sh scripts/package-linux.sh deb
           sh scripts/package-linux.sh rpm
-      - name: Locate Windows packaging tools
+      - name: Set up Windows packaging tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $sdkRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
-          $sdk = Get-ChildItem $sdkRoot -Directory |
-            Where-Object { $_.Name -match '^10\.' -and (Test-Path "$($_.FullName)\x64\rc.exe") } |
-            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
-          if (-not $sdk) { throw 'Windows SDK resource compiler not found' }
-          # Microsoft's cvtres can emit absolute COFF symbols rejected by Go.
-          $cvtres = "$env:ProgramFiles\LLVM\bin\llvm-cvtres.exe"
-          if (-not (Test-Path $cvtres)) { throw 'LLVM resource converter not found' }
+          $env:GOBIN = Join-Path $env:RUNNER_TEMP 'pdf-ts-tools'
+          go install github.com/akavel/rsrc@v0.10.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $rsrc = Join-Path $env:GOBIN 'rsrc.exe'
+          if (-not (Test-Path $rsrc)) { throw 'rsrc installation produced no executable' }
+          "PDF_TS_RSRC=$rsrc" >> $env:GITHUB_ENV
           $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
           if (-not (Test-Path $makensis)) { throw 'NSIS not found' }
-          "PDF_TS_RC=$($sdk.FullName)\x64\rc.exe" >> $env:GITHUB_ENV
-          "PDF_TS_CVTRES=$cvtres" >> $env:GITHUB_ENV
           "PDF_TS_MAKENSIS=$makensis" >> $env:GITHUB_ENV
       - name: Build Windows x64 launcher
         if: runner.os == 'Windows'
@@ -101,6 +99,11 @@ jobs:
       - name: Package Windows installer
         if: runner.os == 'Windows'
         run: node scripts/package-windows.mjs
+      - name: Verify Windows install, upgrade and uninstall
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./scripts/verify-windows-package.ps1
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
         run: |
@@ -118,6 +121,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    if: github.event_name == 'push'
     needs: [web, packages]
     runs-on: ubuntu-24.04
     permissions:
