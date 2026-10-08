@@ -19,7 +19,6 @@ const result = spawnSync(makensis, [
   `${prefix}DAPP_VERSION=${version}`,
   `${prefix}DAPP_VERSION_QUAD=${versionQuad}`,
   `${prefix}DLAUNCHER_FILE=${launcher}`,
-  `${prefix}DSTARTUP_FILE=${resolve(root, 'packaging/windows/pdf.ts-startup.cmd')}`,
   `${prefix}DICON_FILE=${resolve(root, 'assets/icon.ico')}`,
   `${prefix}DOUTPUT_FILE=${output}`,
   `${prefix}V2`,

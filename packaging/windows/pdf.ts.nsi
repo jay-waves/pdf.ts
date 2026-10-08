@@ -2,6 +2,8 @@ Unicode True
 
 !include "MUI2.nsh"
 !include "x64.nsh"
+!include "Sections.nsh"
+!include "FileFunc.nsh"
 
 !ifndef APP_VERSION
   !error "APP_VERSION must be provided with -DAPP_VERSION=<version>"
@@ -11,9 +13,6 @@ Unicode True
 !endif
 !ifndef LAUNCHER_FILE
   !error "LAUNCHER_FILE must be provided"
-!endif
-!ifndef STARTUP_FILE
-  !error "STARTUP_FILE must be provided"
 !endif
 !ifndef ICON_FILE
   !error "ICON_FILE must be provided"
@@ -48,19 +47,12 @@ UninstallIcon "${ICON_FILE}"
 !define MUI_UNICON "${ICON_FILE}"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
-
-Function .onInit
-  ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "pdf.ts requires 64-bit Windows."
-    Abort
-  ${EndIf}
-  SetRegView 64
-FunctionEnd
 
 Function un.onInit
   SetRegView 64
@@ -76,7 +68,7 @@ Section "pdf.ts" SEC_MAIN
 install_files:
   SetOutPath "$INSTDIR"
   File "${LAUNCHER_FILE}"
-  File "${STARTUP_FILE}"
+  Delete "$INSTDIR\pdf.ts-startup.cmd"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   WriteRegStr HKLM "Software\Classes\${APP_ID}.Document" "" "pdf.ts Document"
@@ -103,12 +95,53 @@ install_files:
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd
 
+Section /o "Start background service at login (all users)" SEC_STARTUP
+  SetShellVarContext all
+  SetOutPath "$INSTDIR"
+  ClearErrors
+  CreateShortCut "$SMSTARTUP\pdf.ts.lnk" "$INSTDIR\${APP_EXE}" "daemon"
+  IfErrors 0 +2
+    Abort "Could not create the startup shortcut."
+SectionEnd
+
+Section "-Startup cleanup"
+  ${IfNot} ${SectionIsSelected} ${SEC_STARTUP}
+    SetShellVarContext all
+    Delete "$SMSTARTUP\pdf.ts.lnk"
+  ${EndIf}
+SectionEnd
+
+Function .onInit
+  ${IfNot} ${RunningX64}
+    MessageBox MB_ICONSTOP "pdf.ts requires 64-bit Windows."
+    Abort
+  ${EndIf}
+  SetRegView 64
+  SetShellVarContext all
+  IfFileExists "$SMSTARTUP\pdf.ts.lnk" 0 startup_arguments
+    !insertmacro SelectSection ${SEC_STARTUP}
+startup_arguments:
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/AUTOSTART=" $1
+  ${IfNot} ${Errors}
+    ${If} $1 == "1"
+      !insertmacro SelectSection ${SEC_STARTUP}
+    ${ElseIf} $1 == "0"
+      !insertmacro UnselectSection ${SEC_STARTUP}
+    ${Else}
+      Abort "Use /AUTOSTART=1 or /AUTOSTART=0."
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
 Section "Uninstall"
   SetShellVarContext all
   IfFileExists "$INSTDIR\${APP_EXE}" 0 remove_files
   nsExec::ExecToLog '"$INSTDIR\${APP_EXE}" stop'
 
 remove_files:
+  Delete "$SMSTARTUP\pdf.ts.lnk"
   DeleteRegKey HKLM "Software\Classes\${APP_ID}.Document"
   DeleteRegValue HKLM "Software\Classes\.pdf\OpenWithProgids" "${APP_ID}.Document"
   DeleteRegKey /ifempty HKLM "Software\Classes\.pdf\OpenWithProgids"

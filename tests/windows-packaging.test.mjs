@@ -37,7 +37,6 @@ process.exit(Number(process.env.COMPILER_STATUS ?? 0));
     assert.deepEqual(args, [
       `${prefix}DAPP_VERSION=0.9.5`, `${prefix}DAPP_VERSION_QUAD=0.9.5.0`,
       `${prefix}DLAUNCHER_FILE=${join(root, 'release/pdf.ts.exe')}`,
-      `${prefix}DSTARTUP_FILE=${join(root, 'packaging/windows/pdf.ts-startup.cmd')}`,
       `${prefix}DICON_FILE=${join(root, 'assets/icon.ico')}`,
       `${prefix}DOUTPUT_FILE=${join(root, 'release/pdf-ts-0.9.5-x86_64-pc-windows.exe')}`,
       `${prefix}V2`, join(root, 'packaging/windows/pdf.ts.nsi'),

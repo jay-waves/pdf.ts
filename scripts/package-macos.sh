@@ -20,9 +20,12 @@ bundle="$bundle_parent/pdf.ts.app"
 contents="$bundle/Contents"
 resources="$contents/Resources"
 rm -rf "$bundle_parent"
-mkdir -p "$contents/MacOS" "$resources"
-cp "$binary" "$contents/MacOS/pdf.ts"
-chmod 0755 "$contents/MacOS/pdf.ts"
+mkdir -p "$contents/MacOS" "$resources" "$contents/Library/LaunchAgents"
+cp "$binary" "$contents/MacOS/pdf-ts-launcher"
+chmod 0755 "$contents/MacOS/pdf-ts-launcher"
+xcrun swiftc -O -target arm64-apple-macosx13.0 \
+  packaging/macos/main.swift -o "$contents/MacOS/pdf.ts"
+cp packaging/macos/io.github.jay-waves.pdf.ts.agent.plist "$contents/Library/LaunchAgents/"
 sed \
   -e "s/@@SHORT_VERSION@@/$version/g" \
   -e "s/@@BUNDLE_VERSION@@/$short_version/g" \
@@ -42,6 +45,14 @@ for pair in '16 32' '32 64' '128 256' '256 512' '512 1024'; do
     --out "$iconset/icon_${1}x${1}@2x.png" >/dev/null
 done
 iconutil -c icns "$iconset" -o "$resources/pdf-ts.icns"
+
+# ServiceManagement needs a signed bundle. Ad-hoc signing supports local builds
+# without a Developer ID certificate; releases remain unnotarized.
+codesign --force --sign - --identifier io.github.jay-waves.pdf.ts.launcher "$contents/MacOS/pdf-ts-launcher"
+codesign --force --sign - "$bundle"
+codesign --verify --deep --strict "$bundle"
+plutil -lint "$contents/Info.plist" "$contents/Library/LaunchAgents/io.github.jay-waves.pdf.ts.agent.plist"
+"$contents/MacOS/pdf.ts" autostart status
 
 image_root="$temporary_directory/image"
 mkdir "$image_root"

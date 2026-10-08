@@ -113,10 +113,11 @@ NSIS. Install them with `go install github.com/akavel/rsrc@v0.10.2` and
 Custom tool locations can be supplied through `PDF_TS_GO`,
 `PDF_TS_MAKENSIS`, `PDF_TS_NFPM`, `PDF_TS_RSRC`, and `PDF_TS_HDIUTIL`.
 
-Native packages are intentionally unsigned. They install the launcher and file
+Native packages have no publisher certificate signatures (macOS uses ad-hoc
+signing). They install the launcher and file
 association, while viewer data remains in the per-user application data directory.
-The launcher itself does not install or uninstall platform integration; each
-platform package owns that lifecycle. Portable launchers provide only `purge`
+Platform packages own installation and file associations. The macOS app also
+provides commands to manage its bundled login agent. Portable launchers provide only `purge`
 for explicitly deleting the current user's viewer data.
 
 ## Chrome
@@ -184,24 +185,47 @@ The all-users installer requests administrator permission, writes to
 Windows Installed Apps. Upgrade and uninstall stop the current user's daemon
 first. Uninstall leaves every user's viewer data intact.
 
-Automatic daemon startup is opt-in. Copy
-`%ProgramFiles%\pdf.ts\pdf.ts-startup.cmd` into the folder opened by
-`shell:startup` for the current user. Remove that copied script to disable it.
+Automatic daemon startup is opt-in. Select **Start background service at login
+(all users)** on the installer's Components page to create a shortcut in the
+all-users Startup folder. It runs the GUI executable directly with `daemon`,
+without a CMD script or a browser window. Upgrades preserve the existing choice;
+unchecking the option removes the shortcut, and uninstall removes it too.
+Silent installs accept `/AUTOSTART=1` or `/AUTOSTART=0` before the final `/D=...`
+argument. Remove any startup CMD scripts previously copied into `shell:startup`
+manually; those user-owned copies are not managed by the installer.
 
 ## macOS
 
 Run `pnpm package:macos` on Apple Silicon macOS to build the application and
 disk image.
 
-The app bundle and DMG packaging step runs only on macOS and uses the system
-`sips`, `iconutil`, `ditto`, and `hdiutil` commands; there is no third-party
+The app requires macOS 13 or later. The app bundle and DMG packaging step runs
+only on macOS and uses Xcode Command Line Tools (`xcrun swiftc`), plus the system
+`codesign`, `plutil`, `sips`, `iconutil`, `ditto`, and `hdiutil` commands; there is no third-party
 packaging dependency. Linux DMG writers are intentionally unsupported because
 they do not provide the same compatibility guarantees. Override the `hdiutil`
 path with `PDF_TS_HDIUTIL` when necessary.
 
 The resulting `pdf.ts.app` and DMG have no Developer ID signature and are not
-notarized. The packaging script does not invoke `codesign`; the Go linker may
-add the minimal ad-hoc signature structure required for an Apple Silicon
-executable. The app bundle declares PDF metadata in `Info.plist`; macOS owns
+notarized. Packaging ad-hoc signs the launcher and app bundle for ServiceManagement.
+The app bundle declares PDF metadata in `Info.plist`; macOS owns
 application discovery and file-association registration when the app is copied
 to or launched from `/Applications`.
+
+After copying the app to `/Applications`, opt into login startup with:
+
+```sh
+/Applications/pdf.ts.app/Contents/MacOS/pdf.ts autostart enable
+/Applications/pdf.ts.app/Contents/MacOS/pdf.ts autostart status
+/Applications/pdf.ts.app/Contents/MacOS/pdf.ts autostart disable
+```
+
+The native app entry point uses Apple's `SMAppService` to register the LaunchAgent
+inside `Contents/Library/LaunchAgents`; it does not copy a plist into the user's
+Library or use `launchctl`. If macOS requires approval, `enable` opens Login Items
+in System Settings and reports `requires-approval`. Status reports `enabled`,
+`disabled`, `requires-approval`, or `not-found`. The agent runs only `daemon`,
+without opening the viewer. Disable it before removing or moving the app.
+Disabling unregisters the agent; use `pdf.ts stop` to stop an independently
+started, on-demand daemon if needed. Login registration is per user and is not
+enabled by packaging or by opening a PDF.
