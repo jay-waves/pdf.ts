@@ -125,14 +125,14 @@ test('0.10 Pages supersedes 0.9 using numeric version order', (t) => {
 });
 
 function seedCleanupTags(f) {
-  const retired = ['v0.9.8-alpha', 'v0.9.8-alpha.1', 'v0.9.8-alpha123', 'v0.9.8-beta', 'v0.9.8-beta.2'];
-  const kept = ['v0.9.8', 'v0.9.9', 'v0.9.9-alpha', 'v0.9.7-beta', 'v0.10.8-alpha', 'v0.9.8-rc.1'];
+  const retired = ['v0.9.9-alpha', 'v0.9.9-alpha.1', 'v0.9.9-alpha123', 'v0.9.9-beta', 'v0.9.9-beta.2'];
+  const kept = ['v0.9.8', 'v0.9.9', 'v0.9.8-alpha', 'v0.9.8-beta', 'v0.9.10-alpha', 'v0.10.9-alpha', 'v0.9.9-rc.1'];
   for (const tag of [...retired, ...kept]) f.git('tag', tag);
   f.git('push', 'origin', '--tags');
   return { retired, kept };
 }
 
-test('stable release deletes only preceding patch alpha/beta remote tags, including bare names', (t) => {
+test('stable release deletes only its own alpha/beta remote tags, including bare names', (t) => {
   const f = fixture(t, '0.9.9');
   const { retired, kept } = seedCleanupTags(f);
   const result = f.run();
