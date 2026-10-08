@@ -72,30 +72,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
-          go install github.com/akavel/rsrc@v0.10.2
-          sudo apt-get update
-          sudo apt-get install --yes nsis
       - name: Package Debian and Fedora
         if: runner.os == 'Linux'
         run: |
           node scripts/package-launcher.mjs linux-amd64
           sh scripts/package-linux.sh deb
           sh scripts/package-linux.sh rpm
-      - name: Build Windows x64 launcher
-        if: runner.os == 'Linux'
-        run: node scripts/package-launcher.mjs windows-amd64
-      - name: Package Windows installer
-        if: runner.os == 'Linux'
-        run: node scripts/package-windows.mjs
-      - uses: actions/upload-artifact@v6
-        if: runner.os == 'Linux'
-        with:
-          name: windows-installer
-          path: |
-            release/pdf.ts.exe
-            release/pdf-ts-*-x86_64-pc-windows.exe
-          retention-days: 1
-          if-no-files-found: error
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
         run: |
@@ -115,8 +97,41 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  package-windows:
+    needs: web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v8
+        with:
+          name: web
+          path: release/web
+      - name: Install Windows packaging tools
+        run: |
+          go install github.com/akavel/rsrc@v0.10.2
+          sudo apt-get update
+          sudo apt-get install --yes nsis
+      - name: Build Windows x64 launcher
+        run: node scripts/package-launcher.mjs windows-amd64
+      - name: Package Windows installer
+        run: node scripts/package-windows.mjs
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-installer
+          path: |
+            release/pdf.ts.exe
+            release/pdf-ts-*-x86_64-pc-windows.exe
+          retention-days: 1
+          if-no-files-found: error
+
   verify-windows:
-    needs: packages
+    needs: package-windows
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v6
@@ -131,7 +146,7 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    needs: [web, packages, verify-windows]
+    needs: [web, packages, package-windows, verify-windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
