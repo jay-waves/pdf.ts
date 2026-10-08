@@ -4,6 +4,9 @@ Unicode True
 !include "x64.nsh"
 !include "Sections.nsh"
 !include "FileFunc.nsh"
+!include "nsDialogs.nsh"
+
+Var StartupCheckbox
 
 !ifndef APP_VERSION
   !error "APP_VERSION must be provided with -DAPP_VERSION=<version>"
@@ -47,7 +50,7 @@ UninstallIcon "${ICON_FILE}"
 !define MUI_UNICON "${ICON_FILE}"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
-!insertmacro MUI_PAGE_COMPONENTS
+Page custom StartupPage StartupPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -95,7 +98,7 @@ install_files:
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd
 
-Section /o "Start background service at login (all users)" SEC_STARTUP
+Section /o "-Startup" SEC_STARTUP
   SetShellVarContext all
   SetOutPath "$INSTDIR"
   ClearErrors
@@ -110,6 +113,38 @@ Section "-Startup cleanup"
     Delete "$SMSTARTUP\pdf.ts.lnk"
   ${EndIf}
 SectionEnd
+
+Function StartupPage
+  !insertmacro MUI_HEADER_TEXT "Installation options" "Choose how ${APP_NAME} starts."
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  ${NSD_CreateCheckbox} 0 8u 100% 14u "Start background service at login"
+  Pop $StartupCheckbox
+  ${If} ${SectionIsSelected} ${SEC_STARTUP}
+    ${NSD_Check} $StartupCheckbox
+  ${EndIf}
+  ${NSD_CreateLabel} 12u 30u 94% 36u "Applies to all users on this computer. Starts the background service without opening a browser window."
+  Pop $0
+  ${NSD_OnClick} $StartupCheckbox StartupChanged
+  nsDialogs::Show
+FunctionEnd
+
+Function StartupChanged
+  Pop $0
+  Call StartupPageLeave
+FunctionEnd
+
+Function StartupPageLeave
+  ${NSD_GetState} $StartupCheckbox $0
+  ${If} $0 == ${BST_CHECKED}
+    !insertmacro SelectSection ${SEC_STARTUP}
+  ${Else}
+    !insertmacro UnselectSection ${SEC_STARTUP}
+  ${EndIf}
+FunctionEnd
 
 Function .onInit
   ${IfNot} ${RunningX64}

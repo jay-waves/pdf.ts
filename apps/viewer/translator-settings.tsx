@@ -1,3 +1,4 @@
+import { RadioGroup } from 'radix-ui';
 import { useEffect, useState } from 'react';
 import { Cpu, Languages, ExternalLink } from 'lucide-react';
 import { platform } from '#platform';
@@ -21,16 +22,17 @@ export function TranslatorSettings({ detectedLanguage, llmAvailability }: {
   return (
     <section className={styles.card} aria-labelledby="translator-title">
       <div className={styles.heading}><div><h2 id="translator-title">Translator</h2><p>Choose how selected text is translated.</p></div><Languages size={18} /></div>
-      <div className={styles.providers} role="group" aria-label="Translation provider">
+      <RadioGroup.Root className={styles.providers} value={translator}
+        onValueChange={(value) => chooseTranslator(value as TranslatorMode)} aria-label="Translation provider">
         {([
           ['builtin', 'Built-in', 'On-device translation', Languages],
           ['llm', 'LLM', 'Use translation settings', Cpu],
           ['google', 'Google Translate', 'Open an external link', ExternalLink],
-        ] as const).map(([mode, name, description, Icon]) => <button key={mode} type="button" aria-pressed={translator === mode}
-          disabled={mode === 'llm' && !llmAvailability.available} onClick={() => chooseTranslator(mode)}>
+        ] as const).map(([mode, name, description, Icon]) => <RadioGroup.Item key={mode} value={mode}
+          disabled={mode === 'llm' && !llmAvailability.available}>
           <Icon size={16} /><strong>{name}</strong><span>{description}</span>
-        </button>)}
-      </div>
+        </RadioGroup.Item>)}
+      </RadioGroup.Root>
       <TranslationLanguageSettings detectedLanguage={detectedLanguage} />
     </section>
   );

@@ -1,11 +1,11 @@
 @reference '../tailwind.css';
 
-.button[data-active='true'] {
+.button:is([data-active='true'], [aria-checked='true']) {
   border-color: transparent;
   background-color: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
   color: var(--pdf-accent-primary);
   box-shadow: none;
 }
 
-.button[data-active='true']:hover { background-color: var(--pdf-interactive-selected); }
-.button[data-active='true']:focus-visible { @apply border-accent shadow-control; }
+.button:is([data-active='true'], [aria-checked='true']):hover { background-color: var(--pdf-interactive-selected); }
+.button:is([data-active='true'], [aria-checked='true']):focus-visible { @apply border-accent shadow-control; }

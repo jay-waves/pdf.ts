@@ -98,8 +98,9 @@ function setup(t) {
     goToPage(target, behavior) { jumps.push(target); jumpBehaviors.push(behavior); page = target; emit(); },
     getFitScales: () => ({ height: 0.8 }),
     getViewportCenter: () => ({ vx: 400, vy: 300 }),
-    fitReadingRegion(region, target, fit) {
-      regionFits.push({ region, page: target, fit });
+    focusViewport() {},
+    fitReadingRegion(region, target) {
+      regionFits.push({ region, page: target });
       zoomScope.requestZoom(2);
       page = target;
       emit();
@@ -203,60 +204,68 @@ test('presentation accumulates rapid navigation without scrolling the inactive v
 
 const region = { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 };
 
-test('reading area becomes the reference for fit presets, navigation and resize', (t) => {
-  const { stage, regionFits, resize } = setup(t);
-  stage.setReadingRegion(region);
-  assert.equal(stage.getSnapshot().regionFit, ZoomMode.FitPage);
+test('rectangle selection fits once and later zoom, navigation and resize use normal behavior', (t) => {
+  const { stage, regionFits, zooms, jumps, resize, interaction } = setup(t);
+  stage.beginRegionSelection();
+  stage.completeRegionSelection(1, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
+  assert.deepEqual(regionFits, [{ region, page: 2 }]);
+  assert.equal(stage.getSnapshot().selectingRegion, false);
+  assert.equal(interaction.getActiveMode(), 'pointerMode');
   stage.setZoom(ZoomMode.FitWidth);
+  assert.equal(zooms.at(-1), ZoomMode.FitWidth);
   stage.movePages(1);
+  assert.deepEqual(jumps, [3]);
   resize();
-  assert.deepEqual(regionFits.map(({ page, fit }) => [page, fit]), [
-    [2, ZoomMode.FitPage], [2, ZoomMode.FitWidth], [3, ZoomMode.FitWidth], [3, ZoomMode.FitWidth],
-  ]);
-  assert.deepEqual(stage.getSnapshot().readingRegion, region);
   stage.setZoom(1.5);
-  assert.equal(stage.getSnapshot().regionFit, null);
-  const count = regionFits.length;
-  resize();
-  assert.equal(regionFits.length, count);
+  assert.equal(zooms.at(-1), 1.5);
   stage.setZoom(ZoomMode.FitPage);
-  assert.equal(stage.getSnapshot().regionFit, ZoomMode.FitPage);
+  assert.equal(zooms.at(-1), ZoomMode.FitPage);
+  assert.deepEqual(regionFits, [{ region, page: 2 }]);
 });
 
-test('rectangle selection cancels cleanly and reset restores whole-page fitting', (t) => {
-  const { stage, interaction, zooms } = setup(t);
+test('rectangle selection cancels on toggle or mode change and ignores completion when inactive', (t) => {
+  const { stage, interaction, regionFits, zooms } = setup(t);
+  const rect = { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } };
+  stage.completeRegionSelection(4, rect);
+  assert.deepEqual(regionFits, []);
   stage.beginRegionSelection();
   assert.equal(stage.getSnapshot().selectingRegion, true);
-  stage.cancelRegionSelection();
-  assert.equal(stage.getSnapshot().readingRegion, null);
-  assert.equal(interaction.getActiveMode(), 'pointerMode');
   stage.beginRegionSelection();
-  stage.completeRegionSelection(4, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
+  assert.equal(stage.getSnapshot().selectingRegion, false);
+  assert.equal(interaction.getActiveMode(), 'pointerMode');
+  stage.completeRegionSelection(4, rect);
+  assert.deepEqual(regionFits, []);
+  stage.beginRegionSelection();
+  stage.completeRegionSelection(4, rect);
   assert.equal(stage.getSnapshot().selectingRegion, false);
   assert.equal(stage.getSnapshot().pageNumber, 5);
-  assert.deepEqual(stage.getSnapshot().readingRegion, region);
+  assert.deepEqual(regionFits, [{ region, page: 5 }]);
   stage.beginRegionSelection();
   interaction.activate('square');
   assert.equal(stage.getSnapshot().selectingRegion, false);
-  assert.deepEqual(stage.getSnapshot().readingRegion, region);
-  stage.clearReadingRegion();
-  assert.equal(stage.getSnapshot().readingRegion, null);
-  assert.equal(stage.getSnapshot().regionFit, null);
-  assert.equal(zooms.at(-1), ZoomMode.FitPage);
+  stage.completeRegionSelection(7, rect);
+  assert.deepEqual(regionFits, [{ region, page: 5 }]);
+  assert.equal(zooms.length, 1);
 });
 
-test('presentation keeps reading areas but leaves its inactive viewport untouched', (t) => {
-  const { stage, regionFits, resize } = setup(t);
-  stage.setReadingRegion(region);
-  const count = regionFits.length;
+test('presentation cancels selection and leaves the inactive viewport untouched', (t) => {
+  const { stage, regionFits, zooms, jumps, resize, interaction } = setup(t);
+  stage.beginRegionSelection();
+  stage.completeRegionSelection(1, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
+  stage.beginRegionSelection();
   stage.setPresentation(true);
+  assert.equal(stage.getSnapshot().selectingRegion, false);
+  assert.equal(interaction.getActiveMode(), 'pointerMode');
   stage.movePages(1);
   stage.beginRegionSelection();
+  stage.completeRegionSelection(4, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
   stage.setZoom(ZoomMode.FitWidth);
   resize();
-  assert.equal(regionFits.length, count);
+  assert.deepEqual(regionFits, [{ region, page: 2 }]);
+  assert.deepEqual(zooms, [2]);
+  assert.deepEqual(jumps, []);
   assert.equal(stage.getSnapshot().selectingRegion, false);
   stage.setPresentation(false);
-  assert.equal(regionFits.at(-1).page, 3);
-  assert.deepEqual(stage.getSnapshot().readingRegion, region);
+  assert.deepEqual(jumps, [3]);
+  assert.deepEqual(regionFits, [{ region, page: 2 }]);
 });

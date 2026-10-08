@@ -2,8 +2,9 @@ import { useEffect, useRef, useState, type ComponentProps, type ComponentType, t
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode } from '@embedpdf/plugin-spread';
 import { ZoomMode, type ZoomLevel } from '@embedpdf/plugin-zoom';
-import { Toolbar as RadixToolbar } from 'radix-ui';
+import { DropdownMenu, Toolbar as RadixToolbar } from 'radix-ui';
 import {
+  ChevronDown,
   ArrowLeft,
   ArrowLeftRight,
   BookImage,
@@ -50,13 +51,15 @@ import type {
   ViewerCommandDispatch,
 } from '../viewer/viewer-controller';
 import styles from './toolbar.module.css';
+import { SELECT_TRIGGER_CLASSES } from '../components/select-styles';
+import { usePortalContainer } from '../components/portal-container';
+import { useViewerFocus } from '../components/viewer-focus';
 import {
   FloatingToolbar,
   FloatingToolbarDivider,
   FloatingToolbarGroup,
   IconButton as BaseIconButton,
   PortalProvider,
-  Select,
 } from '../components';
 
 function IconButton(props: ComponentProps<typeof BaseIconButton>) {
@@ -112,7 +115,7 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
   { label: '200%', value: 2 },
 ];
 const READING_AREA_OPTION = { label: 'Fit area', value: 'reading-area' };
-const ZOOM_SELECT_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
+const ZOOM_MENU_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
 const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), value]));
 
 function ZoomControl({
@@ -128,6 +131,8 @@ function ZoomControl({
   onPercentChange(value: number): void;
   onSelectReadingArea(): void;
 }) {
+  const portalContainer = usePortalContainer();
+  const focusViewer = useViewerFocus();
   const [draft, setDraft] = useState(`${zoomPercent}%`);
   const [editing, setEditing] = useState(false);
   const cancelBlurRef = useRef(false);
@@ -173,20 +178,45 @@ function ZoomControl({
           }
         }}
       />
-      <Select
-        className={styles.zoomMenu}
-        value=""
-        options={[
-          ...ZOOM_SELECT_OPTIONS.slice(0, 2),
-          { ...READING_AREA_OPTION, onSelect: onSelectReadingArea },
-          ...ZOOM_SELECT_OPTIONS.slice(2),
-        ]}
-        onValueChange={onPresetChange}
-        label="Zoom presets"
-        disabled={disabled}
-        iconOnly
-        sideOffset={7}
-      />
+      <DropdownMenu.Root>
+        <RadixToolbar.Button asChild disabled={disabled}>
+          <DropdownMenu.Trigger
+            className={`${SELECT_TRIGGER_CLASSES} ${styles.zoomMenu}`}
+            aria-label="Zoom presets"
+            disabled={disabled}
+          >
+            <span className="inline-flex text-muted transition-[color,transform] duration-150 group-hover:text-foreground group-data-[state=open]:rotate-180">
+              <ChevronDown size={12} strokeWidth={2} />
+            </span>
+          </DropdownMenu.Trigger>
+        </RadixToolbar.Button>
+        <DropdownMenu.Portal container={portalContainer ?? undefined}>
+          <DropdownMenu.Content
+            className="pdf-select-content pdf-glass-surface pdf-glass-popover z-50 min-w-[var(--radix-dropdown-menu-trigger-width)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-auto rounded-lg border p-1.5 text-foreground"
+            align="start"
+            sideOffset={7}
+            collisionPadding={6}
+            onCloseAutoFocus={focusViewer ? (event) => {
+              event.preventDefault();
+              focusViewer();
+            } : undefined}
+          >
+            {[
+              ...ZOOM_MENU_OPTIONS.slice(0, 2),
+              READING_AREA_OPTION,
+              ...ZOOM_MENU_OPTIONS.slice(2),
+            ].map(({ label, value }) => (
+              <DropdownMenu.Item
+                key={value}
+                className="relative flex h-6.5 min-w-23 cursor-pointer items-center rounded-md py-0 pr-6 pl-2 outline-none data-[highlighted]:bg-hover"
+                onSelect={() => value === READING_AREA_OPTION.value ? onSelectReadingArea() : onPresetChange(value)}
+              >
+                {label}
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
     </div>
   );
 }
@@ -270,11 +300,11 @@ export function Toolbar({
   };
 
   const selectDrawTool = (toolId: string) => {
-    dispatch({ type: 'annotation/toggle-tool', toolId });
+    const nextTool = toolId || activeTool;
+    if (nextTool) dispatch({ type: 'annotation/toggle-tool', toolId: nextTool });
   };
 
   const selectZoom = (value: string) => {
-    if (value === READING_AREA_OPTION.value) return;
     const level = ZOOM_LEVELS.get(value);
     if (level !== undefined) dispatch({ type: 'view/set-zoom', level });
   };
@@ -509,16 +539,18 @@ export function Toolbar({
 
         {activeSection === 'draw' ? renderSection('Draw toolbar', (
           <div className={styles.drawTools}>
-            {DRAW_TOOLS.map(({ id, label, icon }) => (
-              <IconButton
-                key={id}
-                label={label}
-                icon={icon}
-                active={activeTool === id}
-                disabled={!canUseDocument}
-                onClick={() => selectDrawTool(id)}
-              />
-            ))}
+            <RadixToolbar.ToggleGroup type="single" value={activeTool ?? ''} onValueChange={selectDrawTool}
+              disabled={!canUseDocument} className="contents" aria-label="Drawing tool">
+              {DRAW_TOOLS.map(({ id, label, icon }) => (
+                <IconButton
+                  key={id}
+                  label={label}
+                  icon={icon}
+                  toggleValue={id}
+                  disabled={!canUseDocument}
+                />
+              ))}
+            </RadixToolbar.ToggleGroup>
             <FloatingToolbarDivider />
             <IconButton
               label="Undo"

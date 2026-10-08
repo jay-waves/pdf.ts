@@ -36,7 +36,7 @@ function setup(t, saved, deferredRead) {
   const writes = [];
   t.mock.method(platform, 'readReadingProgress', () => deferredRead ?? Promise.resolve(saved));
   t.mock.method(platform, 'writeReadingProgress', async (_, progress) => writes.push(progress));
-  let snapshot = { pageNumber: 1, mode: 'reading', strategy: 'vertical', spread: 'none', readingRegion: null, regionFit: null, selectingRegion: false };
+  let snapshot = { pageNumber: 1, mode: 'reading', strategy: 'vertical', spread: 'none', selectingRegion: false };
   const listeners = new Set();
   const emit = () => listeners.forEach((listener) => listener());
   let layoutReady;
@@ -46,7 +46,6 @@ function setup(t, saved, deferredRead) {
     onLayoutReady(listener) { layoutReady = listener; return () => {}; },
     applyLayout(strategy, spread) { snapshot = { ...snapshot, strategy, spread }; emit(); },
     goToPage(pageNumber) { snapshot = { ...snapshot, pageNumber }; emit(); },
-    setReadingRegion(readingRegion, regionFit) { snapshot = { ...snapshot, readingRegion, regionFit }; emit(); },
   };
   const dispose = installReadingHistory(stage, 'test-document');
   t.after(() => { dispose(); if (previous) Object.defineProperty(globalThis, 'window', previous); else delete globalThis.window; });
@@ -54,25 +53,28 @@ function setup(t, saved, deferredRead) {
   return { stage, writes, timers, setSelection() { snapshot = { ...snapshot, selectingRegion: true }; emit(); } };
 }
 
-test('reading history restores and persists the document reading area, including reset', async (t) => {
-  const { stage, timers, writes } = setup(t, { pageNumber: 4, scrollStrategy: 'vertical', spreadMode: 'none', readingRegion: region, regionFit: ZoomMode.FitWidth });
+test('reading history restores page and layout and omits legacy reading-area fields when saving', async (t) => {
+  const { stage, timers, writes } = setup(t, {
+    pageNumber: 4, scrollStrategy: 'horizontal', spreadMode: 'none',
+    readingRegion: region, regionFit: ZoomMode.FitWidth,
+  });
   await Promise.resolve();
   assert.equal(stage.getSnapshot().pageNumber, 4);
-  assert.deepEqual(stage.getSnapshot().readingRegion, region);
-  assert.equal(stage.getSnapshot().regionFit, ZoomMode.FitWidth);
+  assert.equal(stage.getSnapshot().strategy, 'horizontal');
+  assert.equal(stage.getSnapshot().spread, 'none');
   stage.goToPage(5);
   [...timers.values()].at(-1)();
-  assert.deepEqual(writes.at(-1).readingRegion, region);
-  assert.equal(writes.at(-1).regionFit, ZoomMode.FitWidth);
-  stage.setReadingRegion(null, null);
-  [...timers.values()].at(-1)();
-  assert.equal(writes.at(-1).readingRegion, undefined);
+  assert.deepEqual(writes.at(-1), {
+    pageNumber: 5, scrollStrategy: 'horizontal', spreadMode: 'none',
+  });
 });
 
-test('invalid saved regions are ignored', async (t) => {
-  const invalid = setup(t, { pageNumber: 2, readingRegion: { ...region, left: 2 } });
+test('invalid saved page numbers do not restore layout', async (t) => {
+  const { stage } = setup(t, { pageNumber: 0, scrollStrategy: 'horizontal', spreadMode: 'odd' });
   await Promise.resolve();
-  assert.equal(invalid.stage.getSnapshot().readingRegion, null);
+  assert.equal(stage.getSnapshot().pageNumber, 1);
+  assert.equal(stage.getSnapshot().strategy, 'vertical');
+  assert.equal(stage.getSnapshot().spread, 'none');
 });
 
 test('delayed history cannot overwrite an active selection', async (t) => {
@@ -83,5 +85,7 @@ test('delayed history cannot overwrite an active selection', async (t) => {
   resolve({ pageNumber: 7, readingRegion: region });
   await Promise.resolve();
   assert.equal(pending.stage.getSnapshot().pageNumber, 1);
-  assert.equal(pending.stage.getSnapshot().readingRegion, null);
+  assert.equal(pending.stage.getSnapshot().selectingRegion, true);
+  [...pending.timers.values()].at(-1)();
+  assert.equal(pending.writes.at(-1).pageNumber, 1);
 });

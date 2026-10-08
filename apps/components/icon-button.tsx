@@ -12,9 +12,12 @@ const CONTROL_BUTTON_CLASS = [
   'disabled:cursor-default disabled:opacity-48 disabled:active:scale-100 motion-reduce:transition-none motion-reduce:active:scale-100',
 ].join(' ');
 
-export function ControlButton({ className = '', type = 'button', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  const Component = useInToolbar() ? Toolbar.Button : 'button';
-  return <Component type={type} className={`${CONTROL_BUTTON_CLASS} ${className}`.trim()} {...props} />;
+export function ControlButton({ className = '', type = 'button', toggleValue, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { toggleValue?: string }) {
+  const inToolbar = useInToolbar();
+  const classNames = `${CONTROL_BUTTON_CLASS} ${className}`.trim();
+  if (toggleValue !== undefined) return <Toolbar.ToggleItem type={type} className={classNames} {...props} value={toggleValue} />;
+  const Component = inToolbar ? Toolbar.Button : 'button';
+  return <Component type={type} className={classNames} {...props} />;
 }
 
 interface IconButtonProps {
@@ -24,7 +27,8 @@ interface IconButtonProps {
   active?: boolean;
   disabled?: boolean;
   iconSize?: number;
-  onClick(): void;
+  toggleValue?: string;
+  onClick?(): void;
 }
 
 export function IconButton({
@@ -35,15 +39,19 @@ export function IconButton({
   disabled,
   iconSize = 14,
   onClick,
+  toggleValue,
 }: IconButtonProps) {
   const button = (
     <ControlButton
       className={`${styles.button} ${className}`.trim()}
       onClick={onClick}
+      toggleValue={toggleValue}
       disabled={disabled}
       aria-label={label}
-      aria-pressed={active === undefined ? undefined : active}
-      data-active={active ? 'true' : undefined}
+      {...(toggleValue === undefined ? {
+        'aria-pressed': active,
+        'data-active': active ? 'true' : undefined,
+      } : {})}
       title={disabled ? label : undefined}
     >
       <Icon size={iconSize} strokeWidth={2} />

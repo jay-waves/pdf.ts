@@ -11,8 +11,8 @@
 .providers button { @apply grid cursor-pointer gap-1.5 rounded border border-transparent bg-transparent p-3 text-left text-secondary shadow-none transition-colors; }
 .providers button strong { @apply text-[11px] font-medium; }
 .providers button span { @apply text-[10px] leading-4 text-muted; }
-.providers button[aria-pressed='true'] { @apply bg-surface text-foreground; }
-.providers button[aria-pressed='true'] { box-shadow: var(--pdf-option-shadow); }
+.providers button[data-state='checked'] { @apply bg-surface text-foreground; }
+.providers button[data-state='checked'] { box-shadow: var(--pdf-option-shadow); }
 .providers button:hover:not(:disabled) { @apply text-foreground; }
 .providers button:disabled { @apply cursor-default opacity-45; }
 .providers button:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: 2px; }

@@ -3,7 +3,6 @@ import test from 'node:test';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { transformRect, transformPosition, transformSize } from '@embedpdf/models';
-import { ZoomMode } from '@embedpdf/plugin-zoom';
 import { readingRegionRect } from '../apps/shared/reading-region.ts';
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 
@@ -298,40 +297,48 @@ test('reading-area fit handles every rotation, aligns both axes and cancels stal
     return { origin: { x: 100 * requestedScale + transformed.origin.x, y: 200 * requestedScale + transformed.origin.y }, size: transformed.size };
   };
   for (rotation = 0; rotation < 4; rotation++) {
-    for (const mode of [ZoomMode.FitPage, ZoomMode.FitWidth]) {
-      const size = transformSize(readingRegionRect(region, page.size).size, rotation, 1);
-      const expectedScale = mode === ZoomMode.FitWidth ? 780 / size.width : Math.min(780 / size.width, 580 / size.height);
-      assert.equal(scroll.fitReadingRegion(region, 1, mode), true);
-      frame();
-      frame();
-      assert.ok(Math.abs(scale - expectedScale) < 1e-8);
-      const positioned = scope.getRectPositionForPage(0, readingRegionRect(region, page.size));
-      const expectedX = Math.max(0, positioned.origin.x + gap + positioned.size.width / 2 - metrics.clientWidth / 2);
-      const expectedY = mode === ZoomMode.FitWidth ? positioned.origin.y
-        : Math.max(0, positioned.origin.y + gap + positioned.size.height / 2 - metrics.clientHeight / 2);
-      assert.ok(Math.abs(scrolls.at(-1).x - expectedX) < 1e-8);
-      assert.ok(Math.abs(scrolls.at(-1).y - expectedY) < 1e-8);
-    }
+    const size = transformSize(readingRegionRect(region, page.size).size, rotation, 1);
+    const expectedScale = Math.min(780 / size.width, 580 / size.height);
+    assert.equal(scroll.fitReadingRegion(region, 1), true);
+    frame();
+    frame();
+    assert.ok(Math.abs(scale - expectedScale) < 1e-8);
+    const positioned = scope.getRectPositionForPage(0, readingRegionRect(region, page.size));
+    const expectedX = Math.max(0, positioned.origin.x + gap + positioned.size.width / 2 - metrics.clientWidth / 2);
+    const expectedY = Math.max(0, positioned.origin.y + gap + positioned.size.height / 2 - metrics.clientHeight / 2);
+    assert.ok(Math.abs(scrolls.at(-1).x - expectedX) < 1e-8);
+    assert.ok(Math.abs(scrolls.at(-1).y - expectedY) < 1e-8);
   }
   rotation = 0;
-  scroll.fitReadingRegion(region, 1, ZoomMode.FitPage);
+  scroll.fitReadingRegion(region, 1);
   scroll.cancelPendingNavigation();
   assert.equal(frames.size, 0);
 });
 
-test('double-page reading areas fit their actual combined bounds including inner margins', (t) => {
-  const { scroll, scope, capabilities } = setup(t);
+test('area fitting targets the selected page in a double-page spread and leaves whole-spread presets unchanged', (t) => {
+  const { scroll, scope, capabilities, scrolls, frame, jumps } = setup(t);
   const region = { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 };
   const pages = [0, 1].map((index) => ({ index, size: { width: 600, height: 800 }, rotatedSize: { width: 600, height: 800 } }));
+  let scale = 1;
+  capabilities.zoom = { forDocument: () => ({ requestZoom(value) { scale = value; } }) };
+  capabilities.scroll.getPageGap = () => 10;
   scope.getSpreadPagesWithRotatedSize = () => [pages];
-  scope.getRectPositionForPage = (index, rect, scale = 1) => ({
-    origin: { x: (index * 610 + rect.origin.x) * scale, y: rect.origin.y * scale },
-    size: { width: rect.size.width * scale, height: rect.size.height * scale },
+  scope.getRectPositionForPage = (index, rect, requestedScale = scale) => ({
+    origin: { x: (index * 610 + rect.origin.x) * requestedScale, y: rect.origin.y * requestedScale },
+    size: { width: rect.size.width * requestedScale, height: rect.size.height * requestedScale },
   });
   capabilities.viewport.getViewportGap = () => 10;
-  const fit = scroll.getFitScales(region, 1);
-  assert.ok(Math.abs(fit.width - 780 / 1090) < 1e-9);
-  assert.ok(Math.abs(fit.height - 580 / 640) < 1e-9);
+  const wholeSpreadFit = scroll.getFitScales();
+  assert.ok(Math.abs(wholeSpreadFit.width - 780 / 1210) < 1e-9);
+  assert.ok(Math.abs(wholeSpreadFit.height - 580 / 800) < 1e-9);
+  assert.equal(scroll.fitReadingRegion(region, 2), true);
+  frame();
+  frame();
+  assert.ok(Math.abs(scale - Math.min(780 / 480, 580 / 640)) < 1e-8);
+  assert.deepEqual(jumps.at(-1), { pageNumber: 2, behavior: 'instant' });
+  assert.ok(Math.abs(scrolls.at(-1).x - Math.max(0, 910 * scale + 10 - 400)) < 1e-8);
+  assert.ok(Math.abs(scrolls.at(-1).y - Math.max(0, 400 * scale + 10 - 300)) < 1e-8);
+  assert.deepEqual(scroll.getFitScales(), wholeSpreadFit);
 });
 
 test('zoom and rotation retain a page point through centering and delayed SDK scroll writes', (t) => {

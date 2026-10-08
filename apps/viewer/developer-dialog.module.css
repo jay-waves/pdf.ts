@@ -13,7 +13,7 @@
 .dialogTitle { @apply font-semibold text-foreground; }
 .pageToggle { @apply inline-flex items-center gap-0.5 rounded-lg bg-surface-alt p-0.5; }
 .pageToggle button { @apply min-w-14 cursor-pointer rounded-md border border-transparent bg-transparent px-3 py-1.5 text-[11px] font-medium text-muted transition-colors hover:text-foreground; }
-.pageToggle button[aria-pressed='true'] {
+.pageToggle button[data-state='active'] {
   @apply bg-surface text-foreground shadow-none;
   box-shadow: var(--pdf-option-shadow);
 }

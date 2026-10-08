@@ -66,22 +66,27 @@ func run(args []string) error {
 }
 
 func printStatus() error {
+	if err := prepareStatusOutput(); err != nil {
+		return err
+	}
 	running, err := DaemonRunning("")
 	if err != nil {
 		return err
 	}
 	if running {
-		fmt.Println("running")
-		return nil
+		_, err := fmt.Fprintln(os.Stdout, "running")
+		return err
 	}
-	fmt.Println("stopped")
+	if _, err := fmt.Fprintln(os.Stdout, "stopped"); err != nil {
+		return err
+	}
 	failure, err := LastDaemonError("")
 	if err != nil {
 		return err
 	}
 	if failure != nil {
-		fmt.Printf("last error: %s\n", failure.Error)
-		fmt.Printf("failed at: %s\n", failure.FailedAt.Format(time.RFC3339))
+		_, err := fmt.Fprintf(os.Stdout, "last error: %s\nfailed at: %s\n", failure.Error, failure.FailedAt.Format(time.RFC3339))
+		return err
 	}
 	return nil
 }

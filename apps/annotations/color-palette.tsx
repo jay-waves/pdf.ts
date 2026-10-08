@@ -1,3 +1,4 @@
+import { RadioGroup } from 'radix-ui';
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { TrackedAnnotation } from '@embedpdf/plugin-annotation';
@@ -107,6 +108,9 @@ export function ColorPalette({
     normalizeAnnotationColor(values[selectedField]) ??
     getDefaultAnnotationColor(theme);
   const currentIndex = getAnnotationPaletteIndex(currentColor);
+  const presetValue = currentColor === TRANSPARENT_ANNOTATION_COLOR
+    ? TRANSPARENT_ANNOTATION_COLOR
+    : currentIndex !== null ? colors[currentIndex] : '';
 
   const applyPatch = (patch: Record<string, unknown>) => {
     const scoped = getAnnotationScope(registry, documentId);
@@ -143,50 +147,46 @@ export function ColorPalette({
           <span>{getAnnotationToolLabel(contextTool)}</span>
         </div>
 
-        {colorFields.length > 1 ? <div
+        {colorFields.length > 1 ? <RadioGroup.Root
           className={styles.targets}
-          role="group"
+          value={selectedField}
+          onValueChange={(value) => setSelectedField(value as AnnotationColorFieldKey)}
+          orientation="horizontal"
           aria-label="Color target"
         >
-          {colorFields.map(({ key, label }) => <button
+          {colorFields.map(({ key, label }) => <RadioGroup.Item
             key={key}
-            type="button"
+            value={key}
             className={styles.target}
-            data-active={selectedField === key ? 'true' : undefined}
-            onClick={() => setSelectedField(key)}
-            aria-pressed={selectedField === key}
           >
             {label}
-          </button>)}
-        </div> : null}
+          </RadioGroup.Item>)}
+        </RadioGroup.Root> : null}
 
-        <div className={styles.grid} role="group" aria-label="Color presets">
+        {/* Use click so an already selected preset can still be reapplied. */}
+        <RadioGroup.Root className={styles.grid} value={presetValue} orientation="horizontal" aria-label="Color presets">
           {colors.map((color, index) => {
             const number = String(index + 1).padStart(2, '0');
-            return <button
+            return <RadioGroup.Item
               key={index}
-              type="button"
+              value={color}
               className={styles.swatch}
               style={{ '--pdf-swatch-color': color } as CSSProperties}
-              data-active={currentIndex === index ? 'true' : undefined}
               onClick={() => applyColor(color)}
               aria-label={`Color ${number}`}
-              aria-pressed={currentIndex === index}
             >
               <span className={styles.color} />
-            </button>;
+            </RadioGroup.Item>;
           })}
-          {selectedField === 'color' || selectedField === 'backgroundColor' ? <button
-            type="button"
+          {selectedField === 'color' || selectedField === 'backgroundColor' ? <RadioGroup.Item
+            value={TRANSPARENT_ANNOTATION_COLOR}
             className={styles.swatch}
-            data-active={currentColor === TRANSPARENT_ANNOTATION_COLOR ? 'true' : undefined}
             onClick={() => applyColor(TRANSPARENT_ANNOTATION_COLOR)}
             aria-label="Transparent"
-            aria-pressed={currentColor === TRANSPARENT_ANNOTATION_COLOR}
           >
             <span className={`${styles.color} ${styles.transparent}`} />
-          </button> : null}
-        </div>
+          </RadioGroup.Item> : null}
+        </RadioGroup.Root>
 
       </div>;
 

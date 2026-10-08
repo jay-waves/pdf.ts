@@ -185,9 +185,9 @@ The all-users installer requests administrator permission, writes to
 Windows Installed Apps. Upgrade and uninstall stop the current user's daemon
 first. Uninstall leaves every user's viewer data intact.
 
-Automatic daemon startup is opt-in. Select **Start background service at login
-(all users)** on the installer's Components page to create a shortcut in the
-all-users Startup folder. It runs the GUI executable directly with `daemon`,
+Automatic daemon startup is opt-in. Select **Start background service at login**
+on the installer's Installation options page to create a shortcut in the all-users
+Startup folder. It runs the GUI executable directly with `daemon`,
 without a CMD script or a browser window. Upgrades preserve the existing choice;
 unchecking the option removes the shortcut, and uninstall removes it too.
 Silent installs accept `/AUTOSTART=1` or `/AUTOSTART=0` before the final `/D=...`
