@@ -34,7 +34,7 @@ do {
             }
             printStatus()
         case "disable":
-            if service.status != .notRegistered {
+            if service.status == .enabled || service.status == .requiresApproval {
                 try service.unregister()
             }
             printStatus()
@@ -55,6 +55,7 @@ do {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
 } catch {
-    FileHandle.standardError.write(Data("pdf.ts: \(error.localizedDescription)\n".utf8))
+    let failure = error as NSError
+    FileHandle.standardError.write(Data("pdf.ts: \(failure.localizedDescription) [\(failure.domain):\(failure.code)]\n".utf8))
     exit(1)
 }
