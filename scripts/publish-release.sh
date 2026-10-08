@@ -109,6 +109,28 @@ git tag --force "$rolling_tag" "$source_commit"
 git push origin "refs/tags/$rolling_tag" --force
 gh release edit "$rolling_tag" --draft=false --latest="$deploy_pages" \
   --title "PDF.ts $GITHUB_REF_NAME" --notes-file "$notes"
+
+# A stable patch release retires alpha/beta tags of the preceding patch only.
+# Read the remote directly so reruns do not attempt to delete stale local tags.
+if [[ "$GITHUB_REF_NAME" == "v$version" ]]; then
+  IFS=. read -r major minor patch <<< "$version"
+  if (( 10#$patch > 0 )); then
+    previous_version="$major.$minor.$((10#$patch - 1))"
+    retired_tags=$(git ls-remote --refs --tags origin \
+      "refs/tags/v$previous_version-alpha*" \
+      "refs/tags/v$previous_version-beta*")
+    deletions=()
+    leases=()
+    while read -r oid ref; do
+      [[ -n "$ref" ]] || continue
+      deletions+=(":$ref")
+      leases+=("--force-with-lease=$ref:$oid")
+    done <<< "$retired_tags"
+    if (( ${#deletions[@]} > 0 )); then
+      git push --atomic "${leases[@]}" origin "${deletions[@]}"
+    fi
+  fi
+fi
 echo 'published=true' >> "$GITHUB_OUTPUT"
 
 echo "deploy_pages=$deploy_pages" >> "$GITHUB_OUTPUT"

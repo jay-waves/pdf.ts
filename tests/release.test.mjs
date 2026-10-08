@@ -123,3 +123,33 @@ test('0.10 Pages supersedes 0.9 using numeric version order', (t) => {
   assert.equal(f.run().status, 0);
   assert.match(readFileSync(f.output, 'utf8'), /deploy_pages=true/);
 });
+
+function seedCleanupTags(f) {
+  const retired = ['v0.9.8-alpha', 'v0.9.8-alpha.1', 'v0.9.8-alpha123', 'v0.9.8-beta', 'v0.9.8-beta.2'];
+  const kept = ['v0.9.8', 'v0.9.9', 'v0.9.9-alpha', 'v0.9.7-beta', 'v0.10.8-alpha', 'v0.9.8-rc.1'];
+  for (const tag of [...retired, ...kept]) f.git('tag', tag);
+  f.git('push', 'origin', '--tags');
+  return { retired, kept };
+}
+
+test('stable release deletes only preceding patch alpha/beta remote tags, including bare names', (t) => {
+  const f = fixture(t, '0.9.9');
+  const { retired, kept } = seedCleanupTags(f);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const remoteTags = f.git('ls-remote', '--refs', '--tags', 'origin').split('\n').map(line => line.split('\t')[1]);
+  for (const tag of retired) assert.ok(!remoteTags.includes(`refs/tags/${tag}`), tag);
+  for (const tag of [...kept, 'v0.9-latest']) assert.ok(remoteTags.includes(`refs/tags/${tag}`), tag);
+  assert.equal(f.run().status, 0, 'rerun tolerates deleted remote tags still present locally');
+});
+
+for (const extra of [{ GITHUB_REF_NAME: 'v0.9.9-beta.1' }, { FAIL_UPLOAD: '1' }]) {
+  test(`prerelease or failed publishing preserves old prerelease tags: ${JSON.stringify(extra)}`, (t) => {
+    const f = fixture(t, '0.9.9');
+    const { retired } = seedCleanupTags(f);
+    const result = f.run(extra);
+    assert.equal(result.status, extra.FAIL_UPLOAD ? 1 : 0, result.stderr);
+    const remoteTags = f.git('ls-remote', '--refs', '--tags', 'origin').split('\n').map(line => line.split('\t')[1]);
+    for (const tag of retired) assert.ok(remoteTags.includes(`refs/tags/${tag}`), tag);
+  });
+}
