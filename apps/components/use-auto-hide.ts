@@ -29,12 +29,12 @@ function useAutoHide(shouldHide: () => boolean, delay = 900) {
     setVisible((current) => !current);
   }, [clearTimer]);
 
-  const scheduleHide = useCallback(() => {
+  const scheduleHide = useCallback((timeout = delay) => {
     if (timerRef.current) return;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = 0;
       if (shouldHideRef.current()) setVisible(false);
-    }, delay);
+    }, timeout);
   }, [delay]);
 
   useEffect(() => clearTimer, [clearTimer]);
@@ -76,10 +76,12 @@ export function useViewerActivityAutoHide(
       if (event.phase === 'start') activeSessions.add(event.id);
       if (event.phase === 'end') activeSessions.delete(event.id);
 
-      if (event.phase === 'end' && activeSessions.size === 0) scheduleHide();
+      if (event.phase === 'end' && activeSessions.size === 0) {
+        scheduleHide(event.path[0] === 'Discovery' ? 3000 : delay);
+      }
       else reveal();
     });
-  }, [hide, reveal, scheduleHide, toggle]);
+  }, [audience, delay, hide, reveal, scheduleHide, toggle]);
 
   return visibility;
 }

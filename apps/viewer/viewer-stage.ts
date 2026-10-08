@@ -70,6 +70,10 @@ export class ViewerStage {
     return this.scroll.getPosition();
   }
 
+  scrollVertically(delta: number) {
+    if (this.state.mode === 'reading') this.scroll.scrollVertically(delta);
+  }
+
   captureReadingPosition() {
     return this.scroll.getAnchor();
   }

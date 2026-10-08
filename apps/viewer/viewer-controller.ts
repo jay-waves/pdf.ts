@@ -12,7 +12,7 @@ const subscribeEmptyView = () => () => {};
 const getEmptyView = () => EMPTY_STAGE_SNAPSHOT;
 import { toggleViewerColorMode } from '../theme/theme';
 import { getDocumentScope, getPluginCapability } from '../shared/utils';
-import { viewerActivity, type ViewerInputSource } from './viewer-activity';
+import type { ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
 type ViewerPanel = 'outline' | 'thumbnails' | 'colors';
@@ -196,7 +196,6 @@ function executeViewerCommand(
       return;
     case 'navigation/move-pages':
       dependencies.stage?.movePages(command.delta);
-      if (command.source) viewerActivity.pulse(command.source, ['Navigation', 'Page']);
       return;
     case 'view/zoom-step': {
       const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);

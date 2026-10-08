@@ -36,7 +36,7 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
     dispatch({ type: 'navigation/move-pages', delta, source });
   };
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
     if (!isViewerNavigationTarget(event.target)) return;
     const presenting = stage.getSnapshot().mode === 'presentation';
     if (presenting && event.key === 'Escape') {
@@ -46,10 +46,18 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
       return;
     }
     if (event.shiftKey && (!presenting || event.key !== ' ')) return;
-    const delta = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1
-      : presenting && (event.key === 'PageUp' || event.key === 'ArrowUp') ? -1
-      : presenting && (event.key === 'PageDown' || event.key === 'ArrowDown') ? 1
-      : presenting && event.key === ' ' ? (event.shiftKey ? -1 : 1) : null;
+    const key = event.key === 'h' ? 'ArrowLeft' : event.key === 'j' ? 'ArrowDown'
+      : event.key === 'k' ? 'ArrowUp' : event.key === 'l' ? 'ArrowRight' : event.key;
+    if (!presenting && (event.key === 'j' || event.key === 'k')) {
+      event.preventDefault();
+      event.stopPropagation();
+      stage.scrollVertically(key === 'ArrowDown' ? 40 : -40);
+      return;
+    }
+    const delta = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1
+      : presenting && (key === 'PageUp' || key === 'ArrowUp') ? -1
+      : presenting && (key === 'PageDown' || key === 'ArrowDown') ? 1
+      : presenting && key === ' ' ? (event.shiftKey ? -1 : 1) : null;
     if (delta === null) return;
     event.preventDefault();
     event.stopPropagation();

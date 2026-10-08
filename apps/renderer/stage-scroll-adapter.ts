@@ -108,6 +108,13 @@ export class StageScrollAdapter {
     };
   }
 
+  scrollVertically(delta: number) {
+    const metrics = this.getMetrics();
+    if (!metrics) return;
+    this.cancelPendingNavigation();
+    this.scrollTo(metrics.scrollLeft, Math.max(0, metrics.scrollTop + delta), 'instant');
+  }
+
   getRectPosition(pageIndex: number, rect: Rect) {
     return this.capability?.forDocument(this.documentId).getRectPositionForPage(pageIndex, rect) ?? null;
   }

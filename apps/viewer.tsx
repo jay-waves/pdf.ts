@@ -82,7 +82,7 @@ import { DOCUMENT_ID, onDocumentLoaded } from './document/viewer-document';
 import { detectDocumentLanguage } from './selection/document-language';
 import { useViewerController } from './viewer/viewer-controller';
 import { PDFIUM_FONT_FALLBACK } from './fonts';
-import type { ViewerInputSource } from './viewer/viewer-activity';
+import { viewerActivity, type ViewerInputSource } from './viewer/viewer-activity';
 import {
   beginStartupLog,
   completeStartupLog,
@@ -229,6 +229,16 @@ function App({
   });
   const { pageNumber: currentPageNumber, totalPages } = stageSnapshot;
   const presentationPage = stageSnapshot.mode === 'presentation' ? stageSnapshot.pageNumber : null;
+  const controlsDiscoveredRef = useRef(false);
+  useEffect(() => {
+    if (totalPages <= 0 || presentationPage !== null || controlsDiscoveredRef.current) return;
+    // Defer until both controls have subscribed, including under StrictMode.
+    const timer = window.setTimeout(() => {
+      controlsDiscoveredRef.current = true;
+      viewerActivity.pulse('Mouse', ['Discovery']);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [presentationPage, totalPages]);
   const { panMode, toolbarSection } = uiSnapshot;
   const sidePanel = uiSnapshot.overlay?.type === 'side-panel' ? uiSnapshot.overlay.panel : null;
   const activeDialog = uiSnapshot.overlay?.type === 'dialog' ? uiSnapshot.overlay.dialog : null;
