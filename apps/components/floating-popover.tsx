@@ -10,6 +10,7 @@ export function FloatingPopover({
   role,
   align = 'start',
   sideOffset = 0,
+  dismissOnFocusOutside = true,
   children,
 }: {
   onClose(): void;
@@ -19,6 +20,7 @@ export function FloatingPopover({
   role?: AriaRole;
   align?: 'start' | 'center' | 'end';
   sideOffset?: number;
+  dismissOnFocusOutside?: boolean;
   children: ReactNode;
 }) {
   const focusViewer = useViewerFocus();
@@ -39,6 +41,7 @@ export function FloatingPopover({
           role={role}
           onClick={role === 'toolbar' ? onControlClick : undefined}
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onFocusOutside={dismissOnFocusOutside ? undefined : (event) => event.preventDefault()}
           onCloseAutoFocus={focusViewer ? (event) => {
             event.preventDefault();
             focusViewer();

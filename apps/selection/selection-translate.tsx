@@ -181,6 +181,8 @@ export function SelectionTranslate({
       onClose={onClose}
       anchor={request.anchor}
       sideOffset={10}
+      // The selection toolbar restores viewport focus after opening this popover.
+      dismissOnFocusOutside={false}
       className={`pdf-glass-surface pdf-glass-popover ${styles.panel} ${result.status === 'error' ? 'text-danger' : ''} ${downloadable ? styles.downloadable : ''}`.trim()}
       label="Translation"
       role={downloadable ? 'dialog' : 'status'}
