@@ -9,6 +9,14 @@ function setup(t) {
   let allowed = true;
   class Element {
     isConnected = true;
+    captured = null;
+    attributes = new Map();
+    closest() { return this; }
+    setAttribute(name, value) { this.attributes.set(name, value); }
+    removeAttribute(name) { this.attributes.delete(name); }
+    setPointerCapture(id) { this.captured = id; }
+    hasPointerCapture(id) { return this.captured === id; }
+    releasePointerCapture() { this.captured = null; }
     dispatchEvent(event) {
       emit('contextmenu', event);
       if (!event.defaultPrevented) menus.push(event);
@@ -26,9 +34,13 @@ function setup(t) {
     listeners.get(type)?.(event);
     return event;
   }
+  const timers = new Map();
+  let nextTimer = 0;
   const previousGlobals = new Map();
   for (const [name, value] of Object.entries({
     Element, MouseEvent,
+    setTimeout(callback, delay) { timers.set(++nextTimer, { callback, delay }); return nextTimer; },
+    clearTimeout(id) { timers.delete(id); },
     window: {
       addEventListener: (name, callback) => listeners.set(name, callback),
       removeEventListener: (name) => listeners.delete(name),
@@ -56,7 +68,7 @@ function setup(t) {
   const menu = () => emit('contextmenu', new MouseEvent('contextmenu', {
     button: 2, clientX: 200, clientY: 200,
   }));
-  return { gesture, pointer, menu, emit, target, navigations, menus, listeners, setAllowed: (value) => { allowed = value; } };
+  return { gesture, pointer, menu, emit, target, navigations, menus, listeners, timers, setAllowed: (value) => { allowed = value; } };
 }
 
 test('right drags navigate once on release in either direction and suppress the following menu', (t) => {
@@ -91,14 +103,14 @@ test('short right clicks keep release-time menus and replay press-time menus', (
   assert.deepEqual(navigations, []);
 });
 
-test('early menus are discarded for gestures, vertical drags and subthreshold drags', (t) => {
+test('early menus are discarded for horizontal, vertical, diagonal and subthreshold drags', (t) => {
   const { pointer, menu, navigations, menus } = setup(t);
   for (const position of [{ clientX: 100 }, { clientY: 100 }, { clientX: 180 }, { clientX: 100, clientY: 100 }]) {
     pointer('pointerdown');
     menu();
     pointer('pointerup', { ...position, buttons: 0 });
   }
-  assert.deepEqual(navigations, [1]);
+  assert.deepEqual(navigations, [1, 1]);
   assert.deepEqual(menus, []);
 });
 
@@ -151,4 +163,91 @@ test('unrelated pointers do not finish the gesture and disposal removes all list
   assert.deepEqual(navigations, [1]);
   gesture.dispose();
   assert.equal(listeners.size, 0);
+});
+
+
+test('moderate slanted drags work on either axis, but ambiguous diagonals do not', (t) => {
+  const { pointer, navigations } = setup(t);
+  for (const [dx, dy] of [[-45, 30], [45, -30], [30, -45], [-30, 45], [45, 45], [39, 0]]) {
+    pointer('pointerdown');
+    pointer('pointerup', { clientX: 200 + dx, clientY: 200 + dy, buttons: 0 });
+  }
+  assert.deepEqual(navigations, [1, -1, 1, -1]);
+});
+
+test('capture is released on completion and lost capture cancels without leaving a stale gesture', (t) => {
+  const { pointer, target, navigations } = setup(t);
+  pointer('pointerdown');
+  assert.equal(target.captured, 1);
+  pointer('lostpointercapture', { pointerId: 2 });
+  pointer('pointerup', { clientY: 150, buttons: 0 });
+  assert.equal(target.captured, null);
+  assert.deepEqual(navigations, [1]);
+  pointer('pointerdown');
+  pointer('lostpointercapture');
+  pointer('pointerup', { clientY: 150, buttons: 0 });
+  assert.deepEqual(navigations, [1]);
+  pointer('pointerdown');
+  pointer('pointerup', { clientY: 250, buttons: 0 });
+  assert.deepEqual(navigations, [1, -1]);
+});
+
+test('mouse release fallback finishes once and extra mouse buttons cancel', (t) => {
+  const { pointer, navigations } = setup(t);
+  pointer('pointerdown');
+  pointer('mouseup', { clientX: 150, buttons: 0 });
+  pointer('pointerup', { clientX: 150, buttons: 0 });
+  assert.deepEqual(navigations, [1]);
+  pointer('pointerdown');
+  pointer('mousedown', { button: 0, buttons: 3 });
+  pointer('mouseup', { clientX: 150, buttons: 1 });
+  assert.deepEqual(navigations, [1]);
+});
+
+
+test('grab cursor is delayed for clicks, immediate for drags, and cleared on every exit', (t) => {
+  const { pointer, target, timers, emit, gesture } = setup(t);
+  const grabbing = () => target.attributes.has('data-pdf-page-grabbing');
+  for (let i = 0; i < 3; i++) {
+    pointer('pointerdown');
+    assert.equal(grabbing(), false);
+    assert.equal([...timers.values()][0].delay, 150);
+    pointer('pointerup', { buttons: 0 });
+    assert.equal(timers.size, 0);
+    assert.equal(grabbing(), false);
+  }
+  const exits = [
+    () => pointer('pointerup', { buttons: 0 }),
+    () => pointer('pointercancel'),
+    () => pointer('lostpointercapture'),
+    () => emit('blur'),
+    () => gesture.cancel(),
+    () => pointer('mousedown', { button: 0, buttons: 3 }),
+    () => gesture.dispose(),
+  ];
+  for (const exit of exits) {
+    pointer('pointerdown');
+    [...timers.values()][0].callback();
+    assert.equal(grabbing(), true);
+    exit();
+    assert.equal(grabbing(), false);
+    assert.equal(timers.size, 0);
+  }
+});
+
+test('drag shows grab cursor before hold delay and canceled timers cannot resurrect it', (t) => {
+  const { pointer, target, timers, gesture, setAllowed } = setup(t);
+  pointer('pointerdown');
+  const stale = [...timers.values()][0].callback;
+  pointer('pointermove', { clientX: 190 });
+  assert.equal(target.attributes.get('data-pdf-page-grabbing'), 'true');
+  assert.equal(timers.size, 0);
+  gesture.cancel();
+  stale();
+  assert.equal(target.attributes.has('data-pdf-page-grabbing'), false);
+  pointer('pointerdown');
+  setAllowed(false);
+  [...timers.values()][0].callback();
+  assert.equal(target.attributes.has('data-pdf-page-grabbing'), false);
+  assert.equal(timers.size, 0);
 });

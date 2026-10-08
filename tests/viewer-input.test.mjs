@@ -20,6 +20,8 @@ hooks.deregister();
 test('hjkl follows directional navigation and respects keyboard guards', (t) => {
   const listeners = new Map();
   class Element {
+    setAttribute() {}
+    removeAttribute() {}
     constructor(interactive = false) { this.interactive = interactive; }
     closest(selector) { return selector.startsWith('input') ? this.interactive : true; }
   }
@@ -77,6 +79,8 @@ test('hjkl follows directional navigation and respects keyboard guards', (t) => 
 test('right mouse gestures dispatch the same page command and Escape cancels them', (t) => {
   const listeners = new Map();
   class Element {
+    setAttribute() {}
+    removeAttribute() {}
     closest(selector) { return selector.startsWith('input') ? null : this; }
   }
   const previousGlobals = new Map();
