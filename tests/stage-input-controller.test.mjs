@@ -3,13 +3,13 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
 
-const sourceImports = new Set(['./zoom-detents', '../viewer/viewer-activity']);
+const sourceImports = new Set(['./zoom-detents', './viewport-geometry', '../viewer/viewer-activity']);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     return nextResolve(sourceImports.has(specifier) ? `${specifier}.ts` : specifier, context);
   },
   load(url, context, nextLoad) {
-    if (
+    if (url.endsWith('/renderer/viewport-geometry.ts') ||
       url.endsWith('/renderer/stage-input-controller.ts')
       || url.endsWith('/renderer/zoom-detents.ts')
       || url.endsWith('/viewer/viewer-activity.ts')

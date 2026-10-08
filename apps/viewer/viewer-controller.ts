@@ -11,7 +11,7 @@ import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from './viewer-stage';
 const subscribeEmptyView = () => () => {};
 const getEmptyView = () => EMPTY_STAGE_SNAPSHOT;
 import { toggleViewerColorMode } from '../theme/theme';
-import { getDocumentScope, getPluginCapability } from '../shared/utils';
+import { getDocumentScope } from '../shared/utils';
 import type { ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
@@ -120,6 +120,8 @@ export type ViewerCommand = ViewerUiCommand
   | { type: 'navigation/move-pages'; delta: number; source?: ViewerInputSource }
   | { type: 'view/zoom-step'; direction: -1 | 1 }
   | { type: 'view/set-zoom'; level: ZoomLevel }
+  | { type: 'view/select-reading-region' }
+  | { type: 'view/cancel-reading-region' }
   | { type: 'view/toggle-spread' }
   | { type: 'view/set-scroll'; strategy: ScrollStrategy }
   | { type: 'view/rotate' }
@@ -138,6 +140,7 @@ export type ViewerCapabilitySnapshot = {
   activeTool: string | null;
   spreadMode: SpreadMode;
   scrollStrategy: ScrollStrategy;
+  selectingRegion: boolean;
 };
 
 type ViewerControllerDependencies = {
@@ -198,13 +201,27 @@ function executeViewerCommand(
       dependencies.stage?.movePages(command.delta);
       return;
     case 'view/zoom-step': {
+      if (dependencies.stage) {
+        dependencies.stage.stepZoom(command.direction);
+        return;
+      }
       const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
       if (command.direction > 0) zoom?.zoomIn();
       else zoom?.zoomOut();
       return;
     }
     case 'view/set-zoom':
-      getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(command.level);
+      if (dependencies.stage) dependencies.stage.setZoom(command.level);
+      else getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(command.level);
+      return;
+    case 'view/select-reading-region':
+      updateUi({ type: 'ui/set-pan', enabled: false });
+      updateUi({ type: 'ui/close-overlay' });
+      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+      dependencies.stage?.beginRegionSelection();
+      return;
+    case 'view/cancel-reading-region':
+      dependencies.stage?.cancelRegionSelection();
       return;
     case 'view/set-presentation':
       if (command.enabled) {
@@ -221,7 +238,8 @@ function executeViewerCommand(
       dependencies.stage?.setStrategy(command.strategy);
       return;
     case 'view/rotate':
-      getPluginCapability<RotateCapability>(registry, 'rotate')?.rotateForward();
+      if (dependencies.stage) dependencies.stage.rotate();
+      else getDocumentScope<RotateCapability>(registry, 'rotate', documentId)?.rotateForward();
       return;
     case 'annotation/toggle-tool': {
       const annotation = getAnnotationScope(registry, documentId);
@@ -255,7 +273,7 @@ function executeViewerCommand(
 function useViewerCapabilitySnapshot(
   registry: PluginRegistry | undefined,
   documentId: string | null | undefined,
-): Omit<ViewerCapabilitySnapshot, 'spreadMode' | 'scrollStrategy'> {
+): Pick<ViewerCapabilitySnapshot, 'zoomPercent' | 'zoomLevel' | 'activeTool'> {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [activeTool, setActiveTool] = useState<string | null>(null);
@@ -311,8 +329,10 @@ export function useViewerController(dependencies: ViewerControllerDependencies) 
     stageSnapshot,
     capabilitySnapshot: {
       ...capabilitySnapshot,
+      zoomLevel: capabilitySnapshot.zoomLevel,
       spreadMode: stageSnapshot.spread,
       scrollStrategy: stageSnapshot.strategy,
+      selectingRegion: stageSnapshot.selectingRegion,
     },
   };
 }

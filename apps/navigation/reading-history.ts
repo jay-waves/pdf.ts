@@ -43,6 +43,7 @@ export function installReadingHistory(
       mode: view.mode,
       scrollStrategy: view.strategy,
       spreadMode: view.spread,
+      selectingRegion: view.selectingRegion,
       ...position,
     };
   };
@@ -55,6 +56,7 @@ export function installReadingHistory(
     || before.mode !== after.mode
     || before.scrollStrategy !== after.scrollStrategy
     || before.spreadMode !== after.spreadMode
+    || before.selectingRegion !== after.selectingRegion
     || (
       before.scrollLeft !== undefined
       && after.scrollLeft !== undefined

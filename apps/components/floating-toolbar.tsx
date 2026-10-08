@@ -1,4 +1,11 @@
-import type { HTMLAttributes, ReactNode } from 'react';
+import { createContext, useContext, type HTMLAttributes, type ReactNode } from 'react';
+import { Toolbar } from 'radix-ui';
+import { useViewerControlClick } from './viewer-focus';
+
+const ToolbarContext = createContext(false);
+export function useInToolbar() {
+  return useContext(ToolbarContext);
+}
 
 const SURFACE_CLASS = 'pdf-glass-surface min-h-8.5 w-fit max-w-[calc(100vw-32px)] rounded-xl border p-1.5 max-[640px]:max-w-[calc(100vw-16px)]';
 
@@ -19,15 +26,16 @@ export function FloatingToolbar({
   children: ReactNode;
   overflow?: boolean;
 }) {
+  const onControlClick = useViewerControlClick();
   return (
-    <FloatingSurface
-      className="flex items-center justify-center gap-1.25 data-[overflow=true]:overflow-x-auto"
-      role="toolbar"
+    <Toolbar.Root
+      className={`${SURFACE_CLASS} flex items-center justify-center gap-1.25 data-[overflow=true]:overflow-x-auto`}
       aria-label={label}
       data-overflow={overflow ? 'true' : undefined}
+      onClick={onControlClick}
     >
-      {children}
-    </FloatingSurface>
+      <ToolbarContext.Provider value>{children}</ToolbarContext.Provider>
+    </Toolbar.Root>
   );
 }
 
@@ -36,5 +44,5 @@ export function FloatingToolbarGroup({ children }: { children: ReactNode }) {
 }
 
 export function FloatingToolbarDivider() {
-  return <div className="h-4 w-px flex-none bg-[var(--pdf-glass-border)]" aria-hidden="true" />;
+  return <Toolbar.Separator className="h-4 w-px flex-none bg-[var(--pdf-glass-border)]" />;
 }

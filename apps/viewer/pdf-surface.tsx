@@ -34,6 +34,7 @@ import type { ViewerStage } from './viewer-stage';
 import { SearchLayer } from '../search/search';
 import { StageViewport } from '../renderer/stage-viewport';
 import { StageSurface } from '../renderer/stage-surface';
+import { ReadingRegionLayer, ReadingRegionControls } from '../renderer/reading-region-layer';
 import { PDF_TILE_SIZE_CSS_PX } from '../renderer/render-settings';
 import { RenderLayer } from '../renderer/viewer-render-layers';
 import { DOCUMENT_ID } from '../document/viewer-document';
@@ -143,6 +144,7 @@ function PageSurface({
   height,
   renderThemeVersion,
   renderDpr,
+  stage,
 }: {
   documentId: string;
   pageIndex: number;
@@ -150,6 +152,7 @@ function PageSurface({
   height: number;
   renderThemeVersion: number;
   renderDpr: number;
+  stage?: ViewerStage | null;
 }) {
   return (
     <Rotate documentId={documentId} pageIndex={pageIndex}>
@@ -200,6 +203,7 @@ function PageSurface({
             iconColor: 'var(--pdf-accent-primary)',
           }}
         />
+        <ReadingRegionLayer documentId={documentId} pageIndex={pageIndex} stage={stage} />
       </PagePointerProvider>
     </Rotate>
   );
@@ -252,10 +256,12 @@ function LoadedPdfDocument({
               height={height}
               renderThemeVersion={renderThemeVersion}
               renderDpr={renderDpr}
+              stage={stage}
             />
           )}
         />
       </StageViewport>
+      <ReadingRegionControls stage={stage} />
       {presentationPage !== null ? (
         <PresentationView
           documentId={documentId}

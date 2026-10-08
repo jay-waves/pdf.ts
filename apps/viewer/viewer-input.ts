@@ -1,6 +1,7 @@
 import type { ViewerCommand, ViewerCommandDispatch } from './viewer-controller';
 import type { ViewerStage } from './viewer-stage';
 import { isEditableTarget, isViewerNavigationTarget } from '../shared/utils';
+import { installMousePageGesture } from './mouse-page-gesture';
 
 export function installViewerCommandKeys(dispatch: ViewerCommandDispatch) {
   const onKeyDown = (event: KeyboardEvent) => {
@@ -35,8 +36,30 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
   const navigate = (delta: number, source: 'Keyboard' | 'Mouse') => {
     dispatch({ type: 'navigation/move-pages', delta, source });
   };
+  const mouseGesture = installMousePageGesture(
+    (target) => !stage.getSnapshot().selectingRegion
+      && isViewerNavigationTarget(target)
+      && target instanceof Element
+      && Boolean(target.closest('.viewer, [data-viewer-presentation]')),
+    (delta) => {
+      navigate(delta, 'Mouse');
+      stage.focusViewportAfterAction();
+    },
+  );
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === 'Escape' && mouseGesture.cancel()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.key === 'Escape' && stage.getSnapshot().selectingRegion
+      && !document.querySelector('[role="dialog"], [role="alertdialog"]')) {
+      event.preventDefault();
+      event.stopPropagation();
+      dispatch({ type: 'view/cancel-reading-region' });
+      return;
+    }
     if (!isViewerNavigationTarget(event.target)) return;
     const presenting = stage.getSnapshot().mode === 'presentation';
     if (presenting && event.key === 'Escape') {
@@ -53,6 +76,9 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
       event.stopPropagation();
       stage.scrollVertically(key === 'ArrowDown' ? 40 : -40);
       return;
+    }
+    if (!presenting && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(key)) {
+      stage.cancelPendingNavigation();
     }
     const delta = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1
       : presenting && (key === 'PageUp' || key === 'ArrowUp') ? -1
@@ -88,6 +114,7 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
   window.addEventListener('pointermove', onPointerMove, { capture: true });
   window.addEventListener('auxclick', stopSideButtonEvent, { capture: true });
   return () => {
+    mouseGesture.dispose();
     window.removeEventListener('keydown', onKeyDown, { capture: true });
     window.removeEventListener('mousedown', stopSideButtonEvent, { capture: true });
     window.removeEventListener('mouseup', onSideButtonUp, { capture: true });

@@ -44,6 +44,7 @@ import { ThemeDialog } from './theme/theme-dialog';
 import { DeveloperDialog } from './viewer/developer-dialog';
 import { ContextMenu } from './selection/context-menu';
 import { Dialog, TooltipProvider } from './components';
+import { ViewerFocusContext } from './components/viewer-focus';
 import { exportPdf, savePdfCopy } from './document/pdf-save';
 import { usePdfRuntime, useRenderThemeVersion, type PdfRuntime } from './renderer/pdf-engine';
 import { useDocumentPersistence } from './document/viewer-document-persistence';
@@ -308,8 +309,7 @@ function App({
             ?.forDocument(DOCUMENT_ID).setRotation(rotation);
         }
         if (zoomLevel !== undefined) {
-          getPluginCapability<ZoomCapability>(registry, 'zoom')
-            ?.forDocument(DOCUMENT_ID).requestZoom(zoomLevel);
+          stage.setZoom(zoomLevel);
         }
         // Zoom/layout requests enqueue their own scroll operations. Restore the
         // page-local anchor after those operations and the DOM layout commit.
@@ -425,6 +425,7 @@ function App({
   };
 
   return (
+    <ViewerFocusContext.Provider value={stage ? () => stage.focusViewportAfterAction() : null}>
     <main ref={viewerRootRef} className="fixed inset-0 overflow-hidden">
       <PdfSurface
         engine={engine}
@@ -559,6 +560,7 @@ function App({
         outlineStatus={outlineCache.status}
       />
     </main>
+    </ViewerFocusContext.Provider>
   );
 }
 

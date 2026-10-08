@@ -1,8 +1,10 @@
 import type { PluginRegistry } from '@embedpdf/core';
 import { ScrollStrategy, type ScrollBehavior, type ScrollCapability } from '@embedpdf/plugin-scroll';
 import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
-import type { ViewportCapability } from '@embedpdf/plugin-viewport';
-import { ZoomMode, type ZoomCapability } from '@embedpdf/plugin-zoom';
+import { ZoomMode, type ZoomCapability, type ZoomLevel } from '@embedpdf/plugin-zoom';
+import type { InteractionManagerCapability } from '@embedpdf/plugin-interaction-manager';
+import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { READING_REGION_MODE, type ReadingRegion } from '../shared/reading-region';
 import { StageScrollAdapter } from '../renderer/stage-scroll-adapter';
 import type { Rect } from '@embedpdf/models';
 import { getPluginCapability } from '../shared/utils';
@@ -13,11 +15,13 @@ export type StageSnapshot = Readonly<{
   totalPages: number;
   strategy: ScrollStrategy;
   spread: SpreadMode;
+  selectingRegion: boolean;
 }>;
 
 export const EMPTY_STAGE_SNAPSHOT: StageSnapshot = {
   mode: 'reading', pageNumber: 1, totalPages: 0,
   strategy: ScrollStrategy.Vertical, spread: SpreadMode.None,
+  selectingRegion: false,
 };
 
 /**
@@ -62,6 +66,19 @@ export class ViewerStage {
     this.scroll.attachViewport(element);
   }
 
+  focusViewportAfterAction() {
+    const focus = () => {
+      // A command may have opened a dialog, menu or search field in this frame.
+      if (typeof document !== 'undefined') {
+        if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]')) return;
+        if (document.activeElement?.matches('input, textarea, select, [contenteditable]')) return;
+      }
+      if (this.state.mode === 'reading') this.scroll.focusViewport();
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focus);
+    else focus();
+  }
+
   cancelPendingNavigation() {
     this.scroll.cancelPendingNavigation();
   }
@@ -72,6 +89,67 @@ export class ViewerStage {
 
   scrollVertically(delta: number) {
     if (this.state.mode === 'reading') this.scroll.scrollVertically(delta);
+  }
+
+  getFitScales() {
+    return this.scroll.getFitScales();
+  }
+
+  setZoom(level: ZoomLevel) {
+    if (this.state.mode !== 'reading') return;
+    this.scroll.cancelPendingNavigation();
+    this.preserveZoom(() => getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.documentId).requestZoom(level));
+  }
+
+  preserveZoom(update: () => void, focus = this.scroll.getViewportCenter()) {
+    this.scroll.preserveView(update, focus);
+  }
+
+  stepZoom(direction: -1 | 1) {
+    const zoom = getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.documentId);
+    this.preserveZoom(() => direction > 0 ? zoom?.zoomIn() : zoom?.zoomOut());
+  }
+
+  rotate() {
+    const rotate = getPluginCapability<RotateCapability>(this.registry, 'rotate')?.forDocument(this.documentId);
+    if (!rotate) return;
+    if (this.state.mode === 'presentation') return rotate.rotateForward();
+    this.transitioning = true;
+    try {
+      this.scroll.preserveView(() => rotate.rotateForward(), this.scroll.getViewportCenter());
+    } finally {
+      this.transitioning = false;
+    }
+  }
+
+  private fitReadingRegion(region: ReadingRegion, pageNumber: number) {
+    this.scroll.fitReadingRegion(region, pageNumber);
+  }
+
+  beginRegionSelection() {
+    if (this.state.mode !== 'reading') return;
+    if (this.state.selectingRegion) return this.cancelRegionSelection();
+    const interaction = getPluginCapability<InteractionManagerCapability>(this.registry, 'interaction-manager');
+    if (!interaction) return;
+    this.scroll.cancelPendingNavigation();
+    this.publish({ selectingRegion: true });
+    interaction.forDocument(this.documentId).activate(READING_REGION_MODE);
+    this.focusViewportAfterAction();
+  }
+
+  cancelRegionSelection() {
+    this.publish({ selectingRegion: false });
+    const scope = getPluginCapability<InteractionManagerCapability>(this.registry, 'interaction-manager')?.forDocument(this.documentId);
+    if (scope?.getActiveMode() === READING_REGION_MODE) scope.activateDefaultMode();
+  }
+
+  completeRegionSelection(pageIndex: number, rect: Rect) {
+    if (!this.state.selectingRegion) return;
+    const region = this.scroll.normalizeReadingRegion(pageIndex, rect);
+    if (!region) return;
+    this.publish({ pageNumber: pageIndex + 1 });
+    this.cancelRegionSelection();
+    this.fitReadingRegion(region, pageIndex + 1);
   }
 
   captureReadingPosition() {
@@ -100,6 +178,8 @@ export class ViewerStage {
   }
 
   install() {
+    const interaction = getPluginCapability<InteractionManagerCapability>(this.registry, 'interaction-manager');
+    interaction?.registerMode({ id: READING_REGION_MODE, scope: 'page', exclusive: true, cursor: 'crosshair' });
     const sync = () => {
       if (this.transitioning) return;
       this.publish({
@@ -112,9 +192,16 @@ export class ViewerStage {
     this.cleanup = [
       this.scroll.onPageChange(sync), this.scroll.onLayoutReady(sync),
       this.scroll.onStrategyChange(sync), this.spread?.onSpreadChange(sync) ?? (() => {}),
+      interaction?.forDocument(this.documentId).onModeChange((mode) => {
+        if (mode !== READING_REGION_MODE && this.state.selectingRegion) this.publish({ selectingRegion: false });
+      }) ?? (() => {}),
     ];
     sync();
-    return () => { this.cleanup.splice(0).forEach((dispose) => dispose()); };
+    return () => {
+      this.cancelRegionSelection();
+      this.scroll.cancelPendingNavigation();
+      this.cleanup.splice(0).forEach((dispose) => dispose());
+    };
   }
 
   goToPage(pageNumber: number, behavior: ScrollBehavior = 'instant') {
@@ -144,12 +231,13 @@ export class ViewerStage {
   setPresentation(enabled: boolean) {
     if (enabled === (this.state.mode === 'presentation') || !this.state.totalPages) return;
     this.scroll.cancelPendingNavigation();
+    this.cancelRegionSelection();
     if (enabled) {
       this.publish({ mode: 'presentation', pageNumber: this.scroll.getCurrentPage() });
     } else {
       const page = Math.min(this.state.totalPages, this.state.pageNumber);
       this.publish({ mode: 'reading' });
-      this.scroll.goToPage(page);
+      this.goToPage(page);
     }
   }
 
@@ -174,13 +262,8 @@ export class ViewerStage {
           ?.setScrollStrategy(strategy, this.scroll.documentId);
         const zoom = getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.scroll.documentId);
         if (strategy === ScrollStrategy.Horizontal) {
-          const viewport = getPluginCapability<ViewportCapability>(this.registry, 'viewport');
-          const pages = getPluginCapability<ScrollCapability>(this.registry, 'scroll')
-            ?.forDocument(this.scroll.documentId).getSpreadPagesWithRotatedSize().flat() ?? [];
-          const height = pages.reduce((max, page) => Math.max(max, page.rotatedSize.height), 0);
-          const available = (viewport?.forDocument(this.scroll.documentId).getMetrics().clientHeight ?? 0)
-            - 2 * (viewport?.getViewportGap() ?? 0);
-          if (available > 0 && height > 0) zoom?.requestZoom(available / height);
+          const fit = this.getFitScales();
+          if (fit && fit.height > 0) zoom?.requestZoom(fit.height);
         } else if (spread !== SpreadMode.None) zoom?.requestZoom(ZoomMode.FitWidth);
       });
     } finally {

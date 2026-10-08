@@ -5,6 +5,7 @@ import type { OutlineCache } from './outline';
 import { useViewerActivityAutoHide } from '../components/use-auto-hide';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import styles from './bottom-navigation.module.css';
+import { useViewerControlClick, useViewerFocus } from '../components/viewer-focus';
 
 export function BottomNav({
   dispatch,
@@ -20,6 +21,8 @@ export function BottomNav({
   outlineStatus: OutlineCache['status'];
 }) {
   const [pageInput, setPageInput] = useState(String(pageNumber || 1));
+  const focusViewer = useViewerFocus();
+  const onControlClick = useViewerControlClick();
   const interactingRef = useRef(false);
   const pageInputRef = useRef<HTMLInputElement>(null);
   const canNavigate = totalPages > 0;
@@ -47,8 +50,11 @@ export function BottomNav({
   useEffect(() => {
     let wasAtBottomEdge = false;
     const onPointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse') return;
-      const atBottomEdge = window.innerHeight - event.clientY <= 96;
+      if (event.pointerType !== 'mouse' || event.buttons !== 0) return;
+      // Match the toolbar's fixed hover zone without measuring DOM geometry.
+      const atBottomEdge = Math.abs(event.clientX - window.innerWidth / 2) <= 480
+        && event.clientX >= 32 && event.clientX <= window.innerWidth - 32
+        && window.innerHeight - event.clientY <= 96;
       if (atBottomEdge && !wasAtBottomEdge) revealTemporarily();
       wasAtBottomEdge = atBottomEdge;
     };
@@ -79,6 +85,8 @@ export function BottomNav({
       return;
     }
     scrollToPage(nextPageNumber);
+    pageInputRef.current?.blur();
+    focusViewer?.();
   };
 
   const scrollByPage = (direction: -1 | 1) => {
@@ -91,6 +99,7 @@ export function BottomNav({
       className={styles.navigation}
       data-visible={visible ? 'true' : undefined}
       aria-label="PDF navigation"
+      onClick={onControlClick}
       onPointerEnter={(event) => {
         if (event.pointerType !== 'mouse') return;
         interactingRef.current = true;

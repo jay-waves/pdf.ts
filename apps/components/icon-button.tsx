@@ -1,6 +1,8 @@
 import type { ButtonHTMLAttributes, ComponentType } from 'react';
 import { Tooltip } from './tooltip';
 import styles from './icon-button.module.css';
+import { Toolbar } from 'radix-ui';
+import { useInToolbar } from './floating-toolbar';
 
 const CONTROL_BUTTON_CLASS = [
   'inline-grid size-6.5 flex-none cursor-pointer place-items-center rounded-lg',
@@ -11,7 +13,8 @@ const CONTROL_BUTTON_CLASS = [
 ].join(' ');
 
 export function ControlButton({ className = '', type = 'button', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button type={type} className={`${CONTROL_BUTTON_CLASS} ${className}`.trim()} {...props} />;
+  const Component = useInToolbar() ? Toolbar.Button : 'button';
+  return <Component type={type} className={`${CONTROL_BUTTON_CLASS} ${className}`.trim()} {...props} />;
 }
 
 interface IconButtonProps {

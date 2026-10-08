@@ -3,6 +3,7 @@ import type { ScrollCapability } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability } from '@embedpdf/plugin-viewport';
 import type { ZoomCapability } from '@embedpdf/plugin-zoom';
 import { ZoomDetents } from './zoom-detents';
+import { clientPointToViewport, fitScales } from './viewport-geometry';
 import type { ViewerStage } from '../viewer/viewer-stage';
 import {
   pointerInputSource,
@@ -263,19 +264,8 @@ export function createStageInputController({
   const getZoomNodes = () => {
     const spreads = scrollCapability?.forDocument(documentId).getSpreadPagesWithRotatedSize();
     if (!spreads?.length) return [];
-    const gap = scrollCapability?.getPageGap() ?? 0;
-    const inset = 2 * viewportCapability.getViewportGap();
-    const metrics = viewportScope.getMetrics();
-    let width = 0;
-    let height = 0;
-    for (const spread of spreads) {
-      width = Math.max(width, spread.reduce((sum, page, index) =>
-        sum + page.rotatedSize.width + (index ? gap : 0), 0));
-      for (const page of spread) height = Math.max(height, page.rotatedSize.height);
-    }
-    const fitWidth = (metrics.clientWidth - inset) / width;
-    const fitPage = Math.min(fitWidth, (metrics.clientHeight - inset) / height);
-    return [fitPage, fitWidth].map((value) => Math.floor(value * 1000) / 1000);
+    const fit = fitScales(spreads, viewport, viewportCapability.getViewportGap(), scrollCapability?.getPageGap() ?? 0);
+    return [fit.page, fit.width].map((value) => Math.floor(value * 1000) / 1000);
   };
 
   const resumeInteraction = (gesture: PointerGesture) => {
@@ -374,16 +364,8 @@ export function createStageInputController({
     inertiaFrame = window.requestAnimationFrame(step);
   };
 
-  const getAnchor = (clientX: number, clientY: number) => {
-    const bounds = viewport.getBoundingClientRect();
-    return {
-      vx: clamp(clientX - bounds.left, 0, viewport.clientWidth),
-      vy: clamp(clientY - bounds.top, 0, viewport.clientHeight),
-    };
-  };
-
   const queueZoom = (delta: number, clientX: number, clientY: number) => {
-    pendingZoom = mergePendingZoom(pendingZoom, delta, getAnchor(clientX, clientY));
+    pendingZoom = mergePendingZoom(pendingZoom, delta, clientPointToViewport(viewport, clientX, clientY));
     if (!zoomFrame) zoomFrame = window.requestAnimationFrame(flushZoom);
   };
 
@@ -408,12 +390,18 @@ export function createStageInputController({
     );
     if (Math.abs(targetZoom - currentZoom) < 0.0005) return;
 
-    commitZoom(() => zoomScope.requestZoom(targetZoom + 1e-10, pending.anchor));
+    commitZoom(() => {
+      const apply = () => zoomScope.requestZoom(targetZoom + 1e-10, pending.anchor);
+      if (stage) stage.preserveZoom(apply, pending.anchor);
+      else apply();
+    });
     zoomSession.lastAppliedZoom = zoomScope.getState().currentZoomLevel;
-    const metrics = viewportScope.getMetrics();
     // Correct the anchor before paint. EmbedPDF already repeats this scroll
     // on the next animation frame, so do not schedule another copy here.
-    viewport.scrollTo(metrics.scrollLeft, metrics.scrollTop);
+    if (!stage) {
+      const metrics = viewportScope.getMetrics();
+      viewport.scrollTo(metrics.scrollLeft, metrics.scrollTop);
+    }
   };
 
   const flushPendingZoom = () => {

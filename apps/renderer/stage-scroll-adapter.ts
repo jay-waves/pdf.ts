@@ -1,10 +1,14 @@
+import { SmoothScroll } from './smooth-scroll';
+import {
+  measureViewport, pagePointFromOffset, projectRect, viewportInterval, revealDelta,
+  scrollAxes, fitScales, findPage, type Insets, type ScrollAxis,
+} from './viewport-geometry';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
   boundingRect,
   Rotation,
-  type Position,
   type Rect,
-  type Size,
+  type PdfPageObjectWithRotatedSize,
 } from '@embedpdf/models';
 import {
   ScrollStrategy,
@@ -13,65 +17,27 @@ import {
 } from '@embedpdf/plugin-scroll';
 import type { ViewportCapability, ViewportMetrics } from '@embedpdf/plugin-viewport';
 import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import type { ZoomCapability } from '@embedpdf/plugin-zoom';
+import { normalizeReadingRegion, readingRegionRect, type ReadingRegion } from '../shared/reading-region';
 import { getDocumentScrollStrategy, getPluginCapability } from '../shared/utils';
 
-const TARGET_INSET = 12;
-const COMFORT_RATIO = 0.08;
-const MIN_COMFORT_PX = 24;
-const MAX_COMFORT_PX = 64;
-const LANDING_RATIO = 0.35;
-const FORWARD_ENTRY_RATIO = 0.82;
-const BACKWARD_ENTRY_RATIO = 0.18;
-
-type Insets = Partial<Record<'top' | 'right' | 'bottom' | 'left', number>>;
 type ScrollAnchor = {
   pageNumber: number;
   pageCoordinates?: { x: number; y: number };
+  viewportOffset?: { x: number; y: number };
 };
-
-function landingPosition(
-  vertical: boolean,
-  viewportSize: number,
-  beforeInset: number,
-  afterInset: number,
-) {
-  const comfort = Math.min(MAX_COMFORT_PX, Math.max(MIN_COMFORT_PX, viewportSize * COMFORT_RATIO));
-  return Math.min(
-    viewportSize - afterInset - comfort,
-    Math.max(beforeInset + comfort, viewportSize * (vertical ? LANDING_RATIO : 0.5)),
-  );
-}
-
-function visibleTargetDelta(start: number, size: number, viewportStart: number,
-  viewportSize: number, beforeInset: number, afterInset: number, comfort: number) {
-  const visibleStart = viewportStart + beforeInset;
-  const visibleEnd = viewportStart + viewportSize - afterInset;
-  if (start < visibleStart) return start - visibleStart - comfort;
-  if (start + size > visibleEnd) return start + size - visibleEnd + comfort;
-  return 0;
-}
-
-function restorePagePosition(
-  position: Position,
-  pageSize: Size,
-  rotation: Rotation,
-  scale: number,
-): Position {
-  const x = position.x / scale;
-  const y = position.y / scale;
-
-  switch (rotation) {
-    case Rotation.Degree90: return { x: y, y: pageSize.height - x };
-    case Rotation.Degree180: return { x: pageSize.width - x, y: pageSize.height - y };
-    case Rotation.Degree270: return { x: pageSize.width - y, y: x };
-    default: return { x, y };
-  }
-}
 
 /** Adapts EmbedPDF v2 scroll/viewport capabilities to ViewerStage. */
 export class StageScrollAdapter {
   private viewportElement: HTMLElement | null = null;
   private settleFrame = 0;
+  private readonly smallScroll = new SmoothScroll(
+    () => {
+      const metrics = this.viewportElement ?? this.viewportCapability?.forDocument(this.documentId).getMetrics();
+      return metrics ? { left: metrics.scrollLeft, top: metrics.scrollTop, maxTop: Math.max(0, metrics.scrollHeight - metrics.clientHeight) } : null;
+    },
+    (top, position) => this.scrollTo(position.left, top, 'instant'),
+  );
   private readonly capability: ScrollCapability | undefined;
   private readonly viewportCapability: ViewportCapability | undefined;
 
@@ -88,7 +54,16 @@ export class StageScrollAdapter {
     this.viewportElement = element;
   }
 
+  focusViewport() {
+    this.viewportElement?.focus({ preventScroll: true });
+  }
+
   cancelPendingNavigation() {
+    this.smallScroll.stop();
+    this.cancelSettle();
+  }
+
+  private cancelSettle() {
     if (this.settleFrame) cancelAnimationFrame(this.settleFrame);
     this.settleFrame = 0;
   }
@@ -110,7 +85,7 @@ export class StageScrollAdapter {
   }
 
   getPosition() {
-    const metrics = this.getMetrics();
+    const metrics = this.viewportElement ?? this.viewportCapability?.forDocument(this.documentId).getMetrics();
     return {
       scrollLeft: metrics?.scrollLeft,
       scrollTop: metrics?.scrollTop,
@@ -118,14 +93,67 @@ export class StageScrollAdapter {
   }
 
   scrollVertically(delta: number) {
-    const metrics = this.getMetrics();
-    if (!metrics) return;
-    this.cancelPendingNavigation();
-    this.scrollTo(metrics.scrollLeft, Math.max(0, metrics.scrollTop + delta), 'smooth');
+    this.cancelSettle();
+    this.smallScroll.move(delta);
   }
 
-  private getRectPosition(pageIndex: number, rect: Rect) {
-    return this.capability?.forDocument(this.documentId).getRectPositionForPage(pageIndex, rect) ?? null;
+  /** EmbedPDF rects exclude viewport padding; all adapter rects include it. */
+  private getContentRect(pageIndex: number, rect: Rect, scale?: number): Rect | null {
+    const scope = this.capability?.forDocument(this.documentId);
+    const positioned = scope?.getRectPositionForPage(pageIndex, rect, scale);
+    if (!positioned) return null;
+    const gap = this.getViewportGap();
+    const metrics = this.getMetrics();
+    const width = scope?.getLayout?.().totalContentSize.width;
+    const zoom = scale ?? (width === undefined ? undefined : getPluginCapability<ZoomCapability>(this.registry, 'zoom')
+      ?.forDocument(this.documentId).getState().currentZoomLevel);
+    // Scroller uses margin:auto when its content is narrower than the viewport.
+    // Plugin coordinates do not include that DOM offset.
+    const centeredX = metrics && width !== undefined && zoom !== undefined
+      ? Math.max(0, (metrics.clientWidth - 2 * gap - width * zoom) / 2) : 0;
+    return { origin: { x: positioned.origin.x + gap + centeredX, y: positioned.origin.y + gap }, size: positioned.size };
+  }
+
+  getFitScales() {
+    const metrics = this.viewportElement ?? this.viewportCapability?.forDocument(this.documentId).getMetrics();
+    return metrics ? fitScales(this.capability?.forDocument(this.documentId).getSpreadPagesWithRotatedSize() ?? [],
+      metrics, this.getViewportGap(), this.capability?.getPageGap() ?? 0) : null;
+  }
+
+  normalizeReadingRegion(pageIndex: number, rect: Rect) {
+    const page = findPage(this.capability?.forDocument(this.documentId).getSpreadPagesWithRotatedSize() ?? [], pageIndex);
+    return page ? normalizeReadingRegion(rect, page.size) : null;
+  }
+
+  private getReadingRegionRect(region: ReadingRegion, pageNumber: number, scale?: number) {
+    const page = findPage(this.capability?.forDocument(this.documentId).getSpreadPagesWithRotatedSize() ?? [], pageNumber - 1);
+    return page ? this.getContentRect(page.index, readingRegionRect(region, page.size), scale) : null;
+  }
+
+  fitReadingRegion(
+    region: ReadingRegion,
+    pageNumber: number,
+  ) {
+    this.cancelPendingNavigation();
+    const metrics = this.getMetrics();
+    const bounds = this.getReadingRegionRect(region, pageNumber, 1);
+    const zoom = getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.documentId);
+    const level = bounds && metrics
+      ? fitScales([[{ rotatedSize: bounds.size }]], metrics, this.getViewportGap(), 0).page
+      : null;
+    if (!zoom || !level || !Number.isFinite(level)) return false;
+    zoom.requestZoom(Math.min(60, Math.max(0.2, level)) + 1e-10);
+    this.capability?.forDocument(this.documentId).scrollToPage({ pageNumber, behavior: 'instant' });
+    // The SDK queues its own scroll writes. Align after those and React layout.
+    this.afterLayout(() => {
+      const bounds = this.getReadingRegionRect(region, pageNumber);
+      const metrics = this.getMetrics();
+      if (!bounds || !metrics) return;
+      const top = bounds.origin.y + bounds.size.height / 2 - metrics.clientHeight / 2;
+      this.scrollTo(Math.max(0, bounds.origin.x + bounds.size.width / 2 - metrics.clientWidth / 2),
+        Math.max(0, top), 'instant');
+    });
+    return true;
   }
 
   onStrategyChange(listener: (strategy: ScrollStrategy) => void) {
@@ -164,108 +192,68 @@ export class StageScrollAdapter {
 
     this.cancelPendingNavigation();
 
-    const gap = this.getViewportGap();
+    const axis = scrollAxes[this.getStrategy()];
+    const view = viewportInterval(metrics, axis, insets);
     const positionRect = (rect: Rect) => {
-      const positioned = scope.getRectPositionForPage(pageIndex, rect);
-      return positioned ? {
-        ...positioned,
-        origin: {
-          x: positioned.origin.x + gap,
-          y: positioned.origin.y + gap,
-        },
-      } : null;
+      const positioned = this.getContentRect(pageIndex, rect);
+      return positioned ? projectRect(positioned, axis) : null;
     };
     let target = positionRect(pdfRect);
-    const vertical = this.getStrategy() !== ScrollStrategy.Horizontal;
-    const beforeInset = vertical ? (insets.top ?? TARGET_INSET) : (insets.left ?? TARGET_INSET);
-    const afterInset = vertical ? (insets.bottom ?? TARGET_INSET) : (insets.right ?? TARGET_INSET);
-    const viewportStart = vertical ? metrics.scrollTop : metrics.scrollLeft;
-    const viewportSize = vertical ? metrics.clientHeight : metrics.clientWidth;
-    const viewportEnd = viewportStart + viewportSize;
-    const page = scope.getSpreadPagesWithRotatedSize().flat().find((item) => item.index === pageIndex);
-    const pageRect = page ? positionRect({ origin: { x: 0, y: 0 }, size: page.size }) : null;
-    const pageStart = pageRect && (vertical ? pageRect.origin.y : pageRect.origin.x);
-    const pageEnd = pageRect && pageStart !== null
-      ? pageStart + (vertical ? pageRect.size.height : pageRect.size.width)
-      : null;
-    const pageIntersectsViewport = pageStart !== null
-      && pageEnd !== null
-      && pageStart < viewportEnd
-      && pageEnd > viewportStart;
+    const page = findPage(scope.getSpreadPagesWithRotatedSize(), pageIndex);
+    const pageInterval = page ? positionRect({ origin: { x: 0, y: 0 }, size: page.size }) : null;
+    const pageIntersectsViewport = pageInterval
+      && pageInterval.start < view.end && pageInterval.start + pageInterval.size > view.start;
 
-    if (!target || pageStart === null || pageEnd === null) {
-      const targetCenter = {
-        x: pdfRect.origin.x + pdfRect.size.width / 2,
-        y: pdfRect.origin.y + pdfRect.size.height / 2,
-      };
-      const comfort = Math.min(MAX_COMFORT_PX, Math.max(MIN_COMFORT_PX, viewportSize * COMFORT_RATIO));
-      const landing = vertical ? LANDING_RATIO : 0.5;
-      const initialAlignment = Math.min(90, (landing + comfort / Math.max(1, viewportSize)) * 100);
-
+    if (!target || !pageIntersectsViewport) {
+      const alignment = !target || !pageInterval
+        ? Math.min(90, (axis.landing + view.comfort / Math.max(1, view.size)) * 100)
+        : (pageInterval.start >= view.end ? 82 : 18);
+      // Jump into the destination page before animating the short final approach.
       scope.scrollToPage({
         pageNumber: pageIndex + 1,
-        pageCoordinates: targetCenter,
+        pageCoordinates: {
+          x: pdfRect.origin.x + pdfRect.size.width / 2,
+          y: pdfRect.origin.y + pdfRect.size.height / 2,
+        },
         behavior: 'instant',
-        alignX: vertical ? 50 : initialAlignment,
-        alignY: vertical ? initialAlignment : 50,
+        alignX: 50, alignY: 50, [axis.align]: alignment,
       });
-      this.scheduleSettle(pageIndex, rects, vertical, insets, behavior);
+      this.scheduleSettle(pageIndex, pdfRect, axis, insets, behavior);
       return true;
     }
 
-    if (!pageIntersectsViewport) {
-      const targetCenter = {
-        x: pdfRect.origin.x + pdfRect.size.width / 2,
-        y: pdfRect.origin.y + pdfRect.size.height / 2,
-      };
-      const forward = pageStart >= viewportEnd;
-      const entryAlignment = (forward ? FORWARD_ENTRY_RATIO : BACKWARD_ENTRY_RATIO) * 100;
-
-      // Keep the target visible during the virtual jump, then provide a short
-      // directional scroll within its own viewport instead of showing an
-      // unrelated preceding page.
-      scope.scrollToPage({
-        pageNumber: pageIndex + 1,
-        pageCoordinates: targetCenter,
-        behavior: 'instant',
-        alignX: vertical ? 50 : entryAlignment,
-        alignY: vertical ? entryAlignment : 50,
-      });
-
-      this.scheduleSettle(pageIndex, rects, vertical, insets, behavior);
-      return true;
+    if (target.size > view.visibleEnd - view.visibleStart - view.comfort * 2) {
+      target = positionRect(rects[0]) ?? target;
     }
+    return this.scrollAlongAxis(axis, metrics, revealDelta(target, view), behavior);
+  }
 
-    const targetStart = () => vertical ? target!.origin.y : target!.origin.x;
-    const targetSize = () => vertical ? target!.size.height : target!.size.width;
-    const availableSize = Math.max(0, viewportSize - beforeInset - afterInset);
-    const comfort = Math.min(
-      MAX_COMFORT_PX,
-      Math.max(MIN_COMFORT_PX, viewportSize * COMFORT_RATIO),
-      availableSize / 3,
-    );
-
-    if (targetSize() > availableSize - comfort * 2) target = positionRect(rects[0]) ?? target;
-
-    const delta = visibleTargetDelta(targetStart(), targetSize(), viewportStart,
-      viewportSize, beforeInset, afterInset, comfort);
+  private scrollAlongAxis(axis: ScrollAxis, metrics: ViewportMetrics, delta: number, behavior: ScrollBehavior) {
     if (Math.abs(delta) <= 0.5) return false;
-
-    this.scrollTo(
-      vertical ? metrics.scrollLeft : Math.max(0, metrics.scrollLeft + delta),
-      vertical ? Math.max(0, metrics.scrollTop + delta) : metrics.scrollTop,
-      behavior,
-    );
+    const position = { x: metrics.scrollLeft, y: metrics.scrollTop };
+    position[axis.coordinate] = Math.max(0, position[axis.coordinate] + delta);
+    this.scrollTo(position.x, position.y, behavior);
     return true;
   }
 
   private scheduleSettle(
     pageIndex: number,
-    rects: Rect[],
-    vertical: boolean,
+    rect: Rect,
+    axis: ScrollAxis,
     insets: Insets,
     behavior: ScrollBehavior,
   ) {
+    this.afterLayout(() => {
+      const positioned = this.getContentRect(pageIndex, rect);
+      const metrics = this.getMetrics();
+      if (!positioned || !metrics) return;
+      const view = viewportInterval(metrics, axis, insets);
+      const target = projectRect(positioned, axis);
+      this.scrollAlongAxis(axis, metrics, target.start + target.size / 2 - view.start - view.landing, behavior);
+    });
+  }
+
+  private afterLayout(update: () => void) {
     let remainingFrames = 2;
     const waitForLayout = () => {
       if (--remainingFrames > 0) {
@@ -273,28 +261,7 @@ export class StageScrollAdapter {
         return;
       }
       this.settleFrame = 0;
-      const target = boundingRect(rects);
-      const positioned = target && this.getRectPosition(pageIndex, target);
-      const metrics = this.getMetrics();
-      if (!positioned || !metrics) return;
-
-      const gap = this.getViewportGap();
-      const viewportStart = vertical ? metrics.scrollTop : metrics.scrollLeft;
-      const viewportSize = vertical ? metrics.clientHeight : metrics.clientWidth;
-      const beforeInset = vertical ? (insets.top ?? TARGET_INSET) : (insets.left ?? TARGET_INSET);
-      const afterInset = vertical ? (insets.bottom ?? TARGET_INSET) : (insets.right ?? TARGET_INSET);
-      const desiredPosition = landingPosition(vertical, viewportSize, beforeInset, afterInset);
-      const targetCenter = (vertical ? positioned.origin.y : positioned.origin.x)
-        + gap
-        + (vertical ? positioned.size.height : positioned.size.width) / 2;
-      const delta = targetCenter - (viewportStart + desiredPosition);
-      if (Math.abs(delta) <= 0.5) return;
-
-      this.scrollTo(
-        vertical ? metrics.scrollLeft : Math.max(0, metrics.scrollLeft + delta),
-        vertical ? Math.max(0, metrics.scrollTop + delta) : metrics.scrollTop,
-        behavior,
-      );
+      update();
     };
     this.settleFrame = requestAnimationFrame(waitForLayout);
   }
@@ -311,66 +278,41 @@ export class StageScrollAdapter {
       : scope.getCurrentPage();
     if (targetPageNumber === currentPageNumber && !scope.getPageChangeState().isChanging) return false;
 
-    const pages = scope.getSpreadPagesWithRotatedSize().flat();
-    const currentPage = pages.find((page) => page.index === currentPageNumber - 1);
-    const targetPage = pages.find((page) => page.index === targetPageNumber - 1);
-    if (!currentPage || !targetPage || !metrics) {
-      scope.scrollToPage({ pageNumber: targetPageNumber, behavior });
-      return true;
-    }
-
-    const currentRect = scope.getRectPositionForPage(currentPage.index, {
-      origin: { x: 0, y: 0 },
-      size: currentPage.size,
-    });
-    if (!currentRect) {
-      scope.scrollToPage({ pageNumber: targetPageNumber, behavior });
-      return true;
-    }
-
-    const scale = currentPage.rotatedSize.width
-      ? currentRect.size.width / currentPage.rotatedSize.width
-      : currentRect.size.height / currentPage.rotatedSize.height;
-    if (!Number.isFinite(scale) || scale <= 0) {
-      scope.scrollToPage({ pageNumber: targetPageNumber, behavior });
-      return true;
-    }
-
-    const targetRotation = (targetPage.rotation + this.getDocumentRotation()) % 4 as Rotation;
-    const pageCoordinates = restorePagePosition({
-      x: metrics.scrollLeft - currentRect.origin.x - this.getViewportGap(),
-      y: metrics.scrollTop - currentRect.origin.y - this.getViewportGap(),
-    }, targetPage.size, targetRotation, scale);
+    const spreads = scope.getSpreadPagesWithRotatedSize();
+    const currentPage = findPage(spreads, currentPageNumber - 1);
+    const targetPage = findPage(spreads, targetPageNumber - 1);
+    const pageCoordinates = currentPage && targetPage && metrics
+      ? this.getPageCoordinates(metrics, currentPage, targetPage) : undefined;
 
     scope.scrollToPage({ pageNumber: targetPageNumber, pageCoordinates, behavior });
     return true;
   }
 
-  preserveView(update: () => void) {
+  preserveView(update: () => void, focus?: { vx: number; vy: number }) {
     this.cancelPendingNavigation();
-    const anchor = this.getAnchor();
+    const anchor = this.getAnchor(focus);
     update();
     this.restoreAnchor(anchor);
+    // SDK scroll writes and React's new page dimensions settle asynchronously.
+    this.afterLayout(() => this.restoreAnchor(anchor));
   }
 
   private getMetrics(): ViewportMetrics | null {
-    const stored = this.viewportCapability?.forDocument(this.documentId).getMetrics();
-    const element = this.viewportElement;
-    if (!stored) return null;
-    if (!element) return stored;
-    return {
-      ...stored,
-      width: element.offsetWidth,
-      height: element.offsetHeight,
-      scrollTop: element.scrollTop,
-      scrollLeft: element.scrollLeft,
-      clientWidth: element.clientWidth,
-      clientHeight: element.clientHeight,
-      scrollWidth: element.scrollWidth,
-      scrollHeight: element.scrollHeight,
-      clientLeft: element.clientLeft,
-      clientTop: element.clientTop,
-    };
+    return this.viewportElement ? measureViewport(this.viewportElement)
+      : this.viewportCapability?.forDocument(this.documentId).getMetrics() ?? null;
+  }
+
+  private getPageCoordinates(metrics: ViewportMetrics, source: PdfPageObjectWithRotatedSize,
+    target = source) {
+    const rect = this.getContentRect(source.index, { origin: { x: 0, y: 0 }, size: source.size });
+    if (!rect) return undefined;
+    const scale = source.rotatedSize.width
+      ? rect.size.width / source.rotatedSize.width : rect.size.height / source.rotatedSize.height;
+    if (!Number.isFinite(scale) || scale <= 0) return undefined;
+    // Preserve the visual offset when changing pages, and the PDF point when
+    // restoring this page after a layout/rotation change.
+    return pagePointFromOffset({ x: metrics.scrollLeft - rect.origin.x, y: metrics.scrollTop - rect.origin.y },
+      target.size, (target.rotation + this.getDocumentRotation()) % 4 as Rotation, scale);
   }
 
   private scrollTo(x: number, y: number, behavior: ScrollBehavior) {
@@ -381,31 +323,41 @@ export class StageScrollAdapter {
     this.viewportCapability?.forDocument(this.documentId).scrollTo({ x, y, behavior });
   }
 
-  getAnchor(): ScrollAnchor | null {
+  getAnchor(focus?: { vx: number; vy: number }): ScrollAnchor | null {
     const scope = this.capability?.forDocument(this.documentId);
     const metrics = this.getMetrics();
     if (!scope || !metrics) return null;
     const scrollMetrics = scope.getMetrics(metrics);
     const pageNumber = scrollMetrics.currentPage;
-    const pageMetric = scrollMetrics.pageVisibilityMetrics.find((item) => item.pageNumber === pageNumber)
-      ?? scrollMetrics.pageVisibilityMetrics[0];
-    return {
-      pageNumber,
-      pageCoordinates: pageMetric ? {
-        x: pageMetric.original.pageX,
-        y: pageMetric.original.pageY - this.getViewportGap() / (pageMetric.scaled.scale || 1),
-      } : undefined,
-    };
+    const page = findPage(scope.getSpreadPagesWithRotatedSize(), pageNumber - 1);
+    const pointMetrics = focus ? { ...metrics, scrollLeft: metrics.scrollLeft + focus.vx,
+      scrollTop: metrics.scrollTop + focus.vy } : metrics;
+    return { pageNumber, pageCoordinates: page ? this.getPageCoordinates(pointMetrics, page) : undefined,
+      ...(focus ? { viewportOffset: { x: focus.vx, y: focus.vy } } : {}) };
   }
 
   restoreAnchor(anchor: ScrollAnchor | null) {
     this.cancelPendingNavigation();
     if (!anchor) return;
+    if (anchor.viewportOffset && anchor.pageCoordinates) {
+      const rect = this.getContentRect(Math.min(anchor.pageNumber, this.getTotalPages()) - 1,
+        { origin: anchor.pageCoordinates, size: { width: 0, height: 0 } });
+      if (rect) {
+        this.scrollTo(Math.max(0, rect.origin.x - anchor.viewportOffset.x),
+          Math.max(0, rect.origin.y - anchor.viewportOffset.y), 'instant');
+        return;
+      }
+    }
     this.capability?.forDocument(this.documentId).scrollToPage({
       pageNumber: Math.min(anchor.pageNumber, this.getTotalPages()),
       pageCoordinates: anchor.pageCoordinates,
       behavior: 'instant',
     });
+  }
+
+  getViewportCenter() {
+    const metrics = this.getMetrics();
+    return metrics ? { vx: metrics.clientWidth / 2, vy: metrics.clientHeight / 2 } : undefined;
   }
 
   private getDocumentRotation() {

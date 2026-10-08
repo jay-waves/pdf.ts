@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ComponentProps, type ComponentType, t
 import { ScrollStrategy } from '@embedpdf/plugin-scroll';
 import { SpreadMode } from '@embedpdf/plugin-spread';
 import { ZoomMode, type ZoomLevel } from '@embedpdf/plugin-zoom';
+import { Toolbar as RadixToolbar } from 'radix-ui';
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -110,21 +111,22 @@ const ZOOM_OPTIONS: Array<{ label: string; value: ZoomLevel }> = [
   { label: '150%', value: 1.5 },
   { label: '200%', value: 2 },
 ];
+const READING_AREA_OPTION = { label: 'Fit area', value: 'reading-area' };
 const ZOOM_SELECT_OPTIONS = ZOOM_OPTIONS.map(({ label, value }) => ({ label, value: String(value) }));
 const ZOOM_LEVELS = new Map(ZOOM_OPTIONS.map(({ value }) => [String(value), value]));
 
 function ZoomControl({
   disabled,
-  zoomLevel,
   zoomPercent,
   onPresetChange,
   onPercentChange,
+  onSelectReadingArea,
 }: {
   disabled: boolean;
-  zoomLevel: ZoomLevel;
   zoomPercent: number;
   onPresetChange(value: string): void;
   onPercentChange(value: number): void;
+  onSelectReadingArea(): void;
 }) {
   const [draft, setDraft] = useState(`${zoomPercent}%`);
   const [editing, setEditing] = useState(false);
@@ -173,8 +175,12 @@ function ZoomControl({
       />
       <Select
         className={styles.zoomMenu}
-        value={String(zoomLevel)}
-        options={ZOOM_SELECT_OPTIONS}
+        value=""
+        options={[
+          ...ZOOM_SELECT_OPTIONS.slice(0, 2),
+          { ...READING_AREA_OPTION, onSelect: onSelectReadingArea },
+          ...ZOOM_SELECT_OPTIONS.slice(2),
+        ]}
         onValueChange={onPresetChange}
         label="Zoom presets"
         disabled={disabled}
@@ -197,7 +203,6 @@ export function Toolbar({
     canPresent,
     darkAppearance,
     zoomPercent,
-    zoomLevel,
     activeTool,
     spreadMode,
     scrollStrategy,
@@ -269,18 +274,28 @@ export function Toolbar({
   };
 
   const selectZoom = (value: string) => {
+    if (value === READING_AREA_OPTION.value) return;
     const level = ZOOM_LEVELS.get(value);
     if (level !== undefined) dispatch({ type: 'view/set-zoom', level });
   };
 
   const enterZoom = (percent: number) => {
     dispatch({ type: 'view/set-zoom', level: percent / 100 });
+    stage?.focusViewportAfterAction();
+  };
+
+  const stepZoom = (direction: -1 | 1) => {
+    dispatch({ type: 'view/zoom-step', direction });
   };
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse') return;
-      if (pinned || event.clientY <= 40) {
+      if (event.pointerType !== 'mouse' || event.buttons !== 0) return;
+      // A generous centered zone; keep the screen edges clear for scrollbars.
+      const nearToolbar = Math.abs(event.clientX - window.innerWidth / 2) <= 480
+        && event.clientX >= 32 && event.clientX <= window.innerWidth - 32
+        && event.clientY <= 96;
+      if (pinned || nearToolbar) {
         showToolbar();
       } else if (!pointerHoveringRef.current && !portalContainer?.matches(':focus-within')) {
         scheduleToolbarHide();
@@ -358,7 +373,7 @@ export function Toolbar({
           <FloatingToolbar label="PDF toolbar">
             <FloatingToolbarGroup>
               {PRIMARY_ITEMS.map(({ id, label, icon: Icon }) => (
-                <button
+                <RadixToolbar.Button
                   key={id}
                   type="button"
                   className={styles.modeButton}
@@ -371,7 +386,7 @@ export function Toolbar({
                     strokeWidth={2}
                   />
                   <span className={styles.modeLabel}>{label}</span>
-                </button>
+                </RadixToolbar.Button>
               ))}
             </FloatingToolbarGroup>
             {renderPersistentControls()}
@@ -380,6 +395,13 @@ export function Toolbar({
 
         {activeSection === 'document' ? renderSection('Document toolbar', (
           <FloatingToolbarGroup>
+            <IconButton
+              label="Thumbnails"
+              icon={BookImage}
+              active={thumbnailsOpen}
+              disabled={!canUseDocument}
+              onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'thumbnails' })}
+            />
             <IconButton
               label="Print"
               icon={Printer}
@@ -425,20 +447,20 @@ export function Toolbar({
                 label="Zoom out"
                 icon={Minus}
                 disabled={!canUseDocument}
-                onClick={() => dispatch({ type: 'view/zoom-step', direction: -1 })}
+                onClick={() => stepZoom(-1)}
               />
               <ZoomControl
                 disabled={!canUseDocument}
-                zoomLevel={zoomLevel}
                 zoomPercent={zoomPercent}
                 onPresetChange={selectZoom}
                 onPercentChange={enterZoom}
+                onSelectReadingArea={() => dispatch({ type: 'view/select-reading-region' })}
               />
               <IconButton
                 label="Zoom in"
                 icon={Plus}
                 disabled={!canUseDocument}
-                onClick={() => dispatch({ type: 'view/zoom-step', direction: 1 })}
+                onClick={() => stepZoom(1)}
               />
             </FloatingToolbarGroup>
             <FloatingToolbarDivider />
@@ -473,13 +495,6 @@ export function Toolbar({
                 icon={RotateCw}
                 disabled={!canUseDocument}
                 onClick={() => dispatch({ type: 'view/rotate' })}
-              />
-              <IconButton
-                label="Thumbnails"
-                icon={BookImage}
-                active={thumbnailsOpen}
-                disabled={!canUseDocument}
-                onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'thumbnails' })}
               />
             </FloatingToolbarGroup>
           </>

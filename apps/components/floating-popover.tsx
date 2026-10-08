@@ -1,5 +1,6 @@
 import type { AriaRole, ReactNode } from 'react';
 import { Popover } from 'radix-ui';
+import { useViewerControlClick, useViewerFocus } from './viewer-focus';
 
 export function FloatingPopover({
   onClose,
@@ -20,6 +21,8 @@ export function FloatingPopover({
   sideOffset?: number;
   children: ReactNode;
 }) {
+  const focusViewer = useViewerFocus();
+  const onControlClick = useViewerControlClick();
   return (
     <Popover.Root open onOpenChange={(nextOpen) => !nextOpen && onClose()} modal={false}>
       <Popover.Anchor asChild>
@@ -34,7 +37,12 @@ export function FloatingPopover({
           collisionPadding={8}
           aria-label={label}
           role={role}
+          onClick={role === 'toolbar' ? onControlClick : undefined}
           onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={focusViewer ? (event) => {
+            event.preventDefault();
+            focusViewer();
+          } : undefined}
         >
           {children}
         </Popover.Content>

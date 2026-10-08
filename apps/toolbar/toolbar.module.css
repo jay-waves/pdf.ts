@@ -1,7 +1,7 @@
 @reference '../tailwind.css';
 
 .root {
-  @apply pointer-events-none fixed inset-x-0 top-0 z-31 flex flex-col items-center bg-transparent opacity-0;
+  @apply pointer-events-none fixed inset-x-0 top-0 z-31 mx-auto flex w-fit max-w-[calc(100vw-32px)] flex-col items-center bg-transparent opacity-0;
   @apply transition-opacity duration-200 ease-out motion-reduce:transition-none;
   padding-top: 2.5vh;
 }
@@ -12,6 +12,7 @@
    every section. display: contents preserves the existing flex layout. */
 .persistentControls { display: contents; }
 @media (max-width: 640px) {
+  .root { max-width: calc(100vw - 16px); }
   .root[data-toolbar-level='secondary'] .persistentControls { display: none; }
 }
 

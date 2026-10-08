@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Dialog as RadixDialog } from 'radix-ui';
+import { ViewerFocusContext, useViewerFocus } from './viewer-focus';
 
 type DialogVariant = 'panel' | 'flatPanel' | 'panelCompact' | 'popup' | 'popupWide';
 type DialogTitleVariant = 'hidden' | 'panel' | 'popup';
@@ -39,6 +40,7 @@ export function Dialog({
   variant?: DialogVariant;
   titleVariant?: DialogTitleVariant;
 }) {
+  const focusViewer = useViewerFocus();
   return (
     <RadixDialog.Root open={open} onOpenChange={(nextOpen) => {
       if (!nextOpen && !preventClose) onClose();
@@ -48,9 +50,13 @@ export function Dialog({
         <RadixDialog.Content
           className={`pdf-mica-surface pdf-dialog-content fixed top-1/2 left-1/2 z-21 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border ${VARIANT_CLASSES[variant]} ${contentClassName}`.trim()}
           aria-describedby={undefined}
+          onCloseAutoFocus={focusViewer ? (event) => {
+            event.preventDefault();
+            focusViewer();
+          } : undefined}
         >
           <RadixDialog.Title className={TITLE_VARIANT_CLASSES[titleVariant]}>{title}</RadixDialog.Title>
-          {children}
+          <ViewerFocusContext.Provider value={null}>{children}</ViewerFocusContext.Provider>
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>

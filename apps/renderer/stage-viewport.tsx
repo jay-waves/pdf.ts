@@ -9,6 +9,7 @@ import {
 } from '@embedpdf/plugin-viewport/react';
 import { ScrollArea } from 'radix-ui';
 import { useZoomCapability } from '@embedpdf/plugin-zoom/react';
+import { measureViewport } from './viewport-geometry';
 import type { ViewerStage } from '../viewer/viewer-stage';
 
 /** The DOM viewport attached to a ViewerStage. */
@@ -41,22 +42,12 @@ export function StageViewport({
     const container = viewportRef.current;
     if (!container || !viewportPlugin || documentState?.status !== 'loaded') return;
     const measure = () => {
-      viewportPlugin.setViewportResizeMetrics(documentId, {
-        width: container.offsetWidth,
-        height: container.offsetHeight,
-        clientWidth: container.clientWidth,
-        clientHeight: container.clientHeight,
-        scrollTop: container.scrollTop,
-        scrollLeft: container.scrollLeft,
-        scrollWidth: container.scrollWidth,
-        scrollHeight: container.scrollHeight,
-        clientLeft: container.clientLeft,
-        clientTop: container.clientTop,
-      });
+      const metrics = measureViewport(container);
+      viewportPlugin.setViewportResizeMetrics(documentId, metrics);
       // Resize events are deduplicated across document lifetimes. A replacement
       // at the same size still needs its initial zoom gate released. Numeric
       // zoom also needs this: the plugin's automatic resize handler skips it.
-      if (container.clientWidth > 0 && container.clientHeight > 0
+      if (metrics.clientWidth > 0 && metrics.clientHeight > 0
         && viewport?.hasGate('zoom', documentId) && zoom) {
         const scope = zoom.forDocument(documentId);
         scope.requestZoom(scope.getState().zoomLevel);
@@ -73,6 +64,7 @@ export function StageViewport({
         <ScrollArea.Viewport
           {...props}
           ref={viewportRef}
+          tabIndex={0}
           className={className}
           style={{
             ...style,
