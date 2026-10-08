@@ -42,6 +42,15 @@ function landingPosition(
   );
 }
 
+function visibleTargetDelta(start: number, size: number, viewportStart: number,
+  viewportSize: number, beforeInset: number, afterInset: number, comfort: number) {
+  const visibleStart = viewportStart + beforeInset;
+  const visibleEnd = viewportStart + viewportSize - afterInset;
+  if (start < visibleStart) return start - visibleStart - comfort;
+  if (start + size > visibleEnd) return start + size - visibleEnd + comfort;
+  return 0;
+}
+
 function restorePagePosition(
   position: Position,
   pageSize: Size,
@@ -112,10 +121,10 @@ export class StageScrollAdapter {
     const metrics = this.getMetrics();
     if (!metrics) return;
     this.cancelPendingNavigation();
-    this.scrollTo(metrics.scrollLeft, Math.max(0, metrics.scrollTop + delta), 'instant');
+    this.scrollTo(metrics.scrollLeft, Math.max(0, metrics.scrollTop + delta), 'smooth');
   }
 
-  getRectPosition(pageIndex: number, rect: Rect) {
+  private getRectPosition(pageIndex: number, rect: Rect) {
     return this.capability?.forDocument(this.documentId).getRectPositionForPage(pageIndex, rect) ?? null;
   }
 
@@ -238,12 +247,8 @@ export class StageScrollAdapter {
 
     if (targetSize() > availableSize - comfort * 2) target = positionRect(rects[0]) ?? target;
 
-    const visibleStart = viewportStart + beforeInset;
-    const visibleEnd = viewportStart + viewportSize - afterInset;
-    const targetEnd = targetStart() + targetSize();
-    let delta = 0;
-    if (targetStart() < visibleStart) delta = targetStart() - visibleStart - comfort;
-    else if (targetEnd > visibleEnd) delta = targetEnd - visibleEnd + comfort;
+    const delta = visibleTargetDelta(targetStart(), targetSize(), viewportStart,
+      viewportSize, beforeInset, afterInset, comfort);
     if (Math.abs(delta) <= 0.5) return false;
 
     this.scrollTo(
@@ -341,35 +346,11 @@ export class StageScrollAdapter {
     return true;
   }
 
-  goToPosition(
-    pageIndex: number,
-    pageCoordinates?: { x: number; y: number },
-    behavior: ScrollBehavior = 'instant',
-  ) {
-    this.cancelPendingNavigation();
-    const scope = this.capability?.forDocument(this.documentId);
-    if (!scope) return false;
-    scope.scrollToPage({ pageNumber: pageIndex + 1, pageCoordinates, behavior });
-    return true;
-  }
-
-  movePages(delta: number, behavior: ScrollBehavior = 'smooth') {
-    return this.goToPage(this.getCurrentPage() + delta, behavior);
-  }
-
   preserveView(update: () => void) {
     this.cancelPendingNavigation();
     const anchor = this.getAnchor();
     update();
     this.restoreAnchor(anchor);
-  }
-
-  restorePage(pageNumber: number) {
-    this.cancelPendingNavigation();
-    this.capability?.forDocument(this.documentId).scrollToPage({
-      pageNumber,
-      behavior: 'instant',
-    });
   }
 
   private getMetrics(): ViewportMetrics | null {
@@ -418,6 +399,7 @@ export class StageScrollAdapter {
   }
 
   restoreAnchor(anchor: ScrollAnchor | null) {
+    this.cancelPendingNavigation();
     if (!anchor) return;
     this.capability?.forDocument(this.documentId).scrollToPage({
       pageNumber: Math.min(anchor.pageNumber, this.getTotalPages()),

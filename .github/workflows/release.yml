@@ -29,7 +29,7 @@ jobs:
           version=$(node -p "require('./package.json').version")
           [[ "$GITHUB_REF_NAME" == "v$version" ||
              ( "$GITHUB_REF_NAME" == "v$version-"* && "$GITHUB_REF_NAME" =~ -[0-9A-Za-z]+([.-][0-9A-Za-z]+)*$ ) ]]
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
       - run: pnpm install --frozen-lockfile
       # Tests and type checking are performed locally before pushing the tag.
       - run: pnpm exec vite build
@@ -39,7 +39,7 @@ jobs:
           path: release/web
           retention-days: 1
           if-no-files-found: error
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: release/web
           retention-days: 1
@@ -166,4 +166,4 @@ jobs:
     steps:
       - name: Deploy web viewer
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

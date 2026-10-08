@@ -31,6 +31,7 @@ function setup(t) {
     scrollTo(position) { scrolls.push(position); metrics.scrollLeft = position.x; metrics.scrollTop = position.y; },
   };
   const scope = {
+    getTotalPages: () => 10,
     getRectPositionForPage: (page, rect) => ({ ...rect, origin: { x: rect.origin.x, y: page * 1000 + rect.origin.y } }),
     getSpreadPagesWithRotatedSize: () => [[{ index: 9, size: { width: 800, height: 1000 } }]],
     scrollToPage(options) {
@@ -58,6 +59,18 @@ function setup(t) {
 globalThis.requestAnimationFrame = () => 0;
 globalThis.cancelAnimationFrame = () => {};
 const rects = [{ origin: { x: 10, y: 100 }, size: { width: 20, height: 20 } }];
+
+test('vertical keyboard scrolling uses native smooth scrolling and clamps at the top', (t) => {
+  const { scroll, scrolls } = setup(t);
+  scroll.scrollVertically(40);
+  scroll.scrollVertically(-40);
+  scroll.scrollVertically(-40);
+  assert.deepEqual(scrolls, [
+    { x: 0, y: 40, behavior: 'smooth' },
+    { x: 0, y: 0, behavior: 'smooth' },
+    { x: 0, y: 0, behavior: 'smooth' },
+  ]);
+});
 
 test('document replacement preserves page-local position and clamps removed pages', () => {
   const jumps = [];
@@ -103,7 +116,7 @@ test('distant target reveal jumps first and then smoothly settles within the des
 });
 
 test('new navigation or direct input cancels the previous delayed settle', (t) => {
-  for (const interrupt of [(scroll) => scroll.goToPosition(2), (scroll) => scroll.cancelPendingNavigation()]) {
+  for (const interrupt of [(scroll) => scroll.restoreAnchor({ pageNumber: 3 }), (scroll) => scroll.cancelPendingNavigation()]) {
     const { scroll, scrolls, frame, frames } = setup(t);
     scroll.reveal(9, rects);
     frame();

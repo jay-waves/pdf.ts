@@ -1,4 +1,4 @@
-import { cpSync } from 'node:fs';
+import { cpSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -27,6 +27,13 @@ export default defineConfig({
     tailwindcss(),
     {
       name: 'viewer-static-files',
+      configureServer(server) {
+        server.middlewares.use('/logo.png', (request, response, next) => {
+          if (request.method !== 'GET' && request.method !== 'HEAD') return next();
+          response.setHeader('Content-Type', 'image/png');
+          response.end(request.method === 'HEAD' ? undefined : readFileSync(resolve(import.meta.dirname, 'assets/logo.png')));
+        });
+      },
       writeBundle() {
         const resolvedOutputDir = resolve(import.meta.dirname, outputDir);
         cpSync(resolve(import.meta.dirname, 'LICENSE.txt'), resolve(resolvedOutputDir, 'LICENSE.txt'));

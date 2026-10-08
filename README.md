@@ -90,6 +90,12 @@ to check model availability.
 
 ## Build from source
 
+For frontend-only validation in WSL, run `pnpm dev:wsl` and open
+`http://localhost:5173` in your Windows browser (or forward port 5173 to your
+browser machine). The welcome screen accepts a dropped PDF or a file selection.
+Changes reload through Vite; no compilation, packaging, or Go daemon is required.
+This uses the existing browser adapter rather than desktop launcher APIs.
+
 Development requires Node.js 24 LTS and pnpm 12.
 
 ```sh
