@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { platform } from '#platform';
+import { supportsLlm as platformSupportsLlm } from '../platform/llm';
 import type { AiConfig, AiConfigUpdate } from '../platform/types';
-import { TRANSLATOR_PREFERENCE } from '../selection/translation-settings';
+import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
+import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
 
 const DEFAULT_PROMPT = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
 const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, prompt: DEFAULT_PROMPT, totalTokens: 0 };
 // Keep saves ordered even when the settings dialog is closed and reopened.
 let saveQueue: Promise<void> = Promise.resolve();
-const supportsLlm = Boolean(platform.getAiConfig && platform.setAiConfig && platform.requestAi);
+const supportsLlm = platformSupportsLlm(platform);
 
-export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(available: boolean): void }) {
+export function LlmSettings() {
+  const [enabled, setEnabled] = useState(() => isLlmEnabled(platform.getPreference));
   const [config, setConfig] = useState<AiConfig>(EMPTY_CONFIG);
   const [apiKey, setApiKey] = useState('');
   const [loaded, setLoaded] = useState(false);
@@ -33,30 +36,35 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
   }, []);
 
   useEffect(() => {
-    if (!supportsLlm) { onAvailabilityChange(false); return; }
+    if (!supportsLlm) return;
     let active = true;
     void saveQueue.then(() => platform.getAiConfig!()).then((value) => {
       if (!active) return;
-      draft.current.config = value;
-      setConfig(value);
+      // Preserve edits made while the launcher configuration is loading.
+      const next = draft.current.revision === 0 ? value : {
+        ...draft.current.config,
+        apiKeyConfigured: value.apiKeyConfigured,
+        totalTokens: value.totalTokens,
+      };
+      draft.current.config = next;
+      setConfig(next);
       setLoaded(true);
-      const available = Boolean(value.model && value.baseUrl && value.apiKeyConfigured);
-      if (!available && platform.getPreference(TRANSLATOR_PREFERENCE) === 'llm') {
-        platform.setPreference(TRANSLATOR_PREFERENCE, 'builtin');
-      }
-      onAvailabilityChange(available);
     }).catch((failure) => {
       if (active) {
-        setError(failure instanceof Error ? failure.message : 'Could not load translation settings.');
-        onAvailabilityChange(false);
+        setError(failure instanceof Error ? failure.message : 'Could not load LLM settings.');
       }
     });
     return () => { active = false; };
-  }, [onAvailabilityChange]);
+  }, []);
 
   const save = () => {
     clearTimeout(timer.current);
-    if (!loaded || !dirty.current) return;
+    if (!dirty.current) return;
+    if (!supportsLlm) {
+      if (mounted.current) setStatus('Open the desktop launcher to save settings and run LLM.');
+      return;
+    }
+    if (!loaded) return;
     dirty.current = false;
     const snapshot = draft.current;
     const update: AiConfigUpdate = {
@@ -70,12 +78,7 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
       try {
         await platform.setAiConfig!(update);
         const saved = await platform.getAiConfig!();
-        const available = Boolean(saved.model && saved.baseUrl && saved.apiKeyConfigured);
-        if (!available && platform.getPreference(TRANSLATOR_PREFERENCE) === 'llm') {
-          platform.setPreference(TRANSLATOR_PREFERENCE, 'builtin');
-        }
         if (!mounted.current) return;
-        onAvailabilityChange(available);
         // A slow response must never replace text typed after this save began.
         if (draft.current.revision !== snapshot.revision) return;
         draft.current = { config: saved, apiKey: '', revision: snapshot.revision };
@@ -85,11 +88,14 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
         if (!mounted.current || draft.current.revision !== snapshot.revision) return;
         dirty.current = true;
         setStatus('');
-        setError(failure instanceof Error ? failure.message : 'Could not save translation settings.');
+        setError(failure instanceof Error ? failure.message : 'Could not save LLM settings.');
       }
     });
   };
   flush.current = save;
+  useEffect(() => {
+    if (loaded) flush.current();
+  }, [loaded]);
 
   const scheduleSave = () => {
     draft.current = { ...draft.current, revision: draft.current.revision + 1 };
@@ -116,7 +122,6 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
       const value = await platform.getAiConfig!();
       draft.current = { config: value, apiKey: '', revision: draft.current.revision + 1 };
       setConfig(value); setApiKey('');
-      onAvailabilityChange(Boolean(value.model && value.baseUrl && value.apiKeyConfigured));
       setStatus(action === 'test' ? 'LLM connection successful.' : '');
     } catch (failure) {
       setStatus('');
@@ -124,11 +129,15 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
     }
   };
 
-  return <form className={styles.editorPanel} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
-    <div className={styles.heading}><div><h2>Translate</h2><p>{supportsLlm
-      ? 'Configure the OpenAI-compatible model for LLM translation.'
-      : 'LLM translation is available in the desktop launcher. API keys are disabled on the web.'}</p></div></div>
-    <fieldset disabled={!supportsLlm || !loaded} className={styles.fieldset}>
+  return <form className={styles.editorPanel} data-enabled={enabled} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
+    <div className={styles.heading}><div><h2>LLM</h2><p>{supportsLlm
+      ? 'Run a custom prompt on selected text using an OpenAI-compatible model.'
+      : 'Open the desktop launcher to save settings and run LLM.'}</p></div><SettingsToggle label="Enable LLM" checked={enabled}
+      onCheckedChange={(value) => {
+        platform.setPreference(LLM_ENABLED_PREFERENCE, String(value));
+        setEnabled(value);
+      }} /></div>
+    <fieldset disabled={!enabled} className={styles.fieldset}>
       <label className={styles.field}>Model name
         <input value={config.model} placeholder="Provider model name" spellCheck={false} onChange={(event) => edit('model', event.target.value)} />
       </label>
@@ -150,13 +159,13 @@ export function LlmSettings({ onAvailabilityChange }: { onAvailabilityChange(ava
         <textarea rows={9} value={config.prompt} onChange={(event) => edit('prompt', event.target.value)} />
       </label>
       <div className={styles.actions}>
-        <button type="button" onClick={() => void runAction('test')}>Test</button>
-        <button type="button" onClick={() => void runAction('reset')}>Reset</button>
+        <button type="button" disabled={!supportsLlm || !loaded} onClick={() => void runAction('test')}>Test</button>
+        <button type="button" disabled={!supportsLlm || !loaded} onClick={() => void runAction('reset')}>Reset</button>
         <span className={styles.tokenCount}><strong>{config.totalTokens.toLocaleString()}</strong><span>tokens</span></span>
       </div>
     </fieldset>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    {supportsLlm && status && <div className={styles.footer}>
+    {status && <div className={styles.footer}>
       <span className={styles.hint} role="status">{status}</span>
     </div>}
   </form>;

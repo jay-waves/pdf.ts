@@ -7,17 +7,8 @@
 .content { @apply min-h-0 flex-1 flex flex-col gap-4 bg-transparent text-xs; height: auto; }
 .section { @apply grid gap-3 rounded-lg border border-border-subtle bg-transparent p-4; }
 .section { background: var(--pdf-section-background); box-shadow: var(--pdf-section-shadow); }
-.pdfPage { @apply grid gap-4; }
-.pdfPage[hidden] { display: none; }
 .breadcrumbs { @apply flex items-center gap-4 text-xs; }
 .dialogTitle { @apply font-semibold text-foreground; }
-.pageToggle { @apply inline-flex items-center gap-0.5 rounded-lg bg-surface-alt p-0.5; }
-.pageToggle button { @apply min-w-14 cursor-pointer rounded-md border border-transparent bg-transparent px-3 py-1.5 text-[11px] font-medium text-muted transition-colors hover:text-foreground; }
-.pageToggle button[data-state='active'] {
-  @apply bg-surface text-foreground shadow-none;
-  box-shadow: var(--pdf-option-shadow);
-}
-.pageToggle button:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: 2px; }
 .sectionTitle { @apply m-0 text-xs font-semibold text-foreground; }
 .stats { @apply m-0 grid grid-cols-2 gap-x-8 max-[480px]:grid-cols-1; }
 .stats > div { @apply grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-border-subtle py-2; }

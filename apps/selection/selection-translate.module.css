@@ -17,3 +17,5 @@
 .downloadAction:focus-visible {
   @apply ring-1 ring-accent;
 }
+
+.externalLink { @apply mt-2 block text-accent underline underline-offset-2; }

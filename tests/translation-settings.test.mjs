@@ -7,23 +7,44 @@ import {
   normalizeTranslationLanguage,
   TRANSLATION_SOURCE_LANGUAGE_PREFERENCE,
   TRANSLATION_TARGET_LANGUAGE_PREFERENCE,
-  getTranslatorMode,
+  isTranslationEnabled,
+  isLlmEnabled,
   googleTranslationUrl,
-  TRANSLATOR_PREFERENCE,
+  TRANSLATION_ENABLED_PREFERENCE,
+  LLM_ENABLED_PREFERENCE,
 } from '../apps/selection/translation-settings.ts';
 
 function preferences(entries) {
   return (key) => entries[key] ?? null;
 }
 
-test('Translator selection alone controls LLM usage, which remains unavailable on web', () => {
-  const configured = preferences({ [TRANSLATOR_PREFERENCE]: 'llm' });
-  assert.equal(getTranslatorMode(configured, false), 'builtin');
-  assert.equal(getTranslatorMode(configured, true), 'llm');
-  assert.equal(getTranslatorMode(preferences({ [TRANSLATOR_PREFERENCE]: 'llm', 'pdf.ts:llm-enabled': 'false' }), true), 'llm');
-  assert.equal(getTranslatorMode(preferences({ [TRANSLATOR_PREFERENCE]: 'builtin' }), true), 'builtin');
-  assert.equal(getTranslatorMode(preferences({}), true), 'builtin');
-  assert.equal(getTranslatorMode(preferences({ [TRANSLATOR_PREFERENCE]: 'google' }), false), 'google');
+test('translation and LLM default to enabled independently of legacy provider selection', () => {
+  for (const legacy of [undefined, 'builtin', 'llm', 'google']) {
+    const read = preferences({ 'pdf.ts:translator': legacy });
+    assert.equal(isTranslationEnabled(read), true);
+    assert.equal(isLlmEnabled(read), true);
+  }
+});
+
+test('translation and LLM can each be disabled without affecting the other', () => {
+  const translationDisabled = preferences({ [TRANSLATION_ENABLED_PREFERENCE]: 'false' });
+  assert.equal(isTranslationEnabled(translationDisabled), false);
+  assert.equal(isLlmEnabled(translationDisabled), true);
+  const llmDisabled = preferences({ [LLM_ENABLED_PREFERENCE]: 'false' });
+  assert.equal(isTranslationEnabled(llmDisabled), true);
+  assert.equal(isLlmEnabled(llmDisabled), false);
+  const bothDisabled = preferences({
+    [TRANSLATION_ENABLED_PREFERENCE]: 'false',
+    [LLM_ENABLED_PREFERENCE]: 'false',
+  });
+  assert.equal(isTranslationEnabled(bothDisabled), false);
+  assert.equal(isLlmEnabled(bothDisabled), false);
+  const reenabled = preferences({
+    [TRANSLATION_ENABLED_PREFERENCE]: 'true',
+    [LLM_ENABLED_PREFERENCE]: 'true',
+  });
+  assert.equal(isTranslationEnabled(reenabled), true);
+  assert.equal(isLlmEnabled(reenabled), true);
 });
 
 test('Google Translate links safely preserve text and requested languages', () => {

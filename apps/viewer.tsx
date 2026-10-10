@@ -49,7 +49,6 @@ import { exportPdf, savePdfCopy } from './document/pdf-save';
 import { usePdfRuntime, useRenderThemeVersion, type PdfRuntime } from './renderer/pdf-engine';
 import { useDocumentPersistence } from './document/viewer-document-persistence';
 import { SelectionTranslate } from './selection/selection-translate';
-import { TRANSLATOR_PREFERENCE } from './selection/translation-settings';
 import { installReadingHistory as installPlatformReadingHistory } from './navigation/reading-history';
 import {
   SignatureDialog,
@@ -101,23 +100,6 @@ writeStartupInfo(
   `${window.location.origin}${window.location.pathname}; ${navigator.onLine ? 'online' : 'offline'}`,
 );
 writeStartupInfo('PDFium WASM asset resolved', describeStartupUrl(BUNDLED_PDFIUM_WASM_URL));
-
-async function fallBackFromUnavailableLlm() {
-  if (platform.getPreference(TRANSLATOR_PREFERENCE) !== 'llm') return;
-  if (!platform.requestAi || !platform.getAiConfig) {
-    platform.setPreference(TRANSLATOR_PREFERENCE, 'builtin');
-    return;
-  }
-  try {
-    const config = await platform.getAiConfig();
-    if (config.apiKeyConfigured && config.baseUrl && config.model) return;
-  } catch {
-    // An unavailable launcher cannot provide LLM translation.
-  }
-  platform.setPreference(TRANSLATOR_PREFERENCE, 'builtin');
-}
-
-void fallBackFromUnavailableLlm();
 
 function installAll(installers: Array<() => (() => void) | undefined>) {
   const cleanups: Array<() => void> = [];

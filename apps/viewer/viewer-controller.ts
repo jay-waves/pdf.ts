@@ -18,6 +18,7 @@ type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
 type ViewerPanel = 'outline' | 'thumbnails' | 'colors';
 export type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 export type ViewerTranslationRequest = {
+  mode?: 'builtin' | 'llm';
   documentId: string;
   anchor: { x: number; y: number };
 };
@@ -45,7 +46,7 @@ type ViewerUiCommand =
   | { type: 'ui/toggle-panel'; panel: Extract<ViewerPanel, 'thumbnails' | 'colors'> }
   | { type: 'ui/open-panel'; panel: ViewerPanel }
   | { type: 'ui/open-comments'; annotationId: string }
-  | { type: 'ui/open-translation'; documentId: string; anchor: { x: number; y: number } }
+  | ({ type: 'ui/open-translation' } & ViewerTranslationRequest)
   | { type: 'ui/open-dialog'; dialog: ViewerDialog }
   | { type: 'ui/close-overlay' };
 
@@ -107,7 +108,7 @@ function reduceViewerUi(state: ViewerUiState, action: ViewerUiCommand): ViewerUi
       toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
       overlay: {
         type: 'translation',
-        request: { documentId: action.documentId, anchor: action.anchor },
+        request: { documentId: action.documentId, anchor: action.anchor, mode: action.mode },
       },
     };
     case 'ui/close-overlay': return { ...state, overlay: null };

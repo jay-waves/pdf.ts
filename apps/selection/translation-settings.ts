@@ -1,13 +1,14 @@
 export const TRANSLATION_TARGET_LANGUAGE_PREFERENCE = 'pdf.ts:translation-target-language';
 export const TRANSLATION_SOURCE_LANGUAGE_PREFERENCE = 'pdf.ts:translation-source-language';
-export const TRANSLATOR_PREFERENCE = 'pdf.ts:translator';
-export type TranslatorMode = 'builtin' | 'llm' | 'google';
+export const TRANSLATION_ENABLED_PREFERENCE = 'pdf.ts:translation-enabled';
+export const LLM_ENABLED_PREFERENCE = 'pdf.ts:llm-enabled';
 
-export function getTranslatorMode(read: (key: string) => string | null, supportsLlm: boolean): TranslatorMode {
-  const mode = read(TRANSLATOR_PREFERENCE);
-  if (mode === 'google') return mode;
-  if (mode === 'llm' && supportsLlm) return mode;
-  return 'builtin';
+export function isTranslationEnabled(read: (key: string) => string | null) {
+  return read(TRANSLATION_ENABLED_PREFERENCE) !== 'false';
+}
+
+export function isLlmEnabled(read: (key: string) => string | null) {
+  return read(LLM_ENABLED_PREFERENCE) !== 'false';
 }
 
 export function googleTranslationUrl(text: string, targetLanguage: string, sourceLanguage = 'auto') {

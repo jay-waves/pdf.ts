@@ -7,15 +7,18 @@
 .heading h2 { @apply m-0 text-xs font-semibold text-foreground; }
 .heading p { @apply mt-1 mb-0 text-[11px] leading-4 text-muted; }
 .heading > svg { @apply shrink-0 text-muted; }
-.providers { @apply grid grid-cols-3 gap-1 rounded-md bg-surface-alt p-1 max-[480px]:grid-cols-1; }
-.providers button { @apply grid cursor-pointer gap-1.5 rounded border border-transparent bg-transparent p-3 text-left text-secondary shadow-none transition-colors; }
-.providers button strong { @apply text-[11px] font-medium; }
-.providers button span { @apply text-[10px] leading-4 text-muted; }
-.providers button[data-state='checked'] { @apply bg-surface text-foreground; }
-.providers button[data-state='checked'] { box-shadow: var(--pdf-option-shadow); }
-.providers button:hover:not(:disabled) { @apply text-foreground; }
-.providers button:disabled { @apply cursor-default opacity-45; }
-.providers button:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: 2px; }
+.toggle { @apply inline-flex h-5 w-8 shrink-0 cursor-pointer items-center rounded-full border border-border-subtle bg-surface-alt p-0.5 shadow-none outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control motion-reduce:transition-none; }
+.toggle[data-state='checked'] { @apply border-border bg-selected; }
+.toggle:hover { @apply border-control-border; }
+.toggle:focus-visible { @apply border-accent shadow-control; }
+.toggleThumb { @apply pointer-events-none block size-3.5 shrink-0 rounded-full bg-muted transition-[background-color,transform] duration-150 ease-control motion-reduce:transition-none; }
+.toggleThumb[data-state='unchecked'] { background: color-mix(in srgb, var(--pdf-foreground-muted) 35%, var(--pdf-background-surface-alt)); }
+.toggleThumb[data-state='checked'] { @apply translate-x-3 bg-secondary; }
+[data-enabled='false'] > .heading > div,
+[data-enabled='false'] > .error,
+[data-enabled='false'] > .footer,
+.fieldset:disabled { @apply opacity-50; }
+.fieldset:disabled :disabled { @apply opacity-100; }
 .languageFields { @apply grid grid-cols-2 gap-3 max-[480px]:grid-cols-1; }
 .fieldset { @apply m-0 grid min-w-0 gap-4 border-0 p-0; }
 .field { @apply grid min-w-0 gap-2 text-[11px] font-medium text-secondary; }

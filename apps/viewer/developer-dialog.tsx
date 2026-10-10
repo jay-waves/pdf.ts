@@ -1,5 +1,6 @@
-import { Tabs } from 'radix-ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { platform } from '#platform';
+import { supportsLlm } from '../platform/llm';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfMetadataObject } from '@embedpdf/models';
@@ -96,9 +97,6 @@ export function DeveloperDialog({
   const [metadata, setMetadata] = useState<PdfMetadataObject | null>(null);
   const [metadataError, setMetadataError] = useState('');
   const [metadataLoading, setMetadataLoading] = useState(false);
-  const [page, setPage] = useState<'pdf' | 'llm'>('pdf');
-  const [llmAvailability, setLlmAvailability] = useState({ available: false });
-  const updateLlmAvailability = useCallback((available: boolean) => setLlmAvailability({ available }), []);
   const loggedOpenRef = useRef(false);
   const snapshot = useStore(viewerDiagnosticsStore);
   const renderSettings = useStore(renderSettingsStore);
@@ -206,72 +204,64 @@ export function DeveloperDialog({
       contentClassName={styles.dialog}
       overlayClassName={styles.overlay}
     >
-      <Tabs.Root value={page} onValueChange={(value) => setPage(value as typeof page)} asChild>
-        <PanelContent className={styles.content}>
-          <div className={styles.breadcrumbs}>
-            <span className={styles.dialogTitle}>Developer</span>
-            <Tabs.List className={styles.pageToggle} aria-label="Settings page">
-              <Tabs.Trigger value="pdf">PDF</Tabs.Trigger>
-              <Tabs.Trigger value="llm">LLM</Tabs.Trigger>
-            </Tabs.List>
+      <PanelContent className={styles.content}>
+        <div className={styles.breadcrumbs}>
+          <span className={styles.dialogTitle}>Developer</span>
+        </div>
+        <section className={styles.section} aria-labelledby="developer-statistics">
+          <h2 id="developer-statistics" className={styles.sectionTitle}>PDF rendering</h2>
+          <dl className={styles.stats}>
+            <div><dt>Effective DPR</dt><dd><span>{formatDpr(dpr)}</span></dd></div>
+            <div><dt>Raster pixels</dt><dd><span>{formatPixels(totalPixels)}</span></dd></div>
+            <div><dt>Active tiles</dt><dd><span>{snapshot.activeTiles}</span></dd></div>
+            <div><dt>Raster memory</dt><dd><span>{formatBytes(totalPixels * 4)}</span></dd></div>
+            <div><dt>Base last / avg</dt><dd><span>{formatTiming(snapshot.baseTiming)}</span></dd></div>
+            <div><dt>Tiles last / avg</dt><dd><span>{formatTiming(snapshot.tileTiming)}</span></dd></div>
+          </dl>
+          <div className={styles.control}>
+            <span>Device Pixel Ratio (DPR)</span>
+            <Select
+              className={styles.select}
+              contentClassName={styles.selectContent}
+              value={dprMode}
+              options={DPR_OPTIONS}
+              label="Device Pixel Ratio"
+              onValueChange={(value) => setRenderDprMode(value as RenderDprMode)}
+            />
           </div>
-          <Tabs.Content value="pdf" forceMount hidden={page !== 'pdf'} className={styles.pdfPage}>
-          <section className={styles.section} aria-labelledby="developer-statistics">
-            <h2 id="developer-statistics" className={styles.sectionTitle}>PDF rendering</h2>
-            <dl className={styles.stats}>
-              <div><dt>Effective DPR</dt><dd><span>{formatDpr(dpr)}</span></dd></div>
-              <div><dt>Raster pixels</dt><dd><span>{formatPixels(totalPixels)}</span></dd></div>
-              <div><dt>Active tiles</dt><dd><span>{snapshot.activeTiles}</span></dd></div>
-              <div><dt>Raster memory</dt><dd><span>{formatBytes(totalPixels * 4)}</span></dd></div>
-              <div><dt>Base last / avg</dt><dd><span>{formatTiming(snapshot.baseTiming)}</span></dd></div>
-              <div><dt>Tiles last / avg</dt><dd><span>{formatTiming(snapshot.tileTiming)}</span></dd></div>
-            </dl>
-            <div className={styles.control}>
-              <span>Device Pixel Ratio (DPR)</span>
-              <Select
-                className={styles.select}
-                contentClassName={styles.selectContent}
-                value={dprMode}
-                options={DPR_OPTIONS}
-                label="Device Pixel Ratio"
-                onValueChange={(value) => setRenderDprMode(value as RenderDprMode)}
-              />
+          <p className={styles.hint}>
+            DPR profiles adjust tile raster scale; tile edges follow a fixed {PDF_TILE_SIZE_CSS_PX} CSS px × DPR ratio.
+          </p>
+        </section>
+
+        <section className={styles.section} aria-labelledby="developer-metadata">
+          <h2 id="developer-metadata" className={styles.sectionTitle}>Metadata</h2>
+          {metadataLoading ? <p className={styles.metadataStatus}>Loading metadata…</p> : null}
+          {metadataError ? <p className={styles.metadataError} role="alert">{metadataError}</p> : null}
+          <dl className={styles.metadata}>
+            <div className={styles.metadataTitle}>
+              <dt>Title</dt>
+              <dd>{fileName || 'Not provided'}</dd>
             </div>
-            <p className={styles.hint}>
-              DPR profiles adjust tile raster scale; tile edges follow a fixed {PDF_TILE_SIZE_CSS_PX} CSS px × DPR ratio.
-            </p>
-          </section>
-
-          <section className={styles.section} aria-labelledby="developer-metadata">
-            <h2 id="developer-metadata" className={styles.sectionTitle}>Metadata</h2>
-            {metadataLoading ? <p className={styles.metadataStatus}>Loading metadata…</p> : null}
-            {metadataError ? <p className={styles.metadataError} role="alert">{metadataError}</p> : null}
-            <dl className={styles.metadata}>
-              <div className={styles.metadataTitle}>
-                <dt>Title</dt>
-                <dd>{fileName || 'Not provided'}</dd>
+            {metadata ? [
+                ['Pages', String(pageCount)],
+                ['Author', metadata.author],
+                ['Creator', metadata.creator],
+                ['Producer', metadata.producer],
+                ['Created', formatMetadataDate(metadata.creationDate)],
+                ['Modified', formatMetadataDate(metadata.modificationDate)],
+              ].map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd><span>{value || 'Not provided'}</span></dd>
               </div>
-              {metadata ? [
-                  ['Pages', String(pageCount)],
-                  ['Author', metadata.author],
-                  ['Creator', metadata.creator],
-                  ['Producer', metadata.producer],
-                  ['Created', formatMetadataDate(metadata.creationDate)],
-                  ['Modified', formatMetadataDate(metadata.modificationDate)],
-                ].map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd><span>{value || 'Not provided'}</span></dd>
-                </div>
-              )) : null}
-            </dl>
-          </section>
+            )) : null}
+          </dl>
+        </section>
 
-          {open && <TranslatorSettings detectedLanguage={detectedDocumentLanguage} llmAvailability={llmAvailability} />}
-          </Tabs.Content>
-          {open && <Tabs.Content value="llm" forceMount hidden={page !== 'llm'}><LlmSettings onAvailabilityChange={updateLlmAvailability} /></Tabs.Content>}
-        </PanelContent>
-      </Tabs.Root>
+        {open && <TranslatorSettings detectedLanguage={detectedDocumentLanguage} />}
+        {open && supportsLlm(platform) && <LlmSettings />}
+      </PanelContent>
     </Dialog>
   );
 }

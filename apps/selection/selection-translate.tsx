@@ -5,6 +5,7 @@ import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from '../components';
 import { getDocument } from '../document/viewer-document';
 import { platform } from '#platform';
+import { supportsLlm } from '../platform/llm';
 import { getPluginCapability, normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
 import { detectDocumentLanguage } from './document-language';
@@ -12,7 +13,7 @@ import {
   getLanguageName,
   getTranslationSourceLanguage,
   getTranslationTargetLanguage,
-  getTranslatorMode,
+  googleTranslationUrl,
 } from './translation-settings';
 import styles from './selection-translate.module.css';
 
@@ -55,8 +56,11 @@ export function SelectionTranslate({
     activeController.current = controller;
     setResult({ status: 'loading' });
     try {
-      if (getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'llm') {
-        const translated = await platform.requestAi!({ text }, controller.signal);
+      if (request.mode === 'llm') {
+        if (!supportsLlm(platform) || !platform.requestAi) {
+          throw new Error('Open the desktop launcher to run LLM on selected text.');
+        }
+        const translated = await platform.requestAi({ text }, controller.signal);
         if (!controller.signal.aborted) setResult({ status: 'success', text: translated });
         return;
       }
@@ -86,7 +90,7 @@ export function SelectionTranslate({
         text: error instanceof Error ? error.message : 'Translation failed.',
       });
     }
-  }, []);
+  }, [request.mode]);
 
   useEffect(() => {
     setSourceText('');
@@ -103,7 +107,7 @@ export function SelectionTranslate({
         if (!cancelled) setSourceText(normalizeText(parts));
         return parts;
       }),
-      configuredSourceLanguage || getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) !== 'builtin'
+      configuredSourceLanguage || request.mode === 'llm'
         ? Promise.resolve(configuredSourceLanguage)
         : detectDocumentLanguage(registry.getEngine(), document)
           .then((result) => result.detectedLanguage),
@@ -173,7 +177,7 @@ export function SelectionTranslate({
         ? 'Preparing the built-in translation model...'
         : `Downloading the built-in translation model... ${Math.round(result.progress * 100)}%`;
     }
-    return 'Translating...';
+    return request.mode === 'llm' ? 'Running LLM...' : 'Translating...';
   })();
 
   return (
@@ -184,7 +188,7 @@ export function SelectionTranslate({
       // The selection toolbar restores viewport focus after opening this popover.
       dismissOnFocusOutside={false}
       className={`pdf-glass-surface pdf-glass-popover ${styles.panel} ${result.status === 'error' ? 'text-danger' : ''} ${downloadable ? styles.downloadable : ''}`.trim()}
-      label="Translation"
+      label={request.mode === 'llm' ? 'LLM' : 'Translation'}
       role={downloadable ? 'dialog' : 'status'}
     >
       {downloadable ? (
@@ -199,7 +203,17 @@ export function SelectionTranslate({
         >
           {message}
         </button>
-      ) : message}
+      ) : <>{message}
+        {result.status === 'error' && request.mode !== 'llm' && sourceText && <a
+          className={styles.externalLink}
+          href={googleTranslationUrl(sourceText, getTranslationTargetLanguage(platform.getPreference), getTranslationSourceLanguage(platform.getPreference))}
+          onClick={(event) => {
+            event.preventDefault();
+            platform.openExternal(event.currentTarget.href);
+            onClose();
+          }}
+        >Open in Google Translate</a>}
+      </>}
     </FloatingPopover>
   );
 }

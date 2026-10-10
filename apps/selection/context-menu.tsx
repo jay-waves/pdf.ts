@@ -33,15 +33,17 @@ import {
   MessageSquareMore,
   PaintBucket,
   Strikethrough,
+  Send,
   Trash2,
 } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
 import { getPluginCapability, isEditableTarget, normalizePdfText } from '../shared/utils';
 import { getExternalUrl, getSelectedExternalUrl } from '../shared/url';
 import { platform } from '#platform';
+import { supportsLlm } from '../platform/llm';
 import { getDocument } from '../document/viewer-document';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
-import { getTranslatorMode, googleTranslationUrl, getTranslationTargetLanguage, getTranslationSourceLanguage } from './translation-settings';
+import { isTranslationEnabled, isLlmEnabled } from './translation-settings';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
@@ -206,18 +208,6 @@ export function ContextMenu({
   dispatch: ViewerCommandDispatch;
 }) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
-  const [translationText, setTranslationText] = useState<{ menu: ContextMenuState; text: string } | null>(null);
-
-  useEffect(() => {
-    if (menu?.kind !== 'selection' || !registry || !documentId) return;
-    let active = true;
-    const scope = getPluginCapability<SelectionCapability>(registry, 'selection')?.forDocument(documentId);
-    void scope?.getSelectedText().toPromise().then((parts) => {
-      if (active) setTranslationText({ menu, text: normalizePdfText(parts.join(' ')).trim() });
-    }).catch((error) => console.error('[pdf-ts] failed to prepare selected translation text', error));
-    return () => { active = false; };
-  }, [documentId, menu, registry]);
-
   useEffect(() => {
     if (!registry || !documentId) return;
     const selection = getPluginCapability<SelectionCapability>(registry, 'selection')
@@ -343,24 +333,14 @@ export function ContextMenu({
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    { label: 'Translate', icon: Languages,
-      disabled: getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'google'
-        && (translationText?.menu !== menu || !translationText.text),
-      action: () => {
-      if (getTranslatorMode(platform.getPreference, Boolean(platform.requestAi)) === 'google') {
-        if (translationText?.menu !== menu || !translationText.text) return;
-        // Open directly in the click handler so popup blockers preserve user activation.
-        platform.openExternal(googleTranslationUrl(translationText.text, getTranslationTargetLanguage(platform.getPreference), getTranslationSourceLanguage(platform.getPreference)));
-        setMenu(null);
-        return;
-      }
-      dispatch({
-        type: 'ui/open-translation',
-        documentId,
-        anchor: menu,
-      });
+    ...(isTranslationEnabled(platform.getPreference) ? [{ label: 'Translate', icon: Languages, action: () => {
+      dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'builtin' });
       setMenu(null);
-    } },
+    } }] : []),
+    ...(supportsLlm(platform) && isLlmEnabled(platform.getPreference) ? [{ label: 'LLM', icon: Send, action: () => {
+      dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'llm' });
+      setMenu(null);
+    } }] : []),
     { label: 'Search', icon: ExternalLink, action: () => {
       const selectedText = selectionScope?.getSelectedText();
       setMenu(null);
