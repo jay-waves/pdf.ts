@@ -5,8 +5,6 @@
   @apply flex flex-col;
 }
 .content { @apply min-h-0 flex-1 flex flex-col gap-4 bg-transparent text-xs; height: auto; }
-.section { @apply grid gap-3 rounded-lg border border-border-subtle bg-transparent p-4; }
-.section { background: var(--pdf-section-background); box-shadow: var(--pdf-section-shadow); }
 .breadcrumbs { @apply flex items-center gap-4 text-xs; }
 .dialogTitle { @apply font-semibold text-foreground; }
 .sectionTitle { @apply m-0 text-xs font-semibold text-foreground; }
@@ -38,5 +36,4 @@
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
 @media (max-width: 640px) {
   .content { @apply px-3 pb-3; }
-  .section { @apply p-4; }
 }

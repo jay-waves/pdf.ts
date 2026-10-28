@@ -78,6 +78,8 @@ type ViewerThemeSettings = {
 
 const LIGHT_THEME_STORAGE_KEY = 'pdf-viewer-light-theme-v2';
 const DARK_THEME_STORAGE_KEY = 'pdf-viewer-dark-theme-v2';
+const COLOR_MODE_STORAGE_KEY = 'pdf-viewer-color-mode-v1';
+const SYSTEM_COLOR_MODE_STORAGE_KEY = 'pdf-viewer-system-color-mode-v1';
 const TOOLBAR_PIN_STORAGE_KEY = 'pdf-toolbar-pinned-v1';
 
 function findViewerTheme(value: unknown) {
@@ -156,6 +158,7 @@ function applyViewerTheme(theme: ViewerTheme) {
   const metadata = findViewerTheme(theme);
   document.documentElement.dataset.viewerTheme = theme;
   document.documentElement.dataset.viewerColorMode = metadata?.colorMode ?? 'light';
+  platform.setPreference(COLOR_MODE_STORAGE_KEY, metadata?.colorMode ?? 'light');
   viewerThemeStore.setState({ theme });
 }
 
@@ -180,20 +183,27 @@ export function toggleViewerColorMode() {
 
 export function initializeViewerTheme() {
   const media = window.matchMedia('(prefers-color-scheme: dark)');
-  applyViewerColorMode(getSystemColorMode(media));
+  let systemColorMode = getSystemColorMode(media);
+  const storedMode = platform.getPreference(COLOR_MODE_STORAGE_KEY);
+  const previousSystemMode = platform.getPreference(SYSTEM_COLOR_MODE_STORAGE_KEY);
+  const manualColorMode = previousSystemMode === systemColorMode
+    && (storedMode === 'light' || storedMode === 'dark')
+    ? storedMode
+    : null;
+  viewerThemeStore.setState({ manualColorMode });
+  platform.setPreference(SYSTEM_COLOR_MODE_STORAGE_KEY, systemColorMode);
+  applyViewerColorMode(manualColorMode ?? systemColorMode);
 
   const syncAutomaticTheme = () => {
+    const nextSystemMode = getSystemColorMode(media);
+    if (nextSystemMode === systemColorMode) return;
+    systemColorMode = nextSystemMode;
+    platform.setPreference(SYSTEM_COLOR_MODE_STORAGE_KEY, systemColorMode);
     viewerThemeStore.setState({ manualColorMode: null });
-    applyViewerColorMode(getSystemColorMode(media));
+    applyViewerColorMode(systemColorMode);
   };
   media.addEventListener('change', syncAutomaticTheme);
-  const observer = new MutationObserver(syncAutomaticTheme);
-  observer.observe(document.body, {
-    attributes: true,
-    attributeFilter: ['class'],
-  });
   return () => {
     media.removeEventListener('change', syncAutomaticTheme);
-    observer.disconnect();
   };
 }

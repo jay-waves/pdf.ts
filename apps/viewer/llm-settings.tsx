@@ -5,6 +5,7 @@ import type { AiConfig, AiConfigUpdate } from '../platform/types';
 import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
+import cardStyles from '../components/settings-card.module.css';
 
 const DEFAULT_PROMPT = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
 const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, prompt: DEFAULT_PROMPT, totalTokens: 0 };
@@ -129,7 +130,7 @@ export function LlmSettings() {
     }
   };
 
-  return <form className={styles.editorPanel} data-enabled={enabled} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
+  return <form className={`${cardStyles.card} ${styles.editorPanel}`} data-enabled={enabled} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
     <div className={styles.heading}><div><h2>LLM</h2><p>{supportsLlm
       ? 'Run a custom prompt on selected text using an OpenAI-compatible model.'
       : 'Open the desktop launcher to save settings and run LLM.'}</p></div><SettingsToggle label="Enable LLM" checked={enabled}

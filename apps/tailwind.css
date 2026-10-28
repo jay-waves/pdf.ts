@@ -152,18 +152,7 @@
   --pdf-page-shadow: rgb(0 0 0 / 32%);
   --pdf-glass-background: color-mix(in srgb, var(--pdf-background-surface) 94%, transparent);
   --pdf-glass-border: rgb(255 255 255 / 14%);
-  --pdf-glass-highlight: rgb(255 255 255 / 13%);
-  --pdf-glass-shadow:
-    0 1px 1px rgb(0 0 0 / 18%),
-    0 14px 38px rgb(0 0 0 / 34%),
-    0 30px 76px rgb(0 0 0 / 18%),
-    inset 0 1px 0 var(--pdf-glass-highlight);
   --pdf-mica-background: color-mix(in srgb, var(--pdf-background-surface) 98%, transparent);
-  --pdf-mica-shadow:
-    0 2px 8px rgb(0 0 0 / 24%),
-    0 26px 76px rgb(0 0 0 / 44%),
-    inset 0 1px 0 var(--pdf-glass-highlight);
-  --pdf-overlay-background: rgb(0 0 0 / 30%);
   --pdf-tooltip-background: rgb(27 27 27 / 94%);
   --pdf-annotation-auto-stroke: #c6c6c6;
   --pdf-annotation-auto-text: #e8e8e8;
@@ -189,7 +178,6 @@
   --pdf-page-shadow: rgb(15 20 30 / 28%);
   --pdf-glass-background: color-mix(in srgb, #434c5e 94%, transparent);
   --pdf-glass-border: rgb(236 239 244 / 14%);
-  --pdf-glass-highlight: rgb(236 239 244 / 12%);
   --pdf-annotation-auto-stroke: #88c0d0;
   --pdf-annotation-auto-text: #eceff4;
 }
@@ -214,7 +202,6 @@
   --pdf-page-shadow: rgb(0 0 0 / 30%);
   --pdf-glass-background: rgb(50 48 47 / 94%);
   --pdf-glass-border: rgb(235 219 178 / 16%);
-  --pdf-glass-highlight: rgb(249 245 215 / 11%);
   --pdf-annotation-auto-stroke: #c9b77a;
   --pdf-annotation-auto-text: #f9f5d7;
 }

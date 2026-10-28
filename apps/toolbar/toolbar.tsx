@@ -185,7 +185,7 @@ function ZoomControl({
             aria-label="Zoom presets"
             disabled={disabled}
           >
-            <span className="inline-flex text-muted transition-[color,transform] duration-150 group-hover:text-foreground group-data-[state=open]:rotate-180">
+            <span className="inline-flex text-muted transition-[color,transform] duration-150 motion-reduce:transition-none group-hover:text-foreground group-data-[state=open]:rotate-180">
               <ChevronDown size={12} strokeWidth={2} />
             </span>
           </DropdownMenu.Trigger>

@@ -35,7 +35,7 @@
 
 .zoomControl {
   @apply inline-flex h-6.5 w-18.5 items-stretch overflow-hidden rounded-md border border-border-subtle bg-transparent;
-  @apply transition-colors duration-150 ease-control;
+  @apply transition-colors duration-150 ease-control motion-reduce:transition-none;
 }
 .zoomControl:focus-within { border-color: color-mix(in srgb, var(--pdf-accent-primary) 35%, var(--pdf-border-subtle)); }
 .zoomControl:hover { @apply border-border; }

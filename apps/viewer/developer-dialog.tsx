@@ -31,6 +31,7 @@ import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import { LlmSettings } from './llm-settings';
 import { TranslatorSettings } from './translator-settings';
 import styles from './developer-dialog.module.css';
+import cardStyles from '../components/settings-card.module.css';
 
 
 const DPR_OPTIONS: Array<{ value: RenderDprMode; label: string }> = [
@@ -208,7 +209,7 @@ export function DeveloperDialog({
         <div className={styles.breadcrumbs}>
           <span className={styles.dialogTitle}>Developer</span>
         </div>
-        <section className={styles.section} aria-labelledby="developer-statistics">
+        <section className={cardStyles.card} aria-labelledby="developer-statistics">
           <h2 id="developer-statistics" className={styles.sectionTitle}>PDF rendering</h2>
           <dl className={styles.stats}>
             <div><dt>Effective DPR</dt><dd><span>{formatDpr(dpr)}</span></dd></div>
@@ -234,7 +235,7 @@ export function DeveloperDialog({
           </p>
         </section>
 
-        <section className={styles.section} aria-labelledby="developer-metadata">
+        <section className={cardStyles.card} aria-labelledby="developer-metadata">
           <h2 id="developer-metadata" className={styles.sectionTitle}>Metadata</h2>
           {metadataLoading ? <p className={styles.metadataStatus}>Loading metadata…</p> : null}
           {metadataError ? <p className={styles.metadataError} role="alert">{metadataError}</p> : null}

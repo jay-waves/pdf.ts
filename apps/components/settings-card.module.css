@@ -1,0 +1,8 @@
+@reference '../tailwind.css';
+
+.card {
+  @apply grid rounded-lg border border-border-subtle p-4;
+  gap: var(--settings-card-gap, 0.75rem);
+  background: var(--pdf-section-background);
+  box-shadow: var(--pdf-section-shadow);
+}

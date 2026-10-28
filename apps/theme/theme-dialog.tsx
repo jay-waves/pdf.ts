@@ -15,7 +15,7 @@ const DARK_THEME_OPTIONS = getViewerThemeOptions('dark');
 
 const THEME_PREVIEWS: Record<ViewerTheme, readonly [string, string, string]> = {
   light: ['#fafafa', '#ffffff', '#454545'],
-  solar: ['#f7f5ef', '#fbfaf6', '#5f8f86'],
+  solar: ['#f7f5ef', '#fbfaf6', '#6d8d86'],
   dark: ['#1b1b1b', '#333333', '#dedede'],
   nord: ['#2e3440', '#434c5e', '#88c0d0'],
   gruvbox: ['#2d2c2a', '#504945', '#c7ce94'],

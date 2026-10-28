@@ -8,7 +8,7 @@
 }
 .form { @apply m-0 grid gap-3.5 bg-transparent px-3.25 pt-3 pb-3.25; }
 .field { @apply grid gap-1.25 text-secondary; }
-.input { @apply h-7.25 w-full rounded-lg border border-border bg-input px-2 text-foreground outline-none transition-[border-color,box-shadow] duration-150; }
+.input { @apply h-7.25 w-full rounded-lg border border-border bg-input px-2 text-foreground outline-none transition-[border-color,box-shadow] duration-150 motion-reduce:transition-none; }
 .flatDialog .input { @apply border-border-subtle bg-[var(--pdf-control-background)]; }
 .flatDialog .input:focus, .input:focus { @apply border-accent shadow-control; }
 .error { @apply leading-3.75 text-danger; }
@@ -22,7 +22,7 @@
   @apply grid grid-cols-3 gap-2.5;
 }
 .themeOption {
-  @apply relative grid min-w-0 cursor-pointer gap-1.5 rounded-lg border border-transparent bg-transparent p-1.5 text-secondary outline-none transition-colors duration-150;
+  @apply relative grid min-w-0 cursor-pointer gap-1.5 rounded-lg border border-transparent bg-transparent p-1.5 text-secondary outline-none transition-colors duration-150 motion-reduce:transition-none;
   @apply hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:bg-transparent;
 }
 .themeOption[data-state='checked'] { @apply border-accent bg-hover text-foreground; }

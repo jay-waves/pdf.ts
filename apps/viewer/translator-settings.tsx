@@ -5,13 +5,14 @@ import { isTranslationEnabled, TRANSLATION_ENABLED_PREFERENCE } from '../selecti
 import { TranslationLanguageSettings } from './translation-language-settings';
 import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
+import cardStyles from '../components/settings-card.module.css';
 
 export function TranslatorSettings({ detectedLanguage }: {
   detectedLanguage?: PlatformLanguageDetectionResult;
 }) {
   const [enabled, setEnabled] = useState(() => isTranslationEnabled(platform.getPreference));
   return (
-    <section className={styles.card} data-enabled={enabled} aria-labelledby="translator-title">
+    <section className={cardStyles.card} data-enabled={enabled} aria-labelledby="translator-title">
       <div className={styles.heading}><div><h2 id="translator-title">Translate</h2>
         <p>Use built-in translation, with an external Google Translate link as fallback.</p>
       </div><SettingsToggle label="Enable Translate" checked={enabled} onCheckedChange={(value) => {

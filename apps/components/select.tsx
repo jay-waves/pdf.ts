@@ -40,7 +40,7 @@ export function Select({
       aria-label={label}
     >
       <RadixSelect.Value />
-      <RadixSelect.Icon className="inline-flex text-muted transition-[color,transform] duration-150 group-hover:text-foreground group-data-[state=open]:rotate-180">
+      <RadixSelect.Icon className="inline-flex text-muted transition-[color,transform] duration-150 motion-reduce:transition-none group-hover:text-foreground group-data-[state=open]:rotate-180">
         <ChevronDown size={12} strokeWidth={2} />
       </RadixSelect.Icon>
     </RadixSelect.Trigger>

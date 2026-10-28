@@ -83,6 +83,10 @@
   transition: background-color 150ms ease, transform 150ms ease;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .pdf-viewer-scrollbar-thumb::after { transition: none; }
+}
+
 .pdf-viewer-scrollbar:hover .pdf-viewer-scrollbar-thumb::after {
   background: var(--pdf-scrollbar-thumb-hover);
 }
