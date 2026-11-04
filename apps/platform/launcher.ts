@@ -272,7 +272,8 @@ class PdfLauncherSession {
   }
 }
 
-const launcherDocumentId = new URLSearchParams(window.location.search).get('launcherDocument');
+const launcherDocumentId = new URLSearchParams(window.location.search).get('launcherDocument')
+  || (window.location.pathname.startsWith("/read/") ? decodeURIComponent(window.location.pathname.slice(6)) : null);
 const launcher = launcherDocumentId ? new PdfLauncherSession(launcherDocumentId) : null;
 
 export const platform: ViewerPlatform = {

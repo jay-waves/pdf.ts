@@ -21,6 +21,7 @@ const (
 
 type Document struct {
 	ID        string    `json:"id"`
+	Alias     string    `json:"alias,omitempty"`
 	Path      string    `json:"path"`
 	ExpiresAt time.Time `json:"expiresAt"`
 }
@@ -125,6 +126,13 @@ func (registry *Registry) Register(target string) (Document, error) {
 			continue
 		}
 		if sameDocumentPath(document.Path, canonical) {
+			if document.Alias == "" {
+				document.Alias = registry.availableAliasLocked(canonical)
+				registry.state.Documents[id] = document
+				if err := registry.writeLocked(); err != nil {
+					return Document{}, err
+				}
+			}
 			return document, nil
 		}
 	}
@@ -135,6 +143,7 @@ func (registry *Registry) Register(target string) (Document, error) {
 	}
 	document := Document{
 		ID:        id,
+		Alias:     registry.availableAliasLocked(canonical),
 		Path:      canonical,
 		ExpiresAt: now.Add(documentCapabilityLifetime),
 	}
@@ -150,6 +159,14 @@ func (registry *Registry) Document(id string) (Document, bool) {
 	registry.mutex.RLock()
 	defer registry.mutex.RUnlock()
 	document, found := registry.state.Documents[id]
+	if !found {
+		for _, candidate := range registry.state.Documents {
+			if candidate.Alias != "" && candidate.Alias == id {
+				document, found = candidate, true
+				break
+			}
+		}
+	}
 	if found && documentExpired(document, time.Now()) {
 		return Document{}, false
 	}
@@ -229,4 +246,27 @@ func sameDocumentPath(left, right string) bool {
 
 func documentExpired(document Document, now time.Time) bool {
 	return document.ExpiresAt.IsZero() || !now.Before(document.ExpiresAt)
+}
+
+// Aliases are persisted with the document; only registered files are addressable.
+func (registry *Registry) availableAliasLocked(target string) string {
+	name := filepath.Base(target)
+	ext := filepath.Ext(name)
+	stem := strings.TrimSuffix(name, ext)
+	for number := 1; ; number++ {
+		candidate := name
+		if number > 1 {
+			candidate = fmt.Sprintf("%s~%d%s", stem, number, ext)
+		}
+		used := false
+		for _, document := range registry.state.Documents {
+			if strings.EqualFold(document.Alias, candidate) || document.ID == candidate {
+				used = true
+				break
+			}
+		}
+		if !used {
+			return candidate
+		}
+	}
 }

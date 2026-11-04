@@ -294,8 +294,7 @@ func (app *App) handleRegisterDocument(response http.ResponseWriter, request *ht
 		writeJSONError(response, http.StatusBadRequest, "invalid_document", err.Error())
 		return
 	}
-	query := url.Values{"launcherDocument": {document.ID}}
-	viewerURL := app.origin + "/?" + query.Encode()
+	viewerURL := app.origin + "/read/" + url.PathEscape(document.Alias)
 	writeJSON(response, http.StatusOK, openResult{
 		URL: viewerURL,
 	})

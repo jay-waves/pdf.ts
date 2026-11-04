@@ -28,8 +28,9 @@ func (handler viewerAssetHandler) ServeHTTP(response http.ResponseWriter, reques
 		return
 	}
 
+	isReader := strings.HasPrefix(request.URL.Path, "/read/")
 	name := strings.TrimPrefix(path.Clean("/"+request.URL.Path), "/")
-	if name == "." || name == "" {
+	if isReader || name == "." || name == "" {
 		name = "index.html"
 	} else if strings.HasSuffix(request.URL.Path, "/") {
 		name = path.Join(name, "index.html")
@@ -47,7 +48,7 @@ func (handler viewerAssetHandler) ServeHTTP(response http.ResponseWriter, reques
 
 	content := compressed
 	response.Header().Set("Vary", "Accept-Encoding")
-	if acceptsGzip(request.Header.Values("Accept-Encoding")) {
+	if !isReader && acceptsGzip(request.Header.Values("Accept-Encoding")) {
 		response.Header().Set("Content-Encoding", "gzip")
 	} else {
 		reader, err := gzip.NewReader(bytes.NewReader(compressed))
@@ -63,6 +64,11 @@ func (handler viewerAssetHandler) ServeHTTP(response http.ResponseWriter, reques
 		}
 	}
 
+	if isReader {
+		// Bundles use relative URLs for extension builds. Reader routes resolve assets at root.
+		content = bytes.ReplaceAll(content, []byte(`href="./`), []byte(`href="/`))
+		content = bytes.ReplaceAll(content, []byte(`src="./`), []byte(`src="/`))
+	}
 	contentType := mime.TypeByExtension(path.Ext(name))
 	if contentType == "" {
 		contentType = "application/octet-stream"
