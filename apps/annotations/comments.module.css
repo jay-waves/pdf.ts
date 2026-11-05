@@ -18,8 +18,6 @@
   @apply transition-[border-color,background-color] duration-150 ease-control;
 }
 .item + .item::after { @apply pointer-events-none absolute -top-px right-3 left-3 h-px bg-border-subtle; content: ''; }
-.item[data-editing='true'] { @apply bg-hover; }
-.item[data-editing='true'] .type { @apply text-accent; }
 .item:has(.cardTarget:hover) { @apply bg-hover; }
 .item:has(.cardTarget:focus-visible) :is(.type, .body) { @apply text-accent; }
 .cardTarget { @apply absolute inset-0 z-0 cursor-pointer rounded-[inherit] border-0 bg-transparent p-0 outline-none; }
@@ -30,11 +28,7 @@
   @apply relative z-1 ml-7 min-h-7 w-[calc(100%-28px)] rounded-md border-0 bg-transparent px-0 py-1 text-xs leading-5 text-foreground whitespace-pre-wrap;
   overflow-wrap: anywhere;
 }
-.editableBody { @apply cursor-text text-left outline-none; }
-.editableBody:hover { @apply text-accent; }
-.editableBody:focus-visible { @apply text-accent; }
 .readonlyBody { @apply pointer-events-none text-secondary; }
-.editor { @apply relative z-1 mt-2 ml-7; }
 .textarea {
   @apply h-28 w-full resize-none overflow-y-auto rounded-lg border-0 px-3 py-2 text-xs leading-5 text-foreground outline-none placeholder:text-muted;
   background: var(--pdf-control-background);
@@ -47,3 +41,10 @@
 @media (prefers-reduced-motion: reduce) {
   .item { transition: none; }
 }
+
+.commentPopover {
+  @apply pointer-events-auto z-[2147483647] grid w-72 max-w-[calc(100vw-24px)] gap-2 rounded-xl border p-2.5 text-foreground;
+}
+.editorHeading { @apply flex min-h-7 items-center gap-2; }
+.editorHeading .type { @apply flex-1; }
+.commentPopover .textarea { @apply block h-24 max-h-[40vh]; }

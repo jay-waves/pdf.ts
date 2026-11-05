@@ -8,8 +8,8 @@ import {
   type PdfPageObject,
   type PdfTextRun,
 } from '@embedpdf/models';
-import { CircleCheckBig, Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Trash, Type, Underline } from 'lucide-react';
-import { IconButton, PanelContent, PanelState } from '../components';
+import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
+import { PanelContent, PanelState } from '../components';
 import {
   TEXT_MARKUP_TYPES,
   getAnnotationLabel,
@@ -22,8 +22,6 @@ import { getDocument } from '../document/viewer-document';
 import styles from './comments.module.css';
 
 type CommentPageGroup = { pageIndex: number; entries: PdfAnnotationObject[] };
-type EditingComment = { annotationId: string; pageIndex: number; draft: string };
-
 const SUMMARY_MAX_LENGTH = 160;
 const pageTextRunsCache = new WeakMap<PdfDocumentObject, Map<number, Promise<PdfTextRun[]>>>();
 
@@ -108,81 +106,23 @@ function navigateToAnnotation(
   stage?.reveal(annotation.pageIndex, getAnnotationRects(annotation));
 }
 
-function scrollCommentItemIntoView(root: HTMLElement, item: HTMLElement) {
-  const inset = 12;
-  const rootRect = root.getBoundingClientRect();
-  const itemRect = item.getBoundingClientRect();
-  const visibleTop = rootRect.top + inset;
-  const visibleBottom = rootRect.bottom - inset;
-  const availableHeight = Math.max(0, visibleBottom - visibleTop);
-  let delta = 0;
-
-  if (itemRect.height > availableHeight || itemRect.top < visibleTop) {
-    delta = itemRect.top - visibleTop;
-  } else if (itemRect.bottom > visibleBottom) {
-    delta = itemRect.bottom - visibleBottom;
-  }
-
-  if (Math.abs(delta) > 0.5) {
-    root.scrollTo({
-      top: Math.max(0, root.scrollTop + delta),
-      behavior: 'auto',
-    });
-  }
-}
-
-function deleteAnnotation(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-  pageIndex: number,
-  annotationId: string,
-) {
-  const scoped = getAnnotationScope(registry, documentId);
-  scoped?.scope.deleteAnnotations([{
-    pageIndex,
-    id: annotationId,
-  }]);
-}
-
-function persistComment(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-  comment: EditingComment,
-) {
-  const scoped = getAnnotationScope(registry, documentId);
-  if (!scoped) return;
-  scoped.scope.updateAnnotation(comment.pageIndex, comment.annotationId, {
-    contents: comment.draft.trim(),
-  });
-}
-
 export function Comments({
   engine,
   registry,
   documentId,
   stage,
   currentPageNumber,
-  targetAnnotationId,
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
   documentId?: string | null;
   stage?: ViewerStage | null;
   currentPageNumber: number;
-  targetAnnotationId?: string | null;
 }) {
   const [revision, setRevision] = useState(0);
-  const [editingComment, setEditingState] = useState<EditingComment | null>(null);
-  const editingCommentRef = useRef<EditingComment | null>(null);
-  const setEditingComment = (comment: EditingComment | null) => {
-    editingCommentRef.current = comment;
-    setEditingState(comment);
-  };
   const contentRef = useRef<HTMLDivElement>(null);
-  const consumedTargetIdRef = useRef<string | null>(null);
   const summaryCacheRef = useRef(new Map<string, string>());
   const invalidSummaryIdsRef = useRef(new Set<string>());
-  const editingAnnotationId = editingComment?.annotationId;
   const entries = useMemo(
     () => getEntries(registry, documentId),
     [documentId, registry, revision],
@@ -288,30 +228,7 @@ export function Comments({
     };
   }, [documentId, engine, entries, registry]);
 
-  useEffect(() => {
-    if (!targetAnnotationId || consumedTargetIdRef.current === targetAnnotationId) return;
-    const target = entries.find((annotation) => annotation.id === targetAnnotationId);
-    if (!target) return;
-    consumedTargetIdRef.current = targetAnnotationId;
-    if (editingCommentRef.current) {
-      persistComment(registry, documentId, editingCommentRef.current);
-    }
-    setEditingComment({
-      annotationId: target.id,
-      pageIndex: target.pageIndex,
-      draft: target.contents?.trim() ?? '',
-    });
-  }, [documentId, entries, registry, targetAnnotationId]);
-
-  useEffect(() => () => {
-    const comment = editingCommentRef.current;
-    editingCommentRef.current = null;
-    if (comment) persistComment(registry, documentId, comment);
-  }, [documentId, registry]);
-
   useLayoutEffect(() => {
-    if (editingAnnotationId) return;
-
     const frame = requestAnimationFrame(() => {
       const root = contentRef.current;
       if (!root) return;
@@ -329,33 +246,7 @@ export function Comments({
       root.scrollTo({ top: Math.max(0, root.scrollTop + currentRect.top - rootRect.top - 12), behavior: 'auto' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [currentPageNumber, editingAnnotationId, entries.length]);
-
-  useLayoutEffect(() => {
-    if (!editingAnnotationId) return;
-
-    const frame = requestAnimationFrame(() => {
-      const root = contentRef.current;
-      if (!root) return;
-      const target = [...root.querySelectorAll<HTMLElement>('[data-comment-annotation-id]')]
-        .find((item) => item.dataset.commentAnnotationId === editingAnnotationId);
-      if (target) scrollCommentItemIntoView(root, target);
-    });
-
-    return () => cancelAnimationFrame(frame);
-  }, [editingAnnotationId, revision]);
-
-  const finishEditing = (annotation: PdfAnnotationObject) => {
-    const comment = editingCommentRef.current;
-    if (!comment || comment.annotationId !== annotation.id) return;
-    setEditingComment(null);
-    persistComment(registry, documentId, comment);
-  };
-
-  const removeComment = (annotation: PdfAnnotationObject) => {
-    if (editingCommentRef.current?.annotationId === annotation.id) setEditingComment(null);
-    deleteAnnotation(registry, documentId, annotation.pageIndex, annotation.id);
-  };
+  }, [currentPageNumber, entries.length]);
 
   return (
     <div className={styles.layout}>
@@ -390,8 +281,6 @@ export function Comments({
                     const Icon = getEntryIcon(annotation);
                     const label = getAnnotationLabel(annotation);
                     const contents = annotation.contents?.trim();
-                    const isComment = annotation.type === PdfAnnotationSubtype.TEXT;
-                    const isEditing = isComment && editingComment?.annotationId === annotation.id;
                     const isTextMarkup = TEXT_MARKUP_TYPES.has(annotation.type);
                     const hasExtractedSummary = summaryCacheRef.current.has(annotation.id);
                     const summary = contents || (isTextMarkup
@@ -405,71 +294,22 @@ export function Comments({
                         key={annotation.id}
                         className={styles.item}
                         data-comment-annotation-id={annotation.id}
-                        data-editing={isEditing ? 'true' : undefined}
-                        onBlur={(event) => {
-                          if (isEditing && !event.currentTarget.contains(event.relatedTarget)) {
-                            finishEditing(annotation);
-                          }
-                        }}
                       >
-                        {!isEditing ? (
-                          <button
-                            type="button"
-                            className={styles.cardTarget}
-                            onClick={() => {
-                              if (registry && documentId) {
-                                navigateToAnnotation(registry, documentId, stage, annotation);
-                              }
-                            }}
-                            aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
-                          />
-                        ) : null}
+                        <button
+                          type="button"
+                          className={styles.cardTarget}
+                          onClick={() => {
+                            if (registry && documentId) {
+                              navigateToAnnotation(registry, documentId, stage, annotation);
+                            }
+                          }}
+                          aria-label={`Go to ${label} on page ${annotation.pageIndex + 1}`}
+                        />
                         <div className={styles.heading}>
                           <span className={styles.icon}><Icon size={15} strokeWidth={2} /></span>
                           <span className={styles.type}>{label}</span>
-                          {isEditing ? (
-                            <div className={styles.actions}>
-                              <IconButton label="Delete" icon={Trash} onClick={() => removeComment(annotation)} />
-                              <IconButton label="Done" icon={CircleCheckBig} onClick={() => finishEditing(annotation)} />
-                            </div>
-                          ) : null}
                         </div>
-                        {isEditing ? (
-                          <form
-                            className={styles.editor}
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              finishEditing(annotation);
-                            }}
-                          >
-                            <textarea
-                              className={styles.textarea}
-                              value={editingComment.draft}
-                              onChange={(event) => setEditingComment({
-                                annotationId: annotation.id,
-                                pageIndex: annotation.pageIndex,
-                                draft: event.currentTarget.value,
-                              })}
-                              placeholder="Write a comment…"
-                              autoFocus
-                              aria-label={`Comment for ${label}`}
-                            />
-                          </form>
-                        ) : isComment ? (
-                          <button
-                            type="button"
-                            className={`${styles.body} ${styles.editableBody}`}
-                            onClick={() => setEditingComment({
-                              annotationId: annotation.id,
-                              pageIndex: annotation.pageIndex,
-                              draft: contents ?? '',
-                            })}
-                          >
-                            {contents || 'Empty comment'}
-                          </button>
-                        ) : (
-                          <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>
-                        )}
+                        <div className={`${styles.body} ${styles.readonlyBody}`}>{summary}</div>
                       </li>
                     );
                   })}

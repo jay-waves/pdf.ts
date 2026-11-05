@@ -36,6 +36,7 @@ import {
   initializeAnnotationPalette,
   installCommentEditor,
 } from './annotations/annotations';
+import { CommentEditor } from './annotations/comment-editor';
 import { Comments } from './annotations/comments';
 import { PrintDialog } from './document/print-dialog';
 import { ExternalChangeDialog } from './document/external-change-dialog';
@@ -234,7 +235,7 @@ function App({
   );
   const currentBookmarkKey = currentBookmark?.key ?? '';
   const currentTitle = currentBookmark?.title ?? '';
-  const commentTarget = sidePanel?.type === 'comments' ? sidePanel.target : null;
+  const commentTarget = uiSnapshot.overlay?.type === 'comment-editor' ? uiSnapshot.overlay : null;
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const sessionCleanupRef = useRef<(() => void) | null>(null);
@@ -462,7 +463,6 @@ function App({
             documentId={documentId}
             stage={stage}
             currentPageNumber={currentPageNumber}
-            targetAnnotationId={commentTarget?.annotationId}
           />
         ) : null}
       </Dialog>
@@ -472,6 +472,16 @@ function App({
         open={sidePanel?.type === 'colors'}
         onClose={closeOverlay}
       />
+      {commentTarget && registry && documentId ? (
+        <CommentEditor
+          key={`${documentId}:${commentTarget.annotationId}`}
+          registry={registry}
+          documentId={documentId}
+          annotationId={commentTarget.annotationId}
+          pointerX={commentTarget.pointerX}
+          onClose={closeOverlay}
+        />
+      ) : null}
       <ContextMenu
         engine={engine}
         registry={registry}

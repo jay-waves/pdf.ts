@@ -14,7 +14,7 @@ export function FloatingPopover({
   children,
 }: {
   onClose(): void;
-  anchor: { x: number; y: number };
+  anchor: { x: number; y: number; height?: number };
   className: string;
   label: string;
   role?: AriaRole;
@@ -28,7 +28,7 @@ export function FloatingPopover({
   return (
     <Popover.Root open onOpenChange={(nextOpen) => !nextOpen && onClose()} modal={false}>
       <Popover.Anchor asChild>
-        <span className="pointer-events-none fixed size-0" style={{ left: anchor.x, top: anchor.y }} />
+        <span className="pointer-events-none fixed size-0" style={{ left: anchor.x, top: anchor.y, height: anchor.height }} />
       </Popover.Anchor>
       <Popover.Portal>
         <Popover.Content

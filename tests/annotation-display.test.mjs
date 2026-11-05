@@ -120,3 +120,25 @@ test('comment and highlight callbacks return components whose theme hooks run in
   const highlight = themeHighlightRenderer.render({ currentObject: { strokeColor: '#ffe066', rect, segmentRects: [rect] }, scale: 1 });
   assert.match(renderToStaticMarkup(highlight), /#f0f0f0/);
 });
+
+
+test('nearby notes are independent text annotations and preserve the original markup', () => {
+  const saved = [];
+  const scope = { createAnnotation: (pageIndex, annotation) => saved.push({ pageIndex, annotation }) };
+  const target = Object.freeze({
+    id: 'highlight', pageIndex: 2, type: PdfAnnotationSubtype.HIGHLIGHT,
+    contents: 'Existing embedded comment',
+    rect: { origin: { x: 10, y: 20 }, size: { width: 200, height: 40 } },
+  });
+  const rect = { origin: { x: 135, y: 64 }, size: { width: 24, height: 24 } };
+  const id = createCommentAnnotation(scope, target, rect);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].pageIndex, 2);
+  assert.equal(saved[0].annotation.type, PdfAnnotationSubtype.TEXT);
+  assert.equal(saved[0].annotation.id, id);
+  assert.notEqual(id, target.id);
+  assert.deepEqual(saved[0].annotation.rect, rect);
+  assert.equal(saved[0].annotation.contents, '');
+  assert.equal(saved[0].annotation.inReplyToId, undefined);
+  assert.equal(target.contents, 'Existing embedded comment');
+});

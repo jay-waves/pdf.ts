@@ -103,6 +103,26 @@ function ThemeComment({ currentObject, isSelected, onClick }: AnnotationRenderer
     </div>;
 }
 
+function MarkupCommentBadge({ annotation, scale }: {
+  annotation: PdfHighlightAnnoObject | PdfUnderlineAnnoObject | PdfStrikeOutAnnoObject;
+  scale: number;
+}) {
+  if (!annotation.contents?.trim()) return null;
+  const segment = annotation.segmentRects.at(-1) ?? annotation.rect;
+  return <button
+    type="button"
+    className={styles.commentBadge}
+    data-annotation-comment-id={annotation.id}
+    aria-label="Edit annotation comment"
+    title={annotation.contents}
+    onPointerDown={(event) => event.stopPropagation()}
+    style={{
+      left: (segment.origin.x + segment.size.width - annotation.rect.origin.x) * scale + 3,
+      top: (segment.origin.y - annotation.rect.origin.y) * scale,
+    }}
+  ><MessageSquareMore size={14} aria-hidden="true" /></button>;
+}
+
 function isHighlight(annotation: PdfAnnotationObject): annotation is PdfHighlightAnnoObject {
   return annotation.type === PdfAnnotationSubtype.HIGHLIGHT;
 }
@@ -176,6 +196,7 @@ function ThemeHighlight({ currentObject, scale, onClick }: AnnotationRendererPro
           pointerEvents: 'none',
         }} /> : null}
       </div>)}
+      <MarkupCommentBadge annotation={currentObject} scale={scale} />
     </>;
 }
 
@@ -220,6 +241,7 @@ function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMar
           : { top: '50%', transform: 'translateY(-50%)' }),
       }} />
     </div>)}
+    <MarkupCommentBadge annotation={annotation} scale={scale} />
   </>;
 }
 

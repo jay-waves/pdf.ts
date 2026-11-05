@@ -285,6 +285,7 @@ export function normalizeAnnotationColor(value: unknown) {
 export function createCommentAnnotation(
   scope: ReturnType<AnnotationCapability['forDocument']>,
   target: PdfAnnotationObject,
+  rect?: Rect,
 ) {
   const id = crypto.randomUUID();
   const size = 24;
@@ -292,10 +293,10 @@ export function createCommentAnnotation(
     id,
     type: PdfAnnotationSubtype.TEXT,
     pageIndex: target.pageIndex,
-    rect: {
+    rect: rect ?? {
       origin: {
         x: Math.max(0, target.rect.origin.x + target.rect.size.width - size),
-        y: Math.max(0, target.rect.origin.y + target.rect.size.height - size),
+        y: Math.max(0, target.rect.origin.y + target.rect.size.height + 4),
       },
       size: { width: size, height: size },
     },

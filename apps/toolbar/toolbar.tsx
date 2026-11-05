@@ -17,6 +17,7 @@ import {
   LineSquiggle,
   Lock,
   MessageSquareMore,
+  NotebookPen,
   Minus,
   MoveUpRight,
   Moon,
@@ -431,6 +432,12 @@ export function Toolbar({
               active={thumbnailsOpen}
               disabled={!canUseDocument}
               onClick={() => dispatch({ type: 'ui/toggle-panel', panel: 'thumbnails' })}
+            />
+            <IconButton
+              label="Annotations"
+              icon={NotebookPen}
+              disabled={!canUseDocument}
+              onClick={() => dispatch({ type: 'ui/open-panel', panel: 'comments' })}
             />
             <IconButton
               label="Print"

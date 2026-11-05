@@ -15,7 +15,7 @@ import { getDocumentScope } from '../shared/utils';
 import type { ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
-type ViewerPanel = 'outline' | 'thumbnails' | 'colors';
+type ViewerPanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
 export type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 export type ViewerTranslationRequest = {
   mode?: 'builtin' | 'llm';
@@ -23,14 +23,13 @@ export type ViewerTranslationRequest = {
   anchor: { x: number; y: number };
 };
 
-type ViewerSidePanel =
-  | { type: ViewerPanel }
-  | { type: 'comments'; target: { annotationId: string } };
+type ViewerSidePanel = { type: ViewerPanel };
 
 type ViewerOverlay =
   | { type: 'side-panel'; panel: ViewerSidePanel }
   | { type: 'dialog'; dialog: ViewerDialog }
   | { type: 'translation'; request: ViewerTranslationRequest }
+  | { type: 'comment-editor'; annotationId: string; pointerX?: number }
   | null;
 
 type ViewerUiState = {
@@ -45,7 +44,7 @@ type ViewerUiCommand =
   | { type: 'ui/set-toolbar-section'; section: ToolbarSection | null }
   | { type: 'ui/toggle-panel'; panel: Extract<ViewerPanel, 'thumbnails' | 'colors'> }
   | { type: 'ui/open-panel'; panel: ViewerPanel }
-  | { type: 'ui/open-comments'; annotationId: string }
+  | { type: 'ui/open-comments'; annotationId: string; pointerX?: number }
   | ({ type: 'ui/open-translation' } & ViewerTranslationRequest)
   | { type: 'ui/open-dialog'; dialog: ViewerDialog }
   | { type: 'ui/close-overlay' };
@@ -91,11 +90,9 @@ function reduceViewerUi(state: ViewerUiState, action: ViewerUiCommand): ViewerUi
       ...state,
       toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
       overlay: {
-        type: 'side-panel',
-        panel: {
-          type: 'comments',
-          target: { annotationId: action.annotationId },
-        },
+        type: 'comment-editor',
+        annotationId: action.annotationId,
+        pointerX: action.pointerX,
       },
     };
     case 'ui/open-dialog': return {

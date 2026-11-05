@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import {
+  restoreRect,
+  transformRect,
+  transformSize,
+  type Rotation,
   PdfActionType,
   PdfAnnotationSubtype,
   type PdfAnnotationObject,
@@ -41,7 +45,7 @@ import { getPluginCapability, isEditableTarget, normalizePdfText } from '../shar
 import { getExternalUrl, getSelectedExternalUrl } from '../shared/url';
 import { platform } from '#platform';
 import { supportsLlm } from '../platform/llm';
-import { getDocument } from '../document/viewer-document';
+import { getDocument, getDocumentState } from '../document/viewer-document';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import { isTranslationEnabled, isLlmEnabled } from './translation-settings';
 
@@ -268,10 +272,26 @@ export function ContextMenu({
 
     const openAnnotationMenu = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
+      const commentBadge = target?.closest<HTMLElement>('[data-annotation-comment-id]');
+      if (event.button === 0 && commentBadge?.dataset.annotationCommentId) {
+        dispatch({
+          type: 'ui/open-comments',
+          annotationId: commentBadge.dataset.annotationCommentId,
+          pointerX: event.clientX,
+        });
+        setMenu(null);
+        return;
+      }
       const layer = target?.closest('.pdf-annotation-layer');
       if (event.button !== 0 || !layer || target === layer
         || event.composedPath().some(isEditableTarget)
         || !annotation?.getSelectedAnnotations().length) return;
+      const selected = annotation.getSelectedAnnotations();
+      if (selected.length === 1 && selected[0].object.type === PdfAnnotationSubtype.TEXT) {
+        dispatch({ type: 'ui/open-comments', annotationId: selected[0].object.id, pointerX: event.clientX });
+        setMenu(null);
+        return;
+      }
       setMenu({ kind: 'annotation', x: event.clientX + 8, y: event.clientY + 8 });
     };
 
@@ -298,7 +318,7 @@ export function ContextMenu({
       container.removeEventListener('click', openAnnotationMenu);
       container.removeEventListener('contextmenu', openContextMenu, { capture: true });
     };
-  }, [container, documentId, registry]);
+  }, [container, documentId, registry, dispatch]);
 
   useEffect(() => {
     if (!menu) return;
@@ -386,12 +406,40 @@ export function ContextMenu({
       platform.openExternal(selectedLink);
       setMenu(null);
     } }] : []),
-    { label: commentTarget?.type === PdfAnnotationSubtype.TEXT ? 'Open comment' : 'Add comment', icon: MessageSquareMore, action: () => {
+    ...(commentTarget?.type !== PdfAnnotationSubtype.TEXT && commentTarget?.contents?.trim() ? [{
+      label: 'Edit existing comment', icon: MessageSquareMore, action: () => {
+        dispatch({ type: 'ui/open-comments', annotationId: commentTarget.id, pointerX: menu.x - 8 });
+        setMenu(null);
+      },
+    }] : []),
+    { label: commentTarget?.type === PdfAnnotationSubtype.TEXT ? 'Edit comment' : 'Add nearby note', icon: MessageSquareMore, action: () => {
       if (annotation && commentTarget) {
-        const commentId = commentTarget.type !== PdfAnnotationSubtype.TEXT
-          ? createCommentAnnotation(annotation, commentTarget)
-          : commentTarget.id;
-        dispatch({ type: 'ui/open-comments', annotationId: commentId });
+        let commentId = commentTarget.id;
+        if (commentTarget.type !== PdfAnnotationSubtype.TEXT) {
+          const state = getDocumentState(registry, documentId);
+          const page = document?.pages[commentTarget.pageIndex];
+          const surface = container?.querySelector<HTMLElement>(`[data-pdf-page-index="${commentTarget.pageIndex}"]`);
+          let noteRect: Rect | undefined;
+          if (state && page && surface) {
+            const rotation = ((page.rotation + state.rotation) % 4) as Rotation;
+            const bounds = surface.getBoundingClientRect();
+            const displaySize = transformSize(page.size, rotation, state.scale);
+            const highlight = transformRect(page.size, commentTarget.rect, rotation, state.scale);
+            const size = Math.min(24 * state.scale, displaySize.width, displaySize.height);
+            const gap = 4 * state.scale;
+            const bottom = highlight.origin.y + highlight.size.height + gap;
+            const top = highlight.origin.y - size - gap;
+            const x = Math.max(0, Math.min(displaySize.width - size, menu.x - 8 - bounds.left));
+            // Prefer below the markup; use the space above if below is offscreen.
+            const fitsBelow = bottom + size <= Math.min(displaySize.height, window.innerHeight - bounds.top);
+            const y = Math.max(0, Math.min(displaySize.height - size, fitsBelow || top < 0 ? bottom : top));
+            noteRect = restoreRect(displaySize, {
+              origin: { x, y }, size: { width: size, height: size },
+            }, rotation, state.scale);
+          }
+          commentId = createCommentAnnotation(annotation, commentTarget, noteRect);
+        }
+        dispatch({ type: 'ui/open-comments', annotationId: commentId, pointerX: menu.x - 8 });
       }
       setMenu(null);
     } },
