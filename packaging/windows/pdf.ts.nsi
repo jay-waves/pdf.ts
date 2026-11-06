@@ -52,6 +52,8 @@ UninstallIcon "${ICON_FILE}"
 !insertmacro MUI_PAGE_DIRECTORY
 Page custom StartupPage StartupPageLeave
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${APP_NAME}"
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES

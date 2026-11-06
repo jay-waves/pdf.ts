@@ -185,6 +185,8 @@ The all-users installer requests administrator permission, writes to
 Windows Installed Apps. Upgrade and uninstall stop the current user's daemon
 first. Uninstall leaves every user's viewer data intact.
 
+The completion page offers a checked **Launch pdf.ts** option. Clicking Finish opens `pdf.ts.exe`; uncheck it to finish without launching. Silent installs skip this completion-page action.
+
 Automatic daemon startup is opt-in. Select **Start background service at login**
 on the installer's Installation options page to create a shortcut in the all-users
 Startup folder. It runs the GUI executable directly with `daemon`,
