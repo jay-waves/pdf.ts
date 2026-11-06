@@ -32,3 +32,8 @@
 .tokenCount strong { @apply font-medium tabular-nums text-foreground; }
 .actions { @apply flex flex-wrap items-center gap-2; }
 .actions button { @apply cursor-pointer rounded-md border border-border-subtle px-3 py-1.5 text-[11px] font-medium text-secondary hover:text-foreground disabled:opacity-40; background: var(--pdf-control-background); }
+
+.storageChoice { @apply grid gap-2; }
+.checkboxLabel { @apply flex cursor-pointer items-center gap-2 text-[11px] font-medium text-secondary; }
+.checkboxLabel input { @apply size-3.5 shrink-0 cursor-pointer accent-accent; }
+.checkboxLabel input:focus-visible { @apply outline-2 outline-offset-2 outline-accent; }

@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { platform } from '#platform';
 import { supportsLlm as platformSupportsLlm } from '../platform/llm';
 import type { AiConfig, AiConfigUpdate } from '../platform/types';
+import { DEFAULT_AI_PROMPT } from '../platform/browser-ai';
 import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
 import cardStyles from '../components/settings-card.module.css';
 
-const DEFAULT_PROMPT = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
-const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, prompt: DEFAULT_PROMPT, totalTokens: 0 };
+const DEFAULT_PROMPT = DEFAULT_AI_PROMPT;
+const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, rememberApiKey: false, prompt: DEFAULT_PROMPT, totalTokens: 0 };
 // Keep saves ordered even when the settings dialog is closed and reopened.
 let saveQueue: Promise<void> = Promise.resolve();
 const supportsLlm = platformSupportsLlm(platform);
@@ -41,7 +42,7 @@ export function LlmSettings() {
     let active = true;
     void saveQueue.then(() => platform.getAiConfig!()).then((value) => {
       if (!active) return;
-      // Preserve edits made while the launcher configuration is loading.
+      // Preserve edits made while the browser configuration is loading.
       const next = draft.current.revision === 0 ? value : {
         ...draft.current.config,
         apiKeyConfigured: value.apiKeyConfigured,
@@ -62,13 +63,14 @@ export function LlmSettings() {
     clearTimeout(timer.current);
     if (!dirty.current) return;
     if (!supportsLlm) {
-      if (mounted.current) setStatus('Open the desktop launcher to save settings and run LLM.');
+      if (mounted.current) setStatus('LLM is unavailable in this environment.');
       return;
     }
     if (!loaded) return;
     dirty.current = false;
     const snapshot = draft.current;
     const update: AiConfigUpdate = {
+      rememberApiKey: snapshot.config.rememberApiKey,
       model: snapshot.config.model.trim(),
       baseUrl: snapshot.config.baseUrl.trim().replace(/\/+$/, ''),
       prompt: snapshot.config.prompt.trim() ? snapshot.config.prompt : DEFAULT_PROMPT,
@@ -84,7 +86,7 @@ export function LlmSettings() {
         if (draft.current.revision !== snapshot.revision) return;
         draft.current = { config: saved, apiKey: '', revision: snapshot.revision };
         setConfig(saved); setApiKey('');
-        setStatus('Automatically saved.');
+        setStatus(saved.rememberApiKey ? 'Saved in this browser.' : 'Settings saved. API key stays in memory until this page reloads or closes.');
       } catch (failure) {
         if (!mounted.current || draft.current.revision !== snapshot.revision) return;
         dirty.current = true;
@@ -112,13 +114,15 @@ export function LlmSettings() {
     scheduleSave();
   };
 
-  const runAction = async (action: 'test' | 'reset') => {
+  const runAction = async (action: 'test' | 'reset' | 'clear') => {
     clearTimeout(timer.current);
     save();
     setError(''); setStatus(action === 'test' ? 'Testing…' : 'Saving…');
     try {
       await saveQueue;
+      if (dirty.current && action === 'test') throw new Error('Save valid LLM settings before testing the connection.');
       if (action === 'test') await platform.requestAi!({ text: 'hello', targetLanguage: 'zh-CN' });
+      if (action === 'clear') await platform.setAiConfig!({ apiKey: '', rememberApiKey: false });
       if (action === 'reset') await platform.setAiConfig!({ reset: true });
       const value = await platform.getAiConfig!();
       draft.current = { config: value, apiKey: '', revision: draft.current.revision + 1 };
@@ -132,21 +136,22 @@ export function LlmSettings() {
 
   return <form className={`${cardStyles.card} ${styles.editorPanel}`} data-enabled={enabled} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
     <div className={styles.heading}><div><h2>LLM</h2><p>{supportsLlm
-      ? 'Run a custom prompt on selected text using an OpenAI-compatible model.'
-      : 'Open the desktop launcher to save settings and run LLM.'}</p></div><SettingsToggle label="Enable LLM" checked={enabled}
+      ? 'Connect directly to an OpenAI-compatible model. The provider must allow browser requests (CORS).'
+      : 'LLM is unavailable in this environment.'}</p></div><SettingsToggle label="Enable LLM" checked={enabled}
       onCheckedChange={(value) => {
         platform.setPreference(LLM_ENABLED_PREFERENCE, String(value));
         setEnabled(value);
       }} /></div>
-    <fieldset disabled={!enabled} className={styles.fieldset}>
+    <fieldset disabled={!enabled || !loaded} className={styles.fieldset}>
       <label className={styles.field}>Model name
         <input value={config.model} placeholder="Provider model name" spellCheck={false} onChange={(event) => edit('model', event.target.value)} />
       </label>
       <label className={styles.field}>Base URL
         <input type="url" value={config.baseUrl} placeholder="https://…/v1" spellCheck={false} onChange={(event) => edit('baseUrl', event.target.value)} />
       </label>
+      <p className={styles.hint}>HTTPS only. Changing the Base URL clears the current key; enter it again for the new endpoint. Redirects are blocked.</p>
       <label className={styles.field}>API key
-        <input type="password" autoComplete="off" value={apiKey}
+        <input type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" value={apiKey}
           placeholder={config.apiKeyConfigured ? '*****' : 'API key'}
           onChange={(event) => {
             const value = event.target.value;
@@ -156,12 +161,31 @@ export function LlmSettings() {
             setApiKey(value); setError(''); setStatus('');
           }} />
       </label>
+      <div className={styles.storageChoice}>
+        <label className={styles.checkboxLabel}>
+          <input type="checkbox" checked={config.rememberApiKey} aria-describedby="llm-key-storage-risk"
+            onChange={(event) => {
+              const updated = { ...draft.current.config, rememberApiKey: event.target.checked };
+              draft.current = { ...draft.current, config: updated };
+              setConfig(updated);
+              scheduleSave();
+              flush.current();
+            }} />
+          Remember API key in this browser
+        </label>
+        <p id="llm-key-storage-risk" className={styles.hint}>
+          {config.rememberApiKey
+            ? 'Warning: your API key will be stored unencrypted in this browser. Injected scripts (XSS) or someone with access to your browser profile may steal it. Use a separate, revocable key with a hard spending limit; never use a production or high-limit key.'
+            : 'Default: the key stays only in memory and is cleared when this page reloads or closes. This does not protect against injected scripts (XSS). Use a separate key with a hard spending limit.'}
+        </p>
+      </div>
       <label className={styles.field}>Prompt
         <textarea rows={9} value={config.prompt} onChange={(event) => edit('prompt', event.target.value)} />
       </label>
       <div className={styles.actions}>
         <button type="button" disabled={!supportsLlm || !loaded} onClick={() => void runAction('test')}>Test</button>
         <button type="button" disabled={!supportsLlm || !loaded} onClick={() => void runAction('reset')}>Reset</button>
+        <button type="button" disabled={!loaded || !config.apiKeyConfigured} onClick={() => void runAction('clear')}>Clear key</button>
         <span className={styles.tokenCount}><strong>{config.totalTokens.toLocaleString()}</strong><span>tokens</span></span>
       </div>
     </fieldset>

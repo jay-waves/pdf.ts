@@ -1,3 +1,4 @@
+import { browserAiCapabilities } from './browser-ai';
 import { getFileNameFromUrl, parseUrl } from '../shared/url';
 import { browserPersistence } from './browser-storage';
 import { browserLocalDocumentCapabilities } from './browser-local-document';
@@ -91,4 +92,5 @@ export const platform: ViewerPlatform = {
   },
   ...browserTranslationCapabilities,
   ...browserPersistence,
+  ...browserAiCapabilities,
 };

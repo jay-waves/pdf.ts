@@ -38,8 +38,6 @@ type App struct {
 	registry   *Registry
 	resources  map[string]*Resource
 	mutex      sync.Mutex
-	aiConfig   aiConfig
-	aiMutex    sync.RWMutex
 	server     *http.Server
 	listener   net.Listener
 	origin     string
@@ -58,14 +56,9 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	config, err := registry.loadAIConfig(aiConfig{Model: "deepseek-flash", BaseURL: "https://api.deepseek.com", Prompt: defaultTranslationPrompt})
-	if err != nil {
-		return nil, err
-	}
 	return &App{
 		registry:  registry,
 		resources: make(map[string]*Resource),
-		aiConfig:  config,
 		done:      make(chan error, 1),
 	}, nil
 }
@@ -204,8 +197,6 @@ func (app *App) routes() http.Handler {
 	mux.HandleFunc("/api/control/status", app.handleStatus)
 	mux.HandleFunc("/api/control/stop", app.handleStop)
 	mux.HandleFunc("/api/control/documents", app.handleRegisterDocument)
-	mux.HandleFunc("/api/control/ai", app.handleAI)
-	mux.HandleFunc("/api/control/ai-config", app.handleAIConfig)
 	mux.HandleFunc("/api/documents/", app.handleDocument)
 
 	sub, err := fs.Sub(viewerFiles, "viewer")

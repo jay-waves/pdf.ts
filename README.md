@@ -88,6 +88,30 @@ Consult the [official Edge language list](https://github.com/MicrosoftEdge/Demos
 or use the [Edge Built-in AI Playground](https://microsoftedge.github.io/Demos/built-in-ai/)
 to check model availability.
 
+## LLM
+
+Web, desktop, and Chrome builds call an OpenAI-compatible Chat Completions
+endpoint directly from the browser. Configure it in Developer > LLM. The endpoint
+must use HTTPS and allow browser requests through CORS. The Ask popover supports
+streaming replies and follow-up questions while it remains open.
+
+API keys stay in page memory by default and are lost on reload or close. Selecting
+**Remember API key in this browser** explicitly opts into unencrypted local
+storage; the warning below the checkbox explains the risk. Use a separate,
+revocable key with a provider-enforced hard spending limit. Memory-only storage
+and the following safeguards do not protect against arbitrary same-origin XSS.
+
+Requests block redirects and omit cookies and referrers. Changing the Base URL
+clears the existing key, and provider error bodies are not displayed. **Clear key**
+removes the saved key and its in-memory copy in the current page. Other already
+open pages may still hold their own in-memory copies; close them or revoke the key
+at the provider to stop all use.
+
+The retired Go LLM proxy and encrypted credential storage have been removed.
+On opening an existing registry, the launcher removes its old AI configuration
+and `master.key`; it does not import the old credential into browser storage.
+Re-enter your key after upgrading.
+
 ## Build from source
 
 For frontend-only validation in WSL, run `pnpm dev:wsl` and open

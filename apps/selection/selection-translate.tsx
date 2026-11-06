@@ -5,7 +5,7 @@ import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from '../components';
 import { getDocument } from '../document/viewer-document';
 import { platform } from '#platform';
-import { supportsLlm } from '../platform/llm';
+import { SelectionLlm } from './selection-llm';
 import { getPluginCapability, normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
 import { detectDocumentLanguage } from './document-language';
@@ -33,7 +33,15 @@ function normalizeText(parts: string[]) {
     .slice(0, MAX_TEXT_LENGTH);
 }
 
-export function SelectionTranslate({
+export function SelectionTranslate(props: {
+  registry?: PluginRegistry;
+  request: ViewerTranslationRequest;
+  onClose(): void;
+}) {
+  return props.request.mode === 'llm' ? <SelectionLlm {...props} /> : <TranslationPopover {...props} />;
+}
+
+function TranslationPopover({
   registry,
   request,
   onClose,
@@ -56,14 +64,6 @@ export function SelectionTranslate({
     activeController.current = controller;
     setResult({ status: 'loading' });
     try {
-      if (request.mode === 'llm') {
-        if (!supportsLlm(platform) || !platform.requestAi) {
-          throw new Error('Open the desktop launcher to run LLM on selected text.');
-        }
-        const translated = await platform.requestAi({ text }, controller.signal);
-        if (!controller.signal.aborted) setResult({ status: 'success', text: translated });
-        return;
-      }
       const translation = await platform.translate(text, {
         allowModelDownload,
         signal: controller.signal,

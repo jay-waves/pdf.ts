@@ -1,3 +1,4 @@
+import { browserAiCapabilities } from './browser-ai';
 import { browserPersistence } from './browser-storage';
 import { browserLocalDocumentCapabilities } from './browser-local-document';
 import { browserTranslationCapabilities } from './browser-translation';
@@ -17,4 +18,5 @@ export const platform: ViewerPlatform = {
   },
   ...browserTranslationCapabilities,
   ...browserPersistence,
+  ...browserAiCapabilities,
 };
