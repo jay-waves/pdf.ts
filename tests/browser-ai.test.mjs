@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
 const hooks = registerHooks({ resolve(specifier, context, nextResolve) {
-  return nextResolve(specifier === './ai-stream' && context.parentURL?.endsWith('/browser-ai.ts') ? './ai-stream.ts' : specifier, context);
+  return nextResolve(['./ai-stream', './ai-prompt'].includes(specifier) && context.parentURL?.endsWith('/browser-ai.ts') ? `${specifier}.ts` : specifier, context);
 } });
 const { createBrowserAi, AI_STORAGE_KEY } = await import('../apps/platform/browser-ai.ts');
 hooks.deregister();
@@ -53,13 +53,13 @@ test('direct browser requests block redirects, omit cookies and referrers, and p
     assert.equal(init.cache, 'no-store');
     assert.equal(init.headers.Authorization, 'Bearer private-key');
     const { messages } = JSON.parse(init.body);
-    assert.equal(messages[1].content, 'Translate into Chinese: hello $& {{targetLanguage}}');
+    assert.equal(messages[1].content, 'hello $& {{browserDefault}}');
     assert.equal(messages[2].content, '你好');
     assert.equal(messages[3].content, 'Explain that word');
     return answer();
   });
-  await ai.setAiConfig({ apiKey: 'private-key', prompt: 'Translate into {{targetLanguage}}: {{selectedText}}' });
-  assert.equal(await ai.requestAi({ text: 'Explain that word', history: [{ role: 'user', content: 'hello $& {{targetLanguage}}' }, { role: 'assistant', content: '你好' }] }), 'answer');
+  await ai.setAiConfig({ apiKey: 'private-key', prompt: 'Translate into {{browserDefault}}: {{selectedText}}' });
+  assert.equal(await ai.requestAi({ text: 'Explain that word', history: [{ role: 'user', content: 'hello $& {{browserDefault}}' }, { role: 'assistant', content: '你好' }] }), 'answer');
   assert.equal((await ai.getAiConfig()).totalTokens, 12);
 });
 
@@ -101,4 +101,75 @@ test('HTTP is allowed only for explicit loopback hosts', async () => {
   for (const baseUrl of ['http://192.168.1.2:11434/v1', 'http://localhost.example.com', 'http://127.0.0.1.example.com']) {
     await assert.rejects(ai.setAiConfig({ baseUrl }));
   }
+});
+
+for (const streaming of [false, true]) {
+  for (const followUp of [false, true]) {
+    test(`reasoning stays disabled for ${streaming ? 'streaming' : 'non-streaming'} ${followUp ? 'follow-up' : 'initial'} requests`, async () => {
+      const requests = [];
+      const ai = createBrowserAi(storage, async (_url, init) => {
+        requests.push(JSON.parse(init.body));
+        return answer();
+      });
+      await ai.setAiConfig({ apiKey: 'private-key', baseUrl: 'https://compatible.example/v1', model: 'inexpensive-model' });
+      const history = followUp ? [{ role: 'user', content: 'hello' }, { role: 'assistant', content: '你好' }] : undefined;
+      const updates = [];
+      assert.equal(await ai.requestAi({ text: 'Explain this', history }, undefined, streaming ? (text) => updates.push(text) : undefined), 'answer');
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].reasoning_effort, 'none');
+      assert.equal(requests[0].stream, streaming);
+      assert.equal('extra_body' in requests[0], false, 'raw HTTP parameters belong at the top level');
+      if (streaming) {
+        assert.deepEqual(requests[0].stream_options, { include_usage: true });
+        assert.deepEqual(updates, ['answer']);
+      }
+    });
+  }
+}
+
+test('providers rejecting disabled reasoning fail without retrying in thinking mode', async () => {
+  let requests = 0;
+  const ai = createBrowserAi(storage, async (_url, init) => {
+    requests++;
+    assert.equal(JSON.parse(init.body).reasoning_effort, 'none');
+    return new Response('reasoning setting unsupported; private-key', { status: 400 });
+  });
+  await ai.setAiConfig({ apiKey: 'private-key' });
+  await assert.rejects(ai.requestAi({ text: 'hello' }), /rejected the request \(400\)/);
+  assert.equal(requests, 1);
+});
+
+test('Translate resolves browserDefault only in its template and keeps Ask independent', async (t) => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { languages: ['ja-JP', 'en-US'], language: 'en-US' } });
+  t.after(() => previous ? Object.defineProperty(globalThis, 'navigator', previous) : delete globalThis.navigator);
+  const requests = [];
+  const ai = createBrowserAi(storage, async (_url, init) => { requests.push(JSON.parse(init.body)); return answer(); });
+  await ai.setAiConfig({ apiKey: 'private-key' });
+  const selection = 'hello $& {{browserDefault}}';
+  await ai.requestAi({ text: selection, task: 'translate', history: [{ role: 'user', content: 'unrelated old question' }] });
+  assert.equal(requests[0].messages.length, 2, 'translation must not bill unrelated conversation history');
+  assert.ok(requests[0].messages[1].content.startsWith('Translate the following text into ja-JP.'));
+  assert.ok(requests[0].messages[1].content.endsWith(selection));
+  assert.equal(requests[0].reasoning_effort, 'none');
+  await ai.setAiConfig({ prompt: 'Translate to French: {{selectedText}}' });
+  await ai.requestAi({ text: 'hello', task: 'translate' });
+  assert.equal(requests[1].messages[1].content, 'Translate to French: hello');
+  await ai.requestAi({ text: 'Explain this word' });
+  assert.equal(requests[2].messages[1].content, 'Explain this word');
+  await ai.setAiConfig({ reset: true });
+  assert.equal((await ai.getAiConfig()).prompt, 'Translate to French: {{selectedText}}', 'resetting LLM must preserve the Translate card');
+});
+
+test('moving the prompt preserves custom settings and upgrades the old shipped default', async () => {
+  const disk = storage();
+  const legacy = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
+  disk.setItem(AI_STORAGE_KEY, JSON.stringify({ model: 'custom-model', baseUrl: 'https://provider.example/v1', prompt: legacy, rememberApiKey: false }));
+  const ai = createBrowserAi(() => disk);
+  assert.ok((await ai.getAiConfig()).prompt.includes('{{browserDefault}}'));
+  assert.equal((await ai.getAiConfig()).model, 'custom-model');
+  await ai.setAiConfig({ prompt: 'Translate to German: %s' });
+  assert.equal((await createBrowserAi(() => disk).getAiConfig()).prompt, 'Translate to German: %s');
+  await ai.setAiConfig({ prompt: legacy });
+  assert.equal((await createBrowserAi(() => disk).getAiConfig()).prompt, legacy, 'an explicit fixed-Chinese choice must survive reload after migration');
 });

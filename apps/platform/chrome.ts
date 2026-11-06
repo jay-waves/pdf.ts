@@ -8,7 +8,6 @@ import {
   readStoredFileHandle,
   verifyFilePermission,
 } from './browser-file-handle';
-import { browserTranslationCapabilities } from './browser-translation';
 import type { PdfFileHandle, ViewerPlatform } from './types';
 
 let activeDocumentUrl: string | undefined;
@@ -90,7 +89,6 @@ export const platform: ViewerPlatform = {
     if (!target || !['file:', 'http:', 'https:'].includes(target.protocol)) return;
     void (globalThis as ChromeGlobal).chrome.tabs.create({ url: target.href });
   },
-  ...browserTranslationCapabilities,
   ...browserPersistence,
   ...browserAiCapabilities,
 };

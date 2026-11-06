@@ -1,7 +1,6 @@
 import { browserAiCapabilities } from './browser-ai';
 import { browserPersistence } from './browser-storage';
 import { browserLocalDocumentCapabilities } from './browser-local-document';
-import { browserTranslationCapabilities } from './browser-translation';
 import { getExternalUrl } from '../shared/url';
 import type {
   PlatformDocument,
@@ -286,7 +285,6 @@ export const platform: ViewerPlatform = {
     const target = getExternalUrl(url, window.location.href);
     if (target) window.open(target, '_blank', 'noopener,noreferrer');
   },
-  ...browserTranslationCapabilities,
   ...browserPersistence,
   ...browserAiCapabilities,
 };

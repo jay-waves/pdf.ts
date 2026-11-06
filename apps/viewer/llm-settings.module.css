@@ -17,7 +17,6 @@
 [data-enabled='false'] > .footer,
 .fieldset:disabled { @apply opacity-50; }
 .fieldset:disabled :disabled { @apply opacity-100; }
-.languageFields { @apply grid grid-cols-2 gap-3 max-[480px]:grid-cols-1; }
 .fieldset { @apply m-0 grid min-w-0 gap-4 border-0 p-0; }
 .field { @apply grid min-w-0 gap-2; }
 .field, .fieldTitle { @apply text-[11px] font-medium text-secondary; }

@@ -77,16 +77,16 @@ a new copy instead. Desktop packages can save changes back to the opened file.
 The browser build targets ES2025 and requires Chrome/Edge 152+, Firefox 154+,
 Safari 26+, or iOS 26+.
 
-Translation is local-only and requires browser support for the built-in
-Translator API; Microsoft Edge 148 or later is required. The target language
-defaults to the browser's preferred language and can be changed in the
-Developer dialog. Translation uses [BCP 47](https://www.rfc-editor.org/info/bcp47)
-tags. Language tags are passed through without changing their meaning; an
-unspecified `zh` tag is supplemented as `zh-Hans` for the browser Translator
-API.
-Consult the [official Edge language list](https://github.com/MicrosoftEdge/Demos/blob/main/built-in-ai/static/translator-api.js)
-or use the [Edge Built-in AI Playground](https://microsoftedge.github.io/Demos/built-in-ai/)
-to check model availability.
+Translate uses the remote model configured in **Developer > LLM**. Its separate
+**Translate** card contains the translation prompt. The default uses
+`{{browserDefault}}`, which is replaced with the browser's preferred language
+for each request; replace it with a fixed language if desired.
+`{{selectedText}}` inserts the selection. Source/target language fields,
+browser translation models, model downloads, and language detection are removed.
+When LLM is off, the Translate action is labeled **Translate (Google Translate)**
+and directly opens Google Translate with the selection in a new tab. Google
+manages language choices on its page. If LLM is enabled but not configured,
+the reader reports a configuration error instead of silently switching providers.
 
 ## LLM
 
@@ -94,7 +94,15 @@ Web, desktop, and Chrome builds call an OpenAI-compatible Chat Completions
 endpoint directly from the browser. Configure it in Developer > LLM. The endpoint
 must use HTTPS (HTTP is also allowed for localhost, 127.0.0.1, and [::1])
 and allow browser requests through CORS. The Ask popover supports
-streaming replies and follow-up questions while it remains open.
+streaming replies and follow-up questions while it remains open. The translation
+prompt applies only to Translate; Ask sends your message directly. Resetting LLM
+settings preserves the separate Translate prompt.
+
+Browser LLM requests always send `reasoning_effort: "none"` through the OpenAI-compatible
+Chat Completions API, including streaming responses, follow-ups, and connection tests.
+Use an endpoint and model that support this setting. An incompatible provider error is
+reported without retrying with reasoning enabled. Providers that ignore this parameter
+must be configured to disable thinking on their side or use a compatible gateway.
 
 API keys stay in page memory by default and are lost on reload or close. Selecting
 **Remember API key in this browser** explicitly opts into unencrypted local

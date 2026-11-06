@@ -3,7 +3,6 @@ import { platform } from '#platform';
 import { supportsLlm as platformSupportsLlm } from '../platform/llm';
 import type { AiConfig, AiConfigUpdate } from '../platform/types';
 import { DEFAULT_AI_PROMPT } from '../platform/browser-ai';
-import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
 import cardStyles from '../components/settings-card.module.css';
@@ -14,8 +13,10 @@ const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.
 let saveQueue: Promise<void> = Promise.resolve();
 const supportsLlm = platformSupportsLlm(platform);
 
-export function LlmSettings() {
-  const [enabled, setEnabled] = useState(() => isLlmEnabled(platform.getPreference));
+export function LlmSettings({ enabled, onEnabledChange }: {
+  enabled: boolean;
+  onEnabledChange(enabled: boolean): void;
+}) {
   const [config, setConfig] = useState<AiConfig>(EMPTY_CONFIG);
   const [apiKey, setApiKey] = useState('');
   const [loaded, setLoaded] = useState(false);
@@ -73,7 +74,6 @@ export function LlmSettings() {
       rememberApiKey: snapshot.config.rememberApiKey,
       model: snapshot.config.model.trim(),
       baseUrl: snapshot.config.baseUrl.trim().replace(/\/+$/, ''),
-      prompt: snapshot.config.prompt.trim() ? snapshot.config.prompt : DEFAULT_PROMPT,
       ...(snapshot.apiKey.trim() ? { apiKey: snapshot.apiKey.trim() } : {}),
     };
     if (mounted.current) { setError(''); setStatus('Saving…'); }
@@ -107,7 +107,7 @@ export function LlmSettings() {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => flush.current(), 500);
   };
-  const edit = (field: 'model' | 'baseUrl' | 'prompt', value: string) => {
+  const edit = (field: 'model' | 'baseUrl', value: string) => {
     const updated = { ...draft.current.config, [field]: value };
     draft.current = { ...draft.current, config: updated };
     setConfig(updated);
@@ -121,7 +121,7 @@ export function LlmSettings() {
     try {
       await saveQueue;
       if (dirty.current && action === 'test') throw new Error('Save valid LLM settings before testing the connection.');
-      if (action === 'test') await platform.requestAi!({ text: 'hello', targetLanguage: 'zh-CN' });
+      if (action === 'test') await platform.requestAi!({ text: 'hello' });
       if (action === 'clear') await platform.setAiConfig!({ apiKey: '', rememberApiKey: false });
       if (action === 'reset') await platform.setAiConfig!({ reset: true });
       const value = await platform.getAiConfig!();
@@ -139,8 +139,7 @@ export function LlmSettings() {
       ? 'Connect directly to an OpenAI-compatible model. The provider must allow browser requests (CORS).'
       : 'LLM is unavailable in this environment.'}</p></div><SettingsToggle label="Enable LLM" checked={enabled}
       onCheckedChange={(value) => {
-        platform.setPreference(LLM_ENABLED_PREFERENCE, String(value));
-        setEnabled(value);
+        onEnabledChange(value);
       }} /></div>
     <fieldset disabled={!enabled || !loaded} className={styles.fieldset}>
       <label className={styles.field}>Model name
@@ -179,9 +178,6 @@ export function LlmSettings() {
             : 'Default: the key stays only in memory and is cleared when this page reloads or closes. This does not protect against injected scripts (XSS). Use a separate key with a hard spending limit.'}
         </p>
       </div>
-      <label className={styles.field}>Prompt
-        <textarea rows={9} value={config.prompt} onChange={(event) => edit('prompt', event.target.value)} />
-      </label>
       <div className={styles.actions}>
         <button type="button" disabled={!supportsLlm || !loaded} onClick={() => void runAction('test')}>Test</button>
         <button type="button" disabled={!supportsLlm || !loaded} onClick={() => void runAction('reset')}>Reset</button>

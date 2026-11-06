@@ -50,44 +50,10 @@ export interface ViewerResources {
   readonly document?: PlatformDocument;
 }
 
-export type PlatformTranslationResult =
-  | { type: 'inline'; text: string }
-  | {
-    type: 'downloadable';
-    downloading: boolean;
-    sourceLanguage: string;
-    targetLanguage: string;
-  };
-
-export interface PlatformLanguageDetectionResult {
-  confidence?: number;
-  detectedLanguage: string;
-}
-
-export type PlatformTranslationAvailability =
-  | 'available'
-  | 'downloadable'
-  | 'downloading'
-  | 'unavailable';
-
-export interface PlatformTranslationOptions {
-  allowModelDownload?: boolean;
-  onDownloadProgress?(progress: number): void;
-  signal?: AbortSignal;
-  sourceLanguage?: string;
-  targetLanguage: string;
-}
-
 export interface ViewerPlatform {
   loadViewerResources(bundledWasmUrl: string): Promise<ViewerResources>;
   openLocalDocument?(file?: File): Promise<PlatformDocument | undefined>;
   openExternal(url: string): void;
-  detectLanguage(text: string): Promise<PlatformLanguageDetectionResult>;
-  getTranslationAvailability(
-    sourceLanguage: string,
-    targetLanguage: string,
-  ): Promise<PlatformTranslationAvailability>;
-  translate(text: string, options: PlatformTranslationOptions): Promise<PlatformTranslationResult>;
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
@@ -105,20 +71,5 @@ export type AiMessage = { role: 'user' | 'assistant'; content: string };
 export type AiRequest = {
   history?: AiMessage[];
   text: string;
-  targetLanguage?: string;
+  task?: 'translate';
 };
-
-export class LanguageDetectionDownloadRequired extends Error {
-  readonly downloading: boolean;
-  readonly resume: () => Promise<PlatformLanguageDetectionResult>;
-
-  constructor(
-    downloading: boolean,
-    resume: () => Promise<PlatformLanguageDetectionResult>,
-  ) {
-    super('Click to download the language detection model.');
-    this.name = 'LanguageDetectionDownloadRequired';
-    this.downloading = downloading;
-    this.resume = resume;
-  }
-}

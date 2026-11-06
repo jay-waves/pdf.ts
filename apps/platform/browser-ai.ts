@@ -1,8 +1,13 @@
+import { buildLlmPrompt } from "./ai-prompt";
 import { readAiStream } from './ai-stream';
 import type { AiConfig, AiConfigUpdate, AiRequest } from './types';
 
 export const AI_STORAGE_KEY = 'pdf.ts:ai-config';
-export const DEFAULT_AI_PROMPT = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
+export const DEFAULT_AI_PROMPT = 'Translate the following text into {{browserDefault}}. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
+const LEGACY_AI_PROMPT = DEFAULT_AI_PROMPT.replace('{{browserDefault}}', 'Chinese');
+function migrateDefaultPrompt(prompt: string) {
+  return prompt === LEGACY_AI_PROMPT || prompt === LEGACY_AI_PROMPT.replace('{{selectedText}}', '%s') ? DEFAULT_AI_PROMPT : prompt;
+}
 const defaults = (): AiConfig => ({ model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', prompt: DEFAULT_AI_PROMPT, apiKeyConfigured: false, rememberApiKey: false, totalTokens: 0 });
 
 export function normalizeAiEndpoint(value: string) {
@@ -12,13 +17,6 @@ export function normalizeAiEndpoint(value: string) {
     throw new Error('Use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1], without credentials, query, or fragment.');
   }
   return url.href.replace(/\/+$/, '');
-}
-
-function initialPrompt(template: string, text: string) {
-  const prompt = template.replaceAll('{{targetLanguage}}', 'Chinese');
-  if (prompt.includes('{{selectedText}}')) return prompt.replace('{{selectedText}}', () => text);
-  if (prompt.includes('%s')) return prompt.replace('%s', () => text);
-  return `${prompt}\n\n${text}`;
 }
 
 // The closure limits accidental exposure; it is not a security boundary against XSS.
@@ -33,7 +31,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
     try {
       const saved = JSON.parse(storage().getItem(AI_STORAGE_KEY) ?? 'null');
       if (!saved || typeof saved.model !== 'string' || typeof saved.prompt !== 'string') return;
-      config = { ...defaults(), model: saved.model, prompt: saved.prompt, baseUrl: normalizeAiEndpoint(saved.baseUrl), rememberApiKey: saved.rememberApiKey === true };
+      config = { ...defaults(), model: saved.model, prompt: saved.promptVersion === 1 ? saved.prompt : migrateDefaultPrompt(saved.prompt), baseUrl: normalizeAiEndpoint(saved.baseUrl), rememberApiKey: saved.rememberApiKey === true };
       if (config.rememberApiKey && typeof saved.apiKey === 'string') apiKey = saved.apiKey;
     } catch { /* Storage may be unavailable; memory-only requests still work. */ }
   }
@@ -44,7 +42,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
     },
     async setAiConfig(update: AiConfigUpdate) {
       initialize();
-      const next = update.reset ? defaults() : { ...config };
+      const next = update.reset ? { ...defaults(), prompt: config.prompt } : { ...config };
       if (update.model !== undefined) next.model = update.model.trim();
       if (update.baseUrl !== undefined) next.baseUrl = normalizeAiEndpoint(update.baseUrl);
       if (update.prompt !== undefined) next.prompt = update.prompt.trim() ? update.prompt : DEFAULT_AI_PROMPT;
@@ -59,7 +57,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
         // Remove the previous credential before saving non-secret settings or a replacement.
         storage().removeItem(AI_STORAGE_KEY);
         storage().setItem(AI_STORAGE_KEY, JSON.stringify({
-          model: next.model, baseUrl: next.baseUrl, prompt: next.prompt,
+          model: next.model, baseUrl: next.baseUrl, prompt: next.prompt, promptVersion: 1,
           rememberApiKey: next.rememberApiKey,
           ...(next.rememberApiKey && nextKey ? { apiKey: nextKey } : {}),
         }));
@@ -73,11 +71,14 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
       if (!request.text.trim()) throw new Error('Enter a message first.');
       const snapshot = { ...config };
       const usageGeneration = generation;
-      const history = request.history ?? [];
+      const translating = request.task === 'translate';
+      const history = translating ? [] : request.history ?? [];
       const messages = [
-        { role: 'system', content: "Follow the user's instructions. Apply the initial task to the selected text, then answer follow-up questions using the conversation context." },
-        ...history.map((message, index) => ({ ...message, content: index === 0 ? initialPrompt(snapshot.prompt, message.content) : message.content })),
-        { role: 'user', content: history.length ? request.text : initialPrompt(snapshot.prompt, request.text) },
+        { role: 'system', content: translating
+          ? 'Translate according to the provided instructions. Output only the translation.'
+          : "Follow the user's instructions and answer follow-up questions using the conversation context." },
+        ...history,
+        { role: 'user', content: translating ? buildLlmPrompt(snapshot.prompt, request.text) : request.text },
       ];
       const recordUsage = (tokens: number) => {
         if (generation === usageGeneration && Number.isSafeInteger(tokens) && tokens > 0) config.totalTokens += tokens;
@@ -87,7 +88,9 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
         response = await send(`${normalizeAiEndpoint(snapshot.baseUrl)}/chat/completions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ model: snapshot.model, messages, stream: Boolean(onText), ...(onText ? { stream_options: { include_usage: true } } : {}) }),
+          // Explicitly disable reasoning through the OpenAI-compatible request body.
+          // Do not retry without this setting if the provider rejects it.
+          body: JSON.stringify({ model: snapshot.model, messages, reasoning_effort: 'none', stream: Boolean(onText), ...(onText ? { stream_options: { include_usage: true } } : {}) }),
           signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
         });
       } catch {

@@ -1,3 +1,4 @@
+import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { platform } from '#platform';
 import { supportsLlm } from '../platform/llm';
 import { useEffect, useRef, useState } from 'react';
@@ -26,7 +27,6 @@ import {
   type PdfFontDiagnostic,
 } from '../fonts';
 import type { PdfRuntime } from '../renderer/pdf-engine';
-import type { PlatformLanguageDetectionResult } from '../platform/types';
 import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import { LlmSettings } from './llm-settings';
 import { TranslatorSettings } from './translator-settings';
@@ -76,7 +76,6 @@ function formatMetadataDate(value: Date | null) {
 }
 
 export function DeveloperDialog({
-  detectedDocumentLanguage,
   registry,
   documentId,
   fileName,
@@ -85,7 +84,6 @@ export function DeveloperDialog({
   pdfium,
   onClose,
 }: {
-  detectedDocumentLanguage?: PlatformLanguageDetectionResult;
   registry?: PluginRegistry;
   documentId?: string | null;
   fileName?: string;
@@ -94,6 +92,11 @@ export function DeveloperDialog({
   pdfium: PdfRuntime;
   onClose(): void;
 }) {
+  const [llmEnabled, setLlmEnabled] = useState(() => isLlmEnabled(platform.getPreference));
+  const toggleLlm = (enabled: boolean) => {
+    platform.setPreference(LLM_ENABLED_PREFERENCE, String(enabled));
+    setLlmEnabled(enabled);
+  };
   const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
   const [metadata, setMetadata] = useState<PdfMetadataObject | null>(null);
   const [metadataError, setMetadataError] = useState('');
@@ -260,8 +263,8 @@ export function DeveloperDialog({
           </dl>
         </section>
 
-        {open && <TranslatorSettings detectedLanguage={detectedDocumentLanguage} />}
-        {open && supportsLlm(platform) && <LlmSettings />}
+        {open && supportsLlm(platform) && <LlmSettings enabled={llmEnabled} onEnabledChange={toggleLlm} />}
+        {open && <TranslatorSettings llmEnabled={llmEnabled} />}
       </PanelContent>
     </Dialog>
   );

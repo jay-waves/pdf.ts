@@ -47,7 +47,7 @@ import { platform } from '#platform';
 import { supportsLlm } from '../platform/llm';
 import { getDocument, getDocumentState } from '../document/viewer-document';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
-import { isTranslationEnabled, isLlmEnabled } from './translation-settings';
+import { runTranslateAction, isTranslationEnabled, isLlmEnabled } from './translation-settings';
 
 type ContextMenuState = {
   kind: 'selection' | 'annotation';
@@ -212,6 +212,17 @@ export function ContextMenu({
   dispatch: ViewerCommandDispatch;
 }) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [selectedText, setSelectedText] = useState('');
+  useEffect(() => {
+    setSelectedText('');
+    if (menu?.kind !== 'selection' || !registry || !documentId) return;
+    let active = true;
+    const scope = getPluginCapability<SelectionCapability>(registry, 'selection')?.forDocument(documentId);
+    void scope?.getSelectedText().toPromise().then((parts) => {
+      if (active) setSelectedText(normalizePdfText(parts.join(' ')).trim());
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [menu, registry, documentId]);
   useEffect(() => {
     if (!registry || !documentId) return;
     const selection = getPluginCapability<SelectionCapability>(registry, 'selection')
@@ -353,9 +364,19 @@ export function ContextMenu({
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
     { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
-    ...(isTranslationEnabled(platform.getPreference) ? [{ label: 'Translate', icon: Languages, action: () => {
-      dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'builtin' });
-      setMenu(null);
+    ...(isTranslationEnabled(platform.getPreference) ? [{
+      label: isLlmEnabled(platform.getPreference) ? 'Translate' : 'Translate (Google Translate)',
+      icon: Languages,
+      disabled: !isLlmEnabled(platform.getPreference) && !selectedText,
+      action: () => {
+        // Open external translation synchronously from the click to preserve user activation.
+        runTranslateAction({
+          text: selectedText,
+          llmEnabled: isLlmEnabled(platform.getPreference),
+          openLlm: () => dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'translate' }),
+          openExternal: platform.openExternal,
+        });
+        setMenu(null);
     } }] : []),
     ...(supportsLlm(platform) && isLlmEnabled(platform.getPreference) ? [{ label: 'LLM', icon: Send, action: () => {
       dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'llm' });

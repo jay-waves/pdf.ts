@@ -1,219 +1,61 @@
-import { LanguageDetectionDownloadRequired } from '../platform/types';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from '../components';
-import { getDocument } from '../document/viewer-document';
 import { platform } from '#platform';
 import { SelectionLlm } from './selection-llm';
 import { getPluginCapability, normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
-import { detectDocumentLanguage } from './document-language';
-import {
-  getLanguageName,
-  getTranslationSourceLanguage,
-  getTranslationTargetLanguage,
-  googleTranslationUrl,
-} from './translation-settings';
+import { googleTranslationUrl, isLlmEnabled } from './translation-settings';
 import styles from './selection-translate.module.css';
 
-const MAX_TEXT_LENGTH = 4000;
-
-type TranslationState =
-  | { status: 'loading'; progress?: number; detecting?: boolean }
-  | { status: 'detection-download'; request: LanguageDetectionDownloadRequired }
-  | { status: 'downloadable'; downloading: boolean; sourceLanguage: string; targetLanguage: string }
-  | { status: 'success'; text: string }
-  | { status: 'error'; text: string };
-
-function normalizeText(parts: string[]) {
-  return normalizePdfText(parts.join(' '))
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_TEXT_LENGTH);
-}
-
-export function SelectionTranslate(props: {
-  registry?: PluginRegistry;
-  request: ViewerTranslationRequest;
-  onClose(): void;
-}) {
+type Props = { registry?: PluginRegistry; request: ViewerTranslationRequest; onClose(): void };
+export function SelectionTranslate(props: Props) {
   return props.request.mode === 'llm' ? <SelectionLlm {...props} /> : <TranslationPopover {...props} />;
 }
 
-function TranslationPopover({
-  registry,
-  request,
-  onClose,
-}: {
-  registry?: PluginRegistry;
-  request: ViewerTranslationRequest;
-  onClose(): void;
-}) {
+function TranslationPopover({ registry, request, onClose }: Props) {
   const [sourceText, setSourceText] = useState('');
-  const [result, setResult] = useState<TranslationState>({ status: 'loading' });
-  const activeController = useRef<AbortController | null>(null);
-
-  const translate = useCallback(async (
-    text: string,
-    allowModelDownload: boolean,
-    sourceLanguage?: string,
-  ) => {
-    activeController.current?.abort();
-    const controller = new AbortController();
-    activeController.current = controller;
-    setResult({ status: 'loading' });
-    try {
-      const translation = await platform.translate(text, {
-        allowModelDownload,
-        signal: controller.signal,
-        sourceLanguage,
-        targetLanguage: getTranslationTargetLanguage(platform.getPreference),
-        onDownloadProgress(progress) {
-          if (!controller.signal.aborted) setResult({ status: 'loading', progress });
-        },
-      });
-      if (controller.signal.aborted) return;
-      if (translation.type === 'downloadable') {
-        setResult({ status: 'downloadable', ...translation });
-      } else {
-        setResult({ status: 'success', text: translation.text });
-      }
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      if (error instanceof LanguageDetectionDownloadRequired) {
-        setResult({ status: 'detection-download', request: error });
-        return;
-      }
-      setResult({
-        status: 'error',
-        text: error instanceof Error ? error.message : 'Translation failed.',
-      });
-    }
-  }, [request.mode]);
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const controller = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    setSourceText('');
-    setResult({ status: 'loading' });
-    const selection = getPluginCapability<SelectionCapability>(registry, 'selection');
-    const scope = selection?.forDocument(request.documentId);
-    if (!registry || !selection || !scope) return;
-
-    let cancelled = false;
-    const configuredSourceLanguage = getTranslationSourceLanguage(platform.getPreference);
-    const document = getDocument(registry, request.documentId)!;
-    Promise.all([
-      scope.getSelectedText().toPromise().then((parts) => {
-        if (!cancelled) setSourceText(normalizeText(parts));
-        return parts;
-      }),
-      configuredSourceLanguage || request.mode === 'llm'
-        ? Promise.resolve(configuredSourceLanguage)
-        : detectDocumentLanguage(registry.getEngine(), document)
-          .then((result) => result.detectedLanguage),
-    ]).then(([parts, sourceLanguage]) => {
-      if (cancelled) return;
-      const text = normalizeText(parts);
-      setSourceText(text);
-      void translate(text, false, sourceLanguage);
-    }).catch((error) => {
-      if (cancelled) return;
-      if (error instanceof LanguageDetectionDownloadRequired) {
-        setResult({ status: 'detection-download', request: error });
-        return;
+    const active = new AbortController();
+    controller.current = active;
+    setSourceText(''); setText(''); setError(''); setLoading(true);
+    const scope = getPluginCapability<SelectionCapability>(registry, 'selection')?.forDocument(request.documentId);
+    void (async () => {
+      try {
+        if (!scope) throw new Error('Could not read the selected text.');
+        const parts = await scope.getSelectedText().toPromise();
+        if (active.signal.aborted) return;
+        const selected = normalizePdfText(parts.join(' ')).trim();
+        setSourceText(selected);
+        if (!isLlmEnabled(platform.getPreference)) throw new Error('LLM is disabled. Open Google Translate to translate this selection.');
+        if (!platform.requestAi) throw new Error('Configure LLM in Developer > LLM to translate.');
+        const result = await platform.requestAi({ text: selected, task: 'translate' }, active.signal, (reply) => {
+          if (!active.signal.aborted) setText(reply);
+        });
+        if (!active.signal.aborted) setText(result);
+      } catch (failure) {
+        if (!active.signal.aborted) setError(failure instanceof Error ? failure.message : 'Translation failed.');
+      } finally {
+        if (!active.signal.aborted) setLoading(false);
       }
-      setResult({
-        status: 'error',
-        text: error instanceof Error ? error.message : 'Could not prepare translation.',
-      });
-    });
+    })();
+    return () => { active.abort(); if (controller.current === active) controller.current = null; };
+  }, [registry, request]);
 
-    const close = () => onClose();
-    window.addEventListener('scroll', close, { capture: true, passive: true });
-    const unsubscribeSelectionChange = selection.onSelectionChange((event) => {
-      if (!event.selection) close();
-    });
-
-    return () => {
-      cancelled = true;
-      activeController.current?.abort();
-      activeController.current = null;
-      window.removeEventListener('scroll', close, { capture: true });
-      unsubscribeSelectionChange();
-    };
-  }, [onClose, registry, request, translate]);
-
-  const resumeDetection = async (download: LanguageDetectionDownloadRequired) => {
-    activeController.current?.abort();
-    const controller = new AbortController();
-    activeController.current = controller;
-    setResult({ status: 'loading', detecting: true });
-    try {
-      const detection = await download.resume();
-      if (!controller.signal.aborted) {
-        // Detection may outlast user activation. Translation gets its own button if needed.
-        void translate(sourceText, false, detection.detectedLanguage);
-      }
-    } catch (error) {
-      if (!controller.signal.aborted) setResult({ status: 'error', text: error instanceof Error ? error.message : 'Language detection failed.' });
-    }
-  };
-
-  const downloadable = result.status === 'downloadable' || result.status === 'detection-download';
-  const message = (() => {
-    if (result.status === 'success' || result.status === 'error') return result.text;
-    if (result.status === 'detection-download') return result.request.downloading
-      ? 'Language detection model is downloading. Click to continue.'
-      : 'Download the language detection model to translate. Click to download.';
-    if (result.status === 'downloadable') {
-      const direction = `${getLanguageName(result.sourceLanguage)} → ${getLanguageName(result.targetLanguage)}`;
-      return result.downloading
-        ? `${direction}\nModel download is in progress. Click to continue.`
-        : `${direction}\nDownload this language model to translate. Click to download.`;
-    }
-    if (result.detecting) return 'Preparing the language detection model...';
-    if (typeof result.progress === 'number') {
-      return result.progress >= 1
-        ? 'Preparing the built-in translation model...'
-        : `Downloading the built-in translation model... ${Math.round(result.progress * 100)}%`;
-    }
-    return request.mode === 'llm' ? 'Running LLM...' : 'Translating...';
-  })();
-
-  return (
-    <FloatingPopover
-      onClose={onClose}
-      anchor={request.anchor}
-      sideOffset={10}
-      // The selection toolbar restores viewport focus after opening this popover.
-      dismissOnFocusOutside={false}
-      className={`pdf-glass-surface pdf-glass-popover ${styles.panel} ${result.status === 'error' ? 'text-danger' : ''} ${downloadable ? styles.downloadable : ''}`.trim()}
-      label={request.mode === 'llm' ? 'LLM' : 'Translation'}
-      role={downloadable ? 'dialog' : 'status'}
-    >
-      {downloadable ? (
-        <button
-          className={styles.downloadAction}
-          type="button"
-          onClick={() => {
-            if (result.status === 'detection-download') void resumeDetection(result.request);
-            else if (result.status === 'downloadable') void translate(sourceText, true, result.sourceLanguage);
-          }}
-          disabled={!sourceText}
-        >
-          {message}
-        </button>
-      ) : <>{message}
-        {result.status === 'error' && request.mode !== 'llm' && sourceText && <a
-          className={styles.externalLink}
-          href={googleTranslationUrl(sourceText, getTranslationTargetLanguage(platform.getPreference), getTranslationSourceLanguage(platform.getPreference))}
-          onClick={(event) => {
-            event.preventDefault();
-            platform.openExternal(event.currentTarget.href);
-            onClose();
-          }}
-        >Open in Google Translate</a>}
-      </>}
-    </FloatingPopover>
-  );
+  return <FloatingPopover anchor={request.anchor} sideOffset={10} onClose={onClose}
+    dismissOnFocusOutside={false} label="Translate" role="dialog"
+    className={`pdf-glass-surface pdf-glass-popover ${styles.panel}`}>
+    <div aria-busy={loading}>{text || (loading ? 'Translating with LLM…' : '')}</div>
+    {error && <p className="text-danger" role="alert">{error}</p>}
+    {sourceText && <a className={styles.externalLink} href={googleTranslationUrl(sourceText)}
+      onClick={(event) => { event.preventDefault(); platform.openExternal(event.currentTarget.href); onClose(); }}>
+      Open in Google Translate
+    </a>}
+  </FloatingPopover>;
 }

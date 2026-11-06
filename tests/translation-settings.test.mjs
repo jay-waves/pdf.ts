@@ -1,15 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  getBrowserTranslationLanguage,
-  getConfiguredTranslationTargetLanguage,
-  getTranslationSourceLanguage,
-  normalizeTranslationLanguage,
-  TRANSLATION_SOURCE_LANGUAGE_PREFERENCE,
-  TRANSLATION_TARGET_LANGUAGE_PREFERENCE,
   isTranslationEnabled,
   isLlmEnabled,
   googleTranslationUrl,
+  runTranslateAction,
   TRANSLATION_ENABLED_PREFERENCE,
   LLM_ENABLED_PREFERENCE,
 } from '../apps/selection/translation-settings.ts';
@@ -47,38 +42,22 @@ test('translation and LLM can each be disabled without affecting the other', () 
   assert.equal(isLlmEnabled(reenabled), true);
 });
 
-test('Google Translate links safely preserve text and requested languages', () => {
+test('Google Translate links preserve selection and delegate language choice to Google', () => {
   const text = 'a & b # c? 中文\n%s';
-  const url = new URL(googleTranslationUrl(text, 'zh-CN'));
+  const url = new URL(googleTranslationUrl(text));
   assert.equal(url.origin, 'https://translate.google.com');
   assert.equal(url.searchParams.get('text'), text);
-  assert.equal(url.searchParams.get('tl'), 'zh-CN');
+  assert.equal(url.searchParams.has('tl'), false);
   assert.equal(url.searchParams.get('sl'), 'auto');
 });
 
-test('translation language overrides use empty values for automatic detection', () => {
-  const automatic = preferences({
-    [TRANSLATION_SOURCE_LANGUAGE_PREFERENCE]: '',
-    [TRANSLATION_TARGET_LANGUAGE_PREFERENCE]: '   ',
-  });
-  assert.equal(getTranslationSourceLanguage(automatic), undefined);
-  assert.equal(getConfiguredTranslationTargetLanguage(automatic), undefined);
-});
-
-test('translation language overrides canonicalize BCP 47 tags', () => {
-  const configured = preferences({
-    [TRANSLATION_SOURCE_LANGUAGE_PREFERENCE]: 'zh_cn',
-    [TRANSLATION_TARGET_LANGUAGE_PREFERENCE]: 'FR_fr',
-  });
-  assert.equal(getTranslationSourceLanguage(configured), 'zh-CN');
-  assert.equal(getConfiguredTranslationTargetLanguage(configured), 'fr-FR');
-  assert.equal(normalizeTranslationLanguage('zh_hant_tw'), 'zh-Hant-TW');
-});
-
-test('a target override equal to the browser language is automatic', () => {
-  const browserLanguage = getBrowserTranslationLanguage();
-  const configured = preferences({
-    [TRANSLATION_TARGET_LANGUAGE_PREFERENCE]: browserLanguage,
-  });
-  assert.equal(getConfiguredTranslationTargetLanguage(configured), undefined);
+test('Translate opens LLM when enabled and opens Google directly without LLM when disabled', () => {
+  const events = [];
+  const options = { text: 'hello & 中文', openLlm: () => events.push('llm'), openExternal: (url) => events.push(new URL(url)) };
+  runTranslateAction({ ...options, llmEnabled: true });
+  assert.deepEqual(events, ['llm']);
+  runTranslateAction({ ...options, llmEnabled: false });
+  assert.equal(events.length, 2, 'external navigation must happen synchronously in the click handler');
+  assert.equal(events[1].hostname, 'translate.google.com');
+  assert.equal(events[1].searchParams.get('text'), options.text);
 });

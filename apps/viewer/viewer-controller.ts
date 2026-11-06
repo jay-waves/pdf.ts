@@ -18,7 +18,7 @@ type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
 type ViewerPanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
 export type ToolbarSection = 'document' | 'page' | 'search' | 'draw';
 export type ViewerTranslationRequest = {
-  mode?: 'builtin' | 'llm';
+  mode?: 'translate' | 'llm';
   documentId: string;
   anchor: { x: number; y: number };
 };
