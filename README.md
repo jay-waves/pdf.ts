@@ -92,7 +92,8 @@ to check model availability.
 
 Web, desktop, and Chrome builds call an OpenAI-compatible Chat Completions
 endpoint directly from the browser. Configure it in Developer > LLM. The endpoint
-must use HTTPS and allow browser requests through CORS. The Ask popover supports
+must use HTTPS (HTTP is also allowed for localhost, 127.0.0.1, and [::1])
+and allow browser requests through CORS. The Ask popover supports
 streaming replies and follow-up questions while it remains open.
 
 API keys stay in page memory by default and are lost on reload or close. Selecting

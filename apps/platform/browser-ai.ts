@@ -7,8 +7,9 @@ const defaults = (): AiConfig => ({ model: 'deepseek-flash', baseUrl: 'https://a
 
 export function normalizeAiEndpoint(value: string) {
   const url = new URL(value.trim());
-  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
-    throw new Error('Use an HTTPS Base URL without credentials, query, or fragment.');
+  const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if ((!localHttp && url.protocol !== 'https:') || url.username || url.password || url.search || url.hash) {
+    throw new Error('Use HTTPS, or HTTP on localhost, 127.0.0.1, or [::1], without credentials, query, or fragment.');
   }
   return url.href.replace(/\/+$/, '');
 }
@@ -91,7 +92,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
         });
       } catch {
         if (signal?.aborted) throw new DOMException('Request aborted.', 'AbortError');
-        throw new Error('Could not reach the LLM provider. Check the HTTPS endpoint and browser CORS support. Redirects are blocked.');
+        throw new Error('Could not reach the LLM provider. Check the endpoint and browser CORS or local-network permissions. Redirects are blocked.');
       }
       // Do not display provider bodies: they may echo credentials or request content.
       if (!response.ok) {

@@ -91,3 +91,14 @@ test('reset clears a remembered key and restores memory-only defaults', async ()
   assert.equal((await ai.getAiConfig()).apiKeyConfigured, false);
   assert.equal(disk.getItem(AI_STORAGE_KEY).includes('private-key'), false);
 });
+
+test('HTTP is allowed only for explicit loopback hosts', async () => {
+  const ai = createBrowserAi(storage, answer);
+  for (const baseUrl of ['http://localhost:11434/v1', 'http://127.0.0.1:1234/v1', 'http://[::1]:11434/v1']) {
+    await ai.setAiConfig({ baseUrl });
+    assert.equal((await ai.getAiConfig()).baseUrl, baseUrl);
+  }
+  for (const baseUrl of ['http://192.168.1.2:11434/v1', 'http://localhost.example.com', 'http://127.0.0.1.example.com']) {
+    await assert.rejects(ai.setAiConfig({ baseUrl }));
+  }
+});

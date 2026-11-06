@@ -149,7 +149,7 @@ export function LlmSettings() {
       <label className={styles.field}>Base URL
         <input type="url" value={config.baseUrl} placeholder="https://…/v1" spellCheck={false} onChange={(event) => edit('baseUrl', event.target.value)} />
       </label>
-      <p className={styles.hint}>HTTPS only. Changing the Base URL clears the current key; enter it again for the new endpoint. Redirects are blocked.</p>
+      <p className={styles.hint}>HTTPS, or HTTP for localhost / 127.0.0.1 / [::1]. Changing the Base URL clears the current key; enter it again for the new endpoint. Redirects are blocked.</p>
       <label className={styles.field}>API key
         <input type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" value={apiKey}
           placeholder={config.apiKeyConfigured ? '*****' : 'API key'}
@@ -162,17 +162,17 @@ export function LlmSettings() {
           }} />
       </label>
       <div className={styles.storageChoice}>
-        <label className={styles.checkboxLabel}>
-          <input type="checkbox" checked={config.rememberApiKey} aria-describedby="llm-key-storage-risk"
-            onChange={(event) => {
-              const updated = { ...draft.current.config, rememberApiKey: event.target.checked };
+        <div className={styles.storageRow}>
+          <span className={styles.fieldTitle}>Remember API key in this browser</span>
+          <SettingsToggle label="Remember API key in this browser" checked={config.rememberApiKey} describedBy="llm-key-storage-risk"
+            onCheckedChange={(checked) => {
+              const updated = { ...draft.current.config, rememberApiKey: checked };
               draft.current = { ...draft.current, config: updated };
               setConfig(updated);
               scheduleSave();
               flush.current();
             }} />
-          Remember API key in this browser
-        </label>
+        </div>
         <p id="llm-key-storage-risk" className={styles.hint}>
           {config.rememberApiKey
             ? 'Warning: your API key will be stored unencrypted in this browser. Injected scripts (XSS) or someone with access to your browser profile may steal it. Use a separate, revocable key with a hard spending limit; never use a production or high-limit key.'

@@ -1,0 +1,16 @@
+@reference '../tailwind.css';
+
+.handle {
+  @apply absolute right-0 bottom-0 size-5 cursor-nwse-resize touch-none text-muted opacity-35 transition-opacity duration-150 motion-reduce:transition-none;
+}
+.handle::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  background: repeating-linear-gradient(135deg, transparent 0 2px, currentColor 2px 3px);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+.handle:hover, .handle:active { @apply text-accent opacity-100; }

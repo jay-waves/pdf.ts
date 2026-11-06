@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PDF Viewer",
   "description": "Open local PDF files with PDF Viewer.",
-  "version": "0.4.5",
+  "version": "1.0.0",
   "minimum_chrome_version": "152",
   "icons": {
     "16": "icon-16.png",
@@ -30,6 +30,6 @@
     "tabs"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; connect-src 'self' https: file: blob: data:;"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:* file: blob: data:;"
   }
 }

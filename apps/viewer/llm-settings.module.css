@@ -19,7 +19,8 @@
 .fieldset:disabled :disabled { @apply opacity-100; }
 .languageFields { @apply grid grid-cols-2 gap-3 max-[480px]:grid-cols-1; }
 .fieldset { @apply m-0 grid min-w-0 gap-4 border-0 p-0; }
-.field { @apply grid min-w-0 gap-2 text-[11px] font-medium text-secondary; }
+.field { @apply grid min-w-0 gap-2; }
+.field, .fieldTitle { @apply text-[11px] font-medium text-secondary; }
 .field input, .field textarea { @apply w-full min-w-0 rounded-md border border-border-subtle bg-transparent px-3 py-2 text-xs font-normal text-foreground shadow-none outline-none focus:border-accent disabled:opacity-50; }
 .field textarea { @apply resize-y leading-5; }
 .field input, .field textarea { background: var(--pdf-control-background); }
@@ -34,6 +35,4 @@
 .actions button { @apply cursor-pointer rounded-md border border-border-subtle px-3 py-1.5 text-[11px] font-medium text-secondary hover:text-foreground disabled:opacity-40; background: var(--pdf-control-background); }
 
 .storageChoice { @apply grid gap-2; }
-.checkboxLabel { @apply flex cursor-pointer items-center gap-2 text-[11px] font-medium text-secondary; }
-.checkboxLabel input { @apply size-3.5 shrink-0 cursor-pointer accent-accent; }
-.checkboxLabel input:focus-visible { @apply outline-2 outline-offset-2 outline-accent; }
+.storageRow { @apply flex items-center justify-between gap-4; }

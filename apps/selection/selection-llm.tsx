@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { PopoverResizeHandle } from '../components/popover-resize-handle';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { SelectionCapability } from '@embedpdf/plugin-selection';
-import { MessageSquareMore, Pencil, X } from 'lucide-react';
-import { Button, FloatingPopover, IconButton } from '../components';
+import { Check, Copy, MessageSquareMore, Pencil, Send } from 'lucide-react';
+import { FloatingPopover, IconButton } from '../components';
 import { platform } from '#platform';
 import type { AiMessage } from '../platform/types';
 import { getPluginCapability, normalizePdfText } from '../shared/utils';
@@ -17,9 +18,17 @@ export function SelectionLlm({ registry, request, onClose }: {
   const [text, setText] = useState('');
   const [status, setStatus] = useState<'preparing' | 'editing' | 'loading' | 'answer'>('preparing');
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setCopied(false); }, [text]);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const history = useRef<AiMessage[]>([]);
   const controller = useRef<AbortController | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const sizeInitialDraft = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +42,9 @@ export function SelectionLlm({ registry, request, onClose }: {
         if (!scope) throw new Error('Could not read the selected text.');
         const parts = await scope.getSelectedText().toPromise();
         if (!cancelled) {
-          setText(normalizePdfText(parts.join(' ')).trim().slice(0, 4000));
+          const selected = normalizePdfText(parts.join(' ')).trim().slice(0, 4000);
+          setText(selected ? `${selected.split(/\r?\n/).map((line) => `> ${line}`).join('\n')}\n\n` : '');
+          sizeInitialDraft.current = true;
           setStatus('editing');
         }
       } catch (error) {
@@ -46,8 +57,27 @@ export function SelectionLlm({ registry, request, onClose }: {
     return () => { cancelled = true; controller.current?.abort(); controller.current = null; };
   }, [registry, request]);
 
+  useLayoutEffect(() => {
+    const input = textarea.current;
+    if (status !== 'editing' || !input || !sizeInitialDraft.current) return;
+    sizeInitialDraft.current = false;
+    const panel = input.parentElement;
+    if (!panel) return;
+    // Only size the initial selection; later replies and manual resizing stay stable.
+    panel.style.removeProperty('height');
+    input.style.height = '144px';
+    const height = Math.min(Math.max(144, input.scrollHeight), 280, window.innerHeight * 0.45);
+    panel.style.height = `${height + panel.getBoundingClientRect().height - input.getBoundingClientRect().height}px`;
+    input.style.removeProperty('height');
+  }, [status, text]);
+
   useEffect(() => {
-    if (status === 'editing') textarea.current?.focus();
+    if (status === 'editing' && textarea.current) {
+      const input = textarea.current;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+      input.scrollTop = input.scrollHeight;
+    }
   }, [status]);
 
   const send = async () => {
@@ -59,10 +89,11 @@ export function SelectionLlm({ registry, request, onClose }: {
     setError('');
     setText('');
     try {
-      if (!platform.requestAi) throw new Error('The desktop launcher is unavailable.');
-      const answer = await platform.requestAi({ text: prompt, history: history.current }, active.signal, (text) => {
+      const onText = (text: string) => {
         if (!active.signal.aborted) setText(text);
-      });
+      };
+      if (!platform.requestAi) throw new Error('LLM is unavailable in this environment.');
+      const answer = await platform.requestAi({ text: prompt, history: history.current }, active.signal, onText);
       if (active.signal.aborted) return;
       history.current = [...history.current, { role: 'user', content: prompt }, { role: 'assistant', content: answer }];
       setText(answer);
@@ -82,14 +113,18 @@ export function SelectionLlm({ registry, request, onClose }: {
     className={`pdf-glass-surface pdf-glass-popover ${styles.commentPopover}`}>
     <div className={styles.editorHeading}>
       <MessageSquareMore size={14} className="text-accent" />
-      <span className={styles.type}>Ask</span>
+      <span className={styles.type}>{status === 'loading' || status === 'answer' ? 'Response' : 'Ask'}</span>
       <div className={styles.actions}>
         {status === 'answer'
           ? <IconButton label="Ask a follow-up" icon={Pencil} onClick={() => { setText(''); setStatus('editing'); }} />
-          : <Button disabled={status !== 'editing' || !text.trim()} onClick={() => void send()}>
-            {status === 'loading' ? 'Sending…' : 'Send'}
-          </Button>}
-        <IconButton label="Close" icon={X} onClick={onClose} />
+          : <IconButton label={status === 'loading' ? 'Sending…' : 'Send'} icon={Send}
+            disabled={status !== 'editing' || !text.trim()} onClick={() => void send()} />}
+        <IconButton label={copied ? 'Copied' : 'Copy text'} icon={copied ? Check : Copy} disabled={!text}
+          onClick={() => {
+            void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => {
+              setError('Could not copy text. Select the text and copy it manually.');
+            });
+          }} />
       </div>
     </div>
     <textarea ref={textarea} className={styles.textarea} value={text}
@@ -101,5 +136,6 @@ export function SelectionLlm({ registry, request, onClose }: {
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void send(); }
       }} />
     {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-  </FloatingPopover>;
+  <PopoverResizeHandle />
+    </FloatingPopover>;
 }

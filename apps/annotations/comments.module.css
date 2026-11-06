@@ -43,8 +43,11 @@
 }
 
 .commentPopover {
-  @apply pointer-events-auto z-[2147483647] grid w-72 max-w-[calc(100vw-24px)] gap-2 rounded-xl border p-2.5 text-foreground;
+  @apply pointer-events-auto relative z-[2147483647] flex flex-col w-72 max-w-[calc(100vw-24px)] gap-1.5 rounded-xl border px-2.5 pt-1.5 pb-2.5 text-foreground;
 }
 .editorHeading { @apply flex min-h-7 items-center gap-2; }
 .editorHeading .type { @apply flex-1; }
-.commentPopover .textarea { @apply block h-24 max-h-[40vh]; }
+.commentPopover { max-height: calc(100dvh - 16px); }
+.commentPopover .textarea { @apply block h-36 min-h-0 flex-1; }
+.commentPopover .editorHeading { @apply min-h-6 shrink-0; }
+.commentPopover .actions button { @apply size-6; }

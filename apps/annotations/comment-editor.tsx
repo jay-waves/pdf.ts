@@ -1,3 +1,4 @@
+import { PopoverResizeHandle } from '../components/popover-resize-handle';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import { transformPosition, type Rotation } from '@embedpdf/models';
@@ -117,6 +118,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
         aria-label="Comment"
         autoFocus
       />
+    <PopoverResizeHandle />
     </FloatingPopover>
   );
 }
