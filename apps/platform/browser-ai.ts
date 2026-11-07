@@ -76,7 +76,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
       const messages = [
         { role: 'system', content: translating
           ? 'Translate according to the provided instructions. Output only the translation.'
-          : "Give brief, concise, elegant explanations in plain text. Do not use Markdown formatting. Follow the user's instructions and answer follow-up questions using the conversation context." },
+          : "Answer in as few words as possible, clearly and elegantly. Give only the essential explanation; omit introductions, repetition, and summaries. Use plain text, no Markdown. Follow the user's instructions and use conversation context for follow-up questions." },
         ...history,
         { role: 'user', content: translating ? buildLlmPrompt(snapshot.prompt, request.text) : request.text },
       ];

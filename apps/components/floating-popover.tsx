@@ -1,4 +1,4 @@
-import type { AriaRole, ReactNode } from 'react';
+import { useEffect, useState, type AriaRole, type ReactNode } from 'react';
 import { Popover } from 'radix-ui';
 import { useViewerControlClick, useViewerFocus } from './viewer-focus';
 
@@ -11,6 +11,7 @@ export function FloatingPopover({
   align = 'start',
   sideOffset = 0,
   dismissOnFocusOutside = true,
+  stableSide = false,
   children,
 }: {
   onClose(): void;
@@ -21,10 +22,22 @@ export function FloatingPopover({
   align?: 'start' | 'center' | 'end';
   sideOffset?: number;
   dismissOnFocusOutside?: boolean;
+  stableSide?: boolean;
   children: ReactNode;
 }) {
   const focusViewer = useViewerFocus();
   const onControlClick = useViewerControlClick();
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight);
+  useEffect(() => {
+    if (!stableSide) return;
+    const onResize = () => setViewportHeight(window.innerHeight);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [stableSide]);
+  const spaceBelow = Math.max(0, viewportHeight - anchor.y - (anchor.height ?? 0) - sideOffset - 9);
+  const spaceAbove = Math.max(0, anchor.y - sideOffset - 9);
+  // Choose from anchor geometry, not content height, so streaming cannot flip the panel.
+  const side = stableSide && spaceBelow < 200 && spaceAbove > spaceBelow ? 'top' : 'bottom';
   return (
     <Popover.Root open onOpenChange={(nextOpen) => !nextOpen && onClose()} modal={false}>
       <Popover.Anchor asChild>
@@ -33,7 +46,8 @@ export function FloatingPopover({
       <Popover.Portal>
         <Popover.Content
           className={className}
-          side="bottom"
+          side={side}
+          style={stableSide ? { maxHeight: side === 'top' ? spaceAbove : spaceBelow } : undefined}
           align={align}
           sideOffset={sideOffset}
           collisionPadding={8}

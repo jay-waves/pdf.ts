@@ -121,7 +121,7 @@ export function SelectionLlm({ registry, request, onClose }: {
   };
 
   return <FloatingPopover anchor={request.anchor} sideOffset={10} onClose={onClose}
-    dismissOnFocusOutside={false} label="Ask LLM" role="dialog"
+    dismissOnFocusOutside={false} stableSide label="Ask LLM" role="dialog"
     className={`pdf-glass-surface pdf-glass-popover ${styles.commentPopover}`}>
     <div className={styles.editorHeading}>
       <MessageSquareMore size={14} className="text-accent" />
@@ -145,7 +145,10 @@ export function SelectionLlm({ registry, request, onClose }: {
       placeholder={status === 'loading' ? 'Running LLM…' : history.current.length ? 'Ask a follow-up…' : 'Ask…'}
       onChange={(event) => setText(event.currentTarget.value)}
       onKeyDown={(event) => {
-        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); void send(); }
+        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+          event.preventDefault();
+          void send();
+        }
       }} />
     {error && <p role="alert" className="text-xs text-danger">{error}</p>}
   <PopoverResizeHandle />
