@@ -38,7 +38,9 @@ function TranslationPopover({ registry, request, onClose }: Props) {
         const result = await platform.requestAi({ text: selected, task: 'translate' }, active.signal, (reply) => {
           if (!active.signal.aborted) setText(reply);
         });
-        if (!active.signal.aborted) setText(result);
+        if (active.signal.aborted) return;
+        if (!result.trim()) throw new Error('The LLM returned an empty translation.');
+        setText(result);
       } catch (failure) {
         if (!active.signal.aborted) setError(failure instanceof Error ? failure.message : 'Translation failed.');
       } finally {
@@ -53,7 +55,7 @@ function TranslationPopover({ registry, request, onClose }: Props) {
     className={`pdf-glass-surface pdf-glass-popover ${styles.panel}`}>
     <div aria-busy={loading}>{text || (loading ? 'Translating with LLM…' : '')}</div>
     {error && <p className="text-danger" role="alert">{error}</p>}
-    {sourceText && <a className={styles.externalLink} href={googleTranslationUrl(sourceText)}
+    {!loading && error && sourceText && <a className={styles.externalLink} href={googleTranslationUrl(sourceText)}
       onClick={(event) => { event.preventDefault(); platform.openExternal(event.currentTarget.href); onClose(); }}>
       Open in Google Translate
     </a>}

@@ -63,12 +63,24 @@ export function SelectionLlm({ registry, request, onClose }: {
     sizeInitialDraft.current = false;
     const panel = input.parentElement;
     if (!panel) return;
-    // Only size the initial selection; later replies and manual resizing stay stable.
+    // Size the initial selection before the user starts editing.
     panel.style.removeProperty('height');
     input.style.height = '144px';
     const height = Math.min(Math.max(144, input.scrollHeight), 280, window.innerHeight * 0.45);
     panel.style.height = `${height + panel.getBoundingClientRect().height - input.getBoundingClientRect().height}px`;
     input.style.removeProperty('height');
+  }, [status, text]);
+
+  useLayoutEffect(() => {
+    const input = textarea.current;
+    const panel = input?.parentElement;
+    if (!input || !panel || (status !== 'loading' && status !== 'answer')) return;
+    const currentHeight = input.getBoundingClientRect().height;
+    const height = Math.min(input.scrollHeight, 420, window.innerHeight * 0.6);
+    // Grow with streamed content; preserve a larger manually resized panel.
+    if (height > currentHeight) {
+      panel.style.height = `${panel.getBoundingClientRect().height + height - currentHeight}px`;
+    }
   }, [status, text]);
 
   useEffect(() => {
