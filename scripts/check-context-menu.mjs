@@ -1,0 +1,94 @@
+import assert from 'node:assert/strict';
+import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
+import { fixture } from './pdf-editing-fixture.mjs';
+
+const browser = await chromium.launch({ channel: 'chrome' });
+try {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+  const page = await context.newPage();
+  page.setDefaultTimeout(10000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
+  const bytes = fixture({ content: 'BT /Helv 20 Tf 60 700 Td (Select this PDF text for highlighting.) Tj ET' });
+  const dataTransfer = await page.evaluateHandle(bytes => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array(bytes)], 'context-menu.pdf', { type: 'application/pdf' }));
+    return transfer;
+  }, [...bytes]);
+  await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer });
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-page-render-image')].some(image => image.complete && image.naturalWidth));
+  await page.mouse.move(640, 30);
+  await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
+  const surface = page.locator('.pdf-page-surface').first();
+  const box = await surface.boundingBox();
+  const scale = box.width / 612;
+  await page.mouse.move(box.x + 61 * scale, box.y + 85 * scale);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 360 * scale, box.y + 85 * scale, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelector('.pdf-text-selection-layer polygon'));
+  const menu = page.getByRole('toolbar', { name: 'Text selection actions' });
+  const rightClick = () => page.mouse.click(box.x + 125 * scale, box.y + 85 * scale, { button: 'right' });
+  await rightClick();
+  await menu.waitFor({ state: 'visible' });
+  await menu.getByRole('button', { name: 'Copy', exact: true }).click();
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /Select this PDF text/);
+  // Right-click must preserve the selected range for subsequent actions.
+  await rightClick();
+  await menu.waitFor({ state: 'visible' });
+  await menu.getByRole('button', { name: 'Highlight', exact: true }).click();
+  await menu.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.querySelector('.pdf-annotation-layer svg'));
+  // Existing highlight actions must work without a text-selection DOM target.
+  await page.mouse.click(box.x + 450 * scale, box.y + 200 * scale);
+  await page.locator('main[data-draft-status="saved"]').waitFor();
+  assert.equal(await page.getByLabel('Draft status', { exact: true }).count(), 0, 'successful autosave stays silent');
+  await rightClick();
+  const annotationMenu = page.getByRole('toolbar', { name: 'Annotation actions' });
+  await annotationMenu.waitFor({ state: 'visible' });
+  await annotationMenu.getByRole('button', { name: 'Add nearby note', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit comment', exact: true });
+  await editor.waitFor({ state: 'visible' });
+  const editorBox = await editor.boundingBox();
+  assert.ok(editorBox.y > box.y + 85 * scale && editorBox.y < box.y + 180 * scale, 'comment editor stays near its highlight');
+  await editor.getByRole('textbox', { name: 'Comment', exact: true }).fill('Nearby highlight comment');
+  await editor.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Draw', exact: true }).click();
+  await page.locator('[aria-label="Rectangle"]').click();
+  await page.mouse.move(box.x + 270 * scale, box.y + 360 * scale);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 380 * scale, box.y + 430 * scale, { steps: 10 });
+  await page.mouse.up();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.mouse.click(box.x + 450 * scale, box.y + 300 * scale);
+  await page.mouse.click(box.x + 300 * scale, box.y + 360 * scale, { button: 'right' });
+  await annotationMenu.waitFor({ state: 'visible' });
+  assert.equal(await annotationMenu.getByRole('button', { name: 'Copy image', exact: true }).count(), 1);
+  await annotationMenu.getByRole('button', { name: 'Add nearby note', exact: true }).click();
+  await editor.waitFor({ state: 'visible' });
+  const shapeEditorBox = await editor.boundingBox();
+  assert.ok(shapeEditorBox.y > box.y + 430 * scale && shapeEditorBox.y < box.y + 520 * scale, 'shape note is below the shape');
+  await editor.getByRole('button', { name: 'Done', exact: true }).click();
+  // Primary-click actions still work on pointer-transparent vector painting.
+  await page.mouse.click(box.x + 300 * scale, box.y + 360 * scale);
+  await annotationMenu.waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Page', exact: true }).click();
+  await page.getByRole('button', { name: 'Rotate', exact: true }).click();
+  await page.waitForFunction(() => {
+    const box = document.querySelector('.pdf-page-surface')?.getBoundingClientRect();
+    return box && box.width > box.height;
+  });
+  const rotated = await surface.boundingBox();
+  const rotatedScale = rotated.width / 792;
+  await page.mouse.click(rotated.x + (792 - 360) * rotatedScale, rotated.y + 300 * rotatedScale, { button: 'right' });
+  await annotationMenu.waitFor({ state: 'visible' });
+  await annotationMenu.getByRole('button', { name: 'Add nearby note', exact: true }).click();
+  await editor.waitFor({ state: 'visible' });
+  const rotatedEditor = await editor.boundingBox();
+  assert.ok(rotatedEditor.y > rotated.y + 350 * rotatedScale && rotatedEditor.y < rotated.y + 470 * rotatedScale, 'rotated note editor remains beside its shape');
+  assert.deepEqual(errors, []);
+  console.log('PASS text selection, copy, highlight/vector menus and nearby comment positioning');
+} finally {
+  await browser.close();
+}

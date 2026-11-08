@@ -447,7 +447,7 @@ function App({
 
   return (
     <ViewerFocusContext.Provider value={stage ? () => stage.focusViewportAfterAction() : null}>
-    <main ref={viewerRootRef} inert={pendingDocument !== null} className="fixed inset-0 overflow-hidden">
+    <main data-draft-status={draft.draftStatus} ref={viewerRootRef} inert={pendingDocument !== null} className="fixed inset-0 overflow-hidden">
       <DraftNotice draft={draft} dirty={isDirty} engine={engine} documentId={documentId} name={resolvedDocumentName ?? 'document.pdf'} />
       <PdfSurface
         engine={engine}

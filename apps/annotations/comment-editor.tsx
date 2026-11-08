@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import { annotationKey } from '@embedpdf/core';
 import { StageToken } from '@embedpdf/plugin-stage';
+import { annotationAnchor, fromDTO, initialModel } from '@embedpdf/core-annotation';
 import { CircleCheckBig, MessageSquareMore, Trash } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
 import { getAnnotationLabel, getAnnotationScope } from './annotations';
@@ -47,13 +48,21 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
     if (!annotation) { onClose(); return; }
     let frame = 0;
     const update = () => {
-      const projection = registry.tryCapability(StageToken, documentId)?.pageRectToViewport(annotation.page, annotation.rect);
+      const stage = registry.tryCapability(StageToken, documentId);
+      const current = scope?.get(annotation.ref);
+      const pageFrame = current && stage?.getPageBox(current.page);
+      const record = current && fromDTO(current);
+      const visual = record && pageFrame && stage && annotationAnchor(
+        { ...initialModel, byId: { [record.id]: record }, order: [record.id] }, record.id,
+        { zoom: stage.getZoomLevel(), rotation: pageFrame.rotation },
+      );
+      const projection = visual && stage?.pageRectToViewport(visual.page, visual.bounds);
       const element = document.querySelector<HTMLElement>(`[data-pdf-document-layer="${documentId}"] .viewer`);
       if (projection && element) {
         const bounds = element.getBoundingClientRect();
-        const left = bounds.left + projection.x;
+        const left = bounds.left + element.clientLeft + projection.x;
         const right = left + projection.width;
-        const y = bounds.top + projection.y;
+        const y = bounds.top + element.clientTop + projection.y;
         const bottom = y + projection.height;
         // Keep the clicked horizontal position attached to the annotation as the view changes.
         horizontalFraction.current ??= pointerX === undefined || right === left
@@ -71,7 +80,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
     };
     update();
     return () => cancelAnimationFrame(frame);
-  }, [registry, documentId, annotation, pointerX, onClose]);
+  }, [registry, documentId, scope, annotation, pointerX, onClose]);
 
   if (!annotation || !anchor) return null;
   return (

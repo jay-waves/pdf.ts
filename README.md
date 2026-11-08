@@ -202,7 +202,8 @@ edits made during merging remain in a new draft.
 Reopening restores matching drafts automatically. A changed original or an
 unrecognized draft produces a conflict: download or explicitly discard the
 stored draft before proceeding. Independent sessions cannot silently overwrite
-one another's drafts. The UI distinguishes “Draft saved” from saving to PDF.
+one another's drafts. Routine draft saving is silent; errors, conflicts, and
+changes requiring Save to PDF remain visible.
 Browser storage can be cleared by the browser or user and is not a backup.
 
 Encrypted documents do not create plaintext drafts. Metadata, security, and

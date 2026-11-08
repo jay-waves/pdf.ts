@@ -50,15 +50,25 @@ const CAPTURE_SCALE = 4;
 const MAX_CAPTURE_PIXELS = 16_000_000;
 const TEXT_SELECTION_HIT_PADDING = 6;
 
-function isTextSelectionHit(container: HTMLElement, x: number, y: number) {
-  const page = container.ownerDocument.elementFromPoint(x, y)?.closest('.pdf-page-surface');
-  const selection = page?.querySelector<HTMLElement>('.pdf-text-selection-layer > div');
-  if (!selection) return false;
-  const rect = selection.getBoundingClientRect();
-  return x >= rect.left - TEXT_SELECTION_HIT_PADDING
-    && x <= rect.right + TEXT_SELECTION_HIT_PADDING
-    && y >= rect.top - TEXT_SELECTION_HIT_PADDING
-    && y <= rect.bottom + TEXT_SELECTION_HIT_PADDING;
+function isTextSelectionHit(container: HTMLElement, registry: Kernel, documentId: string, selection: SelectionCapability, x: number, y: number) {
+  const viewport = container.querySelector<HTMLElement>('.viewer');
+  const stage = registry.tryCapability(StageToken, documentId);
+  if (!viewport || !stage) return false;
+  const bounds = viewport.getBoundingClientRect();
+  const vx = x - bounds.left - viewport.clientLeft;
+  const vy = y - bounds.top - viewport.clientTop;
+  return selection.getSnapshot().pages.some(({ page, segments }) => segments.some(({ rect }) => {
+    const corners = [
+      { x: rect.x, y: rect.y }, { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x, y: rect.y + rect.height }, { x: rect.x + rect.width, y: rect.y + rect.height },
+    ].map(point => stage.pageToViewport(page, point));
+    if (corners.some(point => !point)) return false;
+    const points = corners.filter(point => point !== null);
+    return vx >= Math.min(...points.map(point => point.x)) - TEXT_SELECTION_HIT_PADDING
+      && vx <= Math.max(...points.map(point => point.x)) + TEXT_SELECTION_HIT_PADDING
+      && vy >= Math.min(...points.map(point => point.y)) - TEXT_SELECTION_HIT_PADDING
+      && vy <= Math.max(...points.map(point => point.y)) + TEXT_SELECTION_HIT_PADDING;
+  }));
 }
 
 function getExternalLink(annotation: Annotation | undefined) {
@@ -174,10 +184,20 @@ export function ContextMenu({
       target instanceof HTMLElement && target.classList.contains('viewer')
     ));
 
+    const annotationAt = (event: MouseEvent) => {
+      const viewport = container.querySelector<HTMLElement>('.viewer');
+      const stage = registry.tryCapability(StageToken, documentId);
+      if (!viewport || !stage || !annotation) return null;
+      const bounds = viewport.getBoundingClientRect();
+      const hit = stage.getPageAt({ x: event.clientX - bounds.left - viewport.clientLeft,
+        y: event.clientY - bounds.top - viewport.clientTop });
+      return hit ? annotation.getAt(hit.ref, hit.point) : null;
+    };
+
     const preserveSelection = (event: MouseEvent) => {
-      if (event.button !== 2 || !isViewerEvent(event) || !selection
-        || !selection.hasSelection()
-        || !isTextSelectionHit(container, event.clientX, event.clientY)) return;
+      if (event.button !== 2 || !isViewerEvent(event) || event.composedPath().some(isEditableTarget)) return;
+      const selectedTextHit = selection?.hasSelection() && isTextSelectionHit(container, registry, documentId, selection, event.clientX, event.clientY);
+      if (!selectedTextHit && !annotationAt(event)) return;
       // The selection plugin clears on pointerdown, before contextmenu fires.
       event.stopPropagation();
       event.preventDefault();
@@ -195,11 +215,12 @@ export function ContextMenu({
         setMenu(null);
         return;
       }
-      const layer = target?.closest('.pdf-annotation-layer');
-      if (event.button !== 0 || !layer || target === layer
-        || event.composedPath().some(isEditableTarget)
-        || !annotation?.selection.getSelected().length) return;
-      const selected = annotation.selection.getSelected();
+      if (event.button !== 0 || !isViewerEvent(event) || event.composedPath().some(isEditableTarget)) return;
+      const hit = annotationAt(event);
+      const selected = annotation?.selection.getSelected() ?? [];
+      // Native v3 annotation painting is pointer-transparent. Hit-test the model,
+      // and only open after a click actually selected the annotation.
+      if (!hit || !selected.some(item => annotationKey(item.ref) === annotationKey(hit.ref))) return;
       if (selected.length === 1 && selected[0].subtype === 'text') {
         dispatch({ type: 'ui/open-comments', annotationId: annotationKey(selected[0].ref), pointerX: event.clientX });
         setMenu(null);
@@ -209,18 +230,20 @@ export function ContextMenu({
     };
 
     const openContextMenu = (event: MouseEvent) => {
-      if (!isViewerEvent(event)) return;
+      if (!isViewerEvent(event) || event.composedPath().some(isEditableTarget)) return;
       event.preventDefault();
       event.stopPropagation();
 
-      const hasSelection = Boolean(selection
-        && selection.hasSelection());
-      if (!hasSelection || !isTextSelectionHit(container, event.clientX, event.clientY)) return;
-      setMenu({
-        kind: 'selection',
-        x: event.clientX + 8,
-        y: event.clientY + 8,
-      });
+      if (selection?.hasSelection() && isTextSelectionHit(container, registry, documentId, selection, event.clientX, event.clientY)) {
+        setMenu({ kind: 'selection', x: event.clientX + 8, y: event.clientY + 8 });
+        return;
+      }
+      const hit = annotationAt(event);
+      if (!hit || !annotation) { setMenu(null); return; }
+      if (!annotation.selection.getSelected().some(item => annotationKey(item.ref) === annotationKey(hit.ref))) {
+        annotation.selection.select([hit.ref]);
+      }
+      setMenu({ kind: 'annotation', x: event.clientX + 8, y: event.clientY + 8 });
     };
 
     container.addEventListener('pointerdown', preserveSelection, { capture: true });
@@ -322,11 +345,27 @@ export function ContextMenu({
       let commentId = annotationKey(target.ref);
       if (target.subtype !== 'text') {
         const stage = registry.tryCapability(StageToken, documentId);
-        const viewport = container?.querySelector<HTMLElement>('.viewer')?.getBoundingClientRect();
+        const viewport = container?.querySelector<HTMLElement>('.viewer');
+        const page = registry.documents.getPage(target.page, documentId);
         let noteRect: Rect | undefined;
-        if (stage && viewport) {
-          const point = stage.viewportToPage(target.page, { x: menu.x - 8 - viewport.left, y: menu.y - viewport.top });
-          if (point) noteRect = { x: Math.max(0, point.x), y: Math.max(0, point.y), width: 24, height: 24 };
+        if (stage && viewport && page) {
+          const bounds = viewport.getBoundingClientRect();
+          const pageBox = stage.pageRectToViewport(target.page, { x: 0, y: 0, ...page.size });
+          const targetBox = stage.pageRectToViewport(target.page, target.rect);
+          if (pageBox && targetBox) {
+            const size = Math.min(24, page.size.width, page.size.height);
+            const screenSize = size * pageBox.width / ((stage.getPageBox(target.page)?.rotation ?? 0) % 180 ? page.size.height : page.size.width);
+            const gap = 4;
+            const below = targetBox.y + targetBox.height + gap;
+            const above = targetBox.y - screenSize - gap;
+            const fitsBelow = below + screenSize <= Math.min(pageBox.y + pageBox.height, viewport.clientHeight);
+            const x = Math.max(pageBox.x, Math.min(pageBox.x + pageBox.width - screenSize, menu.x - 8 - bounds.left - viewport.clientLeft));
+            const y = Math.max(pageBox.y, Math.min(pageBox.y + pageBox.height - screenSize, fitsBelow || above < pageBox.y ? below : above));
+            const first = stage.viewportToPage(target.page, { x, y });
+            const last = stage.viewportToPage(target.page, { x: x + screenSize, y: y + screenSize });
+            if (first && last) noteRect = { x: Math.max(0, Math.min(page.size.width - size, first.x, last.x)),
+              y: Math.max(0, Math.min(page.size.height - size, first.y, last.y)), width: size, height: size };
+          }
         }
         commentId = await createCommentAnnotation(annotation, target, noteRect);
       }

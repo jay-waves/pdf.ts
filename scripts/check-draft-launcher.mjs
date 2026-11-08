@@ -13,12 +13,12 @@ try{
  const a=await open();const b=await open();
  await a.bringToFront();await a.getByRole('button',{name:'Draw',exact:true}).click();await a.locator('[aria-label="Rectangle"]').click();
  const rect=await a.locator('.pdf-page-surface').first().boundingBox();await a.mouse.move(rect.x+110,rect.y+110);await a.mouse.down();await a.mouse.move(rect.x+220,rect.y+180,{steps:8});await a.mouse.up();await a.getByRole('button',{name:'Back',exact:true}).click();
- await a.getByRole('status').filter({hasText:'Draft saved'}).waitFor();await b.getByRole('status').filter({hasText:'Draft saved'}).waitFor();
+ await a.locator('main[data-draft-status="saved"]').waitFor();await b.locator('main[data-draft-status="saved"]').waitFor();
  const draft=JSON.parse(await readFile(path+'.swp','utf8'));assert.equal(draft.format,'pdf.ts/swp');assert.equal(draft.bundle.items.length,1);
  assert.deepEqual(await readFile(path),original);
  await a.screenshot({path:'/tmp/pdf-ts-draft-status.png'});
  await a.close();await b.close();
- const reopened=await open();if(process.env.DEBUG_PDF)console.log('reopened',await reopened.locator('body').innerText(),errors);await reopened.getByRole('status').filter({hasText:'Draft saved'}).waitFor();assert.ok(await reopened.title().then(t=>t.startsWith('*')));
+ const reopened=await open();if(process.env.DEBUG_PDF)console.log('reopened',await reopened.locator('body').innerText(),errors);await reopened.locator('main[data-draft-status="saved"]').waitFor();assert.ok(await reopened.title().then(t=>t.startsWith('*')));
  await reopened.keyboard.press('Control+s');await reopened.waitForFunction(()=>!document.title.startsWith('*'));
  await assert.rejects(stat(path+'.swp'),{code:'ENOENT'});
  const output=await readFile(path);assert.notDeepEqual(output,original);

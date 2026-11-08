@@ -89,7 +89,7 @@ try {
   if (process.env.DEBUG_PDF) { console.log('DRAW STATE', await a.title(), await b.title(), await b.locator('.pdf-annotation-layer').innerHTML()); }
   await b.waitForFunction(() => document.title.startsWith('*'));
   await b.waitForFunction(html => document.querySelector('.pdf-annotation-layer')?.innerHTML !== html && document.querySelector('.pdf-annotation-layer svg, .pdf-annotation-layer img'), initialAnnotations);
-  await a.getByRole('status').filter({ hasText: 'Draft saved' }).waitFor({timeout:10000}).catch(async error => { console.error(await a.getByLabel('Draft status').textContent()); throw error; });
+  await a.locator('main[data-draft-status="saved"]').waitFor({timeout:10000}).catch(async error => { console.error(await a.locator('main').getAttribute('data-draft-status')); throw error; });
   assert.equal(writes, 0, 'autosave must not write the PDF');
   assert.ok(draft);
   await a.getByRole('button', { name: 'Save to PDF', exact: true }).click();
@@ -114,7 +114,7 @@ try {
   await a.waitForFunction(() => document.title.startsWith('*'));
   const fallback = await open(true);
   await draw(fallback, 130);
-  await fallback.getByText('Draft saved · not yet saved to PDF', { exact: true }).waitFor();
+  await fallback.locator('main[data-draft-status="saved"]').waitFor();
   // An independent worker now owns the latest sidecar. The original session
   // must explicitly resolve that conflict before replacing the PDF.
   await draw(c, 270);
@@ -122,7 +122,7 @@ try {
   assert.equal(writes, 2, 'draft conflict must not write the PDF');
   acceptDraftDiscard = true;
   await c.getByRole('button', { name: 'Discard stored draft', exact: true }).click();
-  await c.getByText('Draft saved · not yet saved to PDF', { exact: true }).waitFor();
+  await c.locator('main[data-draft-status="saved"]').waitFor();
   acceptDraftDiscard = false;
   await c.getByRole('button', { name: 'Save to PDF', exact: true }).click();
   await a.waitForFunction(() => !document.title.startsWith('*'));

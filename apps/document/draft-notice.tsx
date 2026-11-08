@@ -8,11 +8,11 @@ export function DraftNotice({ draft, dirty, engine, documentId, name }: {
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!documentId || (!dirty && (draft.draftStatus === 'clean' || draft.draftStatus === 'unavailable'))) return null;
-  const labels = {
-    clean: 'Saved to PDF', pending: 'Saving draft…', saving: 'Saving draft…',
-    saved: 'Draft saved · not yet saved to PDF', error: 'Draft could not be saved',
-    conflict: 'Draft conflict · not restored', unavailable: 'Save to PDF required',
+  if (!documentId || !['error', 'conflict', 'unavailable'].includes(draft.draftStatus)
+    || (draft.draftStatus === 'unavailable' && !dirty)) return null;
+  const labels: Partial<Record<DraftState['draftStatus'], string>> = {
+    error: 'Draft could not be saved', conflict: 'Draft conflict · not restored',
+    unavailable: 'Save to PDF required',
   };
   const action = async (discard: boolean) => {
     const client = getSharedDocumentClient(engine);
