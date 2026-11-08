@@ -1,3 +1,5 @@
+import type { DraftState } from '../renderer/document-draft';
+import { getSharedDocumentClient } from '../renderer/shared-document-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfEngine } from '@embedpdf/models';
@@ -22,33 +24,23 @@ export function useDocumentPersistence({
   title: string;
 }) {
   const saveInProgressRef = useRef<Promise<boolean> | null>(null);
-  const changesRef = useRef({ dirty: false, version: 0, forceFullSave: false });
+  const changesRef = useRef({ dirty: false, version: 0 });
   const [isDirty, setIsDirty] = useState(false);
+  const [draft, setDraft] = useState<DraftState>({ draftStatus: 'clean', draftRevision: 0 });
   const titleRef = useRef(title);
 
   const renderTitle = useCallback(() => {
     document.title = `${changesRef.current.dirty ? '*' : ''}${titleRef.current}`;
   }, []);
 
-  const setDirty = useCallback((dirty: boolean, forceFullSave = false) => {
+  const setDirty = useCallback((dirty: boolean) => {
     const changes = changesRef.current;
-    const dirtyStateChanged = changes.dirty !== dirty;
     if (dirty) {
       changes.version++;
-      changes.forceFullSave ||= forceFullSave;
-    } else {
-      changes.forceFullSave = false;
     }
     changes.dirty = dirty;
     setIsDirty(dirty);
 
-    if (dirtyStateChanged) {
-      if (dirty) {
-        window.addEventListener('beforeunload', handleBeforeUnload);
-      } else {
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      }
-    }
     renderTitle();
   }, [renderTitle]);
 
@@ -57,6 +49,23 @@ export function useDocumentPersistence({
     renderTitle();
   }, [renderTitle, title]);
 
+  useEffect(() => {
+    if (!documentId) return;
+    const shared = getSharedDocumentClient(engine);
+    if (!shared) return;
+    const sync = (snapshot: NonNullable<ReturnType<typeof shared.getSnapshot>>) => {
+      if (snapshot.documentId !== documentId) return;
+      fileHandle?.observeSharedSave?.(snapshot);
+      setDraft({ draftStatus: snapshot.draftStatus, draftRevision: snapshot.draftRevision, draftError: snapshot.draftError });
+      const dirty = snapshot.revision !== snapshot.savedRevision;
+      if (changesRef.current.dirty !== dirty || dirty) setDirty(dirty);
+    };
+    const snapshot = shared.getSnapshot(documentId);
+    if (snapshot) sync(snapshot);
+    const unsubscribe = shared.changes.on(sync);
+    return () => { unsubscribe(); fileHandle?.observeSharedSave?.(undefined); };
+  }, [documentId, engine, fileHandle, setDirty]);
+
   const saveDocument = useCallback(
     (): Promise<boolean> => {
       const changes = changesRef.current;
@@ -64,12 +73,10 @@ export function useDocumentPersistence({
       if (saveInProgressRef.current) return saveInProgressRef.current;
 
       const versionAtStart = changes.version;
-      const save = savePdf(engine, registry, documentId, fileHandle, {
-        forceFullSave: changes.forceFullSave,
-      })
+      const save = savePdf(engine, registry, documentId, fileHandle)
         .then((saved) => {
           // Preserve edits made while serialization or disk I/O was in progress.
-          if (saved && changesRef.current.version === versionAtStart) {
+          if (saved && !getSharedDocumentClient(engine) && changesRef.current.version === versionAtStart) {
             setDirty(false);
           }
           return saved;
@@ -90,12 +97,14 @@ export function useDocumentPersistence({
   );
 
   useEffect(() => {
+    if (isDirty && draft.draftStatus !== 'saved') window.addEventListener('beforeunload', handleBeforeUnload);
+    else window.removeEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [isDirty, draft.draftStatus]);
 
   const hasUnsavedChanges = useCallback(() => changesRef.current.dirty, []);
 
-  return { isDirty, saveDocument, setDirty, hasUnsavedChanges };
+  return { isDirty, draft, saveDocument, setDirty, hasUnsavedChanges };
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {

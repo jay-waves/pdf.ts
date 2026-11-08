@@ -22,7 +22,7 @@ func TestDocumentRoutesExposePdfSaveOperations(t *testing.T) {
 
 	assertDocumentStatus(t, app, http.MethodHead, "/api/documents/document", http.StatusOK)
 	assertDocumentStatus(t, app, http.MethodPut, "/api/documents/document", http.StatusPreconditionRequired)
-	assertDocumentStatus(t, app, http.MethodPatch, "/api/documents/document", http.StatusPreconditionRequired)
+	assertDocumentStatus(t, app, http.MethodPatch, "/api/documents/document", http.StatusMethodNotAllowed)
 	assertDocumentStatus(t, app, http.MethodGet, "/api/documents/document/assets/image.png", http.StatusNotFound)
 }
 

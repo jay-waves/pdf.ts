@@ -105,14 +105,14 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 		}, nil
 	}
 
-	temp, err := os.CreateTemp(filepath.Dir(resource.path), ".pdf.ts-save-*")
+	temp, cleanup, err := createSaveFile(resource.path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create temporary document: %w", err)
 	}
 	tempPath := temp.Name()
 	defer func() {
 		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		cleanup()
 	}()
 
 	limited := http.MaxBytesReader(response, request.Body, maxDocumentBytes)
@@ -123,6 +123,9 @@ func (resource *Resource) Replace(response http.ResponseWriter, request *http.Re
 	}
 	if written == 0 {
 		return nil, nil, errors.New("refusing to replace a document with an empty file")
+	}
+	if err := temp.Truncate(written); err != nil {
+		return nil, nil, fmt.Errorf("truncate temporary document: %w", err)
 	}
 	if info, statErr := os.Stat(resource.path); statErr == nil {
 		_ = temp.Chmod(info.Mode().Perm())

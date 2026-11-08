@@ -1,3 +1,4 @@
+import { AutoGrowingTextarea, sizeTextareaPopover } from '../components/auto-growing-textarea';
 import { PopoverResizeHandle } from '../components/popover-resize-handle';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
@@ -61,26 +62,7 @@ export function SelectionLlm({ registry, request, onClose }: {
     const input = textarea.current;
     if (status !== 'editing' || !input || !sizeInitialDraft.current) return;
     sizeInitialDraft.current = false;
-    const panel = input.parentElement;
-    if (!panel) return;
-    // Size the initial selection before the user starts editing.
-    panel.style.removeProperty('height');
-    input.style.height = '144px';
-    const height = Math.min(Math.max(144, input.scrollHeight), 280, window.innerHeight * 0.45);
-    panel.style.height = `${height + panel.getBoundingClientRect().height - input.getBoundingClientRect().height}px`;
-    input.style.removeProperty('height');
-  }, [status, text]);
-
-  useLayoutEffect(() => {
-    const input = textarea.current;
-    const panel = input?.parentElement;
-    if (!input || !panel || (status !== 'loading' && status !== 'answer')) return;
-    const currentHeight = input.getBoundingClientRect().height;
-    const height = Math.min(input.scrollHeight, 420, window.innerHeight * 0.6);
-    // Grow with streamed content; preserve a larger manually resized panel.
-    if (height > currentHeight) {
-      panel.style.height = `${panel.getBoundingClientRect().height + height - currentHeight}px`;
-    }
+    sizeTextareaPopover(input, { reset: true, maxHeight: 280, viewportFraction: 0.45 });
   }, [status, text]);
 
   useEffect(() => {
@@ -139,7 +121,10 @@ export function SelectionLlm({ registry, request, onClose }: {
           }} />
       </div>
     </div>
-    <textarea ref={textarea} className={styles.textarea} value={text}
+    <AutoGrowingTextarea ref={textarea}
+      autoGrow={status !== 'preparing'}
+      maxAutoHeight={status === 'editing' ? 280 : 420}
+      viewportFraction={status === 'editing' ? 0.45 : 0.6} className={styles.textarea} value={text}
       readOnly={status !== 'editing'} aria-label={status === 'answer' ? 'LLM response' : 'Ask'}
       aria-busy={status === 'loading'}
       placeholder={status === 'loading' ? 'Running LLM…' : history.current.length ? 'Ask a follow-up…' : 'Ask…'}

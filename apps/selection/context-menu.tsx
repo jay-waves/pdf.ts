@@ -36,7 +36,6 @@ import {
   Link,
   MessageSquareMore,
   PaintBucket,
-  Strikethrough,
   Send,
   Trash2,
 } from 'lucide-react';
@@ -353,8 +352,9 @@ export function ContextMenu({
   const addTextMarkup = (type: TextMarkupSubtype) => {
     if (!selectionScope || !annotation) return;
 
-    createTextMarkupAnnotations(annotation, selectionScope, type);
+    const created = createTextMarkupAnnotations(annotation, selectionScope, type);
     setMenu(null);
+    return created;
   };
 
   const selectionItems = [
@@ -363,7 +363,13 @@ export function ContextMenu({
       if (selectionScope) void copySelectedText(selectionScope);
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT) },
-    { label: 'Strikeout', icon: Strikethrough, action: () => addTextMarkup(PdfAnnotationSubtype.STRIKEOUT) },
+    { label: 'Comment', icon: MessageSquareMore, action: () => {
+      const highlights = addTextMarkup(PdfAnnotationSubtype.HIGHLIGHT);
+      if (!highlights?.length) return;
+      const page = container?.ownerDocument.elementFromPoint(menu.x - 8, menu.y - 8)
+        ?.closest<HTMLElement>('[data-pdf-page-index]')?.dataset.pdfPageIndex;
+      openComment(highlights.find((highlight) => String(highlight.pageIndex) === page) ?? highlights[0]);
+    } },
     ...(isTranslationEnabled(platform.getPreference) ? [{
       label: isLlmEnabled(platform.getPreference) ? 'Translate' : 'Translate (Google Translate)',
       icon: Languages,
@@ -409,6 +415,38 @@ export function ContextMenu({
     ? commentTarget
     : null;
   const document = getDocument(registry, documentId);
+
+  const openComment = (target: PdfAnnotationObject) => {
+    if (annotation) {
+      let commentId = target.id;
+      if (target.type !== PdfAnnotationSubtype.TEXT) {
+        const state = getDocumentState(registry, documentId);
+        const page = document?.pages[target.pageIndex];
+        const surface = container?.querySelector<HTMLElement>(`[data-pdf-page-index="${target.pageIndex}"]`);
+        let noteRect: Rect | undefined;
+        if (state && page && surface) {
+          const rotation = ((page.rotation + state.rotation) % 4) as Rotation;
+          const bounds = surface.getBoundingClientRect();
+          const displaySize = transformSize(page.size, rotation, state.scale);
+          const highlight = transformRect(page.size, target.rect, rotation, state.scale);
+          const size = Math.min(24 * state.scale, displaySize.width, displaySize.height);
+          const gap = 4 * state.scale;
+          const bottom = highlight.origin.y + highlight.size.height + gap;
+          const top = highlight.origin.y - size - gap;
+          const x = Math.max(0, Math.min(displaySize.width - size, menu.x - 8 - bounds.left));
+          // Prefer below the markup; use the space above if below is offscreen.
+          const fitsBelow = bottom + size <= Math.min(displaySize.height, window.innerHeight - bounds.top);
+          const y = Math.max(0, Math.min(displaySize.height - size, fitsBelow || top < 0 ? bottom : top));
+          noteRect = restoreRect(displaySize, {
+            origin: { x, y }, size: { width: size, height: size },
+          }, rotation, state.scale);
+        }
+        commentId = createCommentAnnotation(annotation, target, noteRect);
+      }
+      dispatch({ type: 'ui/open-comments', annotationId: commentId, pointerX: menu.x - 8 });
+    }
+    setMenu(null);
+  };
   const annotationItems = [
     ...(selectedTextMarkup ? [{ label: 'Copy', icon: Copy, action: () => {
       setMenu(null);
@@ -434,34 +472,7 @@ export function ContextMenu({
       },
     }] : []),
     { label: commentTarget?.type === PdfAnnotationSubtype.TEXT ? 'Edit comment' : 'Add nearby note', icon: MessageSquareMore, action: () => {
-      if (annotation && commentTarget) {
-        let commentId = commentTarget.id;
-        if (commentTarget.type !== PdfAnnotationSubtype.TEXT) {
-          const state = getDocumentState(registry, documentId);
-          const page = document?.pages[commentTarget.pageIndex];
-          const surface = container?.querySelector<HTMLElement>(`[data-pdf-page-index="${commentTarget.pageIndex}"]`);
-          let noteRect: Rect | undefined;
-          if (state && page && surface) {
-            const rotation = ((page.rotation + state.rotation) % 4) as Rotation;
-            const bounds = surface.getBoundingClientRect();
-            const displaySize = transformSize(page.size, rotation, state.scale);
-            const highlight = transformRect(page.size, commentTarget.rect, rotation, state.scale);
-            const size = Math.min(24 * state.scale, displaySize.width, displaySize.height);
-            const gap = 4 * state.scale;
-            const bottom = highlight.origin.y + highlight.size.height + gap;
-            const top = highlight.origin.y - size - gap;
-            const x = Math.max(0, Math.min(displaySize.width - size, menu.x - 8 - bounds.left));
-            // Prefer below the markup; use the space above if below is offscreen.
-            const fitsBelow = bottom + size <= Math.min(displaySize.height, window.innerHeight - bounds.top);
-            const y = Math.max(0, Math.min(displaySize.height - size, fitsBelow || top < 0 ? bottom : top));
-            noteRect = restoreRect(displaySize, {
-              origin: { x, y }, size: { width: size, height: size },
-            }, rotation, state.scale);
-          }
-          commentId = createCommentAnnotation(annotation, commentTarget, noteRect);
-        }
-        dispatch({ type: 'ui/open-comments', annotationId: commentId, pointerX: menu.x - 8 });
-      }
+      if (commentTarget) openComment(commentTarget);
       setMenu(null);
     } },
     { label: 'Colors', icon: PaintBucket, action: () => {

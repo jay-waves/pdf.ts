@@ -1,3 +1,4 @@
+import { AutoGrowingTextarea } from '../components/auto-growing-textarea';
 import { PopoverResizeHandle } from '../components/popover-resize-handle';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PluginRegistry } from '@embedpdf/core';
@@ -104,7 +105,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
           <IconButton label="Done" icon={CircleCheckBig} onClick={onClose} />
         </div>
       </div>
-      <textarea
+      <AutoGrowingTextarea
         className={styles.textarea}
         value={draft}
         onChange={(event) => {

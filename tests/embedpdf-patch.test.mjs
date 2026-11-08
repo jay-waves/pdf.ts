@@ -83,20 +83,20 @@ test('EmbedPDF patch keeps the pdf.ts worker bridge contract', async () => {
 
   // send() is deliberately exposed through the repository patch adapter so
   // pdf.ts can add one worker-side operation without forking EmbedPDF.
-  const incrementalTask = executor.send('saveIncremental', [{ id: 'document-1' }]);
-  const incrementalRequest = worker.messages.at(-1);
-  assert.equal(incrementalRequest.message.type, 'execute');
-  assert.equal(incrementalRequest.message.method, 'saveIncremental');
-  assert.deepEqual(incrementalRequest.message.args, [{ id: 'document-1' }]);
-  assert.deepEqual(incrementalRequest.transfer, []);
+  const saveTask = executor.send('saveAsCopy', [{ id: 'document-1' }]);
+  const saveRequest = worker.messages.at(-1);
+  assert.equal(saveRequest.message.type, 'execute');
+  assert.equal(saveRequest.message.method, 'saveAsCopy');
+  assert.deepEqual(saveRequest.message.args, [{ id: 'document-1' }]);
+  assert.deepEqual(saveRequest.transfer, []);
 
-  const delta = new ArrayBuffer(8);
+  const data = new ArrayBuffer(8);
   worker.respond({
-    id: incrementalRequest.message.id,
+    id: saveRequest.message.id,
     type: 'result',
-    data: { baseSize: 32, delta },
+    data,
   });
-  assert.deepEqual(await incrementalTask.toPromise(), { baseSize: 32, delta });
+  assert.deepEqual(await saveTask.toPromise(), data);
 
   executor.destroy();
   assert.equal(worker.terminated, true);
@@ -155,30 +155,7 @@ function createMinimalPdf() {
   return encoder.encode(parts.join(''));
 }
 
-function saveIncremental(native, module, document) {
-  const context = native.cache.getContext(document.id);
-  const writer = module.PDFiumExt_OpenFileWriter();
-  assert.notEqual(writer, 0);
-  let dataPointer = 0;
-  try {
-    assert.equal(module.FPDF_SaveAsCopy(context.docPtr, writer, 1), true);
-    const size = module.PDFiumExt_GetFileWriterSize(writer);
-    dataPointer = module.pdfium.wasmExports.malloc(size);
-    assert.notEqual(dataPointer, 0);
-    module.PDFiumExt_GetFileWriterData(writer, dataPointer, size);
-    return Uint8Array.from(module.pdfium.HEAPU8.subarray(dataPointer, dataPointer + size));
-  } finally {
-    if (dataPointer) module.pdfium.wasmExports.free(dataPointer);
-    module.PDFiumExt_CloseFileWriter(writer);
-  }
-}
-
-function startsWith(value, prefix) {
-  return value.length >= prefix.length
-    && prefix.every((byte, offset) => value[offset] === byte);
-}
-
-test('PDFium repeated incremental saves replace one revision based on the original PDF', async () => {
+test('PDFium repeated full saves preserve metadata without accumulating revisions', async () => {
   const wasmUrl = import.meta.resolve('@embedpdf/pdfium/pdfium.wasm');
   const wasmFile = await readFile(new URL(wasmUrl));
   const wasmBinary = wasmFile.buffer.slice(
@@ -197,13 +174,12 @@ test('PDFium repeated incremental saves replace one revision based on the origin
     title: 'first',
     author: 'first-author',
   }).toPromise();
-  const first = saveIncremental(native, module, document);
+  const first = new Uint8Array(await native.saveAsCopy(document).toPromise());
   await native.setMetadata(document, { title: 'second' }).toPromise();
-  const second = saveIncremental(native, module, document);
+  const second = new Uint8Array(await native.saveAsCopy(document).toPromise());
 
-  assert.equal(startsWith(first, base), true);
-  assert.equal(startsWith(second, base), true);
-  assert.equal(startsWith(second, first), false);
+  assert.ok(second.length < first.length + 100);
+  assert.equal(new TextDecoder().decode(second).match(/%%EOF/g).length, 1);
 
   const latest = await native.openDocumentBuffer({
     id: 'latest-revision',

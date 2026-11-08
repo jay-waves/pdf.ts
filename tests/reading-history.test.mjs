@@ -25,7 +25,7 @@ delete globalThis.__readingHistoryTestPlatform;
 
 const region = { left: 0.1, top: 0.2, right: 0.9, bottom: 0.8 };
 
-function setup(t, saved, deferredRead) {
+function setup(t, saved, deferredRead, restore = true) {
   const timers = new Map();
   let nextId = 0;
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
@@ -47,7 +47,7 @@ function setup(t, saved, deferredRead) {
     applyLayout(strategy, spread) { snapshot = { ...snapshot, strategy, spread }; emit(); },
     goToPage(pageNumber) { snapshot = { ...snapshot, pageNumber }; emit(); },
   };
-  const dispose = installReadingHistory(stage, 'test-document');
+  const dispose = installReadingHistory(stage, 'test-document', restore);
   t.after(() => { dispose(); if (previous) Object.defineProperty(globalThis, 'window', previous); else delete globalThis.window; });
   layoutReady();
   return { stage, writes, timers, setSelection() { snapshot = { ...snapshot, selectingRegion: true }; emit(); } };
@@ -88,4 +88,15 @@ test('delayed history cannot overwrite an active selection', async (t) => {
   assert.equal(pending.stage.getSnapshot().selectingRegion, true);
   [...pending.timers.values()].at(-1)();
   assert.equal(pending.writes.at(-1).pageNumber, 1);
+});
+
+
+test('replacement keeps its prepared position instead of restoring old persisted history', async (t) => {
+  const { stage, timers, writes } = setup(t, { pageNumber: 9 }, undefined, false);
+  stage.goToPage(3);
+  await Promise.resolve();
+  assert.equal(stage.getSnapshot().pageNumber, 3);
+  assert.equal(platform.readReadingProgress.mock.callCount(), 0);
+  [...timers.values()].at(-1)();
+  assert.equal(writes.at(-1).pageNumber, 3);
 });

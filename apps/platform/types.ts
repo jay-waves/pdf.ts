@@ -1,15 +1,13 @@
+import type { PdfWritePlan, PdfWriteResult, SharedSaveState } from '../renderer/document-save';
 export interface ReadingProgress {
   pageNumber: number;
   scrollStrategy?: string;
   spreadMode?: string;
 }
 
-interface PdfFileWriter {
+export interface PdfFileWriter {
+  writeShared?(plan: PdfWritePlan): Promise<PdfWriteResult>;
   save(data: ArrayBuffer): Promise<boolean>;
-  saveIncremental?(revision: {
-    baseSize: number;
-    delta: ArrayBuffer;
-  }): Promise<boolean>;
 }
 
 export interface ExternalDocumentChange {
@@ -26,11 +24,14 @@ export interface ExternalDocumentChange {
  * permission prompts must run while the save user gesture is still active.
  */
 export interface PdfFileHandle {
+  observeSharedSave?(state?: SharedSaveState): void;
   prepareWrite(): Promise<PdfFileWriter | null>;
   saveCopy?(data: ArrayBuffer): Promise<string>;
 }
 
 export interface ManagedResource {
+  readonly draftLocation?: import('../renderer/draft-storage').DraftLocation;
+  readonly sharedIdentity?: string | FileSystemFileHandle;
   readonly url: string;
   /** Opens the original bytes without materializing another full ArrayBuffer. */
   openStream?(): ReadableStream<Uint8Array>;

@@ -209,7 +209,11 @@ type ThemeLineMarkupProps = {
 
 function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMarkupProps) {
   const theme = useStore(viewerThemeStore, (state) => state.theme);
-  const thickness = VECTOR_ANNOTATION_STROKE_WIDTH * scale;
+  // Keep strikeout legible at fit-page zoom without making it a solid band
+  // across the text. Underlines retain their existing visual weight.
+  const thickness = placement === 'middle'
+    ? Math.max(1.5, 1.75 * scale)
+    : VECTOR_ANNOTATION_STROKE_WIDTH * scale;
   return <>
     {annotation.segmentRects.map((segment, index) => <div
       key={index}

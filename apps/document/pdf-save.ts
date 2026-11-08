@@ -1,9 +1,9 @@
+import { getSharedDocumentClient } from '../renderer/shared-document-client';
 import type { PluginRegistry } from '@embedpdf/core';
 import type { PdfEngine } from '@embedpdf/models';
 import type { AnnotationCapability } from '@embedpdf/plugin-annotation';
 import { getAnnotationScope } from '../annotations/annotations';
 import { downloadPdf } from '../platform/browser-download';
-import { savePdfIncrementally } from '../renderer/pdf-engine';
 import type { PdfFileHandle } from '../platform/types';
 import { getDocument } from './viewer-document';
 
@@ -28,7 +28,9 @@ async function getDocumentForSerialization(
   if (!documentId || !document) return null;
 
   const annotation = getAnnotationScope(registry, documentId);
-  if (annotation) await commitPendingAnnotations(annotation.scope);
+  const shared = getSharedDocumentClient(registry.getEngine() as PdfEngine<Blob>);
+  if (shared) await shared.flush();
+  else if (annotation) await commitPendingAnnotations(annotation.scope);
   return document;
 }
 
@@ -66,7 +68,6 @@ export async function savePdf(
   registry: PluginRegistry | undefined,
   documentId: string | null | undefined,
   fileHandle: PdfFileHandle | undefined,
-  { forceFullSave = false }: { forceFullSave?: boolean } = {},
 ) {
   if (!registry || !fileHandle) return false;
 
@@ -78,18 +79,8 @@ export async function savePdf(
   const document = await getDocumentForSerialization(registry, documentId);
   if (!document) return false;
 
-  if (target.saveIncremental && !forceFullSave) {
-    try {
-      const revision = await savePdfIncrementally(engine, document).toPromise();
-      if (revision.delta.byteLength > 0) {
-        return await target.saveIncremental(revision);
-      }
-    } catch (error) {
-      // Unsupported/encrypted PDFs and stale files safely fall back to the
-      // existing full serialization + conflict-copy flow.
-      console.info('[pdf-ts] incremental save unavailable; using a full save', error);
-    }
-  }
+  const shared = getSharedDocumentClient(engine);
+  if (shared) return shared.save(document.id, target);
 
   const data = await engine.saveAsCopy(document).toPromise();
   return data ? target.save(data) : false;

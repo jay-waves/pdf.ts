@@ -76,7 +76,7 @@ export const platform: ViewerPlatform = {
     return {
       wasm: { url: bundledWasmUrl },
       document: documentUrl ? {
-        resource: { url: documentUrl },
+        resource: { url: documentUrl, sharedIdentity: documentUrl },
         key: documentUrl,
         name: documentName,
         fileHandle: new ChromePdfFileHandle(documentUrl, documentName ?? 'document.pdf'),

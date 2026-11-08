@@ -115,15 +115,17 @@ export function installOutlinePrefetch(
     documentId,
     stage,
     cacheKey,
+    refresh = false,
     onLoaded,
   }: {
     documentId: string;
     stage: ViewerStage;
     cacheKey?: string;
+    refresh?: boolean;
     onLoaded(cache: OutlineCache): void;
   },
 ) {
-  const cached = cacheKey ? outlinePrefetchCache.get(cacheKey) : undefined;
+  const cached = cacheKey && !refresh ? outlinePrefetchCache.get(cacheKey) : undefined;
   if (cached) {
     onLoaded(cached);
     return;

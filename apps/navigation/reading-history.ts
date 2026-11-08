@@ -18,6 +18,7 @@ function isValidPageNumber(value: unknown): value is number {
 export function installReadingHistory(
   stage: ViewerStage,
   documentKey?: string,
+  restore = true,
 ) {
   if (!documentKey) return;
 
@@ -90,6 +91,7 @@ export function installReadingHistory(
     layoutReadyHandled = true;
     unsubscribeLayoutReady?.();
     unsubscribeLayoutReady = null;
+    if (!restore) { historyReady = true; return; }
     const initialView = getViewSnapshot();
 
     platform.readReadingProgress(documentKey)

@@ -101,3 +101,22 @@ test('project font manager owns the PDFium callbacks and preserves cache state',
     globalThis.XMLHttpRequest = previousXhr;
   }
 });
+
+test('shared font cache keeps diagnostics and log suppression local to each session', () => {
+  const logs = [];
+  const manager = new PdfiumFontFallbackManager({
+    fonts: { 0: 'https://example.invalid/fallback.ttf' },
+  }, (...args) => logs.push(args));
+  manager.setDiagnosticContext('a');
+  manager.mapFont(400, false, 0, 0, 'Font A');
+  assert.equal(manager.getDiagnostics()[0].face, 'Font A');
+  manager.setDiagnosticContext('b');
+  assert.deepEqual(manager.getDiagnostics(), []);
+  manager.mapFont(400, false, 0, 0, 'Font B');
+  assert.equal(logs.length, 2);
+  manager.resetDiagnostics();
+  manager.setDiagnosticContext('a');
+  assert.equal(manager.getDiagnostics()[0].face, 'Font A');
+  manager.releaseDiagnosticContext('a');
+  assert.deepEqual(manager.getDiagnostics(), []);
+});

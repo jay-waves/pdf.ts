@@ -12,6 +12,9 @@ import type {
   Task,
 } from '@embedpdf/models';
 import type { PdfRenderTheme } from './pdf-render-theme';
+import { SharedDocumentClient } from './shared-document-client';
+import { createPdfWorker } from './pdf-worker-transport';
+import { getDocument } from '../document/viewer-document';
 import type { PdfFontDiagnostic, PdfFontFallbackConfig } from '../fonts';
 import { getPdfRenderTheme, viewerThemeStore } from '../theme/theme';
 import {
@@ -22,10 +25,6 @@ import {
   type StartupLogLevel,
 } from '../viewer/startup-log';
 
-interface PdfIncrementalRevision {
-  baseSize: number;
-  delta: ArrayBuffer;
-}
 
 interface RemoteExecutorInternals {
   readyTask: Task<boolean, { code: number; message: string }>;
@@ -35,9 +34,9 @@ interface RemoteExecutorInternals {
 const executors = new WeakMap<PdfEngine<Blob>, RemoteExecutorInternals>();
 
 /**
- * Project-owned access to the live PDFium engine and the viewer's sole PDF.
- * The React engine hook remains the sole owner of the worker and engine
- * lifetime; consumers borrow the document handle from EmbedPDF's core state.
+ * Project-owned access to the live PDFium engine and the viewer's documents.
+ * The React engine hook owns a connection to the worker and engine
+ * session; consumers borrow the document handle from EmbedPDF's core state.
  */
 export class PdfRuntime {
   private registry: PluginRegistry | null = null;
@@ -53,7 +52,7 @@ export class PdfRuntime {
   }
 
   getDocument(documentId: string) {
-    return this.registry?.getStore().getState().core.documents[documentId]?.document ?? null;
+    return getDocument(this.registry ?? undefined, documentId);
   }
 
   withDocument<T>(
@@ -91,7 +90,7 @@ export function usePdfRuntime(options: {
     setState({ pdfium: null, isLoading: true, error: null });
     let worker: Worker;
     try {
-      worker = new Worker(new URL('./pdfium-worker', import.meta.url), { type: 'module' });
+      worker = createPdfWorker();
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
       failStartupLog('Unable to start PDF worker', failure.message);
@@ -118,6 +117,7 @@ export function usePdfRuntime(options: {
         quality,
       ),
     });
+    new SharedDocumentClient(engine, internals.send.bind(internals), worker);
     const pdfium = new PdfRuntime(engine);
     executors.set(engine, internals);
 
@@ -204,16 +204,4 @@ export function useRenderThemeVersion(engine: PdfEngine<Blob>) {
   }, [engine]);
 
   return version;
-}
-
-export function savePdfIncrementally(
-  engine: PdfEngine<Blob>,
-  document: PdfDocumentObject,
-): PdfTask<PdfIncrementalRevision> {
-  const executor = executors.get(engine);
-  if (!executor) {
-    throw new Error('This PDF engine does not support incremental save.');
-  }
-
-  return executor.send<PdfIncrementalRevision>('saveIncremental', [document]);
 }

@@ -1,7 +1,11 @@
+import { DraftNotice } from './document/draft-notice';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { nextDocumentFrame, waitForDocumentPaint } from './renderer/document-paint';
 import { useStore } from 'zustand';
 import type { PluginRegistry } from '@embedpdf/core';
+import { PdfErrorCode } from '@embedpdf/models';
 import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import type { FormCapability } from '@embedpdf/plugin-form';
 import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
@@ -40,7 +44,7 @@ import { CommentEditor } from './annotations/comment-editor';
 import { Comments } from './annotations/comments';
 import { PrintDialog } from './document/print-dialog';
 import { ExternalChangeDialog } from './document/external-change-dialog';
-import { ProtectDialog } from './document/protection-dialogs';
+import { ProtectDialog, UnlockDialog } from './document/protection-dialogs';
 import { ThemeDialog } from './theme/theme-dialog';
 import { DeveloperDialog } from './viewer/developer-dialog';
 import { ContextMenu } from './selection/context-menu';
@@ -169,8 +173,12 @@ function App({
   } = sourceDocument ?? {};
   const fileUrl = documentResource?.url;
   const resolvedDocumentName = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined);
-  const documentId = fileUrl ? DOCUMENT_ID : null;
   const [session, setSession] = useState<ViewerSession | null>(null);
+  const documentId = session?.stage.documentId ?? (fileUrl ? DOCUMENT_ID : null);
+  const [currentResource, setCurrentResource] = useState(documentResource);
+  const [pendingDocument, setPendingDocument] = useState<{
+    documentId: string; stage: ViewerStage; presentationPage: number | null;
+  } | null>(null);
   const renderDpr = useStore(renderSettingsStore, (state) => (
     getEffectiveRenderDpr(state.dprMode, state.systemDpr)
   ));
@@ -183,7 +191,7 @@ function App({
   const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
   const viewerTheme = useStore(viewerThemeStore, (state) => state.theme);
-  const { isDirty, saveDocument, setDirty, hasUnsavedChanges } = useDocumentPersistence({
+  const { isDirty, draft, saveDocument, setDirty, hasUnsavedChanges } = useDocumentPersistence({
     engine,
     registry,
     documentId,
@@ -235,6 +243,11 @@ function App({
   const viewerRootRef = useRef<HTMLElement>(null);
   const sessionCleanupRef = useRef<(() => void) | null>(null);
   const reloadInProgressRef = useRef(false);
+  const [reloadRunning, setReloadRunning] = useState(false);
+  const reloadAbortRef = useRef<AbortController | null>(null);
+  const queuedChangeRef = useRef<ExternalDocumentChange | null>(null);
+  const [reloadFailure, setReloadFailure] = useState<{ change: ExternalDocumentChange; message: string } | null>(null);
+  const [reloadPasswordId, setReloadPasswordId] = useState<string | null>(null);
   const [externalChange, setExternalChange] = useState<ExternalDocumentChange | null>(null);
   const closeOverlay = useCallback(() => {
     dispatchCommand({ type: 'ui/close-overlay' });
@@ -250,73 +263,11 @@ function App({
     return () => { delete document.documentElement.dataset.viewerPresentation; };
   }, [presentationPage]);
 
-  useEffect(() => installViewerCommandKeys(dispatchCommand), [dispatchCommand]);
-
-  const reloadExternalDocument = useCallback(async (change: ExternalDocumentChange) => {
-    if (!registry || !stage || reloadInProgressRef.current) return;
-    const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
-    if (!manager?.isDocumentOpen(DOCUMENT_ID)) return;
-
-    reloadInProgressRef.current = true;
-    const snapshot = stage.getSnapshot();
-    const readingPosition = stage.captureReadingPosition();
-    const zoomLevel = getPluginCapability<ZoomCapability>(registry, 'zoom')
-      ?.forDocument(DOCUMENT_ID).getState().zoomLevel;
-    const rotation = getPluginCapability<RotateCapability>(registry, 'rotate')
-      ?.forDocument(DOCUMENT_ID).getRotation();
-    try {
-      await manager.closeDocument(DOCUMENT_ID).toPromise();
-      const opened = await manager.openDocumentUrl({
-        url: change.resource.url,
-        documentId: DOCUMENT_ID,
-        name: resolvedDocumentName ?? 'document.pdf',
-        autoActivate: true,
-        mode: 'full-fetch',
-      }).toPromise();
-      await opened.task.toPromise();
-      change.accept();
-      setDirty(false);
-      setExternalChange(null);
-      setOutlineCache({ status: 'idle', bookmarks: [] });
-      pdfSearchStore.getState().clear();
-
-      const restore = () => {
-        stage.applyLayout(snapshot.strategy, snapshot.spread);
-        if (rotation !== undefined) {
-          getPluginCapability<RotateCapability>(registry, 'rotate')
-            ?.forDocument(DOCUMENT_ID).setRotation(rotation);
-        }
-        if (zoomLevel !== undefined) {
-          stage.setZoom(zoomLevel);
-        }
-        // Zoom/layout requests enqueue their own scroll operations. Restore the
-        // page-local anchor after those operations and the DOM layout commit.
-        window.requestAnimationFrame(() => {
-          if (snapshot.mode === 'presentation') stage.goToPage(snapshot.pageNumber);
-          else stage.restoreReadingPosition(readingPosition);
-        });
-      };
-      // onLayoutReady is a behavior emitter: subscribing can synchronously
-      // replay the previous document's event. Do not restore from that replay.
-      window.requestAnimationFrame(restore);
-    } finally {
-      reloadInProgressRef.current = false;
-    }
-  }, [registry, resolvedDocumentName, setDirty, stage]);
-
-  useEffect(() => sourceDocument?.watchForChanges?.((change) => {
-    if (hasUnsavedChanges()) {
-      dispatchCommand({ type: 'ui/close-overlay' });
-      setExternalChange(change);
-      return;
-    }
-    void reloadExternalDocument(change).catch((error) => {
-      console.error('[pdf-ts] failed to reload externally updated PDF', error);
-    });
-  }), [dispatchCommand, hasUnsavedChanges, reloadExternalDocument, sourceDocument]);
+  useEffect(() => pendingDocument ? undefined : installViewerCommandKeys(dispatchCommand), [dispatchCommand, pendingDocument]);
 
   useEffect(() => {
     return () => {
+      reloadAbortRef.current?.abort();
       sessionCleanupRef.current?.();
       sessionCleanupRef.current = null;
       pdfSearchStore.getState().dispose();
@@ -327,22 +278,24 @@ function App({
     pdfSearchStore.getState().attach(pdfium);
   }, [pdfium]);
 
-  const initializePlugins = useCallback(async (nextRegistry: PluginRegistry) => {
+  const activateDocument = useCallback((
+    nextRegistry: PluginRegistry,
+    nextStage = new ViewerStage(nextRegistry, DOCUMENT_ID),
+    stagedCleanup?: () => void,
+  ) => {
     sessionCleanupRef.current?.();
     sessionCleanupRef.current = null;
-    setSession(null);
-
-    const nextStage = new ViewerStage(nextRegistry, DOCUMENT_ID);
+    const nextDocumentId = nextStage.documentId;
     setOutlineCache({ status: 'idle', bookmarks: [] });
-    dispatchCommand({ type: 'ui/reset' });
+    dispatchCommand({ type: stagedCleanup ? 'ui/close-overlay' : 'ui/reset' });
     resetViewerDiagnostics();
     pdfSearchStore.getState().clear();
     setDirty(false);
-    initializeAnnotationPalette(nextRegistry, DOCUMENT_ID);
+    initializeAnnotationPalette(nextRegistry, nextDocumentId);
 
     const installers = [
       () => pdfium.bindRegistry(nextRegistry),
-      () => nextStage.install(),
+      () => stagedCleanup ?? nextStage.install(),
       () => installStageNavigationInput(nextStage, dispatchCommand),
       () => installScrollAttribute(nextStage),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
@@ -351,11 +304,12 @@ function App({
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
       () => installFormDirty(nextRegistry, () => setDirty(true)),
-      () => installPlatformReadingHistory(nextStage, documentKey),
+      () => installPlatformReadingHistory(nextStage, documentKey, !stagedCleanup),
       () => installOutlinePrefetch(pdfium, {
-        documentId: DOCUMENT_ID,
+        documentId: nextDocumentId,
         stage: nextStage,
         cacheKey: documentKey,
+        refresh: !!stagedCleanup,
         onLoaded: setOutlineCache,
       }),
     ];
@@ -363,6 +317,139 @@ function App({
     sessionCleanupRef.current = installAll(installers);
     setSession({ registry: nextRegistry, stage: nextStage });
   }, [dispatchCommand, documentKey, pdfium, setDirty]);
+
+  const initializePlugins = useCallback(async (nextRegistry: PluginRegistry) => {
+    activateDocument(nextRegistry);
+  }, [activateDocument]);
+
+  const reloadExternalDocument = useCallback(async (change: ExternalDocumentChange) => {
+    if (!registry || !stage || !documentId) return;
+    if (reloadInProgressRef.current) { queuedChangeRef.current = change; return; }
+    const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
+    if (!manager?.isDocumentOpen(documentId)) return;
+
+    reloadInProgressRef.current = true;
+    setReloadRunning(true);
+    const controller = new AbortController();
+    reloadAbortRef.current = controller;
+    const { signal } = controller;
+    const discardConfirmed = hasUnsavedChanges();
+    let replacementId: string | undefined;
+    let stagedCleanup: (() => void) | undefined;
+    let committed = false;
+    setReloadFailure(null);
+    try {
+      // EmbedPDF owns loading, IDs, document state and native handle lifetime.
+      // Keep the old document active until the replacement has actually painted.
+      const opened = await manager.openDocumentUrl({
+        url: change.resource.url,
+        name: resolvedDocumentName ?? 'document.pdf',
+        autoActivate: false,
+        mode: 'full-fetch',
+      }).toPromise();
+      replacementId = opened.documentId;
+      try {
+        await opened.task.toPromise();
+      } catch (error) {
+        if (manager.getDocumentState(replacementId)?.errorCode !== PdfErrorCode.Password) throw error;
+        // Retry through the SDK's password flow without removing the old view.
+        await new Promise<void>((resolve, reject) => {
+          const cleanup = () => { unsubscribe(); signal.removeEventListener('abort', abort); };
+          const abort = () => { cleanup(); reject(new DOMException('Reload cancelled.', 'AbortError')); };
+          const unsubscribe = manager.onDocumentOpened((state) => {
+            if (state.id === replacementId) { cleanup(); resolve(); }
+          });
+          signal.addEventListener('abort', abort, { once: true });
+          if (signal.aborted) abort(); else setReloadPasswordId(replacementId!);
+        });
+        setReloadPasswordId(null);
+      }
+      signal.throwIfAborted();
+      if (!discardConfirmed && hasUnsavedChanges()) {
+        setExternalChange(change);
+        return;
+      }
+      const snapshot = stage.getSnapshot();
+      const readingPosition = stage.captureReadingPosition();
+      const zoomLevel = getPluginCapability<ZoomCapability>(registry, 'zoom')
+        ?.forDocument(documentId).getState().zoomLevel;
+      const rotation = getPluginCapability<RotateCapability>(registry, 'rotate')
+        ?.forDocument(documentId).getRotation();
+      const nextStage = new ViewerStage(registry, replacementId);
+      stagedCleanup = nextStage.install();
+      const nextPage = Math.min(snapshot.pageNumber, manager.getDocument(replacementId)!.pageCount);
+      flushSync(() => setPendingDocument({
+        documentId: replacementId!, stage: nextStage,
+        presentationPage: snapshot.mode === 'presentation' ? nextPage : null,
+      }));
+      await nextDocumentFrame(signal);
+      nextStage.applyLayout(snapshot.strategy, snapshot.spread);
+      if (rotation !== undefined) {
+        getPluginCapability<RotateCapability>(registry, 'rotate')?.forDocument(replacementId).setRotation(rotation);
+      }
+      if (zoomLevel !== undefined) nextStage.setZoom(zoomLevel);
+      await nextDocumentFrame(signal);
+      await nextDocumentFrame(signal);
+      if (snapshot.mode === 'presentation') {
+        nextStage.setPresentation(true);
+        nextStage.goToPage(nextPage);
+      } else {
+        nextStage.restoreReadingPosition(readingPosition);
+      }
+      await waitForDocumentPaint(viewerRootRef.current!, replacementId, signal);
+      signal.throwIfAborted();
+      if (!discardConfirmed && hasUnsavedChanges()) {
+        setExternalChange(change);
+        return;
+      }
+      flushSync(() => {
+        manager.setActiveDocument(replacementId!);
+        activateDocument(registry, nextStage, stagedCleanup);
+        setPendingDocument(null);
+        setCurrentResource(change.resource);
+        setExternalChange(null);
+      });
+      stagedCleanup = undefined; // Active session now owns its cleanup.
+      committed = true;
+      change.accept();
+      onResourceConsumed(change.resource);
+      await manager.closeDocument(documentId).toPromise();
+    } finally {
+      if (!committed) {
+        stagedCleanup?.();
+        setPendingDocument(null);
+        if (replacementId && manager.isDocumentOpen(replacementId)) {
+          await manager.closeDocument(replacementId).toPromise();
+        }
+      }
+      if (reloadAbortRef.current === controller) reloadAbortRef.current = null;
+      reloadInProgressRef.current = false;
+      setReloadPasswordId(null);
+      setReloadRunning(false);
+    }
+  }, [activateDocument, documentId, hasUnsavedChanges, onResourceConsumed, registry, resolvedDocumentName, stage]);
+
+  const handleExternalChange = useCallback((change: ExternalDocumentChange) => {
+    if (reloadInProgressRef.current) { queuedChangeRef.current = change; return; }
+    if (hasUnsavedChanges()) {
+      dispatchCommand({ type: 'ui/close-overlay' });
+      setExternalChange(change);
+      return;
+    }
+    void reloadExternalDocument(change).catch((error) => {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      console.error('[pdf-ts] failed to reload externally updated PDF', error);
+      setReloadFailure({ change, message: 'Could not load the updated PDF. The current version is still open.' });
+    });
+  }, [dispatchCommand, hasUnsavedChanges, reloadExternalDocument]);
+
+  useEffect(() => sourceDocument?.watchForChanges?.(handleExternalChange), [handleExternalChange, sourceDocument]);
+  useEffect(() => {
+    if (reloadInProgressRef.current || !queuedChangeRef.current) return;
+    const change = queuedChangeRef.current;
+    queuedChangeRef.current = null;
+    handleExternalChange(change);
+  }, [handleExternalChange, reloadRunning]);
 
   const toolbarSnapshot: ToolbarSnapshot = {
     ...capabilitySnapshot,
@@ -378,10 +465,12 @@ function App({
 
   return (
     <ViewerFocusContext.Provider value={stage ? () => stage.focusViewportAfterAction() : null}>
-    <main ref={viewerRootRef} className="fixed inset-0 overflow-hidden">
+    <main ref={viewerRootRef} inert={pendingDocument !== null} className="fixed inset-0 overflow-hidden">
+      <DraftNotice draft={draft} dirty={isDirty} engine={engine} documentId={documentId} name={resolvedDocumentName ?? 'document.pdf'} />
       <PdfSurface
         engine={engine}
         registry={registry}
+        pendingDocument={pendingDocument}
         panMode={panMode}
         renderThemeVersion={renderThemeVersion}
         stage={stage}
@@ -473,6 +562,12 @@ function App({
         totalPages={totalPages}
         onClose={closeOverlay}
       />
+      {reloadPasswordId ? <UnlockDialog registry={registry} documentId={reloadPasswordId}
+        incorrect={false} onCancel={() => reloadAbortRef.current?.abort()} /> : null}
+      {reloadFailure ? <div role="alert" className="fixed bottom-16 left-1/2 z-50 -translate-x-1/2 rounded bg-surface p-3 text-xs shadow">
+        {reloadFailure.message}{' '}
+        <button type="button" onClick={() => handleExternalChange(reloadFailure.change)}>Retry</button>
+      </div> : null}
       <ExternalChangeDialog
         open={externalChange !== null}
         onDiscard={async () => {
@@ -491,11 +586,11 @@ function App({
         documentId={documentId}
         open={activeDialog === 'protect'}
         onClose={closeOverlay}
-        onProtectionChanged={() => setDirty(true, true)}
+        onProtectionChanged={() => setDirty(true)}
       />
       <SignatureDialog
         signatures={signatures}
-        resource={documentResource}
+        resource={currentResource}
         open={activeDialog === 'signatures'}
         onClose={closeOverlay}
       />

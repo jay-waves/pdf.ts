@@ -1,3 +1,5 @@
+import type { PdfWritePlan, PdfWriteResult } from '../renderer/document-save';
+import { fingerprintFile } from './file-fingerprint';
 import { get, update } from 'idb-keyval';
 import { downloadPdf } from './browser-download';
 import type { PdfFileHandle } from './types';
@@ -40,6 +42,10 @@ export async function pickPdfFileHandle() {
 
 export function createDownloadWriter(fileName: string) {
   return {
+    async writeShared(plan: PdfWritePlan): Promise<PdfWriteResult> {
+      downloadPdf(plan.data, fileName);
+      return { status: 'copy' };
+    },
     async save(data: ArrayBuffer) {
       downloadPdf(data, fileName);
       return true;
@@ -51,7 +57,39 @@ export function createBrowserWriter(
   nativeHandle: FileSystemFileHandle,
   storageKey?: string,
 ) {
+  const remember = async () => {
+    if (storageKey) {
+      try { await storeFileHandle(storageKey, nativeHandle); }
+      catch (error) { console.warn('[pdf-ts] The PDF was saved, but its persistent file handle was not.', error); }
+    }
+  };
   return {
+    async writeShared(plan: PdfWritePlan): Promise<PdfWriteResult> {
+      if (plan.destination === 'copy') {
+        downloadPdf(plan.data, nativeHandle.name);
+        return { status: 'copy' };
+      }
+      const before = await nativeHandle.getFile();
+      if (await fingerprintFile(before) !== plan.expectedVersion) {
+        return { status: window.confirm('This PDF changed on disk. Download your edits as a separate copy?') ? 'retry-copy' : 'cancelled' };
+      }
+      const writable = await nativeHandle.createWritable({ keepExistingData: false });
+      const size = plan.data.byteLength;
+      try {
+        await writable.write(plan.data);
+        await writable.truncate(size);
+        await writable.close();
+      } catch (error) {
+        await writable.abort().catch(() => {});
+        throw error;
+      }
+      const after = await nativeHandle.getFile();
+      if (after.size !== size || await fingerprintFile(after) !== plan.outputVersion) {
+        throw new Error('The PDF could not be verified after writing.');
+      }
+      await remember();
+      return { status: 'saved', version: plan.outputVersion };
+    },
     async save(data: ArrayBuffer) {
       const writable = await nativeHandle.createWritable();
       try {
@@ -67,13 +105,7 @@ export function createBrowserWriter(
         throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
       }
 
-      if (storageKey) {
-        try {
-          await storeFileHandle(storageKey, nativeHandle);
-        } catch (error) {
-          console.warn('[pdf-ts] The PDF was saved, but its persistent file handle was not.', error);
-        }
-      }
+      await remember();
       return true;
     },
   };

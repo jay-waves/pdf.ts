@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -153,3 +155,37 @@ func TestConflictCopyDoesNotOverwriteOriginal(t *testing.T) {
 		t.Fatalf("original was overwritten: %q", original)
 	}
 }
+
+func TestReplaceInterruptedUploadPreservesOriginal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "document.pdf")
+	original := bytes.Repeat([]byte("original"), 20000)
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	resource, err := NewResource(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := fileVersion(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPut, "/resource", io.MultiReader(bytes.NewReader(make([]byte, 65536)), failedSaveReader{}))
+	request.Header.Set("If-Match", quoteETag(version))
+	result, conflict, err := resource.Replace(httptest.NewRecorder(), request)
+	if err == nil || result != nil || conflict != nil {
+		t.Fatalf("expected failed write: %v %v %v", result, conflict, err)
+	}
+	actual, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(actual, original) {
+		t.Fatalf("original changed: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary files leaked: %v %v", entries, err)
+	}
+}
+
+type failedSaveReader struct{}
+
+func (failedSaveReader) Read([]byte) (int, error) { return 0, errors.New("interrupted upload") }

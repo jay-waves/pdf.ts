@@ -11,14 +11,25 @@ globalThis.themeTestPlatform = {
   getPreference: (key) => preferences.get(key) ?? null,
   setPreference: (key, value) => preferences.set(key, value),
 };
-globalThis.document = { documentElement: { dataset: {} } };
+const windowEvents = new Map();
+const documentEvents = new Map();
+const eventSurface = (events) => ({
+  addEventListener(type, callback) {
+    if (!events.has(type)) events.set(type, new Set());
+    events.get(type).add(callback);
+  },
+  removeEventListener(type, callback) { events.get(type)?.delete(callback); },
+});
+globalThis.document = {
+  documentElement: { dataset: {} }, visibilityState: 'visible', ...eventSurface(documentEvents),
+};
 const listeners = new Set();
 const media = {
   matches: true,
   addEventListener: (_, listener) => listeners.add(listener),
   removeEventListener: (_, listener) => listeners.delete(listener),
 };
-globalThis.window = { matchMedia: () => media };
+globalThis.window = { matchMedia: () => media, ...eventSurface(windowEvents) };
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '#platform') return {
@@ -71,4 +82,33 @@ test('manual appearance survives reload until the system mode actually changes',
   assert.equal(viewerThemeStore.getState().theme, 'nord');
   dispose();
   assert.equal(listeners.size, 0);
+});
+
+
+test('open tabs receive theme preferences without publishing them back', () => {
+  const dispose = initializeViewerTheme();
+  preferences.set('pdf-viewer-light-theme-v2', 'solar');
+  preferences.set('pdf-viewer-dark-theme-v2', 'gruvbox');
+  preferences.set('pdf-viewer-system-color-mode-v1', media.matches ? 'dark' : 'light');
+  preferences.set('pdf-viewer-color-mode-v1', 'dark');
+  let writes = 0;
+  const write = globalThis.themeTestPlatform.setPreference;
+  globalThis.themeTestPlatform.setPreference = (...args) => { writes++; write(...args); };
+  try {
+    for (const listener of windowEvents.get('storage')) listener({ key: 'pdf-viewer-color-mode-v1' });
+    assert.equal(viewerThemeStore.getState().theme, 'gruvbox');
+    assert.equal(document.documentElement.dataset.viewerTheme, 'gruvbox');
+    assert.equal(writes, 0);
+    preferences.set('pdf-viewer-color-mode-v1', 'light');
+    for (const listener of windowEvents.get('pageshow')) listener();
+    assert.equal(viewerThemeStore.getState().theme, 'solar');
+    preferences.set('pdf-viewer-color-mode-v1', 'dark');
+    for (const listener of documentEvents.get('visibilitychange')) listener();
+    assert.equal(viewerThemeStore.getState().theme, 'gruvbox');
+    assert.equal(writes, 0);
+  } finally {
+    globalThis.themeTestPlatform.setPreference = write;
+    dispose();
+  }
+  for (const group of [...windowEvents.values(), ...documentEvents.values()]) assert.equal(group.size, 0);
 });

@@ -82,19 +82,38 @@ export function classifyPdfFontFamily(
  * Project-owned FPDF_SYSFONTINFO implementation.
  *
  * This follows PDFium's wasm32 callback ABI and intentionally performs font
- * loading inside a dedicated worker: GetFontData is synchronous by contract.
+ * loading inside a worker: GetFontData is synchronous by contract.
  */
 export class PdfiumFontFallbackManager {
   private readonly config: PdfFontFallbackConfig;
   private readonly log: FontLog;
   private readonly handles = new Map<number, FontHandle>();
   private readonly fontCache = new Map<string, Uint8Array>();
-  private diagnostics: PdfFontDiagnostic[] = [];
+  private readonly diagnosticContexts = new Map<string, {
+    diagnostics: PdfFontDiagnostic[];
+    reportedLogs: Set<string>;
+  }>();
+  private diagnosticContext = '';
+
+  private get context() {
+    let context = this.diagnosticContexts.get(this.diagnosticContext);
+    if (!context) {
+      context = { diagnostics: [], reportedLogs: new Set() };
+      this.diagnosticContexts.set(this.diagnosticContext, context);
+    }
+    return context;
+  }
+
+  private get diagnostics() { return this.context.diagnostics; }
+  private set diagnostics(value: PdfFontDiagnostic[]) { this.context.diagnostics = value; }
+  private get reportedLogs() { return this.context.reportedLogs; }
+
+  setDiagnosticContext(id: string) { this.diagnosticContext = id; }
+  releaseDiagnosticContext(id: string) { this.diagnosticContexts.delete(id); }
   private module: WrappedPdfiumModule | null = null;
   private nextHandleId = 1;
   private structPtr = 0;
   private callbackPtrs: number[] = [];
-  private reportedLogs = new Set<string>();
   private enabled = false;
 
   constructor(config: PdfFontFallbackConfig, log: FontLog = () => undefined) {
@@ -181,6 +200,7 @@ export class PdfiumFontFallbackManager {
     this.releaseResources();
     this.handles.clear();
     this.fontCache.clear();
+    this.diagnosticContexts.clear();
   }
 
   resetDiagnostics() {

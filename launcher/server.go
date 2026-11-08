@@ -309,6 +309,10 @@ func (app *App) handleDocument(response http.ResponseWriter, request *http.Reque
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "draft" {
+		app.handleDraft(resource, response, request)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "copy" {
 		app.handleCopy(resource, response, request)
 		return
@@ -317,28 +321,7 @@ func (app *App) handleDocument(response http.ResponseWriter, request *http.Reque
 		http.NotFound(response, request)
 		return
 	}
-	if request.Method == http.MethodPatch {
-		app.handlePdfIncrement(resource, response, request)
-		return
-	}
 	app.handleResource(resource, response, request)
-}
-
-func (app *App) handlePdfIncrement(resource *Resource, response http.ResponseWriter, request *http.Request) {
-	if !app.sameOrigin(request) {
-		writeJSONError(response, http.StatusForbidden, "forbidden_origin", "The write request did not come from this pdf.ts page.")
-		return
-	}
-	result, conflict, err := resource.ReplacePdfIncrement(response, request)
-	if conflict != nil {
-		writeJSON(response, http.StatusConflict, conflict)
-		return
-	}
-	if err != nil {
-		writeMutationError(response, err, "write_failed")
-		return
-	}
-	writeJSON(response, http.StatusOK, result)
 }
 
 func (app *App) handleResource(resource *Resource, response http.ResponseWriter, request *http.Request) {
@@ -390,8 +373,6 @@ func writeMutationError(response http.ResponseWriter, err error, fallbackCode st
 	status := http.StatusInternalServerError
 	code := fallbackCode
 	switch {
-	case errors.Is(err, errInvalidPdfIncrement):
-		status, code = http.StatusBadRequest, "invalid_pdf_increment"
 	case errors.Is(err, errPreconditionRequired):
 		status, code = http.StatusPreconditionRequired, "version_required"
 	case errors.Is(err, errDocumentLocked):

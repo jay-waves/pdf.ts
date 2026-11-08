@@ -317,10 +317,11 @@ export function createTextMarkupAnnotations(
 ) {
   const isHighlight = type === PdfAnnotationSubtype.HIGHLIGHT;
   const slices = selectionScope.getState().slices;
+  const created: PdfTextMarkupAnnotation[] = [];
 
   for (const selection of selectionScope.getFormattedSelection()) {
     const slice = slices[selection.pageIndex];
-    annotationScope.createAnnotation(selection.pageIndex, {
+    const markup: PdfTextMarkupAnnotation = {
       id: crypto.randomUUID(),
       type,
       pageIndex: selection.pageIndex,
@@ -333,9 +334,12 @@ export function createTextMarkupAnnotations(
         charIndex: slice.start,
         charCount: slice.count,
       } } } : undefined,
-    });
+    };
+    annotationScope.createAnnotation(selection.pageIndex, markup);
+    created.push(markup);
   }
   selectionScope.clear();
+  return created;
 }
 
 // Plugin setup and lifecycle events

@@ -188,10 +188,11 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
   );
 }
 
-export function UnlockDialog({ registry, documentId, incorrect }: {
+export function UnlockDialog({ registry, documentId, incorrect, onCancel }: {
   registry?: PluginRegistry;
   documentId: string;
   incorrect: boolean;
+  onCancel?(): void;
 }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(incorrect ? 'Incorrect password. Try again.' : '');
@@ -245,6 +246,7 @@ export function UnlockDialog({ registry, documentId, incorrect }: {
         </label>
         {error ? <div className={styles.error} role="alert">{error}</div> : null}
         <DialogActions>
+          {onCancel ? <Button type="button" disabled={busy} onClick={onCancel}>Cancel</Button> : null}
           <Button type="submit" variant="primary" disabled={busy}>
             {busy ? 'Opening...' : 'Open PDF'}
           </Button>

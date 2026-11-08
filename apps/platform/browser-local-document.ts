@@ -31,12 +31,13 @@ function createDownloadFileHandle(name: string): PdfFileHandle {
   };
 }
 
-function documentFromFile(file: File, fileHandle: PdfFileHandle): PlatformDocument {
+function documentFromFile(file: File, fileHandle: PdfFileHandle, identity?: FileSystemFileHandle): PlatformDocument {
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     throw new TypeError('Please select a PDF file.');
   }
   return {
-    resource: blobResource(file),
+    resource: { ...blobResource(file), sharedIdentity: identity,
+      draftLocation: identity ? undefined : { key: `local:${file.name}:${file.size}:${file.lastModified}` } },
     key: `local:${file.name}:${file.size}:${file.lastModified}`,
     name: file.name,
     fileHandle,
@@ -64,7 +65,7 @@ async function openBrowserLocalDocument(file?: File) {
   if (file) return documentFromFile(file, createDownloadFileHandle(file.name));
   if ('showOpenFilePicker' in window) {
     const handle = await pickPdfFileHandle();
-    return documentFromFile(await handle.getFile(), new BrowserPdfFileHandle(handle));
+    return documentFromFile(await handle.getFile(), new BrowserPdfFileHandle(handle), handle);
   }
   const pickedFile = await pickFileWithInput();
   return pickedFile

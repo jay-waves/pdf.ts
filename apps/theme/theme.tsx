@@ -154,16 +154,16 @@ function getSystemColorMode(media: MediaQueryList): ViewerColorMode {
   return media.matches ? 'dark' : 'light';
 }
 
-function applyViewerTheme(theme: ViewerTheme) {
+function applyViewerTheme(theme: ViewerTheme, persist = true) {
   const metadata = findViewerTheme(theme);
   document.documentElement.dataset.viewerTheme = theme;
   document.documentElement.dataset.viewerColorMode = metadata?.colorMode ?? 'light';
-  platform.setPreference(COLOR_MODE_STORAGE_KEY, metadata?.colorMode ?? 'light');
+  if (persist) platform.setPreference(COLOR_MODE_STORAGE_KEY, metadata?.colorMode ?? 'light');
   viewerThemeStore.setState({ theme });
 }
 
-function applyViewerColorMode(mode: ViewerColorMode) {
-  applyViewerTheme(viewerThemeStore.getState().settings[mode]);
+function applyViewerColorMode(mode: ViewerColorMode, persist = true) {
+  applyViewerTheme(viewerThemeStore.getState().settings[mode], persist);
 }
 
 export function setViewerThemeSettings(settings: ViewerThemeSettings) {
@@ -202,8 +202,34 @@ export function initializeViewerTheme() {
     viewerThemeStore.setState({ manualColorMode: null });
     applyViewerColorMode(systemColorMode);
   };
+  const syncSharedTheme = () => {
+    const mode = getSystemColorMode(media);
+    const storedMode = platform.getPreference(COLOR_MODE_STORAGE_KEY);
+    const storedSystemMode = platform.getPreference(SYSTEM_COLOR_MODE_STORAGE_KEY);
+    const manualColorMode = storedSystemMode === mode && (storedMode === 'light' || storedMode === 'dark')
+      ? storedMode : null;
+    viewerThemeStore.setState({ settings: loadViewerThemeSettings(), manualColorMode });
+    // Receiving a preference must not publish it back to other tabs.
+    applyViewerColorMode(manualColorMode ?? mode, false);
+  };
+  const sharedKeys = new Set([
+    LIGHT_THEME_STORAGE_KEY, DARK_THEME_STORAGE_KEY,
+    COLOR_MODE_STORAGE_KEY, SYSTEM_COLOR_MODE_STORAGE_KEY,
+  ]);
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === null || sharedKeys.has(event.key)) syncSharedTheme();
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === 'visible') syncSharedTheme();
+  };
   media.addEventListener('change', syncAutomaticTheme);
+  window.addEventListener('storage', onStorage);
+  window.addEventListener('pageshow', syncSharedTheme);
+  document.addEventListener('visibilitychange', onVisibility);
   return () => {
     media.removeEventListener('change', syncAutomaticTheme);
+    window.removeEventListener('storage', onStorage);
+    window.removeEventListener('pageshow', syncSharedTheme);
+    document.removeEventListener('visibilitychange', onVisibility);
   };
 }

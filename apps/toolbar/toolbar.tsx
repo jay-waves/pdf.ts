@@ -344,7 +344,7 @@ export function Toolbar({
       <FloatingToolbarDivider />
       <FloatingToolbarGroup>
         <IconButton
-          label="Save"
+          label="Save to PDF"
           icon={Save}
           disabled={!canSave}
           onClick={() => dispatch({ type: 'document/save' })}

@@ -4,8 +4,7 @@ import { EmbedPDF } from '@embedpdf/core/react';
 import { PdfErrorCode, Rotation, type PdfEngine } from '@embedpdf/models';
 import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
 import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
-import { FormPluginPackage } from '@embedpdf/plugin-form/react';
-import { HistoryPluginPackage } from '@embedpdf/plugin-history/react';
+import { SharedFormPluginPackage, SharedHistoryPluginPackage, getSharedDocumentClient } from '../renderer/shared-document-client';
 import {
   GlobalPointerProvider,
   InteractionManagerPluginPackage,
@@ -54,18 +53,6 @@ const ANNOTATION_RENDERERS = [
   themeCommentRenderer,
   signatureWidgetRenderer,
 ];
-const documentInstanceKeys = new WeakMap<object, number>();
-let nextDocumentInstanceKey = 1;
-
-function getDocumentInstanceKey(document: object) {
-  let key = documentInstanceKeys.get(document);
-  if (key === undefined) {
-    key = nextDocumentInstanceKey++;
-    documentInstanceKeys.set(document, key);
-  }
-  return key;
-}
-
 function StartupDocumentStatus({
   status,
   pageCount,
@@ -107,7 +94,8 @@ export function LoadingStatus({ label }: { label: string }) {
 function createPlugins(fileUrl?: string) {
   return [
     createPluginRegistration(DocumentManagerPluginPackage, {
-      maxDocuments: 1,
+      // Keep the current version open while its replacement loads and paints.
+      maxDocuments: 2,
       initialDocuments: fileUrl ? [{ url: fileUrl, documentId: DOCUMENT_ID }] : [],
     }),
     createPluginRegistration(ViewportPluginPackage, { viewportGap: 10 }),
@@ -130,10 +118,10 @@ function createPlugins(fileUrl?: string) {
     createPluginRegistration(SelectionPluginPackage, { maxCachedGeometries: 8 }),
     createPluginRegistration(
       AnnotationPluginPackage,
-      createAnnotationPluginConfig(),
+      { ...createAnnotationPluginConfig(), autoCommit: false },
     ),
-    createPluginRegistration(HistoryPluginPackage),
-    createPluginRegistration(FormPluginPackage),
+    createPluginRegistration(SharedHistoryPluginPackage),
+    createPluginRegistration(SharedFormPluginPackage),
   ];
 }
 
@@ -278,6 +266,7 @@ function LoadedPdfDocument({
 export const PdfSurface = memo(function PdfSurface({
   engine,
   registry,
+  pendingDocument,
   panMode,
   renderThemeVersion,
   stage,
@@ -291,6 +280,7 @@ export const PdfSurface = memo(function PdfSurface({
 }: {
   engine: PdfEngine<Blob>;
   registry?: PluginRegistry;
+  pendingDocument?: { documentId: string; stage: ViewerStage; presentationPage: number | null } | null;
   panMode: boolean;
   renderThemeVersion: number;
   stage?: ViewerStage | null;
@@ -303,48 +293,59 @@ export const PdfSurface = memo(function PdfSurface({
   onExitPresentation(): void;
 }) {
   const fileUrl = documentResource?.url;
-  const plugins = useMemo(() => createPlugins(fileUrl), [fileUrl]);
+  const plugins = useMemo(() => {
+    getSharedDocumentClient(engine)?.setIdentity(documentResource?.sharedIdentity ?? fileUrl ?? crypto.randomUUID(), documentResource?.draftLocation);
+    return createPlugins(fileUrl);
+  }, [engine, fileUrl, documentResource?.sharedIdentity, documentResource?.draftLocation]);
 
   return (
     <EmbedPDF engine={engine} plugins={plugins} onInitialized={onInitialized}>
-      {({ activeDocumentId: documentId }) => documentId ? (
-        <DocumentContent documentId={documentId}>
-          {({ documentState, isLoading, isError, isLoaded }) => (
-            <>
-              <StartupDocumentStatus
-                status={documentState.status}
-                pageCount={documentState.document?.pageCount}
-                errorCode={documentState.errorCode}
-              />
-              {isLoading && <LoadingStatus label="Loading document…" />}
-              {isError && documentState.errorCode === PdfErrorCode.Password ? (
-                <UnlockDialog
-                  registry={registry}
-                  documentId={documentId}
-                  incorrect={documentState.passwordProvided === true}
-                />
-              ) : null}
-              {isError && documentState.errorCode !== PdfErrorCode.Password ? (
-                <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>
-              ) : null}
-              {isLoaded ? (
-                <LoadedPdfDocument
-                  key={getDocumentInstanceKey(documentState.document!)}
-                  documentId={documentId}
-                  panMode={panMode}
-                  renderThemeVersion={renderThemeVersion}
-                  stage={stage}
-                  resource={documentResource}
-                  onResourceConsumed={onResourceConsumed}
-                  renderDpr={renderDpr}
-                  presentationPage={presentationPage}
-                  onNavigatePresentation={onNavigatePresentation}
-                  onExitPresentation={onExitPresentation}
-                />
-              ) : null}
-            </>
-          )}
-        </DocumentContent>
+      {({ activeDocumentId }) => activeDocumentId ? (
+        [...new Set([activeDocumentId, pendingDocument?.documentId].filter((id): id is string => !!id))].map((documentId) => {
+          const pending = documentId === pendingDocument?.documentId ? pendingDocument : null;
+          const hidden = documentId !== activeDocumentId;
+          return <div key={documentId} data-pdf-document-layer={documentId}
+            aria-hidden={hidden} inert={hidden}
+            style={{ position: 'absolute', inset: 0, visibility: hidden ? 'hidden' : 'visible' }}>
+            <DocumentContent documentId={documentId}>
+              {({ documentState, isLoading, isError, isLoaded }) => (
+                <>
+                  <StartupDocumentStatus
+                    status={documentState.status}
+                    pageCount={documentState.document?.pageCount}
+                    errorCode={documentState.errorCode}
+                  />
+                  {isLoading && <LoadingStatus label="Loading document…" />}
+                  {isError && documentState.errorCode === PdfErrorCode.Password ? (
+                    <UnlockDialog
+                      registry={registry}
+                      documentId={documentId}
+                      incorrect={documentState.passwordProvided === true}
+                    />
+                  ) : null}
+                  {isError && documentState.errorCode !== PdfErrorCode.Password ? (
+                    <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>
+                  ) : null}
+                  {isLoaded ? (
+                    <LoadedPdfDocument
+                      key={documentId}
+                      documentId={documentId}
+                      panMode={panMode}
+                      renderThemeVersion={renderThemeVersion}
+                      stage={pending?.stage ?? stage}
+                      resource={documentResource}
+                      onResourceConsumed={onResourceConsumed}
+                      renderDpr={renderDpr}
+                      presentationPage={pending ? pending.presentationPage : presentationPage}
+                      onNavigatePresentation={onNavigatePresentation}
+                      onExitPresentation={onExitPresentation}
+                    />
+                  ) : null}
+                </>
+              )}
+            </DocumentContent>
+          </div>;
+        })
       ) : (
         <div className={VIEWER_STATUS_CLASS}>No PDF document.</div>
       )}
