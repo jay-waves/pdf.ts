@@ -1,447 +1,131 @@
-import type { PluginRegistry } from '@embedpdf/core';
-import {
-  PdfAnnotationName,
-  PdfAnnotationSubtype,
-  PdfBlendMode,
-  type PdfAnnotationObject,
-  type PdfHighlightAnnoObject,
-  type PdfSquigglyAnnoObject,
-  type PdfSquareAnnoObject,
-  type PdfStrikeOutAnnoObject,
-  type PdfUnderlineAnnoObject,
-  type Rect,
-} from '@embedpdf/models';
-import {
-  LockModeType,
-  type AnnotationCapability,
-  type AnnotationPluginConfig,
-  type TrackedAnnotation,
-} from '@embedpdf/plugin-annotation';
-import type { SelectionCapability } from '@embedpdf/plugin-selection';
-import { getPluginCapability } from '../shared/utils';
+import type { Kernel } from '@embedpdf/core';
+import { annotationKey } from '@embedpdf/core';
+import type { Rect } from '@embedpdf/core-geometry';
+import { AnnotationToken, type Annotation, type AnnotationCapability, type AnnotationConfig, type AnnotationSubtype, type AnnotationToolInput } from '@embedpdf/plugin-annotation';
+import { ActionsToken } from '@embedpdf/plugin-actions';
+import { InteractionToken } from '@embedpdf/plugin-interaction';
 import { isDarkViewerTheme, viewerThemeStore } from '../theme/theme';
 import { getDefaultAnnotationColor, getThemeAnnotationColor } from './theme-palette';
 
-// Appearance and palette configuration
-
 export const TRANSPARENT_ANNOTATION_COLOR = 'transparent';
-
-// Legacy AUTO colors remain recognizable when loading existing annotations.
 export const DEFAULT_HIGHLIGHT_COLOR = '#ffcd45';
 export const DEFAULT_ANNOTATION_COLOR = '#e44234';
-const DEFAULT_ANNOTATION_COLORS = [
-  DEFAULT_HIGHLIGHT_COLOR,
-  '#ff8d00',
-  DEFAULT_ANNOTATION_COLOR,
-  '#ec4899',
-  '#c544ce',
-  '#8b5cf6',
-  '#597ce2',
-  '#0ea5e9',
-  '#25d2d1',
-  '#14b86e',
-  '#84cc16',
-];
-
-export function getThemeHighlightPolicy(theme = viewerThemeStore.getState().theme) {
-  const dark = isDarkViewerTheme(theme);
-  return {
-    color: getDefaultAnnotationColor(theme),
-    blendMode: dark ? PdfBlendMode.Normal : PdfBlendMode.Multiply,
-    // Display policy only; saved highlights always use the Light appearance.
-    opacity: dark ? 0.4 : 1,
-  };
-}
-
-function getPresetHighlightAppearance() {
-  return { opacity: 1, blendMode: PdfBlendMode.Multiply };
-}
-
-export function hasAutoHighlightColor(annotation: PdfHighlightAnnoObject) {
-  const color = (annotation.strokeColor ?? annotation.color)?.toLowerCase();
-  return color === DEFAULT_HIGHLIGHT_COLOR;
-}
-
-export const TEXT_MARKUP_TYPES = new Set<PdfAnnotationSubtype>([
-  PdfAnnotationSubtype.HIGHLIGHT,
-  PdfAnnotationSubtype.UNDERLINE,
-  PdfAnnotationSubtype.STRIKEOUT,
-  PdfAnnotationSubtype.SQUIGGLY,
-]);
-
-export type PdfTextMarkupAnnotation = PdfHighlightAnnoObject | PdfUnderlineAnnoObject |
-  PdfStrikeOutAnnoObject | PdfSquigglyAnnoObject;
-export type PdfCaptureAnnotation = PdfTextMarkupAnnotation | PdfSquareAnnoObject;
-export type TextMarkupSubtype =
-  | PdfAnnotationSubtype.HIGHLIGHT
-  | PdfAnnotationSubtype.UNDERLINE
-  | PdfAnnotationSubtype.STRIKEOUT;
-
-export type AnnotationColorFieldKey =
-  | 'strokeColor'
-  | 'color'
-  | 'fontColor'
-  | 'backgroundColor';
-
-interface AnnotationColorField {
-  key: AnnotationColorFieldKey;
-  label: string;
-}
-
-export interface AnnotationToolLike {
-  id: string;
-  name?: string;
-  defaults?: Record<string, unknown>;
-}
-
-const COLOR_FIELDS = {
-  stroke: { key: 'strokeColor', label: 'Stroke' },
-  fill: { key: 'color', label: 'Fill' },
-  color: { key: 'strokeColor', label: 'Color' },
-  text: { key: 'fontColor', label: 'Text' },
-  background: { key: 'color', label: 'Background' },
-} as const satisfies Record<string, AnnotationColorField>;
-
-const FALLBACK_COLOR_FIELDS: AnnotationColorField[] = [
-  COLOR_FIELDS.stroke,
-  COLOR_FIELDS.fill,
-  COLOR_FIELDS.text,
-  { key: 'backgroundColor', label: 'Background' },
-];
-
-const SINGLE_COLOR_TOOL_IDS = new Set([
-  'highlight',
-  'underline',
-  'strikeout',
-  'squiggly',
-  'ink',
-  'inkHighlighter',
-  'line',
-  'lineArrow',
-  'polyline',
-  'textComment',
-]);
-
-const VECTOR_TOOL_IDS = new Set([
-  'square', 'circle', 'polygon', 'line', 'lineArrow', 'polyline', 'ink',
-  'underline', 'strikeout', 'squiggly', 'freeTextCallout',
-]);
 export const VECTOR_ANNOTATION_OPACITY = 0.75;
 export const VECTOR_ANNOTATION_STROKE_WIDTH = 1.25;
+export const TEXT_MARKUP_TYPES = new Set<AnnotationSubtype>(['highlight', 'underline', 'strikeout', 'squiggly']);
+export type TextMarkupSubtype = 'highlight' | 'underline' | 'strikeout';
+export type TextMarkupAnnotation = Extract<Annotation, { subtype: 'highlight' | 'underline' | 'strikeout' | 'squiggly' }>;
+export type CaptureAnnotation = TextMarkupAnnotation | Extract<Annotation, { subtype: 'square' }>;
+export type AnnotationColorFieldKey = 'color' | 'interiorColor' | 'textColor';
+export interface AnnotationToolLike { id: string; name?: string; defaults?: Record<string, unknown> }
 
-const SHAPE_TOOL_IDS = new Set(['square', 'circle', 'polygon']);
-const STROKE_COLOR_ALIAS_TOOL_IDS = new Set([
-  'highlight',
-  'underline',
-  'strikeout',
-  'squiggly',
-  'ink',
-  'inkHighlighter',
-]);
-
+const VECTOR_TOOL_IDS = new Set(['square', 'circle', 'polygon', 'line', 'lineArrow', 'polyline', 'ink', 'underline', 'strikeout', 'squiggly', 'freeTextCallout']);
 const TOOL_LABELS: Record<string, string> = {
-  highlight: 'Highlight',
-  underline: 'Underline',
-  strikeout: 'Strikeout',
-  squiggly: 'Squiggly',
-  ink: 'Ink',
-  inkHighlighter: 'Highlighter',
-  square: 'Rectangle',
-  circle: 'Circle',
-  polygon: 'Polygon',
-  line: 'Line',
-  lineArrow: 'Arrow',
-  polyline: 'Polyline',
-  textComment: 'Comment',
-  freeText: 'Text',
-  freeTextCallout: 'Callout',
+  highlight: 'Highlight', underline: 'Underline', strikeout: 'Strikeout', squiggly: 'Squiggly',
+  ink: 'Ink', inkHighlighter: 'Highlighter', square: 'Rectangle', circle: 'Circle', polygon: 'Polygon',
+  line: 'Line', lineArrow: 'Arrow', polyline: 'Polyline', text: 'Comment', textComment: 'Comment',
+  freeText: 'Text', freeTextCallout: 'Callout', freetext: 'Text', stamp: 'Stamp',
 };
 
-const ANNOTATION_LABELS = new Map<PdfAnnotationSubtype, string>([
-  [PdfAnnotationSubtype.TEXT, 'Comment'],
-  [PdfAnnotationSubtype.HIGHLIGHT, 'Highlight'],
-  [PdfAnnotationSubtype.UNDERLINE, 'Underline'],
-  [PdfAnnotationSubtype.STRIKEOUT, 'Strikeout'],
-  [PdfAnnotationSubtype.SQUIGGLY, 'Squiggly'],
-  [PdfAnnotationSubtype.FREETEXT, 'Text'],
-  [PdfAnnotationSubtype.STAMP, 'Stamp'],
-  [PdfAnnotationSubtype.INK, 'Drawing'],
-]);
-
-// Registry access
-
-export function getAnnotationCapability(registry: PluginRegistry | undefined) {
-  return getPluginCapability<AnnotationCapability>(registry, 'annotation');
+export function getThemeHighlightPolicy(theme = viewerThemeStore.getState().theme) {
+  return { color: getDefaultAnnotationColor(theme), blendMode: isDarkViewerTheme(theme) ? 'normal' : 'multiply', opacity: isDarkViewerTheme(theme) ? 0.4 : 1 };
 }
-
-export function getAnnotationScope(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-) {
-  const capability = getAnnotationCapability(registry);
-  return capability && documentId
-    ? { documentId, capability, scope: capability.forDocument(documentId) }
-    : null;
+export function hasAutoHighlightColor(annotation: Annotation) { return 'color' in annotation && annotation.color?.toLowerCase() === DEFAULT_HIGHLIGHT_COLOR; }
+export function getAnnotationCapability(kernel: Kernel | undefined, documentId?: string | null) {
+  return kernel?.tryCapability(AnnotationToken, documentId ?? undefined) ?? null;
 }
-
-// Annotation model helpers
-
-export function isTextMarkupAnnotation(
-  annotation: PdfAnnotationObject | undefined,
-): annotation is PdfTextMarkupAnnotation {
-  return Boolean(annotation && TEXT_MARKUP_TYPES.has(annotation.type));
+export function getAnnotationScope(kernel: Kernel | undefined, documentId: string | null | undefined) {
+  const scope = documentId ? getAnnotationCapability(kernel, documentId) : null;
+  return scope && kernel ? { documentId: documentId!, capability: scope, scope, interaction: kernel.tryCapability(InteractionToken, documentId!) } : null;
 }
-
-export function isCaptureAnnotation(
-  annotation: PdfAnnotationObject | undefined,
-): annotation is PdfCaptureAnnotation {
-  return isTextMarkupAnnotation(annotation) || annotation?.type === PdfAnnotationSubtype.SQUARE;
-}
-
-export function getAnnotationRects(annotation: PdfAnnotationObject): Rect[] {
-  return isTextMarkupAnnotation(annotation) && annotation.segmentRects.length
-    ? annotation.segmentRects
-    : [annotation.rect];
-}
-
-export function rectsIntersect(left: Rect, right: Rect) {
-  return left.origin.x < right.origin.x + right.size.width &&
-    left.origin.x + left.size.width > right.origin.x &&
-    left.origin.y < right.origin.y + right.size.height &&
-    left.origin.y + left.size.height > right.origin.y;
-}
-
-export function getAnnotationLabel(annotation: PdfAnnotationObject) {
-  return ANNOTATION_LABELS.get(annotation.type) ?? 'Annotation';
-}
-
-export function getAnnotationToolLabel(tool: AnnotationToolLike | null) {
-  return tool
-    ? TOOL_LABELS[tool.id] ?? tool.name ?? 'Annotation tool'
-    : 'Selected annotation';
-}
-
-export function getCommonAnnotationTool(
-  capability: AnnotationCapability,
-  annotations: TrackedAnnotation[],
-) {
-  const tools = annotations.map(({ object }) => capability.findToolForAnnotation(object));
-  return tools[0] && tools.every((tool) => tool?.id === tools[0]?.id)
-    ? tools[0]
-    : null;
-}
-
-export function getAnnotationColorFields(
-  toolId: string | null,
-  values: Record<string, unknown>,
-): AnnotationColorField[] {
-  if (toolId && SINGLE_COLOR_TOOL_IDS.has(toolId)) return [COLOR_FIELDS.color];
-  if (toolId && SHAPE_TOOL_IDS.has(toolId)) return [COLOR_FIELDS.stroke, COLOR_FIELDS.fill];
-  if (toolId === 'freeText' || toolId === 'freeTextCallout') {
-    return [COLOR_FIELDS.text, COLOR_FIELDS.background];
+export function isTextMarkupAnnotation(annotation: Annotation | undefined): annotation is TextMarkupAnnotation { return !!annotation && TEXT_MARKUP_TYPES.has(annotation.subtype); }
+export function isCaptureAnnotation(annotation: Annotation | undefined): annotation is CaptureAnnotation { return isTextMarkupAnnotation(annotation) || annotation?.subtype === 'square'; }
+export function getAnnotationRects(annotation: Annotation): Rect[] {
+  if ('quadPoints' in annotation && Array.isArray(annotation.quadPoints) && annotation.quadPoints.length) {
+    return annotation.quadPoints.map((quad) => {
+      const points = [quad.upperLeft, quad.upperRight, quad.lowerLeft, quad.lowerRight];
+      const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
+      return { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
+    });
   }
-
-  const fields = FALLBACK_COLOR_FIELDS.filter(({ key }) => key in values);
-  return fields.length ? fields : [COLOR_FIELDS.color];
+  return [annotation.rect];
 }
-
-export function getAnnotationColorPatch(
-  toolId: string | null,
-  field: AnnotationColorFieldKey,
-  color: string,
-) {
-  const patch: Record<string, unknown> = { [field]: color };
-  if (field === 'strokeColor' && toolId && STROKE_COLOR_ALIAS_TOOL_IDS.has(toolId)) {
-    patch.color = color;
-  }
-  if (field === 'color' && (toolId === 'freeText' || toolId === 'freeTextCallout')) {
-    patch.backgroundColor = color;
-  }
-  return patch;
+export function rectsIntersect(a: Rect, b: Rect) { return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y; }
+export function getAnnotationLabel(annotation: Annotation) { return TOOL_LABELS[annotation.subtype] ?? 'Annotation'; }
+export function getAnnotationToolLabel(tool: AnnotationToolLike | null) { return tool ? TOOL_LABELS[tool.id] ?? tool.name ?? 'Annotation tool' : 'Selected annotation'; }
+export function getCommonAnnotationTool(capability: AnnotationCapability, annotations: readonly Annotation[]) {
+  const subtype = annotations[0]?.subtype;
+  return subtype && annotations.every((annotation) => annotation.subtype === subtype)
+    ? capability.tools.list().find((tool) => tool.subtype === subtype) ?? null : null;
 }
-
-export function getAnnotationPresetPatch(
-  toolId: string | null,
-  field: AnnotationColorFieldKey,
-  color: string,
-) {
-  const highlight = toolId === 'highlight' || toolId === 'inkHighlighter';
-  return {
-    ...getAnnotationColorPatch(toolId, field, getThemeAnnotationColor(color, 'light') ?? color),
+export function getAnnotationColorFields(toolId: string | null, values: Record<string, unknown>): { key: AnnotationColorFieldKey; label: string }[] {
+  if (toolId && ['square', 'circle', 'polygon'].includes(toolId)) return [{ key: 'color', label: 'Stroke' }, { key: 'interiorColor', label: 'Fill' }];
+  if (toolId && ['freeText', 'freeTextCallout', 'free-text'].includes(toolId)) return [{ key: 'textColor', label: 'Text' }, { key: 'interiorColor', label: 'Background' }];
+  if ('textColor' in values) return [{ key: 'textColor', label: 'Text' }];
+  return [{ key: 'color', label: 'Color' }];
+}
+export function getAnnotationColorPatch(_toolId: string | null, field: AnnotationColorFieldKey, color: string) { return field === 'textColor' ? { richText: { body: { color: color === TRANSPARENT_ANNOTATION_COLOR ? '#000000' : color } } } : { [field]: color === TRANSPARENT_ANNOTATION_COLOR ? null : color }; }
+export function getAnnotationPresetPatch(toolId: string | null, field: AnnotationColorFieldKey, color: string) {
+  return { ...getAnnotationColorPatch(toolId, field, getThemeAnnotationColor(color, 'light') ?? color),
     opacity: toolId && VECTOR_TOOL_IDS.has(toolId) ? VECTOR_ANNOTATION_OPACITY : 1,
-    ...(highlight ? getPresetHighlightAppearance() : {}),
-  };
+    ...(toolId === 'highlight' || toolId === 'inkHighlighter' ? { blendMode: 'multiply' } : {}) };
 }
-
 export function normalizeAnnotationColor(value: unknown) {
-  if (value === TRANSPARENT_ANNOTATION_COLOR) return TRANSPARENT_ANNOTATION_COLOR;
-  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
-    ? value.toLowerCase()
-    : null;
+  if (value === TRANSPARENT_ANNOTATION_COLOR || value === null) return TRANSPARENT_ANNOTATION_COLOR;
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
 }
-
-// Annotation creation
-
-export function createCommentAnnotation(
-  scope: ReturnType<AnnotationCapability['forDocument']>,
-  target: PdfAnnotationObject,
-  rect?: Rect,
-) {
-  const id = crypto.randomUUID();
-  const size = 24;
-  scope.createAnnotation(target.pageIndex, {
-    id,
-    type: PdfAnnotationSubtype.TEXT,
-    pageIndex: target.pageIndex,
-    rect: rect ?? {
-      origin: {
-        x: Math.max(0, target.rect.origin.x + target.rect.size.width - size),
-        y: Math.max(0, target.rect.origin.y + target.rect.size.height + 4),
-      },
-      size: { width: size, height: size },
-    },
-    contents: '',
-    name: PdfAnnotationName.Comment,
-    strokeColor: getDefaultAnnotationColor('light'),
-    opacity: 1,
-    flags: ['print', 'noRotate', 'noZoom'],
-    created: new Date(),
-  });
-  return id;
+export async function createCommentAnnotation(scope: AnnotationCapability, target: Annotation, rect?: Rect) {
+  const { annotation } = await scope.create(target.page, { subtype: 'text', rect: rect ?? { x: Math.max(0, target.rect.x + target.rect.width - 24), y: Math.max(0, target.rect.y + target.rect.height + 4), width: 24, height: 24 }, contents: '', icon: 'comment', color: getDefaultAnnotationColor('light'), opacity: 1, print: true, noRotate: true, noZoom: true });
+  return annotationKey(annotation.ref);
 }
-
-export function createTextMarkupAnnotations(
-  annotationScope: ReturnType<AnnotationCapability['forDocument']>,
-  selectionScope: ReturnType<SelectionCapability['forDocument']>,
-  type: TextMarkupSubtype,
-) {
-  const isHighlight = type === PdfAnnotationSubtype.HIGHLIGHT;
-  const slices = selectionScope.getState().slices;
-  const created: PdfTextMarkupAnnotation[] = [];
-
-  for (const selection of selectionScope.getFormattedSelection()) {
-    const slice = slices[selection.pageIndex];
-    const markup: PdfTextMarkupAnnotation = {
-      id: crypto.randomUUID(),
-      type,
-      pageIndex: selection.pageIndex,
-      rect: selection.rect,
-      segmentRects: selection.segmentRects,
-      strokeColor: getDefaultAnnotationColor('light'),
-      opacity: VECTOR_ANNOTATION_OPACITY,
-      ...(isHighlight ? getPresetHighlightAppearance() : {}),
-      custom: slice ? { pdfTs: { textSlice: {
-        charIndex: slice.start,
-        charCount: slice.count,
-      } } } : undefined,
-    };
-    annotationScope.createAnnotation(selection.pageIndex, markup);
-    created.push(markup);
-  }
-  selectionScope.clear();
-  return created;
-}
-
-// Plugin setup and lifecycle events
-
-export function createAnnotationPluginConfig(): AnnotationPluginConfig {
-  return {
-    locked: { type: LockModeType.Include, categories: ['form', 'link'] },
-    autoOpenLinks: false,
-    deactivateToolAfterCreate: true,
-    colorPresets: DEFAULT_ANNOTATION_COLORS,
-    tools: [
-      ...[...VECTOR_TOOL_IDS].map((id) => ({
-        id,
-        defaults: { strokeWidth: VECTOR_ANNOTATION_STROKE_WIDTH, opacity: VECTOR_ANNOTATION_OPACITY },
-      })),
-      {
-        id: 'highlight',
-        defaults: {
-          strokeColor: DEFAULT_HIGHLIGHT_COLOR,
-          color: DEFAULT_HIGHLIGHT_COLOR,
-          blendMode: PdfBlendMode.Multiply,
-          opacity: 1,
-        },
-      },
-      {
-        id: 'textComment',
-        behavior: { editAfterCreate: true },
-      },
-      // Register the tool so existing stamps resolve their built-in renderer.
-      { id: 'stamp' },
-      // Link annotations stay interactive for URI and destination navigation.
-      { id: 'link', categories: ['link'] },
-    ],
+export async function createTextMarkupAnnotations(scope: AnnotationCapability, _selection: unknown, type: TextMarkupSubtype) { return (await scope.createFromSelection(type)).annotations; }
+export function createAnnotationPluginConfig(): AnnotationConfig {
+  return { afterCreate: { select: true, tool: 'default', editText: true },
+    editable: ['text', 'highlight', 'underline', 'strikeout', 'squiggly', 'free-text', 'square', 'circle', 'polygon', 'polyline', 'line', 'ink', 'stamp'],
+    tools: [...(['square', 'circle', 'polygon', 'line', 'polyline', 'ink', 'underline', 'strikeout', 'squiggly'] as const).map((id) => ({ id, defaults: { ...(['underline', 'strikeout', 'squiggly'].includes(id) ? {} : { strokeWidth: VECTOR_ANNOTATION_STROKE_WIDTH }), opacity: VECTOR_ANNOTATION_OPACITY } } as AnnotationToolInput)),
+      { id: 'highlight', defaults: { color: DEFAULT_HIGHLIGHT_COLOR, blendMode: 'multiply', opacity: 1 } },
+      { id: 'textComment', extends: 'note' }, { id: 'freeText', extends: 'free-text' },
+      { id: 'freeTextCallout', extends: 'free-text-callout' }, { id: 'inkHighlighter', extends: 'ink-highlight' },
+      { id: 'lineArrow', extends: 'line', defaults: { lineEndings: { start: 'none', end: 'open-arrow' } } }],
   };
 }
-
-export function initializeAnnotationPalette(registry: PluginRegistry, documentId: string) {
-  const scoped = getAnnotationScope(registry, documentId);
-  if (!scoped) return;
-  // Initialize creation defaults once. Existing annotations are never rewritten.
-  const fields = ['strokeColor', 'color', 'fontColor', 'backgroundColor'] as const;
-  for (const tool of scoped.capability.getTools()) {
-    const defaults = (tool.defaults ?? {}) as Record<string, unknown>;
+export function initializeAnnotationPalette(kernel: Kernel, documentId: string) {
+  const capability = getAnnotationCapability(kernel, documentId);
+  if (!capability) return;
+  for (const tool of capability.tools.list()) {
+    const defaults = capability.tools.getDefaults(tool.id) as Record<string, unknown>;
     const patch: Record<string, unknown> = {};
-    for (const field of fields) {
+    for (const field of ['color', 'interiorColor', 'textColor']) {
       const current = normalizeAnnotationColor(defaults[field]);
       if (!current || current === TRANSPARENT_ANNOTATION_COLOR) continue;
-      const color = current === DEFAULT_HIGHLIGHT_COLOR || current === DEFAULT_ANNOTATION_COLOR
-        ? getDefaultAnnotationColor('light')
-        : getThemeAnnotationColor(current, 'light') ?? getDefaultAnnotationColor('light');
-      if (color !== current) patch[field] = color;
+      const color = current === DEFAULT_HIGHLIGHT_COLOR || current === DEFAULT_ANNOTATION_COLOR ? getDefaultAnnotationColor('light') : getThemeAnnotationColor(current, 'light');
+      if (color && color !== current) patch[field] = color;
     }
-    if (tool.id === 'highlight' || tool.id === 'inkHighlighter') {
-      const appearance = getPresetHighlightAppearance();
-      if (defaults.opacity !== appearance.opacity) patch.opacity = appearance.opacity;
-      if (defaults.blendMode !== appearance.blendMode) patch.blendMode = appearance.blendMode;
-    }
-    if (Object.keys(patch).length) scoped.capability.setToolDefaults(tool.id, patch);
+    if (Object.keys(patch).length) capability.tools.updateDefaults(tool.id, patch);
   }
 }
-
-export function installAnnotationDirty(
-  registry: PluginRegistry,
-  onDirty: () => void,
-) {
-  const capability = getAnnotationCapability(registry);
-  if (!capability) return;
-
-  return capability.onAnnotationEvent((event) => {
-    // The plugin emits an immediate uncommitted event and a second committed
-    // event after PDFium catches up. Mark dirty on the first one.
-    if (event.type !== 'loaded' && !event.committed) onDirty();
-  });
+export function installAnnotationDirty(kernel: Kernel, onDirty: () => void) {
+  return kernel.documents.onUnsavedChangesChanged((event) => { if (event.hasUnsavedChanges) onDirty(); });
 }
-
-export function installAnnotationLinks(
-  registry: PluginRegistry,
-  openExternal: (uri: string) => void,
-) {
-  const capability = getAnnotationCapability(registry);
-  if (!capability) return;
-
-  return capability.onNavigate((event) => {
-    if (event.result.outcome === 'uri') openExternal(event.result.uri);
-  });
+export function installAnnotationLinks(kernel: Kernel, openExternal: (uri: string) => void) {
+  const cleanups = new Map<string, () => void>();
+  const attach = (id: string) => {
+    cleanups.get(id)?.();
+    const actions = kernel.tryCapability(ActionsToken, id);
+    if (actions) cleanups.set(id, actions.setUiAdapter({ openUri: openExternal, print: () => window.print() }));
+  };
+  kernel.documents.list().forEach((info) => attach(info.id));
+  const unsubscribe = kernel.documents.onOpened(({ documentId }) => attach(documentId));
+  return () => { unsubscribe(); cleanups.forEach((cleanup) => cleanup()); };
 }
-
-export function installCommentEditor(
-  registry: PluginRegistry,
-  onCreate: (annotationId: string) => void,
-) {
-  const capability = getAnnotationCapability(registry);
-  if (!capability) return;
-
-  return capability.onAnnotationEvent((event) => {
-    if (
-      event.type === 'create' &&
-      !event.committed &&
-      event.editAfterCreate &&
-      event.annotation.type === PdfAnnotationSubtype.TEXT
-    ) {
-      onCreate(event.annotation.id);
-    }
-  });
+export function installCommentEditor(kernel: Kernel, onCreate: (id: string) => void) {
+  const cleanups = new Map<string, () => void>();
+  const attach = (id: string) => {
+    cleanups.get(id)?.();
+    const scope = getAnnotationCapability(kernel, id);
+    if (scope) cleanups.set(id, scope.onCreated(({ annotation }) => { if (annotation.subtype === 'text' && !annotation.reply) onCreate(annotationKey(annotation.ref)); }));
+  };
+  kernel.documents.list().forEach((info) => attach(info.id));
+  const unsubscribe = kernel.documents.onOpened(({ documentId }) => attach(documentId));
+  return () => { unsubscribe(); cleanups.forEach((cleanup) => cleanup()); };
 }

@@ -1,43 +1,43 @@
 import { AutoGrowingTextarea } from '../components/auto-growing-textarea';
 import { PopoverResizeHandle } from '../components/popover-resize-handle';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import { transformPosition, type Rotation } from '@embedpdf/models';
+import type { Kernel } from '@embedpdf/core';
+import { annotationKey } from '@embedpdf/core';
+import { StageToken } from '@embedpdf/plugin-stage';
 import { CircleCheckBig, MessageSquareMore, Trash } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
-import { getDocumentState } from '../document/viewer-document';
 import { getAnnotationLabel, getAnnotationScope } from './annotations';
 import styles from './comments.module.css';
 
 export function CommentEditor({ registry, documentId, annotationId, pointerX, onClose }: {
-  registry: PluginRegistry;
+  registry: Kernel;
   documentId: string;
   annotationId: string;
   pointerX?: number;
   onClose(): void;
 }) {
   const scope = getAnnotationScope(registry, documentId)?.scope;
-  const annotation = scope?.getAnnotations().find(({ object }) => object.id === annotationId)?.object;
+  const annotation = scope?.list().find((item) => annotationKey(item.ref) === annotationId);
   const [draft, setDraft] = useState(annotation?.contents ?? '');
   const draftRef = useRef(draft);
   const discarded = useRef(false);
   const [anchor, setAnchor] = useState<{ x: number; y: number; height: number } | null>(null);
   const horizontalFraction = useRef<number | null>(null);
-  const pageIndex = annotation?.pageIndex;
+  const pageIndex = annotation ? registry.documents.getPageIndex(annotation.page, documentId) : undefined;
 
   // Save on dismissal or when another annotation replaces this editor.
   useEffect(() => () => {
     if (discarded.current || pageIndex === undefined) return;
     const currentScope = getAnnotationScope(registry, documentId)?.scope;
-    const current = currentScope?.getAnnotations().find(({ object }) => object.id === annotationId)?.object;
+    const current = currentScope?.list().find((item) => annotationKey(item.ref) === annotationId);
     const contents = draftRef.current.trim();
     if (current && contents !== (current.contents ?? '')) {
-      currentScope?.updateAnnotation(pageIndex, annotationId, { contents });
+      void currentScope?.comments.setText(current.ref, contents).catch((error) => console.error('[pdf-ts] failed to save comment', error));
     }
   }, [registry, documentId, annotationId, pageIndex]);
 
-  useEffect(() => scope?.onAnnotationEvent((event) => {
-    if (event.type === 'delete' && event.annotation.id === annotationId) {
+  useEffect(() => scope?.onDeleted((event) => {
+    if (event.refs.some((ref) => annotationKey(ref) === annotationId)) {
       discarded.current = true;
       onClose();
     }
@@ -47,23 +47,14 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
     if (!annotation) { onClose(); return; }
     let frame = 0;
     const update = () => {
-      const state = getDocumentState(registry, documentId);
-      const page = state?.document?.pages[annotation.pageIndex];
-      const element = document.querySelector<HTMLElement>(`[data-pdf-page-index="${annotation.pageIndex}"]`);
-      if (page && state && element) {
+      const projection = registry.tryCapability(StageToken, documentId)?.pageRectToViewport(annotation.page, annotation.rect);
+      const element = document.querySelector<HTMLElement>(`[data-pdf-document-layer="${documentId}"] .viewer`);
+      if (projection && element) {
         const bounds = element.getBoundingClientRect();
-        const rotation = ((page.rotation + state.rotation) % 4) as Rotation;
-        const { origin, size } = annotation.rect;
-        const corners = [
-          origin,
-          { x: origin.x + size.width, y: origin.y },
-          { x: origin.x, y: origin.y + size.height },
-          { x: origin.x + size.width, y: origin.y + size.height },
-        ].map((point) => transformPosition(page.size, point, rotation, state.scale));
-        const left = bounds.left + Math.min(...corners.map((point) => point.x));
-        const right = bounds.left + Math.max(...corners.map((point) => point.x));
-        const y = bounds.top + Math.min(...corners.map((point) => point.y));
-        const bottom = bounds.top + Math.max(...corners.map((point) => point.y));
+        const left = bounds.left + projection.x;
+        const right = left + projection.width;
+        const y = bounds.top + projection.y;
+        const bottom = y + projection.height;
         // Keep the clicked horizontal position attached to the annotation as the view changes.
         horizontalFraction.current ??= pointerX === undefined || right === left
           ? 0
@@ -99,7 +90,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
         <div className={styles.actions}>
           <IconButton label="Delete annotation" icon={Trash} onClick={() => {
             discarded.current = true;
-            scope?.deleteAnnotations([{ pageIndex: annotation.pageIndex, id: annotationId }]);
+            void scope?.comments.delete(annotation.ref).catch((error) => console.error('[pdf-ts] failed to delete annotation', error));
             onClose();
           }} />
           <IconButton label="Done" icon={CircleCheckBig} onClick={onClose} />

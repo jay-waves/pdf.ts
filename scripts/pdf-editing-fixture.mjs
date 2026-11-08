@@ -1,12 +1,12 @@
-export function fixture({ secondPage = false, notes = false } = {}) {
+export function fixture({ secondPage = false, notes = false, content = '', fontName = 'Helvetica' } = {}) {
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [5 0 R] /Resources << /Font << /Helv 7 0 R >> >> /Contents 4 0 R >>',
-    '<< /Length 0 >>\nstream\n\nendstream',
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
     '<< /Type /Annot /Subtype /Widget /FT /Tx /T (SharedName) /V (initial) /Rect [50 600 250 630] /P 3 0 R /F 4 /DA (/Helv 12 Tf 0 g) >>',
     '<< /Fields [5 0 R] /DR << /Font << /Helv 7 0 R >> >> /DA (/Helv 12 Tf 0 g) >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Type /Font /Subtype /Type1 /BaseFont /${fontName} >>`,
   ];
   if (notes) {
     objects[2] = objects[2].replace('/Annots [5 0 R]', '/Annots [5 0 R 8 0 R 9 0 R]');

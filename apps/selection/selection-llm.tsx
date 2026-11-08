@@ -1,18 +1,18 @@
 import { AutoGrowingTextarea, sizeTextareaPopover } from '../components/auto-growing-textarea';
 import { PopoverResizeHandle } from '../components/popover-resize-handle';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { SelectionCapability } from '@embedpdf/plugin-selection';
+import type { Kernel } from '@embedpdf/core';
+import { SelectionToken } from '@embedpdf/plugin-selection';
 import { Check, Copy, MessageSquareMore, Pencil, Send } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
 import { platform } from '#platform';
 import type { AiMessage } from '../platform/types';
-import { getPluginCapability, normalizePdfText } from '../shared/utils';
+import { normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
 import styles from '../annotations/comments.module.css';
 
 export function SelectionLlm({ registry, request, onClose }: {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   request: ViewerTranslationRequest;
   onClose(): void;
 }) {
@@ -37,13 +37,13 @@ export function SelectionLlm({ registry, request, onClose }: {
     setText('');
     setError('');
     setStatus('preparing');
-    const scope = getPluginCapability<SelectionCapability>(registry, 'selection')?.forDocument(request.documentId);
+    const scope = registry?.tryCapability(SelectionToken, request.documentId);
     void (async () => {
       try {
         if (!scope) throw new Error('Could not read the selected text.');
-        const parts = await scope.getSelectedText().toPromise();
+        const parts = await scope.readText();
         if (!cancelled) {
-          const selected = normalizePdfText(parts.join(' ')).trim().slice(0, 4000);
+          const selected = normalizePdfText(parts).trim().slice(0, 4000);
           setText(selected ? `${selected.split(/\r?\n/).map((line) => `> ${line}`).join('\n')}\n\n` : '');
           sizeInitialDraft.current = true;
           setStatus('editing');

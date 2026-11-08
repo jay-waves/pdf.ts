@@ -1,74 +1,84 @@
-import type { PdfAnnotationObject } from '@embedpdf/models';
-import type { AnnotationTransferItem } from '@embedpdf/plugin-annotation';
+import { restoreLegacyDraft, type LegacyDraft } from './legacy-draft';
+import { annotationKey, fieldValueOf, type Annotation, type AnnotationBundle, type FormField, type FormFieldValue, type LocalDocumentHandle } from '@embedpdf/engine-core/runtime';
 
 export type DraftStatus = 'clean' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict' | 'unavailable';
-export interface DraftState {
-  draftStatus: DraftStatus;
-  draftRevision: number;
-  draftError?: string;
-}
+export interface DraftState { draftStatus: DraftStatus; draftRevision: number; draftError?: string }
 export interface AnnotationTarget { id: string; pageIndex: number; index: number }
-export interface DraftChange {
-  target?: AnnotationTarget;
-  item: AnnotationTransferItem;
-}
-export interface DocumentDraft {
-  format: 'pdf.ts/swp';
-  version: 1;
-  baseVersion: string;
-  revision: number;
-  updatedAt: string;
-  targets: AnnotationTarget[];
-  upsert: DraftChange[];
-  removed: AnnotationTarget[];
-  formValues: Record<string, string>;
-  /** Written before replacing the PDF, so recovery recognizes an acknowledged
-   * or interrupted merge without applying its annotations a second time. */
+export interface DraftBaseline { annotations: Annotation[]; fields: FormField[]; pages: string[] }
+export type DocumentDraft = NativeDocumentDraft | LegacyDraft;
+export interface NativeDocumentDraft {
+  format: 'pdf.ts/swp'; version: 1; engine: 3;
+  baseVersion: string; revision: number; updatedAt: string;
+  targets: AnnotationTarget[]; removed: AnnotationTarget[];
+  bundle: AnnotationBundle | null;
+  formValues: Record<string, FormFieldValue>;
   mergeOutputVersion?: string;
 }
-export interface DraftBaseline {
-  annotations: PdfAnnotationObject[];
-  formValues: Record<string, string>;
+const pageKey = (page: unknown) => JSON.stringify(page);
+export async function captureBaseline(doc: LocalDocumentHandle): Promise<DraftBaseline> {
+  const [annotations, forms, pages] = await Promise.all([doc.annotations.list(), doc.forms.list(), doc.pages.list()]);
+  return { annotations: annotations.annotations.filter(a => a.subtype !== 'widget'), fields: forms.fields,
+    pages: pages.pages.map(p => pageKey(p.ref)) };
 }
-export function draftBaseline(annotations: PdfAnnotationObject[], formValues: Record<string, string>): DraftBaseline {
-  return { annotations: structuredClone(annotations), formValues: { ...formValues } };
-}
-export function annotationTargets(annotations: PdfAnnotationObject[]): Map<string, AnnotationTarget> {
+export function annotationTargets(baseline: DraftBaseline) {
   const counts = new Map<number, number>();
-  return new Map(annotations.map(annotation => {
-    const index = counts.get(annotation.pageIndex) ?? 0;
-    counts.set(annotation.pageIndex, index + 1);
-    return [annotation.id, { id: annotation.id, pageIndex: annotation.pageIndex, index }];
+  return new Map(baseline.annotations.map(a => {
+    const pageIndex = baseline.pages.indexOf(pageKey(a.page));
+    const index = counts.get(pageIndex) ?? 0; counts.set(pageIndex, index + 1);
+    return [annotationKey(a.ref), { id: annotationKey(a.ref), pageIndex, index }];
   }));
 }
-export function resolveTarget(target: AnnotationTarget, annotations: PdfAnnotationObject[]): PdfAnnotationObject {
-  const result = annotations.find(a => a.id === target.id && a.pageIndex === target.pageIndex)
-    ?? annotations.filter(a => a.pageIndex === target.pageIndex)[target.index];
-  if (!result) throw new Error('A draft annotation no longer matches the original PDF.');
-  return result;
+export async function buildDraft(doc: LocalDocumentHandle, baseVersion: string, revision: number,
+  baseline: DraftBaseline, snapshot?: DraftBaseline): Promise<NativeDocumentDraft> {
+  const current = snapshot ?? await captureBaseline(doc);
+  const previous = new Map(baseline.annotations.map(a => [annotationKey(a.ref), a]));
+  const present = new Set(current.annotations.map(a => annotationKey(a.ref)));
+  const targets = annotationTargets(baseline);
+  const changed = current.annotations.filter(a => JSON.stringify(a) !== JSON.stringify(previous.get(annotationKey(a.ref))));
+  // The native bundle closes references and reply threads, and deduplicates stamp resources.
+  const bundle = changed.length ? await doc.annotations.export({ refs: changed.map(a => a.ref), include: 'threads' }) : null;
+  const oldFields = new Map(baseline.fields.filter(f => fieldValueOf(f) !== null).map(f => [f.name, fieldValueOf(f)!]));
+  return { format: 'pdf.ts/swp', version: 1, engine: 3, baseVersion, revision, updatedAt: new Date().toISOString(),
+    targets: [...targets.values()], bundle,
+    removed: baseline.annotations.filter(a => !present.has(annotationKey(a.ref))).map(a => targets.get(annotationKey(a.ref))!),
+    formValues: Object.fromEntries(current.fields.filter(f => JSON.stringify(fieldValueOf(f)) !== JSON.stringify(oldFields.get(f.name))).filter(f => fieldValueOf(f) !== null).map(f => [f.name, fieldValueOf(f)!])) };
 }
-export function buildDraft(baseVersion: string, revision: number, baseline: DraftBaseline,
-  annotations: PdfAnnotationObject[], formValues: Record<string, string>): DocumentDraft {
-  const before = new Map(baseline.annotations.map(a => [a.id, a]));
-  const current = new Set(annotations.map(a => a.id));
-  const targets = annotationTargets(baseline.annotations);
-  return {
-    format: 'pdf.ts/swp', version: 1, baseVersion, revision, updatedAt: new Date().toISOString(),
-    targets: [...targets.values()],
-    upsert: annotations.filter(a => JSON.stringify(before.get(a.id)) !== JSON.stringify(a))
-      .map(annotation => ({ ...(targets.has(annotation.id) ? { target: targets.get(annotation.id)! } : {}), item: { annotation } })),
-    removed: baseline.annotations.filter(a => !current.has(a.id)).map(a => targets.get(a.id)!),
-    formValues: Object.fromEntries(Object.entries(formValues).filter(([key, value]) => baseline.formValues[key] !== value)),
+export async function restoreDraft(doc: LocalDocumentHandle, draft: DocumentDraft, baseline: DraftBaseline) {
+  if (draft.engine !== 3) return restoreLegacyDraft(doc, draft, baseline);
+  const currentTargets = annotationTargets(baseline);
+  const byPosition = new Map([...currentTargets].map(([key, t]) => [`${t.pageIndex}:${t.index}`, key]));
+  const byKey = new Map(baseline.annotations.map(a => [annotationKey(a.ref), a]));
+  const resolve = (t: AnnotationTarget) => {
+    const key = byPosition.get(`${t.pageIndex}:${t.index}`);
+    const a = key && byKey.get(key);
+    if (!a) throw new Error('A draft annotation no longer matches its original PDF.');
+    return a;
   };
+  const targets = new Map(draft.targets.map(t => [t.id, t]));
+  const replaced = new Map<string, Annotation>();
+  for (const t of draft.removed) { const a = resolve(t); replaced.set(annotationKey(a.ref), a); }
+  for (const item of draft.bundle?.items ?? []) {
+    const t = targets.get(annotationKey(item.data.ref));
+    if (t) { const a = resolve(t); replaced.set(annotationKey(a.ref), a); }
+  }
+  // One transaction deletes the old representations. Imports reconstruct native references,
+  // replies and appearance resources together, without SDK-private state or closure history.
+  if (replaced.size) await doc.apply({ ops: [...replaced.values()].filter(a => !a.reply?.to || !replaced.has(annotationKey(a.reply.to))).map(a => ({ type: 'annotations.delete', page: a.page, ref: a.ref })) });
+  if (draft.bundle) {
+    const result = await doc.annotations.import(draft.bundle, { pages: 'by-position' });
+    if (result.dropped.length) throw new Error('Some draft annotations could not be restored. The original PDF was kept.');
+  }
+  const fields = (await doc.forms.list()).fields;
+  for (const [name, value] of Object.entries(draft.formValues)) {
+    const field = fields.find(f => f.name === name);
+    if (!field) throw new Error(`Draft form field no longer exists: ${name}`);
+    await doc.forms.setValue(field.ref, value);
+  }
 }
 export function encodeDraft(draft: DocumentDraft): string {
-  return JSON.stringify(draft, function(key, value) {
-    const original = key ? this[key] : value;
-    if (original instanceof Date) return { $date: original.toISOString() };
-    if (original instanceof ArrayBuffer) {
-      const bytes = new Uint8Array(original);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return JSON.stringify(draft, (_key, value) => {
+    if (value instanceof Uint8Array) {
+      let binary = ''; for (let i = 0; i < value.length; i += 8192) binary += String.fromCharCode(...value.subarray(i, i + 8192));
       return { $bytes: btoa(binary) };
     }
     return value;
@@ -77,28 +87,17 @@ export function encodeDraft(draft: DocumentDraft): string {
 export function decodeDraft(text: string): DocumentDraft {
   const value = JSON.parse(text, (key, value) => {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Invalid draft property.');
-    if (value && typeof value === 'object') {
-      if (Object.keys(value).length === 1 && typeof value.$date === 'string') {
-        const date = new Date(value.$date);
-        if (!Number.isFinite(date.getTime())) throw new Error('Invalid draft date.');
-        return date;
-      }
-      if (Object.keys(value).length === 1 && typeof value.$bytes === 'string') return Uint8Array.from(atob(value.$bytes), c => c.charCodeAt(0)).buffer;
-    }
+    if (value && typeof value === 'object' && Object.keys(value).length === 1 && typeof value.$date === 'string') return new Date(value.$date);
+    if (value && typeof value === 'object' && Object.keys(value).length === 1 && typeof value.$bytes === 'string') return Uint8Array.from(atob(value.$bytes), c => c.charCodeAt(0));
     return value;
   });
-  if (!value || value.format !== 'pdf.ts/swp' || value.version !== 1 || typeof value.baseVersion !== 'string'
-    || !Number.isSafeInteger(value.revision) || value.revision < 0 || !Array.isArray(value.upsert)
-    || !Array.isArray(value.targets) || !Array.isArray(value.removed) || !value.formValues || typeof value.formValues !== 'object') {
+  if (!value || value.format !== 'pdf.ts/swp' || value.version !== 1 || (value.engine !== 3 && value.engine !== undefined) || typeof value.baseVersion !== 'string'
+    || !Number.isSafeInteger(value.revision) || value.revision < 0 || !Array.isArray(value.targets) || !Array.isArray(value.removed)
+    || !value.formValues || typeof value.formValues !== 'object' || (value.bundle && (value.bundle.format !== 'embedpdf/annotations' || value.bundle.version !== 1))) {
     throw new Error('This .swp file is not a supported pdf.ts draft.');
   }
-  const validTarget = (target: AnnotationTarget) => target && typeof target.id === 'string'
-    && Number.isSafeInteger(target.pageIndex) && target.pageIndex >= 0 && Number.isSafeInteger(target.index) && target.index >= 0;
-  for (const change of value.upsert) {
-    const a = change?.item?.annotation;
-    if (!a || typeof a.id !== 'string' || !Number.isSafeInteger(a.pageIndex) || a.pageIndex < 0
-      || !Number.isInteger(a.type) || !a.rect || (change.target && !validTarget(change.target))) throw new Error('Invalid draft annotation.');
-  }
-  if (!value.targets.every(validTarget) || !value.removed.every(validTarget) || !Object.values(value.formValues).every(v => typeof v === 'string')) throw new Error('Invalid draft edits.');
+  const validTarget = (target: AnnotationTarget) => target && typeof target.id === 'string' && Number.isSafeInteger(target.pageIndex) && target.pageIndex >= 0 && Number.isSafeInteger(target.index) && target.index >= 0;
+  if (!value.targets.every(validTarget) || !value.removed.every(validTarget)) throw new Error('Invalid draft annotation target.');
+  if (value.engine === undefined && (!Array.isArray(value.upsert) || value.upsert.some((c: any) => !c?.item?.annotation || !Number.isSafeInteger(c.item.annotation.pageIndex) || c.item.annotation.pageIndex < 0 || (c.target && !validTarget(c.target))))) throw new Error('Invalid legacy draft annotations.');
   return value as DocumentDraft;
 }

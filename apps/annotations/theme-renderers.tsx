@@ -1,290 +1,101 @@
-import {
-  PdfAnnotationSubtype,
-  PdfBlendMode,
-  blendModeToCss,
-  getContrastStrokeColor,
-  type PdfAnnotationObject,
-  type PdfHighlightAnnoObject,
-  type PdfStrikeOutAnnoObject,
-  type PdfTextAnnoObject,
-  type PdfUnderlineAnnoObject,
-} from '@embedpdf/models';
-import { createRenderer, type AnnotationRendererProps, type CustomAnnotationRenderer } from '@embedpdf/plugin-annotation/react';
-import { cloneElement, type ReactElement, type ComponentProps } from 'react';
+import { useRichTextEditor, type AnnotationRenderer, type AnnotationRendererProps } from '@embedpdf/react/annotation';
+import { fromDTO, initialModel, pageItems, scene, type SceneNode } from '@embedpdf/core-annotation';
+import type { CSSProperties } from 'react';
+import { annotationKey } from '@embedpdf/core';
 import { MessageSquareMore } from 'lucide-react';
 import { useStore } from 'zustand';
 import { isDarkViewerTheme, viewerThemeStore } from '../theme/theme';
-import { getAnnotationDisplayColors, getThemeAnnotationColor } from './theme-palette';
-import {
-  getThemeHighlightPolicy,
-  VECTOR_ANNOTATION_OPACITY,
-  VECTOR_ANNOTATION_STROKE_WIDTH,
-  hasAutoHighlightColor,
-} from './annotations';
+import { ANNOTATION_PALETTES, getAnnotationDisplayColors, getThemeAnnotationColor } from './theme-palette';
+import { getAnnotationRects, getThemeHighlightPolicy, hasAutoHighlightColor, VECTOR_ANNOTATION_OPACITY, VECTOR_ANNOTATION_STROKE_WIDTH } from './annotations';
 import styles from './theme-renderers.module.css';
 
-export const themeAnnotationColorRenderer: CustomAnnotationRenderer<PdfAnnotationObject> = ({
-  annotation,
-  children,
-}) => <ThemeAnnotationColors annotation={annotation}>{children}</ThemeAnnotationColors>;
-
-function ThemeAnnotationColors({ annotation, children }: {
-  annotation: PdfAnnotationObject;
-  children: ReactElement;
-}) {
+function ThemeMarkup({ annotation, frame }: AnnotationRendererProps) {
   const theme = useStore(viewerThemeStore, (state) => state.theme);
-  // These renderers already resolve their colors from the theme.
-  if (annotation.type === PdfAnnotationSubtype.HIGHLIGHT
-    || annotation.type === PdfAnnotationSubtype.TEXT
-    || annotation.type === PdfAnnotationSubtype.UNDERLINE
-    || annotation.type === PdfAnnotationSubtype.STRIKEOUT) return children;
-  const display = getAnnotationDisplayColors(annotation, theme);
-  const mapped = display !== annotation;
-  const element = children as ReactElement<Record<string, unknown>>;
-  const tracked = element.props.annotation as { object: PdfAnnotationObject } | undefined;
-  // EmbedPDF's geometry renderers take colors directly; FreeText takes a
-  // tracked annotation. Change only visual props, retaining all edit handlers.
-  return <span className={styles.root} data-themed={mapped ? 'true' : undefined}>
-    {mapped ? cloneElement(element, {
-      ...getAnnotationDisplayColors(element.props, theme),
-      ...(tracked ? { annotation: { ...tracked, object: display } } : {}),
-      appearanceActive: false,
-    }) : children}
-  </span>;
-}
-
-function isComment(annotation: PdfAnnotationObject): annotation is PdfTextAnnoObject {
-  return annotation.type === PdfAnnotationSubtype.TEXT && !annotation.inReplyToId;
-}
-
-export const themeCommentRenderer = createRenderer<PdfTextAnnoObject>({
-  id: 'themeComment',
-  matches: (annotation): annotation is PdfTextAnnoObject => (
-    isComment(annotation) && getThemeAnnotationColor(annotation.strokeColor ?? annotation.color, 'light') !== null
-  ),
-  useAppearanceStream: false,
-  interactionDefaults: {
-    isDraggable: true,
-    isResizable: false,
-    isRotatable: false,
-  },
-  render: (props) => <ThemeComment {...props} />,
-});
-
-function ThemeComment({ currentObject, isSelected, onClick }: AnnotationRendererProps<PdfTextAnnoObject>) {
-    const theme = useStore(viewerThemeStore, (state) => state.theme);
-    const color = getThemeAnnotationColor(currentObject.strokeColor ?? currentObject.color, theme)
-      ?? currentObject.strokeColor ?? currentObject.color ?? getThemeHighlightPolicy().color;
-    const lineColor = getContrastStrokeColor(color);
-
-    return <div
-      onPointerDown={onClick}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        zIndex: 2,
-        pointerEvents: !onClick || isSelected ? 'none' : 'auto',
-        cursor: isSelected ? 'move' : onClick ? 'pointer' : 'default',
-      }}
-    >
-      <MessageSquareMore
-        aria-hidden="true"
-        size="100%"
-        fill={color}
-        color={lineColor}
-        strokeWidth={1.25}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          opacity: currentObject.opacity ?? 1,
-          pointerEvents: 'none',
-        }}
-      />
-    </div>;
-}
-
-function MarkupCommentBadge({ annotation, scale }: {
-  annotation: PdfHighlightAnnoObject | PdfUnderlineAnnoObject | PdfStrikeOutAnnoObject;
-  scale: number;
-}) {
-  if (!annotation.contents?.trim()) return null;
-  const segment = annotation.segmentRects.at(-1) ?? annotation.rect;
-  return <button
-    type="button"
-    className={styles.commentBadge}
-    data-annotation-comment-id={annotation.id}
-    aria-label="Edit annotation comment"
-    title={annotation.contents}
-    onPointerDown={(event) => event.stopPropagation()}
-    style={{
-      left: (segment.origin.x + segment.size.width - annotation.rect.origin.x) * scale + 3,
-      top: (segment.origin.y - annotation.rect.origin.y) * scale,
-    }}
-  ><MessageSquareMore size={14} aria-hidden="true" /></button>;
-}
-
-function isHighlight(annotation: PdfAnnotationObject): annotation is PdfHighlightAnnoObject {
-  return annotation.type === PdfAnnotationSubtype.HIGHLIGHT;
-}
-
-function getHighlightAppearance(annotation: PdfHighlightAnnoObject) {
-  const blendMode = annotation.blendMode ?? PdfBlendMode.Multiply;
-  const opacity = annotation.opacity ?? 1;
-  const policy = getThemeHighlightPolicy();
-  return blendMode === PdfBlendMode.Multiply && opacity === 1
-    ? { blendMode: policy.blendMode, opacity: policy.opacity }
-    : { blendMode, opacity };
-}
-
-export const themeHighlightRenderer = createRenderer<PdfHighlightAnnoObject>({
-  id: 'themeHighlight',
-  matches: (annotation): annotation is PdfHighlightAnnoObject => (
-    isHighlight(annotation)
-  ),
-  useAppearanceStream: false,
-  zIndex: 0,
-  defaultBlendMode: PdfBlendMode.Multiply,
-  containerStyle: (annotation) => ({
-    mixBlendMode: isDarkViewerTheme(viewerThemeStore.getState().theme)
-      ? 'normal'
-      : blendModeToCss(getHighlightAppearance(annotation).blendMode),
-  }),
-  interactionDefaults: {
-    isDraggable: false,
-    isResizable: false,
-    isRotatable: false,
-  },
-  render: (props) => <ThemeHighlight {...props} />,
-});
-
-function ThemeHighlight({ currentObject, scale, onClick }: AnnotationRendererProps<PdfHighlightAnnoObject>) {
-    const theme = useStore(viewerThemeStore, (state) => state.theme);
-    const dark = isDarkViewerTheme(theme);
-    const policy = getThemeHighlightPolicy();
-    const { opacity } = getHighlightAppearance(currentObject);
-    const color = hasAutoHighlightColor(currentObject)
-      ? policy.color
-      : getThemeAnnotationColor(currentObject.strokeColor ?? currentObject.color, theme)
-        ?? currentObject.strokeColor ?? currentObject.color ?? policy.color;
-
-    return <>
-      {currentObject.segmentRects.map((segment, index) => <div
-        key={index}
-        onPointerDown={onClick}
-        style={{
-          position: 'absolute',
-          left: (segment.origin.x - currentObject.rect.origin.x) * scale,
-          top: (segment.origin.y - currentObject.rect.origin.y) * scale,
-          width: segment.size.width * scale,
-          height: segment.size.height * scale,
-          background: dark ? 'transparent' : color,
-          opacity: dark ? 1 : opacity,
-          pointerEvents: onClick ? 'auto' : 'none',
-          cursor: onClick ? 'pointer' : 'default',
-          zIndex: onClick ? 1 : undefined,
-        }}
-      >
-        {dark ? <div style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: VECTOR_ANNOTATION_STROKE_WIDTH * scale,
-          borderRadius: VECTOR_ANNOTATION_STROKE_WIDTH * scale / 2,
-          background: color,
-          opacity: VECTOR_ANNOTATION_OPACITY,
-          pointerEvents: 'none',
-        }} /> : null}
-      </div>)}
-      <MarkupCommentBadge annotation={currentObject} scale={scale} />
-    </>;
-}
-
-type ThemeLineMarkupProps = {
-  annotation: PdfUnderlineAnnoObject | PdfStrikeOutAnnoObject;
-  placement: 'bottom' | 'middle';
-  scale: number;
-  onClick?: ComponentProps<'div'>['onPointerDown'];
-};
-
-function ThemeLineMarkup({ annotation, placement, scale, onClick }: ThemeLineMarkupProps) {
-  const theme = useStore(viewerThemeStore, (state) => state.theme);
-  // Keep strikeout legible at fit-page zoom without making it a solid band
-  // across the text. Underlines retain their existing visual weight.
-  const thickness = placement === 'middle'
-    ? Math.max(1.5, 1.75 * scale)
-    : VECTOR_ANNOTATION_STROKE_WIDTH * scale;
+  const dark = isDarkViewerTheme(theme);
+  const policy = getThemeHighlightPolicy(theme);
+  const rawColor = 'color' in annotation ? annotation.color : null;
+  const color = hasAutoHighlightColor(annotation) ? policy.color : getThemeAnnotationColor(rawColor, theme) ?? rawColor ?? policy.color;
+  const rects = getAnnotationRects(annotation);
+  const line = annotation.subtype !== 'highlight' || dark;
+  const last = rects.at(-1) ?? annotation.rect;
   return <>
-    {annotation.segmentRects.map((segment, index) => <div
-      key={index}
-      onPointerDown={onClick}
-      style={{
-        position: 'absolute',
-        left: (segment.origin.x - annotation.rect.origin.x) * scale,
-        top: (segment.origin.y - annotation.rect.origin.y) * scale,
-        width: segment.size.width * scale,
-        height: segment.size.height * scale,
-        background: 'transparent',
-        pointerEvents: onClick ? 'auto' : 'none',
-        cursor: onClick ? 'pointer' : 'default',
-        zIndex: onClick ? 1 : 0,
-      }}
-    >
-      <div style={{
-        position: 'absolute',
-        left: 0,
-        width: '100%',
-        height: thickness,
-        background: getThemeAnnotationColor(annotation.strokeColor ?? annotation.color, theme)
-          ?? annotation.strokeColor ?? annotation.color,
-        borderRadius: thickness / 2,
-        opacity: annotation.opacity ?? VECTOR_ANNOTATION_OPACITY,
-        pointerEvents: 'none',
-        ...(placement === 'bottom'
-          ? { bottom: 0 }
-          : { top: '50%', transform: 'translateY(-50%)' }),
-      }} />
-    </div>)}
-    <MarkupCommentBadge annotation={annotation} scale={scale} />
+    {rects.map((rect, index) => <div key={index} style={{
+      position: 'absolute', left: rect.x - annotation.rect.x, top: rect.y - annotation.rect.y,
+      width: rect.width, height: rect.height, background: line ? 'transparent' : color,
+      opacity: line ? 1 : ('opacity' in annotation ? annotation.opacity : 1),
+      mixBlendMode: line ? 'normal' : 'multiply',
+    }}>{line ? <div style={{ position: 'absolute', left: 0, right: 0,
+      ...(annotation.subtype === 'strikeout' ? { top: '50%', transform: 'translateY(-50%)' } : { bottom: 0 }),
+      height: annotation.subtype === 'strikeout' ? Math.max(1.5 / frame.scale, 1.75) : VECTOR_ANNOTATION_STROKE_WIDTH,
+      borderRadius: 1, background: color, opacity: 'opacity' in annotation ? annotation.opacity : VECTOR_ANNOTATION_OPACITY,
+    }} /> : null}</div>)}
+    {annotation.contents?.trim() ? <button type="button" className={styles.commentBadge}
+      data-annotation-comment-id={annotationKey(annotation.ref)} aria-label="Edit annotation comment" title={annotation.contents}
+      onPointerDown={(event) => event.stopPropagation()}
+      style={{ left: last.x + last.width - annotation.rect.x + 3 / frame.scale, top: last.y - annotation.rect.y,
+        transform: `scale(${1 / frame.scale})`, transformOrigin: 'top left' }}>
+      <MessageSquareMore size={14} aria-hidden="true" />
+    </button> : null}
   </>;
 }
 
-export const themeUnderlineRenderer = createRenderer<PdfUnderlineAnnoObject>({
-  id: 'themeUnderline',
-  matches: (annotation): annotation is PdfUnderlineAnnoObject => (
-    annotation.type === PdfAnnotationSubtype.UNDERLINE
-  ),
-  useAppearanceStream: false,
-  zIndex: 0,
-  interactionDefaults: {
-    isDraggable: false,
-    isResizable: false,
-    isRotatable: false,
-  },
-  render: ({ currentObject, scale, onClick }) => <ThemeLineMarkup
-    annotation={currentObject}
-    placement="bottom"
-    scale={scale}
-    onClick={onClick}
-  />,
-});
+function ThemeComment({ annotation }: AnnotationRendererProps) {
+  const theme = useStore(viewerThemeStore, (state) => state.theme);
+  const rawColor = 'color' in annotation ? annotation.color : null;
+  const color = getThemeAnnotationColor(rawColor, theme) ?? rawColor ?? getThemeHighlightPolicy(theme).color;
+  return <MessageSquareMore width="100%" height="100%" fill={color} color={isDarkViewerTheme(theme) ? '#202020' : '#fff'} strokeWidth={1.5} />;
+}
 
-export const themeStrikeoutRenderer = createRenderer<PdfStrikeOutAnnoObject>({
-  id: 'themeStrikeout',
-  matches: (annotation): annotation is PdfStrikeOutAnnoObject => (
-    annotation.type === PdfAnnotationSubtype.STRIKEOUT
-  ),
-  useAppearanceStream: false,
-  zIndex: 0,
-  interactionDefaults: {
-    isDraggable: false,
-    isResizable: false,
-    isRotatable: false,
-  },
-  render: ({ currentObject, scale, onClick }) => <ThemeLineMarkup
-    annotation={currentObject}
-    placement="middle"
-    scale={scale}
-    onClick={onClick}
-  />,
-});
+function SceneShape({ node }: { node: SceneNode }) {
+  const paint = node.paint;
+  const props = { fill: paint.fill ?? 'none', stroke: paint.stroke ?? 'none', strokeWidth: paint.width,
+    opacity: paint.opacity, strokeDasharray: paint.dash?.join(' '), strokeLinecap: paint.lineCap,
+    strokeLinejoin: paint.join, fillRule: paint.fillRule,
+    style: { mixBlendMode: paint.blend } as CSSProperties };
+  switch (node.kind) {
+    case 'rect': return <rect {...node.rect} {...props} />;
+    case 'ellipse': return <ellipse cx={node.rect.x + node.rect.width / 2} cy={node.rect.y + node.rect.height / 2} rx={node.rect.width / 2} ry={node.rect.height / 2} {...props} />;
+    case 'line': return <line x1={node.a.x} y1={node.a.y} x2={node.b.x} y2={node.b.y} {...props} />;
+    case 'poly': return node.closed ? <polygon points={node.points.map((p) => `${p.x},${p.y}`).join(' ')} {...props} /> : <polyline points={node.points.map((p) => `${p.x},${p.y}`).join(' ')} {...props} />;
+    case 'path': return <path d={node.d} {...props} />;
+    case 'text': case 'textRun': return <text x={node.at.x} y={node.at.y} fontSize={node.fontSize} fontFamily={node.fontFamily} {...props}>{node.text}</text>;
+  }
+}
+
+/** The v3 portable scene is public and contains only drawing data. Theme
+ * copies never enter the editing model or an engine mutation. */
+function ThemeGeometry({ annotation, native }: AnnotationRendererProps) {
+  const theme = useStore(viewerThemeStore, (state) => state.theme);
+  const display = getAnnotationDisplayColors(annotation, theme);
+  if (display === annotation && annotation.subtype !== 'free-text') return <>{native}</>;
+  const record = fromDTO(display);
+  const item = pageItems({ ...initialModel, byId: { [record.id]: record }, order: [record.id] }, annotation.page)[0];
+  if (!item) return <>{native}</>;
+  return <svg viewBox={`${item.box.x} ${item.box.y} ${item.box.width} ${item.box.height}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+    {scene(item).map((node, index) => <SceneShape key={index} node={node} />)}
+  </svg>;
+}
+
+function ThemeFreeText(props: AnnotationRendererProps) {
+  const theme = useStore(viewerThemeStore, (state) => state.theme);
+  // The editor always receives the original record. Text fill is a display
+  // property, separate from the color declarations the editor serializes.
+  const editor = useRichTextEditor(props.annotation);
+  const original = props.annotation.subtype === 'free-text' ? props.annotation.richText?.body.color : null;
+  const color = getThemeAnnotationColor(original, theme) ?? original ?? undefined;
+  const selector = `[data-annotation-text-theme="${theme}"] [style*="color:"]`;
+  const rules = [`${selector}{-webkit-text-fill-color:currentColor}`];
+  for (const source of new Set(Object.values(ANNOTATION_PALETTES).flat())) {
+    const rgb = [1, 3, 5].map((offset) => parseInt(source.slice(offset, offset + 2), 16)).join(', ');
+    const target = getThemeAnnotationColor(source, theme);
+    rules.push(`[data-annotation-text-theme="${theme}"] [style*="color: ${source}"],[data-annotation-text-theme="${theme}"] [style*="color: rgb(${rgb})"]{-webkit-text-fill-color:${target}}`);
+  }
+  return <><ThemeGeometry {...props} /><style>{rules.join('')}</style><div data-annotation-text-theme={theme} ref={editor.ref} style={{ ...editor.style, WebkitTextFillColor: color }} /></>;
+}
+
+export const themeAnnotationRenderers: AnnotationRenderer[] = [
+  { id: 'theme-markup', for: (annotation) => ['highlight', 'underline', 'strikeout'].includes(annotation.subtype), component: ThemeMarkup },
+  { id: 'theme-comment', for: (annotation) => annotation.subtype === 'text' && !annotation.reply, component: ThemeComment },
+  { id: 'theme-free-text', for: (annotation) => annotation.subtype === 'free-text', component: ThemeFreeText },
+  { id: 'theme-geometry', for: (annotation) => ['square', 'circle', 'line', 'polyline', 'polygon', 'ink', 'squiggly'].includes(annotation.subtype), component: ThemeGeometry },
+];

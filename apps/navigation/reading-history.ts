@@ -1,5 +1,5 @@
-import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode } from '@embedpdf/plugin-spread';
+import { ScrollStrategy } from '../viewer/viewer-stage';
+import { SpreadMode } from '../viewer/viewer-stage';
 import { platform } from '#platform';
 import type { ViewerStage } from '../viewer/viewer-stage';
 

@@ -1,13 +1,17 @@
-import type { PluginRegistry } from '@embedpdf/core';
-import { ScrollStrategy, type ScrollBehavior, type ScrollCapability } from '@embedpdf/plugin-scroll';
-import { SpreadMode, type SpreadCapability } from '@embedpdf/plugin-spread';
-import { ZoomMode, type ZoomCapability, type ZoomLevel } from '@embedpdf/plugin-zoom';
-import type { InteractionManagerCapability } from '@embedpdf/plugin-interaction-manager';
-import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import type { Kernel } from '@embedpdf/core';
+import type { Rect } from '@embedpdf/core-geometry';
+import { StageToken, type ScrollBehaviorKind } from '@embedpdf/plugin-stage';
+import { InteractionToken, samplePointOn, type PointerSample } from '@embedpdf/plugin-interaction/contract/host';
 import { READING_REGION_MODE, type ReadingRegion } from '../shared/reading-region';
 import { StageScrollAdapter } from '../renderer/stage-scroll-adapter';
-import type { Rect } from '@embedpdf/models';
-import { getPluginCapability } from '../shared/utils';
+
+export const ScrollStrategy = { Vertical: 'vertical', Horizontal: 'horizontal' } as const;
+export type ScrollStrategy = typeof ScrollStrategy[keyof typeof ScrollStrategy];
+export const SpreadMode = { None: 'none', Odd: 'odd', Even: 'even' } as const;
+export type SpreadMode = typeof SpreadMode[keyof typeof SpreadMode];
+export const ZoomMode = { FitPage: 'fit-page', FitWidth: 'fit-width' } as const;
+export type ZoomLevel = number | typeof ZoomMode[keyof typeof ZoomMode];
+type ScrollBehavior = ScrollBehaviorKind;
 
 export type StageSnapshot = Readonly<{
   mode: 'reading' | 'presentation';
@@ -16,17 +20,18 @@ export type StageSnapshot = Readonly<{
   strategy: ScrollStrategy;
   spread: SpreadMode;
   selectingRegion: boolean;
+  regionPreview: { pageIndex: number; rect: Rect } | null;
 }>;
 
 export const EMPTY_STAGE_SNAPSHOT: StageSnapshot = {
   mode: 'reading', pageNumber: 1, totalPages: 0,
   strategy: ScrollStrategy.Vertical, spread: SpreadMode.None,
-  selectingRegion: false,
+  selectingRegion: false, regionPreview: null,
 };
 
 /**
  * Owns the viewer's spatial state and navigation vocabulary.
- * EmbedPDF v2 capabilities remain the source of truth for layout and zoom;
+ * The native v3 stage remains the source of truth for layout and zoom;
  * this stage provides one lifecycle and one coherent snapshot to the app.
  */
 export class ViewerStage {
@@ -38,7 +43,7 @@ export class ViewerStage {
   private readonly scroll: StageScrollAdapter;
 
   constructor(
-    private readonly registry: PluginRegistry,
+    private readonly registry: Kernel,
     readonly documentId: string,
     scroll = new StageScrollAdapter(registry, documentId),
   ) {
@@ -59,7 +64,7 @@ export class ViewerStage {
   }
 
   private get spread() {
-    return getPluginCapability<SpreadCapability>(this.registry, 'spread')?.forDocument(this.scroll.documentId);
+    return this.registry.tryCapability(StageToken, this.documentId);
   }
 
   attachSurface(element: HTMLElement | null) {
@@ -98,7 +103,7 @@ export class ViewerStage {
   setZoom(level: ZoomLevel) {
     if (this.state.mode !== 'reading') return;
     this.scroll.cancelPendingNavigation();
-    this.preserveZoom(() => getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.documentId).requestZoom(level));
+    this.preserveZoom(() => this.spread?.zoomTo(typeof level === 'number' ? level : { mode: level }));
   }
 
   preserveZoom(update: () => void, focus = this.scroll.getViewportCenter()) {
@@ -106,17 +111,17 @@ export class ViewerStage {
   }
 
   stepZoom(direction: -1 | 1) {
-    const zoom = getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.documentId);
+    const zoom = this.spread;
     this.preserveZoom(() => direction > 0 ? zoom?.zoomIn() : zoom?.zoomOut());
   }
 
   rotate() {
-    const rotate = getPluginCapability<RotateCapability>(this.registry, 'rotate')?.forDocument(this.documentId);
+    const rotate = this.spread;
     if (!rotate) return;
-    if (this.state.mode === 'presentation') return rotate.rotateForward();
+    if (this.state.mode === 'presentation') return rotate.rotateViewBy(90);
     this.transitioning = true;
     try {
-      this.scroll.preserveView(() => rotate.rotateForward(), this.scroll.getViewportCenter());
+      this.scroll.preserveView(() => rotate.rotateViewBy(90), this.scroll.getViewportCenter());
     } finally {
       this.transitioning = false;
     }
@@ -129,18 +134,18 @@ export class ViewerStage {
   beginRegionSelection() {
     if (this.state.mode !== 'reading') return;
     if (this.state.selectingRegion) return this.cancelRegionSelection();
-    const interaction = getPluginCapability<InteractionManagerCapability>(this.registry, 'interaction-manager');
+    const interaction = this.registry.tryCapability(InteractionToken, this.documentId);
     if (!interaction) return;
     this.scroll.cancelPendingNavigation();
     this.publish({ selectingRegion: true });
-    interaction.forDocument(this.documentId).activate(READING_REGION_MODE);
+    interaction.activateTool(READING_REGION_MODE);
     this.focusViewportAfterAction();
   }
 
   cancelRegionSelection() {
-    this.publish({ selectingRegion: false });
-    const scope = getPluginCapability<InteractionManagerCapability>(this.registry, 'interaction-manager')?.forDocument(this.documentId);
-    if (scope?.getActiveMode() === READING_REGION_MODE) scope.activateDefaultMode();
+    this.publish({ selectingRegion: false, regionPreview: null });
+    const scope = this.registry.tryCapability(InteractionToken, this.documentId);
+    if (scope?.getActiveToolId() === READING_REGION_MODE) scope.activateDefaultTool();
   }
 
   completeRegionSelection(pageIndex: number, rect: Rect) {
@@ -178,22 +183,64 @@ export class ViewerStage {
   }
 
   install() {
-    const interaction = getPluginCapability<InteractionManagerCapability>(this.registry, 'interaction-manager');
-    interaction?.registerMode({ id: READING_REGION_MODE, scope: 'page', exclusive: true, cursor: 'crosshair' });
+    let current: ReturnType<Kernel['tryCapability']> = null;
+    let dispose = () => {};
+    const connect = () => {
+      const ready = this.registry.tryCapability(StageToken, this.documentId);
+      if (ready === current) return;
+      dispose(); current = ready;
+      dispose = ready ? this.installReady() : () => {};
+    };
+    const unsubscribe = this.registry.subscribe?.(connect) ?? (() => {});
+    connect();
+    return () => { unsubscribe(); dispose(); };
+  }
+
+  private installReady() {
+    const interaction = this.registry.tryCapability(InteractionToken, this.documentId);
+    let origin: { pageIndex: number; x: number; y: number } | null = null;
+    const preview = (event: PointerSample) => {
+      if (!origin) return null;
+      const page = this.registry.documents.listPages(this.documentId)[origin.pageIndex];
+      const point = page && samplePointOn(event, page.ref);
+      if (!page || !point) return null;
+      const x = Math.max(0, Math.min(page.size.width, point.x));
+      const y = Math.max(0, Math.min(page.size.height, point.y));
+      return { pageIndex: origin.pageIndex, rect: { x: Math.min(origin.x, x), y: Math.min(origin.y, y), width: Math.abs(x - origin.x), height: Math.abs(y - origin.y) } };
+    };
+    const unregisterRegionTool = interaction?.registerTool({
+      id: READING_REGION_MODE, cursor: 'crosshair', touch: 'draw',
+    });
+    const unregisterRegionHandler = interaction?.registerHandler({
+      id: READING_REGION_MODE, priority: 100, enabledFor: tool => tool.id === READING_REGION_MODE,
+      onPointerDown: event => {
+        const pageIndex = this.registry.documents.listPages(this.documentId).findIndex(p => p.ref.objectNumber === event.page?.ref.objectNumber);
+        if (!this.state.selectingRegion || pageIndex < 0) return false;
+        if (!event.page) return false;
+        origin = { pageIndex, ...event.page.point }; return true;
+      },
+      onPointerMove: event => this.publish({ regionPreview: preview(event) }),
+      onPointerCancel: () => { origin = null; this.publish({ regionPreview: null }); },
+      onPointerUp: event => {
+        const region = preview(event); origin = null;
+        this.publish({ regionPreview: null });
+        if (region && Math.min(region.rect.width, region.rect.height) * (this.spread?.getZoomLevel() ?? 1) >= 5) this.completeRegionSelection(region.pageIndex, region.rect);
+      },
+    });
     const sync = () => {
       if (this.transitioning) return;
       this.publish({
         totalPages: this.scroll.getTotalPages(),
         ...(this.state.mode === 'reading' ? { pageNumber: this.scroll.getCurrentPage() } : {}),
         strategy: this.scroll.getStrategy(),
-        spread: this.spread?.getSpreadMode() ?? SpreadMode.None,
+        spread: this.spread?.getSettings().spread ?? SpreadMode.None,
       });
     };
     this.cleanup = [
       this.scroll.onPageChange(sync), this.scroll.onLayoutReady(sync),
-      this.scroll.onStrategyChange(sync), this.spread?.onSpreadChange(sync) ?? (() => {}),
-      interaction?.forDocument(this.documentId).onModeChange((mode) => {
-        if (mode !== READING_REGION_MODE && this.state.selectingRegion) this.publish({ selectingRegion: false });
+      this.scroll.onStrategyChange(sync), this.spread?.onSettingsChanged(sync) ?? (() => {}),
+      interaction?.onToolChanged(({ toolId }) => {
+        if (toolId !== READING_REGION_MODE && this.state.selectingRegion) this.publish({ selectingRegion: false, regionPreview: null });
       }) ?? (() => {}),
     ];
     sync();
@@ -201,6 +248,8 @@ export class ViewerStage {
       this.cancelRegionSelection();
       this.scroll.cancelPendingNavigation();
       this.cleanup.splice(0).forEach((dispose) => dispose());
+      unregisterRegionHandler?.();
+      unregisterRegionTool?.();
     };
   }
 
@@ -257,18 +306,16 @@ export class ViewerStage {
     this.transitioning = true;
     try {
       this.scroll.preserveView(() => {
-        this.spread?.setSpreadMode(spread);
-        getPluginCapability<ScrollCapability>(this.registry, 'scroll')
-          ?.setScrollStrategy(strategy, this.scroll.documentId);
-        const zoom = getPluginCapability<ZoomCapability>(this.registry, 'zoom')?.forDocument(this.scroll.documentId);
+        this.spread?.updateSettings({ spread, layout: strategy });
+        const zoom = this.spread;
         if (strategy === ScrollStrategy.Horizontal) {
           const fit = this.getFitScales();
-          if (fit && fit.height > 0) zoom?.requestZoom(fit.height);
-        } else if (spread !== SpreadMode.None) zoom?.requestZoom(ZoomMode.FitWidth);
+          if (fit && fit.height > 0) zoom?.zoomTo(fit.height);
+        } else if (spread !== SpreadMode.None) zoom?.zoomTo({ mode: ZoomMode.FitWidth });
       });
     } finally {
       this.transitioning = false;
-      this.publish({ strategy: this.scroll.getStrategy(), spread: this.spread?.getSpreadMode() ?? SpreadMode.None });
+      this.publish({ strategy: this.scroll.getStrategy(), spread: this.spread?.getSettings().spread ?? SpreadMode.None });
     }
   }
 }

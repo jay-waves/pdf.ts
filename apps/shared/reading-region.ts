@@ -1,4 +1,4 @@
-import type { Rect, Size } from '@embedpdf/models';
+import type { Rect, Size } from '@embedpdf/core-geometry';
 
 /** Unrotated page fractions, shared by every page in a document. */
 export type ReadingRegion = Readonly<{ left: number; top: number; right: number; bottom: number }>;
@@ -12,20 +12,20 @@ export function isReadingRegion(value: unknown): value is ReadingRegion {
 }
 
 export function normalizeReadingRegion(rect: Rect, size: Size): ReadingRegion | null {
-  if (![size.width, size.height, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height].every(Number.isFinite)
+  if (![size.width, size.height, rect.x, rect.y, rect.width, rect.height].every(Number.isFinite)
     || !(size.width > 0 && size.height > 0)) return null;
   const clamp = (value: number) => Math.max(0, Math.min(1, value));
   const region = {
-    left: clamp(rect.origin.x / size.width), top: clamp(rect.origin.y / size.height),
-    right: clamp((rect.origin.x + rect.size.width) / size.width),
-    bottom: clamp((rect.origin.y + rect.size.height) / size.height),
+    left: clamp(rect.x / size.width), top: clamp(rect.y / size.height),
+    right: clamp((rect.x + rect.width) / size.width),
+    bottom: clamp((rect.y + rect.height) / size.height),
   };
   return isReadingRegion(region) ? region : null;
 }
 
 export function readingRegionRect(region: ReadingRegion, size: Size): Rect {
   return {
-    origin: { x: region.left * size.width, y: region.top * size.height },
-    size: { width: (region.right - region.left) * size.width, height: (region.bottom - region.top) * size.height },
+    x: region.left * size.width, y: region.top * size.height,
+    width: (region.right - region.left) * size.width, height: (region.bottom - region.top) * size.height,
   };
 }

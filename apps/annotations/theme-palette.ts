@@ -32,7 +32,7 @@ export function getThemeAnnotationColor(color: unknown, theme: ViewerTheme) {
 /** A display-only copy; never pass this object to annotation update commands. */
 export function getAnnotationDisplayColors<T extends object>(annotation: T, theme: ViewerTheme): T {
   let result = annotation;
-  for (const field of ['strokeColor', 'color', 'fontColor', 'backgroundColor'] as const) {
+  for (const field of ['color', 'interiorColor', 'textColor', 'strokeColor', 'fontColor', 'backgroundColor'] as const) {
     const value = (annotation as Record<string, unknown>)[field];
     const color = getThemeAnnotationColor(value, theme);
     if (color && color !== value) {

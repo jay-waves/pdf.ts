@@ -1,7 +1,7 @@
 import { RadioGroup } from 'radix-ui';
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { TrackedAnnotation } from '@embedpdf/plugin-annotation';
+import type { Kernel } from '@embedpdf/core';
+import type { Annotation } from '@embedpdf/plugin-annotation';
 import { useStore } from 'zustand';
 import { viewerThemeStore } from '../theme/theme';
 import { ANNOTATION_PALETTES, getAnnotationPaletteIndex, getDefaultAnnotationColor } from './theme-palette';
@@ -24,7 +24,7 @@ interface PaletteSnapshot {
   activeTool: AnnotationToolLike | null;
   contextTool: AnnotationToolLike | null;
   defaults: Record<string, unknown>;
-  selectedAnnotations: TrackedAnnotation[];
+  selectedAnnotations: readonly Annotation[];
 }
 
 const EMPTY_SNAPSHOT: PaletteSnapshot = {
@@ -36,10 +36,12 @@ const EMPTY_SNAPSHOT: PaletteSnapshot = {
 
 function getAnnotationValues(
   defaults: Record<string, unknown>,
-  selectedAnnotations: TrackedAnnotation[],
-) {
-  const selected = (selectedAnnotations[0]?.object ?? {}) as unknown as Record<string, unknown>;
-  return { ...selected, ...defaults };
+  selectedAnnotations: readonly Annotation[],
+): Record<string, unknown> {
+  const selected = (selectedAnnotations[0] ?? {}) as unknown as Record<string, unknown>;
+  const values = { ...selected, ...defaults };
+  const richText = values.richText as { body?: { color?: string } } | undefined;
+  return richText ? { ...values, textColor: richText.body?.color } : values;
 }
 
 export function ColorPalette({
@@ -48,15 +50,15 @@ export function ColorPalette({
   open,
   onClose,
 }: {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   documentId?: string | null;
   open: boolean;
   onClose(): void;
 }) {
-  const capability = getAnnotationCapability(registry);
+  const capability = getAnnotationCapability(registry, documentId);
   const theme = useStore(viewerThemeStore, (state) => state.theme);
   const [snapshot, setSnapshot] = useState<PaletteSnapshot>(EMPTY_SNAPSHOT);
-  const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('strokeColor');
+  const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('color');
   const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;
 
   useEffect(() => {
@@ -67,11 +69,11 @@ export function ColorPalette({
     }
 
     const sync = () => {
-      const active = scoped.scope.getActiveTool();
-      const resolvedActive = active?.id ? scoped.capability.getTool(active.id) ?? active : null;
-      const selected = scoped.scope.getSelectedAnnotations();
+      const active = scoped.interaction?.getActiveToolId();
+      const resolvedActive = active ? scoped.scope.tools.get(active) : null;
+      const selected = scoped.scope.selection.getSelected();
       const context = resolvedActive ?? getCommonAnnotationTool(scoped.capability, selected);
-      const nextDefaults = resolvedActive?.defaults ?? {};
+      const nextDefaults = resolvedActive ? scoped.scope.tools.getDefaults(resolvedActive.id) as Record<string, unknown> : {};
       const fields = getAnnotationColorFields(
         context?.id ?? null,
         getAnnotationValues(nextDefaults, selected),
@@ -89,9 +91,9 @@ export function ColorPalette({
     };
 
     sync();
-    const unsubscribeTool = scoped.scope.onActiveToolChange(sync);
-    const unsubscribeState = scoped.scope.onStateChange(sync);
-    const unsubscribeTools = scoped.capability.onToolsChange(sync);
+    const unsubscribeTool = scoped.interaction?.onToolChanged(sync) ?? (() => {});
+    const unsubscribeState = registry!.subscribe(sync);
+    const unsubscribeTools = scoped.scope.tools.onDefaultsChanged(sync);
     return () => {
       unsubscribeTool();
       unsubscribeState();
@@ -117,7 +119,7 @@ export function ColorPalette({
     if (!scoped) return;
 
     if (activeTool?.id) {
-      scoped.capability.setToolDefaults(activeTool.id, patch);
+      scoped.scope.tools.updateDefaults(activeTool.id, patch);
       setSnapshot((current) => ({
         ...current,
         defaults: { ...current.defaults, ...patch },
@@ -125,11 +127,7 @@ export function ColorPalette({
     }
 
     if (selectedAnnotations.length) {
-      scoped.scope.updateAnnotations(selectedAnnotations.map(({ object }) => ({
-        pageIndex: object.pageIndex,
-        id: object.id,
-        patch,
-      })));
+      void scoped.scope.selection.update(patch).catch((error) => console.error('[pdf-ts] failed to update annotation colors', error));
     }
   };
 
@@ -178,7 +176,7 @@ export function ColorPalette({
               <span className={styles.color} />
             </RadioGroup.Item>;
           })}
-          {selectedField === 'color' || selectedField === 'backgroundColor' ? <RadioGroup.Item
+          {selectedField === 'color' || selectedField === 'interiorColor' ? <RadioGroup.Item
             value={TRANSPARENT_ANNOTATION_COLOR}
             className={styles.swatch}
             onClick={() => applyColor(TRANSPARENT_ANNOTATION_COLOR)}

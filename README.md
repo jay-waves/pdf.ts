@@ -213,3 +213,24 @@ Targeted checks: `node --test tests/document-draft.test.mjs`,
 `node scripts/check-document-drafts.mjs` (running Vite required), and
 `PDF_TS_BROWSER_TEST=1 go test ./launcher -run TestDraftBrowser -count=1 -v`
 (real launcher sidecar and browser recovery check, also requires Vite).
+
+### EmbedPDF 3 integration
+
+The viewer uses EmbedPDF 3.0's document handles, plugins and typed mutation
+stream. A SharedWorker owns each original file's document, undo operation IDs,
+draft writer and save queue. Tabs retain their own camera, selection and render
+theme. There is no private plugin-state injection or incremental PDF append path.
+Saving explicitly requests `rewrite`; automatic drafts use native annotation
+bundles (including replies and stamp resources) and form value writes. Native
+layer artifacts are not used as `.swp`: their base does not change after a rewrite,
+which would break draft recovery after a manual save.
+
+The application keeps small runtime extensions for on-demand font substitution,
+PDFium's forced-color rendering and password changes, which are not all exposed
+by v3's high-level document API. Existing v2 `.swp` files have a read-only migration
+path; a failed migration preserves the draft and reopens the untouched original.
+
+Engine and shared-session checks: `node --test tests/embedpdf-v3.test.mjs`,
+`node scripts/check-shared-pdfium.mjs` and `node scripts/check-document-drafts.mjs`
+(the browser scripts require the development server). On-demand font coverage uses `node scripts/check-font-fallback.mjs`. UI regression checks use
+`node scripts/check-shared-viewer.mjs` and `node scripts/check-document-reload.mjs`.

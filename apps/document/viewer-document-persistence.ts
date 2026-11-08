@@ -1,8 +1,8 @@
 import type { DraftState } from '../renderer/document-draft';
 import { getSharedDocumentClient } from '../renderer/shared-document-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { PdfEngine } from '@embedpdf/models';
+import type { Kernel } from '@embedpdf/core';
+import type { Engine } from '@embedpdf/core';
 import { savePdf } from './pdf-save';
 import type { PdfFileHandle } from '../platform/types';
 
@@ -17,8 +17,8 @@ export function useDocumentPersistence({
   fileHandle,
   title,
 }: {
-  engine: PdfEngine<Blob>;
-  registry: PluginRegistry | undefined;
+  engine: Engine;
+  registry: Kernel | undefined;
   documentId: string | null;
   fileHandle?: PdfFileHandle;
   title: string;

@@ -14,7 +14,7 @@ import {
   createSHA512,
   type IHasher,
 } from 'hash-wasm';
-import type { PdfSignatureObject } from '@embedpdf/models';
+export interface PdfSignatureObject { contents: ArrayBuffer; byteRange: ArrayBuffer | readonly number[]; subFilter: string; time: string; reason: string | null }
 import type { ManagedResource } from '../../platform/types';
 
 export interface SignatureCertificateInfo {
@@ -159,13 +159,13 @@ export function getSignatureCertificateInfo(contents: ArrayBuffer): SignatureCer
   }
 }
 
-function readByteSpans(byteRange: ArrayBuffer): ByteSpan[] {
-  if (byteRange.byteLength < 16 || byteRange.byteLength % Uint32Array.BYTES_PER_ELEMENT !== 0) {
+function readByteSpans(byteRange: ArrayBuffer | readonly number[]): ByteSpan[] {
+  if (byteRange instanceof ArrayBuffer && (byteRange.byteLength < 16 || byteRange.byteLength % Uint32Array.BYTES_PER_ELEMENT !== 0)) {
     throw new Error('The signature ByteRange is malformed.');
   }
 
-  const values = new Uint32Array(byteRange);
-  if (values.length % 2 !== 0) throw new Error('The signature ByteRange is malformed.');
+  const values = byteRange instanceof ArrayBuffer ? new Uint32Array(byteRange) : byteRange;
+  if (values.length < 4 || values.length % 2 !== 0) throw new Error('The signature ByteRange is malformed.');
   const spans: ByteSpan[] = [];
   for (let index = 0; index < values.length; index += 2) {
     const start = values[index];

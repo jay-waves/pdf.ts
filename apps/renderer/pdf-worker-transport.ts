@@ -1,4 +1,4 @@
-/** Worker-shaped transport for EmbedPDF's RemoteExecutor. */
+/** SharedWorker connection with a dedicated-worker fallback and crash-safe lease. */
 class PdfWorkerTransport extends EventTarget {
   private endpoint: Worker | MessagePort | null = null;
   private sharedWorker: SharedWorker | null = null;
@@ -84,7 +84,7 @@ class PdfWorkerTransport extends EventTarget {
       this.attach(new Worker(new URL('./pdfium-worker', import.meta.url), { type: 'module' }));
       this.endpoint!.postMessage(this.initialMessage);
     } catch (error) {
-      // RemoteExecutor attaches its readiness task after posting initialization.
+      // Report constructor failures after the caller attaches startup listeners.
       queueMicrotask(() => this.onError(new ErrorEvent('error', { message: String(error) })));
     }
   }
@@ -135,7 +135,6 @@ class PdfWorkerTransport extends EventTarget {
 }
 
 export function createPdfWorker(): Worker {
-  // RemoteExecutor uses only EventTarget, postMessage and terminate, including
-  // terminate() when it is destroyed. It never accesses Worker-only properties.
+  // The application RPC uses only EventTarget, postMessage and terminate.
   return new PdfWorkerTransport() as unknown as Worker;
 }

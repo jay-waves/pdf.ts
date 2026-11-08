@@ -6,7 +6,6 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { transformWithOxc } from 'vite';
 import { createStore } from 'zustand/vanilla';
-import { PdfAnnotationSubtype, PdfBlendMode } from '@embedpdf/models';
 import { ANNOTATION_PALETTES, getAnnotationDisplayColors } from '../apps/annotations/theme-palette.ts';
 
 globalThis.annotationTestTheme = createStore(() => ({ theme: 'dark' }));
@@ -33,7 +32,7 @@ const hooks = registerHooks({
   },
 });
 const { initializeAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation, createTextMarkupAnnotations } = await import('../apps/annotations/annotations.ts');
-const { themeAnnotationColorRenderer, themeCommentRenderer, themeHighlightRenderer } = await import(rendererUrl.href);
+const { themeAnnotationRenderers } = await import(rendererUrl.href);
 hooks.deregister();
 
 test('theme display copies preserve saved annotation colors and custom colors', () => {
@@ -53,11 +52,10 @@ test('theme display copies preserve saved annotation colors and custom colors', 
 test('selecting a preset in any theme writes the equivalent Light color', () => {
   for (const colors of Object.values(ANNOTATION_PALETTES)) {
     colors.forEach((color, index) => {
-      const patch = getAnnotationPresetPatch('highlight', 'strokeColor', color);
-      assert.equal(patch.strokeColor, ANNOTATION_PALETTES.light[index]);
+      const patch = getAnnotationPresetPatch('highlight', 'color', color);
       assert.equal(patch.color, ANNOTATION_PALETTES.light[index]);
       assert.equal(patch.opacity, 1);
-      assert.equal(patch.blendMode, PdfBlendMode.Multiply);
+      assert.equal(patch.blendMode, 'multiply');
     });
   }
 });
@@ -65,80 +63,78 @@ test('selecting a preset in any theme writes the equivalent Light color', () => 
 test('initialization and theme changes never read or edit existing annotations', () => {
   const defaults = [];
   const capability = {
-    forDocument: () => new Proxy({}, { get() { assert.fail('Existing annotations must not be accessed'); } }),
-    getTools: () => [{ id: 'highlight', defaults: { strokeColor: '#ffcd45', opacity: 0.4, blendMode: PdfBlendMode.Normal } }],
-    setToolDefaults: (id, patch) => defaults.push({ id, patch }),
+    list() { assert.fail('Existing annotations must not be accessed'); },
+    tools: {
+      list: () => [{ id: 'highlight' }],
+      getDefaults: () => ({ color: '#ffcd45', opacity: 1, blendMode: 'multiply' }),
+      updateDefaults: (id, patch) => defaults.push({id,patch}),
+    },
   };
-  initializeAnnotationPalette({ getPlugin: () => ({ provides: () => capability }) }, 'doc');
+  initializeAnnotationPalette({ tryCapability: () => capability }, 'doc');
   assert.equal(defaults.length, 1);
-  assert.equal(defaults[0].patch.strokeColor, ANNOTATION_PALETTES.light[2]);
+  assert.equal(defaults[0].patch.color, ANNOTATION_PALETTES.light[2]);
   globalThis.annotationTestTheme.setState({ theme: 'light' });
   globalThis.annotationTestTheme.setState({ theme: 'dark' });
   assert.equal(defaults.length, 1);
 });
 
-test('comments and selection highlights created in Dark retain Light PDF appearance', () => {
-  const annotations = [];
-  const scope = { createAnnotation: (_page, annotation) => annotations.push(annotation) };
-  const rect = { origin: { x: 10, y: 20 }, size: { width: 100, height: 20 } };
-  createCommentAnnotation(scope, { pageIndex: 0, rect });
-  createTextMarkupAnnotations(scope, {
-    getState: () => ({ slices: {} }),
-    getFormattedSelection: () => [{ pageIndex: 0, rect, segmentRects: [rect] }],
-    clear() {},
-  }, PdfAnnotationSubtype.HIGHLIGHT);
-  for (const annotation of annotations) assert.equal(annotation.strokeColor, ANNOTATION_PALETTES.light[2]);
-  assert.equal(annotations[1].opacity, 1);
-  assert.equal(annotations[1].blendMode, PdfBlendMode.Multiply);
+test('selection markup uses the native selection operation and clears through its default policy', async () => {
+  const calls=[];
+  const annotations=[{subtype:'highlight'}];
+  const result=await createTextMarkupAnnotations({createFromSelection:async (...args)=>{calls.push(args);return {annotations};}}, {}, 'highlight');
+  assert.deepEqual(calls,[['highlight']]);
+  assert.equal(result,annotations);
 });
 
-test('display renderer maps geometry and text props without replacing edit handlers or saved objects', () => {
-  const saved = Object.freeze({ type: PdfAnnotationSubtype.FREETEXT, fontColor: '#ffe066', backgroundColor: 'transparent' });
-  const onClick = () => {};
-  const seen = [];
-  const Child = (props) => { seen.push(props); return createElement('span', null, 'Text'); };
-  renderToStaticMarkup(themeAnnotationColorRenderer({
-    annotation: saved,
-    children: createElement(Child, { annotation: { object: saved }, onClick, appearanceActive: true }),
-  }));
-  assert.equal(seen[0].annotation.object.fontColor, ANNOTATION_PALETTES.dark[2]);
-  assert.equal(seen[0].annotation.object.backgroundColor, 'transparent');
-  assert.equal(seen[0].onClick, onClick);
-  assert.equal(seen[0].appearanceActive, false);
-  assert.equal(saved.fontColor, '#ffe066');
-
-  const square = Object.freeze({ type: PdfAnnotationSubtype.SQUARE, strokeColor: '#7dd3fc', color: '#123456' });
-  renderToStaticMarkup(themeAnnotationColorRenderer({ annotation: square, children: createElement(Child, square) }));
-  assert.equal(seen[1].strokeColor, ANNOTATION_PALETTES.dark[0]);
-  assert.equal(seen[1].color, '#123456');
+test('comment and highlight renderers keep theme reads in React and leave saved appearance unchanged', () => {
+  const rect = { x: 0, y: 0, width: 100, height: 20 };
+  const ref={kind:'objectNumber',page:{objectNumber:3},objectNumber:8};
+  const base = {ref,page:ref.page,rect,reply:null,color:'#ffe066',opacity:1,contents:''};
+  const comment=Object.freeze({...base,subtype:'text'});
+  const highlight=Object.freeze({...base,subtype:'highlight',quadPoints:[]});
+  for (const annotation of [comment,highlight]) {
+    const renderer=themeAnnotationRenderers.find(renderer=>renderer.for(annotation));
+    const html=renderToStaticMarkup(createElement(renderer.component,{annotation,frame:{scale:1,rotation:0,width:100,height:20}}));
+    assert.match(html,/#f0f0f0/);
+    assert.equal(annotation.color,'#ffe066');
+  }
 });
 
-test('comment and highlight callbacks return components whose theme hooks run inside React', () => {
-  const rect = { origin: { x: 0, y: 0 }, size: { width: 100, height: 20 } };
-  const comment = themeCommentRenderer.render({ currentObject: { strokeColor: '#ffe066', opacity: 1 }, isSelected: false });
-  assert.match(renderToStaticMarkup(comment), /#f0f0f0/);
-  const highlight = themeHighlightRenderer.render({ currentObject: { strokeColor: '#ffe066', rect, segmentRects: [rect] }, scale: 1 });
-  assert.match(renderToStaticMarkup(highlight), /#f0f0f0/);
+test('nearby notes retain Light PDF colors and do not rewrite the original markup or its comment', async () => {
+  const saved=[];
+  const ref={kind:'objectNumber',page:{objectNumber:3},objectNumber:8};
+  const scope={create:async(page,annotation)=>{saved.push({page,annotation});return {annotation:{...annotation,page,ref}};}};
+  const target=Object.freeze({subtype:'highlight',page:{objectNumber:3},contents:'Existing embedded comment',rect:{x:10,y:20,width:200,height:40}});
+  const rect={x:135,y:64,width:24,height:24};
+  const id=await createCommentAnnotation(scope,target,rect);
+  assert.equal(typeof id,'string');
+  assert.equal(saved.length,1);
+  assert.deepEqual(saved[0].page,target.page);
+  assert.equal(saved[0].annotation.subtype,'text');
+  assert.deepEqual(saved[0].annotation.rect,rect);
+  assert.equal(saved[0].annotation.color,ANNOTATION_PALETTES.light[2]);
+  assert.equal(saved[0].annotation.contents,'');
+  assert.equal(saved[0].annotation.reply,undefined);
+  assert.equal(target.contents,'Existing embedded comment');
 });
 
-
-test('nearby notes are independent text annotations and preserve the original markup', () => {
-  const saved = [];
-  const scope = { createAnnotation: (pageIndex, annotation) => saved.push({ pageIndex, annotation }) };
-  const target = Object.freeze({
-    id: 'highlight', pageIndex: 2, type: PdfAnnotationSubtype.HIGHLIGHT,
-    contents: 'Existing embedded comment',
-    rect: { origin: { x: 10, y: 20 }, size: { width: 200, height: 40 } },
+test('public geometry scene applies theme without changing the saved shape', () => {
+  const annotation = Object.freeze({
+    subtype: 'square', ref: {kind:'objectNumber',page:{objectNumber:3},objectNumber:9},
+    page: {objectNumber:3}, rect: {x:10,y:20,width:100,height:50}, box: {x:10,y:20,width:100,height:50}, rotation:0,
+    color:'#ffe066', interiorColor:'#123456', opacity:1, strokeWidth:2,
   });
-  const rect = { origin: { x: 135, y: 64 }, size: { width: 24, height: 24 } };
-  const id = createCommentAnnotation(scope, target, rect);
-  assert.equal(saved.length, 1);
-  assert.equal(saved[0].pageIndex, 2);
-  assert.equal(saved[0].annotation.type, PdfAnnotationSubtype.TEXT);
-  assert.equal(saved[0].annotation.id, id);
-  assert.notEqual(id, target.id);
-  assert.deepEqual(saved[0].annotation.rect, rect);
-  assert.equal(saved[0].annotation.contents, '');
-  assert.equal(saved[0].annotation.inReplyToId, undefined);
-  assert.equal(target.contents, 'Existing embedded comment');
+  const renderer = themeAnnotationRenderers.find(renderer => renderer.for(annotation));
+  const html = renderToStaticMarkup(createElement(renderer.component, {annotation,frame:{scale:1,rotation:0,width:100,height:50}}));
+  assert.match(html, /#f0f0f0/);
+  assert.match(html, /#123456/);
+  assert.equal(annotation.color, '#ffe066');
+});
+
+test('free-text palette uses the native rich-text body and interior fill fields', () => {
+  const text = getAnnotationPresetPatch('freeText', 'textColor', '#f0f0f0');
+  assert.deepEqual(text.richText, {body:{color:'#ffe066'}});
+  assert.equal('textColor' in text, false);
+  const fill = getAnnotationPresetPatch('freeText', 'interiorColor', '#f0f0f0');
+  assert.equal(fill.interiorColor, '#ffe066');
 });

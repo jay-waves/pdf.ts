@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import type { PdfEngine } from '@embedpdf/models';
+import type { Engine } from '@embedpdf/core';
 import type { DraftState } from '../renderer/document-draft';
 import { getSharedDocumentClient } from '../renderer/shared-document-client';
 
 export function DraftNotice({ draft, dirty, engine, documentId, name }: {
-  draft: DraftState; dirty: boolean; engine: PdfEngine<Blob>; documentId: string | null; name: string;
+  draft: DraftState; dirty: boolean; engine: Engine; documentId: string | null; name: string;
 }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

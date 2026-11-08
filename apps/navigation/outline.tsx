@@ -1,22 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  PdfZoomMode,
-  type PdfBookmarkObject,
-} from '@embedpdf/models';
+import type { OutlineItem, PageDestination } from '@embedpdf/engine';
 import { PanelContent, PanelState } from '../components';
 import type { PdfRuntime } from '../renderer/pdf-engine';
 import type { ViewerStage } from '../viewer/viewer-stage';
-import { getDestinationFromTarget } from '../shared/utils';
 import styles from './outline.module.css';
 
+type Bookmark = Omit<OutlineItem, 'target'> & { destination?: PageDestination; pageIndex?: number; children: Bookmark[] };
+function getDestinationFromTarget(bookmark: Bookmark) {
+  return bookmark.destination && bookmark.pageIndex !== undefined ? { ...bookmark.destination, pageIndex: bookmark.pageIndex } : undefined;
+}
+
 const outlinePrefetchCache = new Map<string, OutlineCache>();
-const flattenedBookmarksCache = new WeakMap<PdfBookmarkObject[], FlattenedBookmark[]>();
+const flattenedBookmarksCache = new WeakMap<Bookmark[], FlattenedBookmark[]>();
 const OUTLINE_CACHE_LIMIT = 4;
 
 type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
 export type OutlineCache = {
   status: OutlineStatus;
-  bookmarks: PdfBookmarkObject[];
+  bookmarks: Bookmark[];
 };
 type FlattenedBookmark = {
   key: string;
@@ -33,15 +34,15 @@ function cacheOutline(key: string, cache: OutlineCache) {
   outlinePrefetchCache.set(key, cache);
 }
 
-function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
+function flattenBookmarks(bookmarks: Bookmark[]) {
   const cached = flattenedBookmarksCache.get(bookmarks);
   if (cached) return cached;
 
   const flattened: FlattenedBookmark[] = [];
 
-  const walk = (items: PdfBookmarkObject[], parentPath: number[] = []) => {
+  const walk = (items: Bookmark[], parentPath: number[] = []) => {
     items.forEach((item, index) => {
-      const destination = getDestinationFromTarget(item.target);
+      const destination = getDestinationFromTarget(item);
       const title = item.title?.trim();
       const path = [...parentPath, index];
 
@@ -73,7 +74,7 @@ function flattenBookmarks(bookmarks: PdfBookmarkObject[]) {
   return sorted;
 }
 
-export function getCurrentBookmark(bookmarks: PdfBookmarkObject[], pageNumber: number): CurrentBookmark | null {
+export function getCurrentBookmark(bookmarks: Bookmark[], pageNumber: number): CurrentBookmark | null {
   if (pageNumber < 1) {
     return null;
   }
@@ -99,10 +100,20 @@ async function loadOutline(pdfium: PdfRuntime, documentId: string) {
     return { status: 'empty', bookmarks: [] } satisfies OutlineCache;
   }
 
-  const task = pdfium.withDocument(documentId, (engine, document) => (
-    engine.getBookmarks(document)
-  ));
-  const { bookmarks } = await task.toPromise();
+  const { outline, pages } = await pdfium.withDocument(documentId, async document => ({
+    outline: await document.outline.get(), pages: (await document.pages.list()).pages,
+  }));
+  const byId = new Map<number, Bookmark>();
+  const bookmarks: Bookmark[] = [];
+  for (const item of outline.items) {
+    const destination = item.target?.kind === 'goto' ? item.target.destination : undefined;
+    const pageIndex = destination ? pages.findIndex(page => page.ref.objectNumber === destination.page.objectNumber) : -1;
+    const bookmark: Bookmark = { ...item, destination, pageIndex: pageIndex >= 0 ? pageIndex : undefined, children: [] };
+    byId.set(item.ref.objectNumber, bookmark);
+    const parent = item.parent && byId.get(item.parent.objectNumber);
+    (parent ? parent.children : bookmarks).push(bookmark);
+  }
+
   return {
     status: bookmarks.length ? 'ready' : 'empty',
     bookmarks,
@@ -185,16 +196,16 @@ export function installOutlinePrefetch(
   };
 }
 
-function revealBookmark(stage: ViewerStage, bookmark: PdfBookmarkObject) {
-  const destination = getDestinationFromTarget(bookmark.target);
+function revealBookmark(stage: ViewerStage, bookmark: Bookmark) {
+  const destination = getDestinationFromTarget(bookmark);
   if (!destination) {
     return;
   }
 
-  const xyzZoom = destination.zoom.mode === PdfZoomMode.XYZ ? destination.zoom : undefined;
   stage.reveal(destination.pageIndex, [{
-    origin: xyzZoom ? { x: xyzZoom.params.x, y: xyzZoom.params.y } : { x: 0, y: 0 },
-    size: { width: 0, height: 0 },
+    x: 'x' in destination ? destination.x ?? 0 : 0,
+    y: 'y' in destination ? destination.y ?? 0 : 0,
+    width: 0, height: 0,
   }]);
 }
 
@@ -287,7 +298,7 @@ export function Outline({
           if (!stage) return;
 
           const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
-          const destination = getDestinationFromTarget(bookmark.target);
+          const destination = getDestinationFromTarget(bookmark);
 
           if (hasChildren && !isExpanded) {
             setExpandedBookmarkKeys((current) => {
@@ -332,16 +343,16 @@ function BookmarkList({
   path,
   onSelect,
 }: {
-  bookmarks: PdfBookmarkObject[];
+  bookmarks: Bookmark[];
   selectedBookmarkKey: string;
   expandedBookmarkKeys: Set<string>;
   path: number[];
-  onSelect: (bookmark: PdfBookmarkObject, bookmarkKey: string, hasChildren: boolean) => void;
+  onSelect: (bookmark: Bookmark, bookmarkKey: string, hasChildren: boolean) => void;
 }) {
   return (
     <ol className={path.length ? styles.nestedList : styles.list}>
       {bookmarks.map((bookmark, index) => {
-        const destination = getDestinationFromTarget(bookmark.target);
+        const destination = getDestinationFromTarget(bookmark);
         const pageNumber = destination ? destination.pageIndex + 1 : undefined;
         const children = bookmark.children ?? [];
         const title = bookmark.title || `Item ${index + 1}`;

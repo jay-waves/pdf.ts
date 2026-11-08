@@ -1,24 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import {
-  PDF_FORM_FIELD_TYPE,
-  PdfAnnotationSubtype,
-  type PdfAnnotationObject,
-  type PdfEngine,
-  type PdfSignatureObject,
-  type PdfWidgetAnnoObject,
-} from '@embedpdf/models';
-import { createRenderer } from '@embedpdf/plugin-annotation/react';
-import { ShieldCheck } from 'lucide-react';
+import type { Kernel } from '@embedpdf/core';
+import type { Engine } from '@embedpdf/engine-core/runtime';
 import { Button, Dialog, DialogActions } from '../../components';
 import type { ManagedResource } from '../../platform/types';
 import { onDocumentLoaded } from '../viewer-document';
-import type { SignatureCertificateInfo, SignatureVerificationResult } from './certificate';
+import type { PdfSignatureObject, SignatureCertificateInfo, SignatureVerificationResult } from './certificate';
 import styles from './signatures.module.css';
-
-function decodeSignatureBuffer(value: ArrayBuffer) {
-  return new TextDecoder().decode(value).replace(/\0+$/g, '').trim();
-}
 
 function formatSignatureTime(value: string) {
   const match = value.match(/^D:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
@@ -106,7 +93,7 @@ export function SignatureDialog({ signatures, resource, open, onClose }: {
                 ) : null}
                 <div><dt>Signed at</dt><dd>{formatSignatureTime(signature.time)}</dd></div>
                 {signature.reason ? <div><dt>Reason</dt><dd>{signature.reason}</dd></div> : null}
-                <div><dt>Format</dt><dd>{decodeSignatureBuffer(signature.subFilter) || 'Not provided'}</dd></div>
+                <div><dt>Format</dt><dd>{signature.subFilter || 'Not provided'}</dd></div>
               </dl>
               <p
                 className={styles.status}
@@ -127,8 +114,8 @@ export function SignatureDialog({ signatures, resource, open, onClose }: {
 }
 
 export function useDocumentSignatures(
-  engine: PdfEngine<Blob>,
-  registry: PluginRegistry | undefined,
+  engine: Engine,
+  registry: Kernel | undefined,
   documentId: string | null,
 ) {
   const [signatures, setSignatures] = useState<PdfSignatureObject[]>([]);
@@ -139,12 +126,15 @@ export function useDocumentSignatures(
 
     let active = true;
     const unsubscribe = onDocumentLoaded(registry, documentId, (document) => {
-      engine.getSignatures(document).wait(
-        (next) => {
-          if (active) setSignatures(next);
-        },
-        (error) => console.error('[pdf-ts] failed to read digital signatures', error),
-      );
+      void (async () => {
+        const snapshot = await document.signatures.list();
+        const next = await Promise.all(snapshot.signatures.filter(s => s.signed).map(async signature => ({
+          contents: (await document.signatures.getContents(signature.field)).slice().buffer,
+          byteRange: signature.byteRange ?? [],
+          subFilter: signature.subFilter ?? '', time: signature.signer.signedAt ?? '', reason: signature.signer.reason,
+        })));
+        if (active) setSignatures(next);
+      })().catch(error => console.error('[pdf-ts] failed to read digital signatures', error));
     });
     return () => {
       active = false;
@@ -154,33 +144,3 @@ export function useDocumentSignatures(
 
   return signatures;
 }
-
-function isSignatureWidget(annotation: PdfAnnotationObject): annotation is PdfWidgetAnnoObject {
-  return annotation.type === PdfAnnotationSubtype.WIDGET
-    && annotation.field?.type === PDF_FORM_FIELD_TYPE.SIGNATURE;
-}
-
-export const signatureWidgetRenderer = createRenderer<PdfWidgetAnnoObject>({
-  id: 'signatureWidget',
-  matches: isSignatureWidget,
-  useAppearanceStream: true,
-  interactionDefaults: {
-    isDraggable: false,
-    isResizable: false,
-    isRotatable: false,
-  },
-  render: ({ currentObject, appearanceActive }) => (
-    <div
-      className={styles.widget}
-      data-appearance-active={appearanceActive ? 'true' : undefined}
-      title={appearanceActive ? 'Digital signature' : 'Digital signature appearance unavailable'}
-    >
-      {!appearanceActive ? (
-        <>
-          <ShieldCheck aria-hidden="true" />
-          <span>{currentObject.field?.name || 'Digital signature'}</span>
-        </>
-      ) : null}
-    </div>
-  ),
-});

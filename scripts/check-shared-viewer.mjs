@@ -84,10 +84,11 @@ async function draw(page, offset = 0) {
 try {
   const a = await open(); const b = await open();
   const originalId = await b.locator('[data-pdf-document-layer]').getAttribute('data-pdf-document-layer');
-  const initialImage = await b.locator('.pdf-page-render-image').first().getAttribute('src');
+  const initialAnnotations = await b.locator('.pdf-annotation-layer').first().innerHTML();
   await draw(a);
+  if (process.env.DEBUG_PDF) { console.log('DRAW STATE', await a.title(), await b.title(), await b.locator('.pdf-annotation-layer').innerHTML()); }
   await b.waitForFunction(() => document.title.startsWith('*'));
-  await b.waitForFunction(src => document.querySelector('.pdf-page-render-image')?.src !== src, initialImage);
+  await b.waitForFunction(html => document.querySelector('.pdf-annotation-layer')?.innerHTML !== html && document.querySelector('.pdf-annotation-layer svg, .pdf-annotation-layer img'), initialAnnotations);
   await a.getByRole('status').filter({ hasText: 'Draft saved' }).waitFor({timeout:10000}).catch(async error => { console.error(await a.getByLabel('Draft status').textContent()); throw error; });
   assert.equal(writes, 0, 'autosave must not write the PDF');
   assert.ok(draft);

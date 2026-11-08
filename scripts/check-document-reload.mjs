@@ -1,9 +1,6 @@
 import { createHash } from 'node:crypto';
 // Targeted browser integration: run against pnpm dev, with a simulated launcher.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { init } from '@embedpdf/pdfium';
-import { PdfiumNative } from '@embedpdf/engines/pdfium';
 import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
 const base = process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173';
 function fixture(version) {
@@ -23,14 +20,6 @@ function fixture(version) {
 let version = 1;
 let invalid = false;
 let protectedUpdate = false;
-const wasm = await readFile(new URL(import.meta.resolve('@embedpdf/pdfium/pdfium.wasm')));
-const native = new PdfiumNative(await init({ wasmBinary: wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength) }));
-const source = fixture('protected');
-const doc = await native.openDocumentBuffer({ id: 'encrypted-fixture', content: source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength) }).toPromise();
-await native.setDocumentEncryption(doc, 'secret', 'secret', 0xffffffff).toPromise();
-const encrypted = Buffer.from(await native.saveAsCopy(doc).toPromise());
-await native.closeDocument(doc).toPromise();
-await native.destroy().toPromise();
 const browser = await chromium.launch({ channel: 'chrome' });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 await context.route('**/api/documents/reload-test*', async route => {
@@ -40,6 +29,16 @@ await context.route('**/api/documents/reload-test*', async route => {
   await route.fulfill({ status: 200, headers, body: route.request().method() === 'HEAD' ? undefined : body });
 });
 const page = await context.newPage();
+await page.goto(base);
+const encrypted = Buffer.from(await page.evaluate(async source => {
+  const { createSharedPdfEngine } = await import('/apps/renderer/shared-document-client.ts');
+  const { engine, client } = createSharedPdfEngine();
+  try {
+    const doc = await engine.open({ kind: 'bytes', bytes: new Uint8Array(source), id: 'encrypted-fixture' });
+    await client.request(doc.id, 'setProtection', ['secret']);
+    return Array.from(await doc.download({ mode: 'rewrite' }));
+  } finally { await engine.destroy(); }
+}, [...fixture('protected')]));
 const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 page.on('console', m => { if (process.env.DEBUG_PDF) console.log(m.type(), m.text()); });
@@ -54,21 +53,21 @@ try {
   await page.getByRole('button', { name: 'Rotate', exact: true }).click();
   await page.waitForTimeout(300);
   const originalPageSize = await page.locator('.pdf-page-surface').first().boundingBox();
-  await page.locator('.viewer').evaluate(e => { e.scrollTop = 950; });
+  await page.locator('.viewer').hover(); await page.mouse.wheel(0, 950);
   await page.waitForTimeout(300);
   const before = await activeId();
-  const position = await page.locator('.viewer').evaluate(e => e.scrollTop);
+  const position = (await page.locator('.pdf-page-surface').first().boundingBox()).y;
   await page.evaluate(() => {
     window.framesChecked = 0; window.blankFrames = 0; window.watchFrames = true;
     const check = () => {
-      if (!watchFrames) return;
-      framesChecked++;
+      if (!window.watchFrames) return;
+      window.framesChecked++;
       const layer = document.querySelector('[data-pdf-document-layer][aria-hidden="false"]');
       const images = layer ? [...layer.querySelectorAll('.pdf-page-render-image')] : [];
       if (!images.some(i => {
         const r = i.getBoundingClientRect();
         return i.complete && i.naturalWidth && r.bottom > 0 && r.top < innerHeight;
-      })) blankFrames++;
+      })) window.blankFrames++;
       requestAnimationFrame(check);
     };requestAnimationFrame(check);
   });
@@ -76,7 +75,7 @@ try {
   await page.waitForFunction(old => document.querySelector('[data-pdf-document-layer][aria-hidden="false"]')?.dataset.pdfDocumentLayer !== old, before, { timeout: 25000 });
   await page.waitForTimeout(300);
   const after = await activeId();
-  const nextPosition = await page.locator('.viewer').evaluate(e => e.scrollTop);
+  const nextPosition = (await page.locator('.pdf-page-surface').first().boundingBox()).y;
   assert.ok(Math.abs(position - nextPosition) < 3, `Scroll moved: ${position} -> ${nextPosition}`);
   assert.equal(await page.locator('[data-pdf-document-layer]').count(), 1);
   const nextPageSize = await page.locator('.pdf-page-surface').first().boundingBox();
@@ -92,13 +91,13 @@ try {
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await page.waitForFunction(old => document.querySelector('[data-pdf-document-layer][aria-hidden="false"]')?.dataset.pdfDocumentLayer !== old, after, { timeout: 25000 });
   await page.waitForTimeout(300);
-  const samples = await page.evaluate(() => { watchFrames = false; return { framesChecked, blankFrames }; });
+  const samples = await page.evaluate(() => { window.watchFrames = false; return { framesChecked: window.framesChecked, blankFrames: window.blankFrames }; });
   assert.equal(samples.blankFrames, 0, JSON.stringify(samples));
   assert.equal(errors.length, 0, errors.join('\n'));
   await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page.getByRole('button', { name: 'Draw', exact: true }).click();
   await page.locator('[aria-label="Rectangle"]').click();
-  await page.locator('.viewer').evaluate(e => { e.scrollTop = 0; e.scrollLeft = 0; });
+  await page.locator('.viewer').hover(); await page.mouse.wheel(0, -10000); await page.waitForTimeout(300);
   const rect = await page.locator('.pdf-page-surface').first().boundingBox();
   await page.mouse.move(Math.max(50, rect.x + 150), Math.max(100, rect.y + 150));
   await page.mouse.down();

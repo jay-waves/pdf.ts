@@ -23,7 +23,7 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
-const { mergePendingZoom, reducePointerGesture } = await import('../apps/renderer/stage-input-controller.ts');
+const { mergePendingZoom, installStageWheelZoom } = await import('../apps/renderer/stage-input-controller.ts');
 hooks.deregister();
 
 test('wheel and pinch deltas share one pending zoom accumulator', () => {
@@ -33,80 +33,53 @@ test('wheel and pinch deltas share one pending zoom accumulator', () => {
   assert.deepEqual(pending.anchor, { vx: 30, vy: 40 });
 });
 
-const touch = {
-  pointerId: 7,
-  pointerX: 10,
-  pointerY: 20,
-  target: {},
-  timer: 12,
-  interactionPaused: true,
-  scrollLeft: 30,
-  scrollTop: 40,
-  cancel() {},
-};
 
-test('touch gesture has one explicit pending, pan, and idle path', () => {
-  let state = reducePointerGesture({ type: 'idle' }, { type: 'begin-touch', gesture: touch });
-  assert.equal(state.type, 'touch-pending');
+function setup(t) {
+  const frames = new Map(); let nextFrame = 0;
+  const window = new EventTarget();
+  const restore = [];
+  for (const [name, value] of Object.entries({ window,
+    requestAnimationFrame: callback => { frames.set(++nextFrame, callback); return nextFrame; },
+    cancelAnimationFrame: id => frames.delete(id),
+  })) {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, name);
+    Object.defineProperty(globalThis, name, { configurable: true, value });
+    restore.push(() => previous ? Object.defineProperty(globalThis, name, previous) : delete globalThis[name]);
+  }
+  const viewport = { clientWidth: 800, clientHeight: 600, clientLeft: 0, clientTop: 0,
+    getBoundingClientRect: () => ({ left: 10, top: 20 }) };
+  let level = 1;
+  const applied = [];
+  const native = { getZoomLevel: () => level, stopMotion() {}, zoomTo(value, options) { level = value; applied.push({ value, options }); } };
+  const dispose = installStageWheelZoom(viewport, native, { getFitScales: () => ({ page: .8, width: 1.5 }) });
+  t.after(() => { dispose(); restore.forEach(fn => fn()); });
+  const wheel = (fields = {}, inside = true) => {
+    const event = new Event('wheel', { cancelable: true });
+    Object.assign(event, { ctrlKey: true, metaKey: false, deltaY: -50, deltaMode: 0, clientX: 210, clientY: 120, ...fields });
+    event.composedPath = () => inside ? [viewport] : [];
+    window.dispatchEvent(event); return event;
+  };
+  const frame = () => { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); };
+  return { wheel, frame, applied, frames, dispose };
+}
 
-  state = reducePointerGesture(state, { type: 'touch-pan' });
-  assert.equal(state.type, 'touch-pan');
-  assert.equal(state.pointerId, 7);
-  assert.equal(state.scrollTop, 40);
-
-  state = reducePointerGesture(state, { type: 'end' });
-  assert.deepEqual(state, { type: 'idle' });
+test('zoom wheels coalesce into one native focal zoom and block duplicate browser/SDK zoom', t => {
+  const { wheel, frame, applied, frames } = setup(t);
+  assert.equal(wheel().defaultPrevented, true);
+  wheel({ clientX: 310, clientY: 220 });
+  assert.equal(frames.size, 1);
+  frame();
+  assert.equal(applied.length, 1);
+  assert.ok(Math.abs(applied[0].value - Math.exp(.2)) < 1e-9);
+  assert.deepEqual(applied[0].options.around, { x: 300, y: 200 });
 });
 
-test('long press can only claim a pending touch', () => {
-  const pending = reducePointerGesture(
-    { type: 'idle' },
-    { type: 'begin-touch', gesture: touch },
-  );
-  const selection = reducePointerGesture(pending, { type: 'touch-selection' });
-  assert.equal(selection.type, 'touch-selection');
-  assert.strictEqual(
-    reducePointerGesture(selection, { type: 'touch-pan' }),
-    selection,
-  );
-});
-
-test('pinch takes over any pointer gesture and tracks its latest scale', () => {
-  const pending = reducePointerGesture(
-    { type: 'idle' },
-    { type: 'begin-touch', gesture: touch },
-  );
-  let state = reducePointerGesture(pending, { type: 'begin-pinch' });
-  assert.deepEqual(state, { type: 'pinch', lastScale: 1 });
-
-  state = reducePointerGesture(state, { type: 'set-pinch-scale', scale: 1.4 });
-  assert.deepEqual(state, { type: 'pinch', lastScale: 1.4 });
-});
-
-test('mouse drag threshold changes only a mouse pan', () => {
-  let state = reducePointerGesture({ type: 'idle' }, {
-    type: 'begin-mouse',
-    gesture: { scrollLeft: 5, scrollTop: 9, dragging: false, cancel() {} },
-  });
-  assert.equal(state.type, 'mouse-pan');
-  assert.equal(state.dragging, false);
-
-  state = reducePointerGesture(state, { type: 'set-mouse-dragging' });
-  assert.equal(state.type, 'mouse-pan');
-  assert.equal(state.dragging, true);
-
-  const unchanged = reducePointerGesture({ type: 'idle' }, { type: 'set-mouse-dragging' });
-  assert.deepEqual(unchanged, { type: 'idle' });
-});
-
-test('a second pointer gesture cannot silently replace an active drag', () => {
-  const pending = reducePointerGesture(
-    { type: 'idle' },
-    { type: 'begin-touch', gesture: touch },
-  );
-  const attemptedMouse = reducePointerGesture(pending, {
-    type: 'begin-mouse',
-    gesture: { scrollLeft: 0, scrollTop: 0, dragging: false, cancel() {} },
-  });
-  assert.strictEqual(attemptedMouse, pending);
+test('ordinary scroll and zoom outside the viewport remain native; teardown drops pending zoom', t => {
+  const { wheel, frame, applied, frames, dispose } = setup(t);
+  assert.equal(wheel({ ctrlKey: false }).defaultPrevented, false);
+  assert.equal(wheel({}, false).defaultPrevented, false);
+  assert.equal(frames.size, 0);
+  wheel(); dispose(); frame();
+  assert.deepEqual(applied, []);
+  assert.equal(wheel().defaultPrevented, false);
 });

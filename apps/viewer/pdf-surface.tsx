@@ -1,84 +1,33 @@
-import { memo, useEffect, useMemo } from 'react';
-import { createPluginRegistration, type PluginRegistry } from '@embedpdf/core';
-import { EmbedPDF } from '@embedpdf/core/react';
-import { PdfErrorCode, Rotation, type PdfEngine } from '@embedpdf/models';
-import { AnnotationLayer, AnnotationPluginPackage } from '@embedpdf/plugin-annotation/react';
-import { DocumentContent, DocumentManagerPluginPackage } from '@embedpdf/plugin-document-manager/react';
-import { SharedFormPluginPackage, SharedHistoryPluginPackage, getSharedDocumentClient } from '../renderer/shared-document-client';
-import {
-  GlobalPointerProvider,
-  InteractionManagerPluginPackage,
-  PagePointerProvider,
-} from '@embedpdf/plugin-interaction-manager/react';
-import { RenderPluginPackage } from '@embedpdf/plugin-render/react';
-import { Rotate, RotatePluginPackage } from '@embedpdf/plugin-rotate/react';
-import { Scroller, ScrollPluginPackage, ScrollStrategy } from '@embedpdf/plugin-scroll/react';
-import { SelectionLayer, SelectionPluginPackage } from '@embedpdf/plugin-selection/react';
-import { SpreadMode, SpreadPluginPackage } from '@embedpdf/plugin-spread/react';
-import { TilingPluginPackage } from '@embedpdf/plugin-tiling/react';
-import { ViewportPluginPackage } from '@embedpdf/plugin-viewport/react';
-import { ZoomMode, ZoomPluginPackage } from '@embedpdf/plugin-zoom/react';
+import { cloneElement, isValidElement, memo, useEffect, useMemo, type ReactElement } from 'react';
+import type { Engine, Kernel } from '@embedpdf/core';
+import { Viewer, DocumentScope, DocumentGate, useActiveDocumentId, useDocument } from '@embedpdf/react/runtime';
+import { AnnotationLayer, annotationPlugin } from '@embedpdf/react/annotation';
+import { SelectionLayer, selectionPlugin } from '@embedpdf/react/selection';
+import { FormLayer, formPlugin } from '@embedpdf/react/form';
+import { LinkLayer, linkPlugin, type LinkRenderProps } from '@embedpdf/react/link';
+import { actionsPlugin } from '@embedpdf/plugin-actions';
+import { platform } from '#platform';
+import { interactionPlugin } from '@embedpdf/plugin-interaction';
+import { stagePlugin } from '@embedpdf/plugin-stage';
+import { renderPlugin, RenderToken } from '@embedpdf/plugin-render';
+import { getSharedDocumentClient, sharedHistoryPlugin } from '../renderer/shared-document-client';
+import { PDF_TILE_SIZE_CSS_PX } from '../renderer/render-settings';
+import { NativePdfStage } from '../renderer/native-pdf-stage';
+import { ReadingRegionLayer, ReadingRegionControls } from '../renderer/reading-region-layer';
 import { createAnnotationPluginConfig } from '../annotations/annotations';
+import { themeAnnotationRenderers } from '../annotations/theme-renderers';
+import { SignatureFallbackLayer } from '../document/signatures/signature-fallback-layer';
 import { UnlockDialog } from '../document/protection-dialogs';
-import { signatureWidgetRenderer } from '../document/signatures';
-import {
-  themeAnnotationColorRenderer,
-  themeCommentRenderer,
-  themeHighlightRenderer,
-  themeStrikeoutRenderer,
-  themeUnderlineRenderer,
-} from '../annotations/theme-renderers';
 import type { ManagedResource } from '../platform/types';
 import type { ViewerStage } from './viewer-stage';
 import { SearchLayer } from '../search/search';
-import { StageViewport } from '../renderer/stage-viewport';
-import { StageSurface } from '../renderer/stage-surface';
-import { ReadingRegionLayer, ReadingRegionControls } from '../renderer/reading-region-layer';
-import { PDF_TILE_SIZE_CSS_PX } from '../renderer/render-settings';
-import { RenderLayer } from '../renderer/viewer-render-layers';
 import { DOCUMENT_ID } from '../document/viewer-document';
-import './pdf-surface.css';
-import styles from './viewer.module.css';
 import { completeStartupLog, failStartupLog, writeStartupLogOnce } from './startup-log';
 import { PresentationView } from './presentation-view';
+import './pdf-surface.css';
+import styles from './viewer.module.css';
 
-export const RENDER_IMAGE_TYPE = 'image/bmp';
-const TILING_OVERLAP_PX = 2;
-const TILING_EXTRA_RINGS = 0;
 export const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
-const ANNOTATION_RENDERERS = [
-  themeHighlightRenderer,
-  themeUnderlineRenderer,
-  themeStrikeoutRenderer,
-  themeCommentRenderer,
-  signatureWidgetRenderer,
-];
-function StartupDocumentStatus({
-  status,
-  pageCount,
-  errorCode,
-}: {
-  status: 'loading' | 'loaded' | 'error';
-  pageCount?: number;
-  errorCode?: PdfErrorCode;
-}) {
-  useEffect(() => {
-    if (status === 'loading') {
-      writeStartupLogOnce('document-loading', 'Opening PDF document');
-    } else if (status === 'loaded') {
-      writeStartupLogOnce(
-        'document-opened',
-        'Document opened',
-        pageCount ? `${pageCount} pages` : undefined,
-      );
-    } else if (errorCode === PdfErrorCode.Password) {
-      completeStartupLog('Document requires a password');
-    } else {
-      failStartupLog('Unable to open PDF document');
-    }
-  }, [errorCode, pageCount, status]);
-  return null;
-}
 
 export function LoadingStatus({ label }: { label: string }) {
   return (
@@ -91,264 +40,106 @@ export function LoadingStatus({ label }: { label: string }) {
   );
 }
 
-function createPlugins(fileUrl?: string) {
-  return [
-    createPluginRegistration(DocumentManagerPluginPackage, {
-      // Keep the current version open while its replacement loads and paints.
-      maxDocuments: 2,
-      initialDocuments: fileUrl ? [{ url: fileUrl, documentId: DOCUMENT_ID }] : [],
-    }),
-    createPluginRegistration(ViewportPluginPackage, { viewportGap: 10 }),
-    createPluginRegistration(ScrollPluginPackage, {
-      defaultStrategy: ScrollStrategy.Vertical,
-      defaultPageGap: 10,
-      defaultBufferSize: 2,
-    }),
-    createPluginRegistration(RenderPluginPackage, { defaultImageType: RENDER_IMAGE_TYPE }),
-    createPluginRegistration(TilingPluginPackage, {
-      defaultImageType: RENDER_IMAGE_TYPE,
-      tileSize: PDF_TILE_SIZE_CSS_PX,
-      overlapPx: TILING_OVERLAP_PX,
-      extraRings: TILING_EXTRA_RINGS,
-    }),
-    createPluginRegistration(ZoomPluginPackage, { defaultZoomLevel: ZoomMode.FitPage }),
-    createPluginRegistration(SpreadPluginPackage, { defaultSpreadMode: SpreadMode.None }),
-    createPluginRegistration(RotatePluginPackage, { defaultRotation: Rotation.Degree0 }),
-    createPluginRegistration(InteractionManagerPluginPackage),
-    createPluginRegistration(SelectionPluginPackage, { maxCachedGeometries: 8 }),
-    createPluginRegistration(
-      AnnotationPluginPackage,
-      { ...createAnnotationPluginConfig(), autoCommit: false },
-    ),
-    createPluginRegistration(SharedHistoryPluginPackage),
-    createPluginRegistration(SharedFormPluginPackage),
-  ];
+
+function createPlugins() {
+  return [stagePlugin({ padding: 10, gap: { px: 10 }, zoom: { mode: 'fit-page' }, minZoom: 0.2, maxZoom: 60, viewUnitsPerPoint: 1 }),
+    renderPlugin({ format: 'bmp', tiles: { size: PDF_TILE_SIZE_CSS_PX, bleedPx: 2, prefetch: { margin: 0, velocityBias: false } } }),
+    interactionPlugin(), selectionPlugin({ color: 'var(--pdf-text-selection-color)' }), actionsPlugin(), linkPlugin(),
+    annotationPlugin(createAnnotationPluginConfig()), sharedHistoryPlugin(), formPlugin()];
 }
 
-function PageSurface({
-  documentId,
-  pageIndex,
-  width,
-  height,
-  renderThemeVersion,
-  renderDpr,
-  stage,
-}: {
-  documentId: string;
-  pageIndex: number;
-  width: number;
-  height: number;
-  renderThemeVersion: number;
-  renderDpr: number;
-  stage?: ViewerStage | null;
-}) {
-  return (
-    <Rotate documentId={documentId} pageIndex={pageIndex}>
-      <PagePointerProvider
-        documentId={documentId}
-        pageIndex={pageIndex}
-        data-pdf-page-index={pageIndex}
-        className="pdf-page-surface"
-        style={{
-          position: 'relative',
-          width,
-          height,
-          backgroundColor: 'var(--pdf-page-background)',
-        }}
-      >
-        <RenderLayer
-          key={`render-${renderThemeVersion}`}
-          documentId={documentId}
-          pageIndex={pageIndex}
-          dpr={renderDpr}
-          baseScale={0.5}
-        />
-        <SearchLayer
-          documentId={documentId}
-          pageIndex={pageIndex}
-        />
-        <div className="pdf-text-selection-layer">
-          <SelectionLayer
-            documentId={documentId}
-            pageIndex={pageIndex}
-            background="var(--pdf-text-selection-color)"
-          />
-        </div>
-        <AnnotationLayer
-          className="pdf-annotation-layer"
-          documentId={documentId}
-          pageIndex={pageIndex}
-          annotationRenderers={ANNOTATION_RENDERERS}
-          customAnnotationRenderer={themeAnnotationColorRenderer}
-          selectionOutline={{ color: 'var(--pdf-accent-primary)' }}
-          groupSelectionOutline={{ color: 'var(--pdf-accent-primary)' }}
-          resizeUI={{ color: 'var(--pdf-accent-primary)' }}
-          vertexUI={{ color: 'var(--pdf-accent-primary)' }}
-          rotationUI={{
-            color: 'var(--pdf-background-surface)',
-            border: { color: 'var(--pdf-accent-primary)' },
-            connectorColor: 'var(--pdf-accent-primary)',
-            iconColor: 'var(--pdf-accent-primary)',
-          }}
-        />
-        <ReadingRegionLayer documentId={documentId} pageIndex={pageIndex} stage={stage} />
-      </PagePointerProvider>
-    </Rotate>
-  );
+function renderPlatformLink({ link, native }: LinkRenderProps) {
+  if (link.target?.kind !== 'uri' || !isValidElement(native)) return undefined;
+  const uri = link.target.uri;
+  return cloneElement(native as ReactElement<{ onClick(event: React.MouseEvent): void }>, {
+    onClick(event) { event.preventDefault(); event.stopPropagation(); platform.openExternal(uri); },
+  });
 }
 
-function LoadedPdfDocument({
-  documentId,
-  panMode,
-  renderThemeVersion,
-  stage,
-  resource,
-  onResourceConsumed,
-  renderDpr,
-  presentationPage,
-  onNavigatePresentation,
-  onExitPresentation,
-}: {
-  documentId: string;
-  panMode: boolean;
-  renderThemeVersion: number;
-  stage?: ViewerStage | null;
-  resource?: ManagedResource;
-  onResourceConsumed(resource?: ManagedResource): void;
-  renderDpr: number;
-  presentationPage: number | null;
-  onNavigatePresentation(delta: -1 | 1, source: 'Mouse'): void;
-  onExitPresentation(): void;
-}) {
-  useEffect(() => onResourceConsumed(resource), [onResourceConsumed, resource]);
-
-  return (
-    <GlobalPointerProvider documentId={documentId}>
-      <StageViewport
-        documentId={documentId}
-        stage={stage}
-        className={`viewer${panMode ? ' is-pan-mode' : ''}`}
-        inert={presentationPage !== null}
-        aria-hidden={presentationPage !== null}
-        onDragStart={(event) => event.preventDefault()}
-      >
-        {presentationPage === null ? <StageSurface documentId={documentId} panMode={panMode} stage={stage} /> : null}
-        <Scroller
-          documentId={documentId}
-          className="pdf-scroller"
-          renderPage={({ pageIndex, width, height }) => (
-            <PageSurface
-              documentId={documentId}
-              pageIndex={pageIndex}
-              width={width}
-              height={height}
-              renderThemeVersion={renderThemeVersion}
-              renderDpr={renderDpr}
-              stage={stage}
-            />
-          )}
-        />
-      </StageViewport>
-      <ReadingRegionControls stage={stage} />
-      {presentationPage !== null ? (
-        <PresentationView
-          documentId={documentId}
-          pageNumber={presentationPage}
-          renderDpr={renderDpr}
-          onNavigate={onNavigatePresentation}
-          onExit={onExitPresentation}
-        />
-      ) : null}
-    </GlobalPointerProvider>
-  );
+function DocumentStatus() {
+  const info = useDocument();
+  useEffect(() => {
+    if (info.status === 'ready') writeStartupLogOnce('document-opened', 'Document opened', `${info.pageCount} pages`);
+    else if (info.status === 'locked') completeStartupLog('Document requires a password');
+    else if (info.status === 'error') { failStartupLog('Unable to open PDF document', info.error?.message); console.error('[pdf-ts] document open failed', info.error); }
+    else writeStartupLogOnce('document-loading', 'Opening PDF document');
+  }, [info.status, info.pageCount]);
+  return null;
 }
 
-export const PdfSurface = memo(function PdfSurface({
-  engine,
-  registry,
-  pendingDocument,
-  panMode,
-  renderThemeVersion,
-  stage,
-  documentResource,
-  onInitialized,
-  onResourceConsumed,
-  renderDpr,
-  presentationPage,
-  onNavigatePresentation,
-  onExitPresentation,
-}: {
-  engine: PdfEngine<Blob>;
-  registry?: PluginRegistry;
+type SurfaceProps = {
+  engine: Engine;
+  registry?: Kernel;
   pendingDocument?: { documentId: string; stage: ViewerStage; presentationPage: number | null } | null;
   panMode: boolean;
   renderThemeVersion: number;
   stage?: ViewerStage | null;
   documentResource?: ManagedResource;
-  onInitialized(registry: PluginRegistry): Promise<void>;
+  onInitialized(registry: Kernel): Promise<void>;
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
   presentationPage: number | null;
   onNavigatePresentation(delta: -1 | 1, source: 'Mouse'): void;
   onExitPresentation(): void;
-}) {
-  const fileUrl = documentResource?.url;
-  const plugins = useMemo(() => {
-    getSharedDocumentClient(engine)?.setIdentity(documentResource?.sharedIdentity ?? fileUrl ?? crypto.randomUUID(), documentResource?.draftLocation);
-    return createPlugins(fileUrl);
-  }, [engine, fileUrl, documentResource?.sharedIdentity, documentResource?.draftLocation]);
+};
 
-  return (
-    <EmbedPDF engine={engine} plugins={plugins} onInitialized={onInitialized}>
-      {({ activeDocumentId }) => activeDocumentId ? (
-        [...new Set([activeDocumentId, pendingDocument?.documentId].filter((id): id is string => !!id))].map((documentId) => {
-          const pending = documentId === pendingDocument?.documentId ? pendingDocument : null;
-          const hidden = documentId !== activeDocumentId;
-          return <div key={documentId} data-pdf-document-layer={documentId}
-            aria-hidden={hidden} inert={hidden}
-            style={{ position: 'absolute', inset: 0, visibility: hidden ? 'hidden' : 'visible' }}>
-            <DocumentContent documentId={documentId}>
-              {({ documentState, isLoading, isError, isLoaded }) => (
-                <>
-                  <StartupDocumentStatus
-                    status={documentState.status}
-                    pageCount={documentState.document?.pageCount}
-                    errorCode={documentState.errorCode}
-                  />
-                  {isLoading && <LoadingStatus label="Loading document…" />}
-                  {isError && documentState.errorCode === PdfErrorCode.Password ? (
-                    <UnlockDialog
-                      registry={registry}
-                      documentId={documentId}
-                      incorrect={documentState.passwordProvided === true}
-                    />
-                  ) : null}
-                  {isError && documentState.errorCode !== PdfErrorCode.Password ? (
-                    <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>
-                  ) : null}
-                  {isLoaded ? (
-                    <LoadedPdfDocument
-                      key={documentId}
-                      documentId={documentId}
-                      panMode={panMode}
-                      renderThemeVersion={renderThemeVersion}
-                      stage={pending?.stage ?? stage}
-                      resource={documentResource}
-                      onResourceConsumed={onResourceConsumed}
-                      renderDpr={renderDpr}
-                      presentationPage={pending ? pending.presentationPage : presentationPage}
-                      onNavigatePresentation={onNavigatePresentation}
-                      onExitPresentation={onExitPresentation}
-                    />
-                  ) : null}
-                </>
-              )}
-            </DocumentContent>
-          </div>;
-        })
-      ) : (
-        <div className={VIEWER_STATUS_CLASS}>No PDF document.</div>
-      )}
-    </EmbedPDF>
-  );
+function LoadedPdfDocument({ documentId, stage, presentationPage, ...props }: SurfaceProps & { documentId: string }) {
+  useEffect(() => props.onResourceConsumed(props.documentResource), [props.onResourceConsumed, props.documentResource]);
+  return <>
+    <NativePdfStage documentId={documentId} stage={stage} panMode={props.panMode} renderDpr={props.renderDpr}
+      className={`viewer${props.panMode ? ' is-pan-mode' : ''}`}
+      inert={presentationPage !== null} aria-hidden={presentationPage !== null}
+      renderPage={({ pageIndex }) => <>
+        <SearchLayer documentId={documentId} pageIndex={pageIndex} />
+        <div className="pdf-text-selection-layer"><SelectionLayer /></div>
+        <div className="pdf-annotation-layer"><AnnotationLayer renderers={themeAnnotationRenderers} /></div>
+        <FormLayer />
+        <SignatureFallbackLayer />
+        <LinkLayer renderLink={renderPlatformLink} />
+        <ReadingRegionLayer documentId={documentId} pageIndex={pageIndex} stage={stage} />
+      </>} />
+    <ReadingRegionControls stage={stage} />
+    {presentationPage !== null ? <PresentationView documentId={documentId} pageNumber={presentationPage}
+      renderDpr={props.renderDpr} onNavigate={props.onNavigatePresentation} onExit={props.onExitPresentation} /> : null}
+  </>;
+}
+
+function DocumentLayers(props: SurfaceProps) {
+  const activeDocumentId = useActiveDocumentId();
+  if (!activeDocumentId) return <div className={VIEWER_STATUS_CLASS}>No PDF document.</div>;
+  return [...new Set([activeDocumentId, props.pendingDocument?.documentId].filter((id): id is string => !!id))].map((id) => {
+    const pending = props.pendingDocument?.documentId === id ? props.pendingDocument : null;
+    const hidden = id !== activeDocumentId;
+    return <div key={id} data-pdf-document-layer={id} aria-hidden={hidden} inert={hidden}
+      style={{ position: 'absolute', inset: 0, visibility: hidden ? 'hidden' : 'visible' }}>
+      <DocumentScope id={id}>
+        <DocumentStatus />
+        <DocumentGate fallback={<LoadingStatus label="Loading document…" />}
+          locked={(info) => <UnlockDialog registry={props.registry} documentId={id} incorrect={info.passwordProvided} />}
+          error={() => <div className={`${VIEWER_STATUS_CLASS} text-danger`}>Unable to load PDF.</div>}>
+          <LoadedPdfDocument {...props} documentId={id} stage={pending?.stage ?? props.stage}
+            presentationPage={pending ? pending.presentationPage : props.presentationPage} />
+        </DocumentGate>
+      </DocumentScope>
+    </div>;
+  });
+}
+
+export const PdfSurface = memo(function PdfSurface(props: SurfaceProps) {
+  const plugins = useMemo(createPlugins, []);
+  useEffect(() => {
+    for (const info of props.registry?.documents.list() ?? []) {
+      props.registry?.tryCapability(RenderToken, info.id)?.invalidate({ scope: 'content' });
+    }
+  }, [props.registry, props.renderThemeVersion]);
+  const initialDocuments = useMemo(() => {
+    const resource = props.documentResource;
+    getSharedDocumentClient(props.engine)?.setIdentity(resource?.sharedIdentity ?? resource?.url ?? crypto.randomUUID(), resource?.draftLocation);
+    return resource?.url ? [{ source: { kind: 'url' as const, url: resource.url, id: DOCUMENT_ID } }] : [];
+  }, [props.engine, props.documentResource]);
+  return <Viewer engine={props.engine} plugins={plugins} initialDocuments={initialDocuments}
+    accent="var(--pdf-accent-primary)" page={{ background: 'var(--pdf-page-background)' }}
+    onReady={(kernel) => { void props.onInitialized(kernel); }}>
+    <DocumentLayers {...props} />
+  </Viewer>;
 });

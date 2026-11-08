@@ -1,11 +1,8 @@
-import {
-  MatchFlag,
-  PdfErrorCode,
-  type PdfPageSearchProgress,
-  type PdfTask,
-  type SearchAllPagesResult,
-  type SearchResult,
-} from '@embedpdf/models';
+import type { Rect } from '@embedpdf/core-geometry';
+import type { AbortablePromise, SearchSlice } from '@embedpdf/engine-core/runtime';
+export const MatchFlag = { MatchCase: 'matchCase', MatchWholeWord: 'wholeWord' } as const;
+export type MatchFlag = typeof MatchFlag[keyof typeof MatchFlag];
+export interface SearchResult { pageIndex: number; rects: Rect[] }
 import { createStore } from 'zustand/vanilla';
 import type { PdfRuntime } from '../renderer/pdf-engine';
 
@@ -43,12 +40,14 @@ const EMPTY_SEARCH = {
 
 export function createPdfSearchStore() {
   let pdfium: PdfRuntime | null = null;
-  let task: PdfTask<SearchAllPagesResult, PdfPageSearchProgress> | null = null;
+  let task: AbortablePromise<SearchSlice> | null = null;
 
-  const cancel = (message: string) => {
+  let generation = 0;
+  const cancel = (_message: string) => {
     const current = task;
     task = null;
-    current?.abort({ code: PdfErrorCode.Cancelled, message });
+    current?.abort();
+    generation++;
   };
 
   return createStore<PdfSearchState>((set, get) => {
@@ -69,50 +68,36 @@ export function createPdfSearchStore() {
       cancel('new search');
       set({ query: keyword, flags, results: [], resultsByPage: new Map(), activeResultIndex: -1, loading: true });
 
-      try {
-        const current = pdfium.withDocument(documentId, (engine, document) => (
-          engine.searchAllPages(document, keyword, { flags })
-        ));
-        task = current;
-        current.onProgress(({ results }) => {
-          if (task === current && results.length) {
-            set((state) => {
-              const nextResults = [...state.results, ...results];
-              return {
-                results: nextResults,
-                resultsByPage: appendResultsByPage(
-                  state.resultsByPage,
-                  results,
-                  state.results.length,
-                ),
-              };
-            });
-          }
-        });
-        current.wait(
-          ({ results }) => {
-            if (task !== current) return;
-            task = null;
-            set({
-              results,
-              resultsByPage: indexResultsByPage(results),
-              activeResultIndex: findNearestResult(results, nearPage),
-              loading: false,
-            });
-          },
-          (error) => {
-            if (task !== current) return;
-            task = null;
-            if (error.reason.code !== PdfErrorCode.Cancelled) {
-              console.error('[pdf-ts] PDF search failed', error);
-              set({ results: [], resultsByPage: new Map(), activeResultIndex: -1, loading: false });
+      const currentGeneration = generation;
+      void (async () => {
+        try {
+          const document = pdfium!.getDocument(documentId);
+          if (!document) throw new Error('Document is not open.');
+          const pages = await document.pages.list();
+          let cursor: string | undefined;
+          const results: SearchResult[] = [];
+          do {
+            if (generation !== currentGeneration) return;
+            const current = document.search.query({ text: keyword, matchCase: flags.includes(MatchFlag.MatchCase), wholeWord: flags.includes(MatchFlag.MatchWholeWord), cursor, limit: { pages: 16, matches: 256 } });
+            task = current;
+            const batch = await current;
+            if (generation !== currentGeneration) return;
+            for (const match of batch.matches) {
+              const pageIndex = pages.pages.findIndex((page) => JSON.stringify(page.ref) === JSON.stringify(match.page));
+              if (pageIndex >= 0) results.push({ pageIndex, rects: match.segments.map((segment) => segment.rect) });
             }
-          },
-        );
-      } catch (error) {
-        console.error('[pdf-ts] failed to start PDF search', error);
-        set({ loading: false });
-      }
+            set({ results: [...results], resultsByPage: indexResultsByPage(results), activeResultIndex: findNearestResult(results, nearPage) });
+            cursor = batch.nextCursor ?? undefined;
+          } while (cursor);
+          task = null;
+          set({ loading: false });
+        } catch (error) {
+          if (generation !== currentGeneration) return;
+          console.error('[pdf-ts] PDF search failed', error);
+          task = null;
+          set({ results: [], resultsByPage: new Map(), activeResultIndex: -1, loading: false });
+        }
+      })();
     };
 
     return {
@@ -170,25 +155,6 @@ function indexResultsByPage(results: SearchResult[]) {
     const entry = { result, resultIndex };
     if (pageResults) pageResults.push(entry);
     else indexed.set(result.pageIndex, [entry]);
-  });
-  return indexed;
-}
-
-function appendResultsByPage(
-  current: ReadonlyMap<number, PageSearchResult[]>,
-  results: SearchResult[],
-  startIndex: number,
-) {
-  const indexed = new Map(current);
-  const changedPages = new Set<number>();
-  results.forEach((result, offset) => {
-    let pageResults = indexed.get(result.pageIndex);
-    if (!changedPages.has(result.pageIndex)) {
-      pageResults = pageResults ? [...pageResults] : [];
-      indexed.set(result.pageIndex, pageResults);
-      changedPages.add(result.pageIndex);
-    }
-    pageResults!.push({ result, resultIndex: startIndex + offset });
   });
   return indexed;
 }

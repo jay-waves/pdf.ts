@@ -3,8 +3,8 @@ import { platform } from '#platform';
 import { supportsLlm } from '../platform/llm';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { PdfMetadataObject } from '@embedpdf/models';
+import type { Kernel } from '@embedpdf/core';
+import type { DocumentMetadata } from '@embedpdf/engine-core';
 import { Dialog, PanelContent, Select } from '../components';
 import { getDocument } from '../document/viewer-document';
 import { getErrorMessage } from '../shared/utils';
@@ -84,7 +84,7 @@ export function DeveloperDialog({
   pdfium,
   onClose,
 }: {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   documentId?: string | null;
   fileName?: string;
   pageCount: number;
@@ -98,7 +98,7 @@ export function DeveloperDialog({
     setLlmEnabled(enabled);
   };
   const [fontDiagnostics, setFontDiagnostics] = useState<PdfFontDiagnostic[]>([]);
-  const [metadata, setMetadata] = useState<PdfMetadataObject | null>(null);
+  const [metadata, setMetadata] = useState<DocumentMetadata | null>(null);
   const [metadataError, setMetadataError] = useState('');
   const [metadataLoading, setMetadataLoading] = useState(false);
   const loggedOpenRef = useRef(false);
@@ -129,7 +129,7 @@ export function DeveloperDialog({
     if (!open) return;
     let cancelled = false;
     const document = getDocument(registry, documentId);
-    const engine = registry?.getEngine();
+    const engine = registry?.engine;
 
     setMetadata(null);
     setMetadataError('');
@@ -140,7 +140,7 @@ export function DeveloperDialog({
     }
 
     setMetadataLoading(true);
-    void engine.getMetadata(document).toPromise().then((nextMetadata) => {
+    void document.metadata.get().then((nextMetadata) => {
       if (!cancelled) setMetadata(nextMetadata);
     }).catch((error: unknown) => {
       if (!cancelled) setMetadataError(getErrorMessage(error, 'Failed to read document metadata.'));
@@ -252,8 +252,8 @@ export function DeveloperDialog({
                 ['Author', metadata.author],
                 ['Creator', metadata.creator],
                 ['Producer', metadata.producer],
-                ['Created', formatMetadataDate(metadata.creationDate)],
-                ['Modified', formatMetadataDate(metadata.modificationDate)],
+                ['Created', formatMetadataDate(metadata.createdAt ? new Date(metadata.createdAt) : null)],
+                ['Modified', formatMetadataDate(metadata.modifiedAt ? new Date(metadata.modifiedAt) : null)],
               ].map(([label, value]) => (
               <div key={label}>
                 <dt>{label}</dt>

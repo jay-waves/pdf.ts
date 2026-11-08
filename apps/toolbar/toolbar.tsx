@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from 'react';
-import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode } from '@embedpdf/plugin-spread';
-import { ZoomMode, type ZoomLevel } from '@embedpdf/plugin-zoom';
+import { ScrollStrategy } from '../viewer/viewer-stage';
+import { SpreadMode } from '../viewer/viewer-stage';
+import { ZoomMode, type ZoomLevel } from '../viewer/viewer-stage';
 import { DropdownMenu, Toolbar as RadixToolbar } from 'radix-ui';
 import {
   ChevronDown,

@@ -2,26 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode } from '@embedpdf/plugin-spread';
-import { ZoomMode } from '@embedpdf/plugin-zoom';
+import { InteractionToken } from '@embedpdf/plugin-interaction/contract/host';
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const sourceModules = new Set(['../shared/utils', '../shared/reading-region', '../renderer/stage-scroll-adapter', './smooth-scroll', './viewport-geometry']);
+    const sourceModules = new Set(['../shared/utils', '../shared/reading-region', '../renderer/stage-scroll-adapter', './viewport-geometry']);
     return nextResolve(sourceModules.has(specifier) ? `${specifier}.ts` : specifier, context);
   },
   load(url, context, nextLoad) {
     if (url.endsWith('/renderer/viewport-geometry.ts')
       || url.endsWith('/viewer/viewer-stage.ts')
-      || url.endsWith('/renderer/stage-scroll-adapter.ts')
-      || url.endsWith('/renderer/smooth-scroll.ts')) {
+      || url.endsWith('/renderer/stage-scroll-adapter.ts')) {
       return { format: 'module', source: stripTypeScriptTypes(readFileSync(new URL(url), 'utf8'), { mode: 'transform' }), shortCircuit: true };
     }
     return nextLoad(url, context);
   },
 });
-const { ViewerStage } = await import('../apps/viewer/viewer-stage.ts');
+const { ViewerStage, ScrollStrategy, SpreadMode, ZoomMode } = await import('../apps/viewer/viewer-stage.ts');
 hooks.deregister();
 
 test('control actions return focus after closing overlays and preserve active editors', (t) => {
@@ -80,10 +77,12 @@ function setup(t) {
   const modeListeners = new Set();
   let mode = 'pointerMode';
   const interaction = {
-    getActiveMode: () => mode,
-    activate(value) { mode = value; modeListeners.forEach((listener) => listener(value)); },
-    activateDefaultMode() { this.activate('pointerMode'); },
-    onModeChange(listener) { modeListeners.add(listener); return () => modeListeners.delete(listener); },
+    getActiveToolId: () => mode,
+    registerTool: () => () => {},
+    registerHandler: () => () => {},
+    activateTool(value) { mode = value; modeListeners.forEach((listener) => listener({toolId:value})); },
+    activateDefaultTool() { this.activateTool('pointerMode'); },
+    onToolChanged(listener) { modeListeners.add(listener); return () => modeListeners.delete(listener); },
   };
   const zoomScope = {
     requestZoom(value) { zooms.push(value); zoomListeners.forEach((listener) => listener()); },
@@ -109,23 +108,15 @@ function setup(t) {
     normalizeReadingRegion: () => ({ left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 }),
     preserveView(update) { anchors++; const savedPage = page; update(); page = savedPage; },
   };
-  const capabilities = {
-    scroll: {
-      setScrollStrategy(value) { strategy = value; emit(); },
-    },
-    spread: { forDocument: () => ({
-      getSpreadMode: () => spread, setSpreadMode(value) { spread = value; emit(); }, onSpreadChange: subscribe,
-    }) },
-    zoom: { forDocument: () => zoomScope },
-    rotate: { forDocument: () => ({
-      rotateForward() { page = 8; emit(); },
-      onRotateChange: () => () => {},
-    }) },
-    'interaction-manager': { registerMode() {}, forDocument: () => interaction },
-    viewport: { onViewportResize(listener) { resizeListeners.add(listener); return () => resizeListeners.delete(listener); } },
+  const native = {
+    getSettings: () => ({ spread, layout: strategy }),
+    updateSettings(value) { spread = value.spread; strategy = value.layout; emit(); },
+    onSettingsChanged: subscribe,
+    zoomTo(value) { zoomScope.requestZoom(typeof value === 'number' ? value : value.mode); },
+    rotateViewBy() { page = 8; emit(); },
   };
   const stage = new ViewerStage(
-    { getPlugin: (name) => ({ provides: () => capabilities[name] }) },
+    { tryCapability: token => token === InteractionToken ? interaction : native, documents: { listPages: () => [] } },
     'doc',
     scroll,
   );
@@ -207,10 +198,10 @@ const region = { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 };
 test('rectangle selection fits once and later zoom, navigation and resize use normal behavior', (t) => {
   const { stage, regionFits, zooms, jumps, resize, interaction } = setup(t);
   stage.beginRegionSelection();
-  stage.completeRegionSelection(1, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
+  stage.completeRegionSelection(1, { x: 10, y: 10, width: 100, height: 100 });
   assert.deepEqual(regionFits, [{ region, page: 2 }]);
   assert.equal(stage.getSnapshot().selectingRegion, false);
-  assert.equal(interaction.getActiveMode(), 'pointerMode');
+  assert.equal(interaction.getActiveToolId(), 'pointerMode');
   stage.setZoom(ZoomMode.FitWidth);
   assert.equal(zooms.at(-1), ZoomMode.FitWidth);
   stage.movePages(1);
@@ -225,14 +216,14 @@ test('rectangle selection fits once and later zoom, navigation and resize use no
 
 test('rectangle selection cancels on toggle or mode change and ignores completion when inactive', (t) => {
   const { stage, interaction, regionFits, zooms } = setup(t);
-  const rect = { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } };
+  const rect = { x: 10, y: 10, width: 100, height: 100 };
   stage.completeRegionSelection(4, rect);
   assert.deepEqual(regionFits, []);
   stage.beginRegionSelection();
   assert.equal(stage.getSnapshot().selectingRegion, true);
   stage.beginRegionSelection();
   assert.equal(stage.getSnapshot().selectingRegion, false);
-  assert.equal(interaction.getActiveMode(), 'pointerMode');
+  assert.equal(interaction.getActiveToolId(), 'pointerMode');
   stage.completeRegionSelection(4, rect);
   assert.deepEqual(regionFits, []);
   stage.beginRegionSelection();
@@ -241,7 +232,7 @@ test('rectangle selection cancels on toggle or mode change and ignores completio
   assert.equal(stage.getSnapshot().pageNumber, 5);
   assert.deepEqual(regionFits, [{ region, page: 5 }]);
   stage.beginRegionSelection();
-  interaction.activate('square');
+  interaction.activateTool('square');
   assert.equal(stage.getSnapshot().selectingRegion, false);
   stage.completeRegionSelection(7, rect);
   assert.deepEqual(regionFits, [{ region, page: 5 }]);
@@ -251,14 +242,14 @@ test('rectangle selection cancels on toggle or mode change and ignores completio
 test('presentation cancels selection and leaves the inactive viewport untouched', (t) => {
   const { stage, regionFits, zooms, jumps, resize, interaction } = setup(t);
   stage.beginRegionSelection();
-  stage.completeRegionSelection(1, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
+  stage.completeRegionSelection(1, { x: 10, y: 10, width: 100, height: 100 });
   stage.beginRegionSelection();
   stage.setPresentation(true);
   assert.equal(stage.getSnapshot().selectingRegion, false);
-  assert.equal(interaction.getActiveMode(), 'pointerMode');
+  assert.equal(interaction.getActiveToolId(), 'pointerMode');
   stage.movePages(1);
   stage.beginRegionSelection();
-  stage.completeRegionSelection(4, { origin: { x: 10, y: 10 }, size: { width: 100, height: 100 } });
+  stage.completeRegionSelection(4, { x: 10, y: 10, width: 100, height: 100 });
   stage.setZoom(ZoomMode.FitWidth);
   resize();
   assert.deepEqual(regionFits, [{ region, page: 2 }]);

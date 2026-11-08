@@ -1,4 +1,8 @@
-import type { WrappedPdfiumModule } from '@embedpdf/pdfium';
+import type { LegacyWrappedPdfiumModule } from '@embedpdf/engine-runtime';
+type WrappedPdfiumModule = Omit<LegacyWrappedPdfiumModule, 'pdfium'> & {
+  pdfium: Omit<LegacyWrappedPdfiumModule['pdfium'], 'addFunction'> & { addFunction(fn: (...args: any[]) => unknown, signature: string): number };
+  FPDF_SetSystemFontInfo(pointer: number): void;
+};
 import type {
   PdfFontDiagnostic,
   PdfFontEntry,
@@ -111,6 +115,7 @@ export class PdfiumFontFallbackManager {
   setDiagnosticContext(id: string) { this.diagnosticContext = id; }
   releaseDiagnosticContext(id: string) { this.diagnosticContexts.delete(id); }
   private module: WrappedPdfiumModule | null = null;
+  private writeBytes?: (data: Uint8Array, pointer: number) => void;
   private nextHandleId = 1;
   private structPtr = 0;
   private callbackPtrs: number[] = [];
@@ -121,9 +126,10 @@ export class PdfiumFontFallbackManager {
     this.log = log;
   }
 
-  initialize(module: WrappedPdfiumModule) {
+  initialize(module: WrappedPdfiumModule, writeBytes?: (data: Uint8Array, pointer: number) => void) {
     if (this.enabled) return;
     this.module = module;
+    this.writeBytes = writeBytes ?? ((data, pointer) => (module.pdfium as PdfiumHeap).HEAPU8.set(data, pointer));
     const pdfium = module.pdfium;
     this.structPtr = pdfium.wasmExports.malloc(SYSFONTINFO_SIZE);
     if (!this.structPtr) throw new Error('Could not allocate FPDF_SYSFONTINFO.');
@@ -290,7 +296,7 @@ export class PdfiumFontFallbackManager {
 
     const heap = this.module?.pdfium as PdfiumHeap | undefined;
     if (!heap) return 0;
-    heap.HEAPU8.set(handle.data, bufferPtr);
+    this.writeBytes!(handle.data, bufferPtr);
     return handle.data.byteLength;
   }
 

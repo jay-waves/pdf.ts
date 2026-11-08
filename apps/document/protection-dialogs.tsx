@@ -1,14 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import { PdfPermissionFlag } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
+import type { Kernel } from '@embedpdf/core';
+import { getDocument } from './viewer-document';
+import { getSharedDocumentClient } from '../renderer/shared-document-client';
 import { Button, Dialog, DialogActions } from '../components';
-import { getErrorMessage, getPluginCapability } from '../shared/utils';
+import { getErrorMessage } from '../shared/utils';
 import styles from './document-dialogs.module.css';
 import { DocumentDialog } from './document-dialog-shared';
 
 export function ProtectDialog({ registry, documentId, open, onClose, onProtectionChanged }: {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   documentId?: string | null;
   open: boolean;
   onClose(): void;
@@ -23,10 +23,12 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
   const [protectionState, setProtectionState] = useState<boolean | null>(null);
   const busy = busyAction !== null;
 
-  const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
-  const document = documentId ? manager?.getDocument(documentId) : undefined;
-  const isProtected = protectionState ?? document?.isEncrypted ?? false;
-  const requiresOwnerPassword = document?.isEncrypted === true && !document.isOwnerUnlocked;
+  const client = registry ? getSharedDocumentClient(registry.engine) : undefined;
+  const document = getDocument(registry, documentId);
+  const isProtected = protectionState ?? (document?.security.state.encryption.state === 'encrypted');
+  const requiresOwnerPassword = document?.security.state.encryption.state === 'encrypted' && document.security.state.permissions.openedAs !== 'owner';
+
+  useEffect(() => setProtectionState(null), [documentId]);
 
   useEffect(() => {
     if (!open) return;
@@ -49,7 +51,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
       setError('Passwords do not match.');
       return;
     }
-    if (!manager || !documentId) {
+    if (!client || !documentId) {
       setError('Document protection is not available.');
       return;
     }
@@ -57,11 +59,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
     setBusyAction('protect');
     setError('');
     try {
-      const updated = await manager.setDocumentEncryption(documentId, {
-        userPassword: password,
-        ownerPassword: password,
-        allowedFlags: PdfPermissionFlag.AllowAll,
-      }).toPromise();
+      const updated = await client.request(documentId, 'setProtection', [password]);
       if (!updated) throw new Error('PDFium rejected document protection.');
       setProtectionState(true);
       onProtectionChanged();
@@ -74,7 +72,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
   };
 
   async function removeProtection() {
-    if (!manager || !document || !documentId) {
+    if (!client || !document || !documentId) {
       setError('Document protection is not available.');
       return;
     }
@@ -92,14 +90,14 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
     setError('');
     try {
       if (requiresOwnerPassword) {
-        const unlocked = await manager.unlockOwnerPermissions(documentId, ownerPassword).toPromise();
-        if (!unlocked) {
+        const unlocked = await document.security.unlock({ password: ownerPassword, mode: 'owner' });
+        if (!unlocked || document.security.passwordPrompt.state === 'required') {
           setError('Incorrect owner password.');
           return;
         }
       }
 
-      const removed = await manager.removeEncryption(documentId).toPromise();
+      const removed = await client.request(documentId, 'setProtection', [null]);
       if (!removed) throw new Error('PDFium rejected password removal.');
       setProtectionState(false);
       onProtectionChanged();
@@ -189,7 +187,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
 }
 
 export function UnlockDialog({ registry, documentId, incorrect, onCancel }: {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   documentId: string;
   incorrect: boolean;
   onCancel?(): void;
@@ -205,8 +203,7 @@ export function UnlockDialog({ registry, documentId, incorrect, onCancel }: {
       return;
     }
 
-    const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
-    if (!manager) {
+    if (!registry) {
       setError('Password verification is not available.');
       return;
     }
@@ -214,8 +211,7 @@ export function UnlockDialog({ registry, documentId, incorrect, onCancel }: {
     setBusy(true);
     setError('');
     try {
-      const retry = await manager.retryDocument(documentId, { password }).toPromise();
-      await retry.task.toPromise();
+      await registry.documents.unlock(documentId, { password });
     } catch {
       // The document manager remounts this dialog when it returns to the error state.
       setError('Incorrect password. Try again.');

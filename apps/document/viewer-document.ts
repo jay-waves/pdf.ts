@@ -1,33 +1,15 @@
-import type { PluginRegistry } from '@embedpdf/core';
-import type { PdfDocumentObject } from '@embedpdf/models';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
-import { getPluginCapability } from '../shared/utils';
-
+import type { Kernel, DocumentHandle } from '@embedpdf/core';
+import { getRuntimeDocument } from '../renderer/shared-document-client';
 export const DOCUMENT_ID = 'pdf-ts-document';
-
-export function getDocumentState(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-) {
-  return registry && documentId
-    ? getPluginCapability<DocumentManagerCapability>(registry, 'document-manager')?.getDocumentState(documentId) ?? null
-    : null;
+export function getDocumentState(kernel: Kernel | undefined, documentId: string | null | undefined) {
+  return documentId ? kernel?.documents.get(documentId) ?? null : null;
 }
-
-export function getDocument(registry: PluginRegistry | undefined, documentId: string | null | undefined) {
-  return getDocumentState(registry, documentId)?.document ?? null;
+export function getDocument(kernel: Kernel | undefined, documentId: string | null | undefined) {
+  return kernel && documentId ? getRuntimeDocument(kernel.engine, documentId) : null;
 }
-
-export function onDocumentLoaded(
-  registry: PluginRegistry,
-  documentId: string,
-  listener: (document: PdfDocumentObject) => void,
-) {
-  const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
-  const unsubscribe = manager?.onDocumentOpened((state) => {
-    if (state.id === documentId && state.document) listener(state.document);
-  });
-  const current = manager?.getDocument(documentId);
-  if (current) listener(current);
-  return unsubscribe ?? (() => {});
+export function onDocumentLoaded(kernel: Kernel, documentId: string, listener: (document: DocumentHandle) => void) {
+  const notify = () => { const document = getDocument(kernel, documentId); if (document) listener(document); };
+  const unsubscribe = kernel.documents.onOpened((event) => { if (event.documentId === documentId) notify(); });
+  if (kernel.documents.get(documentId)?.status === 'ready') notify();
+  return unsubscribe;
 }

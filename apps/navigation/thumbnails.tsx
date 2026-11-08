@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { PdfPageObject } from '@embedpdf/models';
-import type { RenderCapability } from '@embedpdf/plugin-render';
-import type { RotateCapability } from '@embedpdf/plugin-rotate';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { Kernel } from '@embedpdf/core';
+import type { PageInfo } from '@embedpdf/core';
+import { RenderToken } from '@embedpdf/plugin-render';
+import { StageToken } from '@embedpdf/plugin-stage';
 import { useStore } from 'zustand';
 import { PanelContent, PanelState } from '../components';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
-import { getDocumentScope } from '../shared/utils';
 import { renderSettingsStore } from '../renderer/render-settings';
-import { useRenderUrl } from '../renderer/use-render-url';
-import { getDocumentState } from '../document/viewer-document';
 import styles from './thumbnails.module.css';
 
 const THUMBNAIL_RENDER_HEIGHT = 112;
@@ -37,11 +34,11 @@ function observeVisibility(element: Element, onChange: (visible: boolean) => voi
 }
 
 function getThumbnailItem(
-  page: PdfPageObject | undefined,
+  page: PageInfo | undefined,
   pageIndex: number,
   documentRotation: number,
 ): ThumbnailItem {
-  const quarterTurn = ((page?.rotation ?? 0) + documentRotation) % 2 === 1;
+  const quarterTurn = ((page?.rotation ?? 0) + documentRotation) % 180 !== 0;
   const width = quarterTurn ? page?.size.height : page?.size.width;
   const height = quarterTurn ? page?.size.width : page?.size.height;
   return {
@@ -59,9 +56,9 @@ function ThumbnailCard({
   current,
   onSelect,
 }: {
-  registry: PluginRegistry;
+  registry: Kernel;
   documentId: string;
-  page: PdfPageObject | undefined;
+  page: PageInfo | undefined;
   item: ThumbnailItem;
   documentRotation: number;
   current: boolean;
@@ -77,23 +74,25 @@ function ThumbnailCard({
     return observeVisibility(card, setVisible);
   }, []);
 
-  const start = useCallback(() => {
-    if (!page || !visible) return null;
-    const render = getDocumentScope<RenderCapability>(registry, 'render', documentId);
-    if (!render) return null;
-    const rotation = ((page.rotation ?? 0) + documentRotation) % 4;
-    const rotatedHeight = rotation % 2 === 1 ? page.size.width : page.size.height;
-    return render.renderPageRect({
-      pageIndex: item.pageIndex,
-      rect: { origin: { x: 0, y: 0 }, size: page.size },
-      options: {
-        scaleFactor: THUMBNAIL_RENDER_HEIGHT / rotatedHeight,
-        dpr: Math.min(systemDpr, 1.5),
-        rotation,
-      },
-    });
-  }, [documentId, documentRotation, item.pageIndex, page, registry, systemDpr, visible]);
-  const [url, releaseImage] = useRenderUrl(start, 'thumbnail');
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    if (!page || !visible) return;
+    const render = registry.tryCapability(RenderToken, documentId);
+    if (!render) return;
+    const controller = new AbortController();
+    let release: (() => void) | undefined;
+    let active = true;
+    const rotation = ((page.rotation ?? 0) + documentRotation) % 360 as 0 | 90 | 180 | 270;
+    const rotatedHeight = rotation % 180 !== 0 ? page.size.width : page.size.height;
+    void render.renderPage(page.ref, {
+      scale: THUMBNAIL_RENDER_HEIGHT / rotatedHeight * Math.min(systemDpr, 1.5),
+      rotation, signal: controller.signal,
+    }).then(image => image.objectUrl()).then(image => {
+      if (!active) { image.revoke(); return; }
+      release = image.revoke; setUrl(image.url);
+    }).catch(error => { if (active) console.error('[pdf-ts] thumbnail failed', error); });
+    return () => { active = false; controller.abort(); release?.(); setUrl(undefined); };
+  }, [documentId, documentRotation, page, registry, systemDpr, visible]);
 
   const pageNumber = item.pageIndex + 1;
   return (
@@ -110,7 +109,6 @@ function ThumbnailCard({
         {visible && url ? (
           <img
             src={url}
-            onLoad={releaseImage}
             alt=""
             draggable={false}
             className="size-full object-contain"
@@ -129,7 +127,7 @@ function ThumbnailFlow({
   pageCount,
   currentPageNumber,
 }: {
-  registry: PluginRegistry;
+  registry: Kernel;
   documentId: string;
   dispatch: ViewerCommandDispatch;
   pageCount: number;
@@ -137,9 +135,8 @@ function ThumbnailFlow({
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const currentPageIndex = Math.min(Math.max(0, currentPageNumber - 1), pageCount - 1);
-  const documentState = getDocumentState(registry, documentId);
-  const pages = documentState?.document?.pages ?? [];
-  const [documentRotation, setDocumentRotation] = useState(documentState?.rotation ?? 0);
+  const pages = registry.documents.listPages(documentId);
+  const [documentRotation, setDocumentRotation] = useState(registry.tryCapability(StageToken, documentId)?.getViewRotation() ?? 0);
   const items = useMemo(
     () => Array.from({ length: pageCount }, (_, pageIndex) => (
       getThumbnailItem(pages[pageIndex], pageIndex, documentRotation)
@@ -148,10 +145,10 @@ function ThumbnailFlow({
   );
 
   useEffect(() => {
-    const rotate = getDocumentScope<RotateCapability>(registry, 'rotate', documentId);
+    const rotate = registry.tryCapability(StageToken, documentId);
     if (!rotate) return;
-    setDocumentRotation(rotate.getRotation());
-    return rotate.onRotateChange((rotation) => setDocumentRotation(rotation));
+    setDocumentRotation(rotate.getViewRotation());
+    return rotate.onSettingsChanged(() => setDocumentRotation(rotate.getViewRotation()));
   }, [documentId, registry]);
 
   useLayoutEffect(() => {
@@ -188,7 +185,7 @@ export function Thumbnails({
   totalPages,
   currentPageNumber,
 }: {
-  registry: PluginRegistry | undefined;
+  registry: Kernel | undefined;
   documentId?: string | null;
   dispatch: ViewerCommandDispatch;
   totalPages: number;

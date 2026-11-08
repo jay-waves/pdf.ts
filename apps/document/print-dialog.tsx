@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { getEffectivePermission, type PluginRegistry } from '@embedpdf/core';
-import { PdfPermissionFlag } from '@embedpdf/models';
+import type { Kernel } from '@embedpdf/core';
 import { Check } from 'lucide-react';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { Button, DialogActions } from '../components';
@@ -42,77 +41,20 @@ function validatePageRange(value: string, totalPages: number) {
   return compact;
 }
 
-function openBrowserPrintDialog(data: ArrayBuffer) {
-  return new Promise<void>((resolve, reject) => {
-    const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
-    const iframe = document.createElement('iframe');
-    iframe.title = 'Print Document';
-    iframe.hidden = true;
-    let cleanupTimer = 0;
-
-    const cleanup = () => {
-      if (cleanupTimer) window.clearTimeout(cleanupTimer);
-      iframe.remove();
-      URL.revokeObjectURL(url);
-    };
-
-    iframe.onerror = () => {
-      cleanup();
-      reject(new Error('The browser could not load the print document.'));
-    };
-    iframe.onload = () => {
-      if (iframe.src !== url) return;
-      const printWindow = iframe.contentWindow;
-      if (!printWindow) {
-        cleanup();
-        reject(new Error('The browser did not provide a print window.'));
-        return;
-      }
-
-      printWindow.addEventListener('afterprint', cleanup, { once: true });
-      cleanupTimer = window.setTimeout(cleanup, 60_000);
-      try {
-        printWindow.focus();
-        printWindow.print();
-        resolve();
-      } catch (error) {
-        cleanup();
-        reject(error);
-      }
-    };
-
-    document.body.append(iframe);
-    iframe.src = url;
-  });
-}
-
-async function printDocument(
-  registry: PluginRegistry | undefined,
-  documentId: string | null | undefined,
-  pageRange?: string,
-) {
+async function printDocument(registry: Kernel | undefined, documentId: string | null | undefined, pageRange?: string) {
   const document = getDocument(registry, documentId);
-  const engine = registry?.getEngine();
-  if (!registry || !documentId || !document || !engine) {
-    throw new Error('Printing is not available.');
-  }
-  if (!getEffectivePermission(
-    registry.getStore().getState().core,
-    documentId,
-    PdfPermissionFlag.Print,
-  )) {
-    throw new Error('This document does not allow printing.');
-  }
-
-  const data = await engine.preparePrintDocument(document, {
-    pageRange,
-    includeAnnotations: true,
-  }).toPromise();
-  await openBrowserPrintDialog(data);
+  if (!registry || !documentId || !document) throw new Error('Printing is not available.');
+  if (!document.security.allows('doc.print')) throw new Error('This document does not allow printing.');
+  const all = registry.documents.listPages(documentId);
+  const indices = pageRange?.split(',').flatMap(part => {
+    const [start, end = start] = part.split('-').map(Number);
+    return Array.from({ length: end - start + 1 }, (_, offset) => start - 1 + offset);
+  });
+  await registry.documents.print(documentId, { pages: indices?.map(index => all[index].ref), includeAnnotations: true });
 }
 
 export function PrintDialog({ registry, documentId, open, currentPageNumber, totalPages, onClose }: {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   documentId?: string | null;
   open: boolean;
   currentPageNumber: number;

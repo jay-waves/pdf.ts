@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { HistoryCapability } from '@embedpdf/plugin-history';
-import type { RotateCapability } from '@embedpdf/plugin-rotate';
-import { ScrollStrategy } from '@embedpdf/plugin-scroll';
-import { SpreadMode } from '@embedpdf/plugin-spread';
-import type { ZoomCapability, ZoomLevel } from '@embedpdf/plugin-zoom';
+import type { Kernel } from '@embedpdf/core';
+import { HistoryToken } from '@embedpdf/plugin-history';
+import { StageToken } from '@embedpdf/plugin-stage';
+import { ScrollStrategy } from './viewer-stage';
+import { SpreadMode } from './viewer-stage';
+import type { ZoomLevel } from './viewer-stage';
 import { getAnnotationScope } from '../annotations/annotations';
 import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from './viewer-stage';
 
 const subscribeEmptyView = () => () => {};
 const getEmptyView = () => EMPTY_STAGE_SNAPSHOT;
 import { toggleViewerColorMode } from '../theme/theme';
-import { getDocumentScope } from '../shared/utils';
 import type { ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
@@ -142,7 +141,7 @@ export type ViewerCapabilitySnapshot = {
 };
 
 type ViewerControllerDependencies = {
-  registry?: PluginRegistry;
+  registry?: Kernel;
   documentId?: string | null;
   stage?: ViewerStage | null;
   saveDocument(): void;
@@ -174,13 +173,13 @@ function executeViewerCommand(
       return;
     case 'ui/set-pan':
       if (command.enabled) {
-        getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+        getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       }
       updateUi(command);
       return;
     case 'ui/set-toolbar-section':
       if (command.section === 'search') {
-        getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+        getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       }
       updateUi(command);
       return;
@@ -203,19 +202,19 @@ function executeViewerCommand(
         dependencies.stage.stepZoom(command.direction);
         return;
       }
-      const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
+      const zoom = documentId ? registry?.tryCapability(StageToken, documentId) : null;
       if (command.direction > 0) zoom?.zoomIn();
       else zoom?.zoomOut();
       return;
     }
     case 'view/set-zoom':
       if (dependencies.stage) dependencies.stage.setZoom(command.level);
-      else getDocumentScope<ZoomCapability>(registry, 'zoom', documentId)?.requestZoom(command.level);
+      else if (documentId) registry?.tryCapability(StageToken, documentId)?.zoomTo(typeof command.level === 'number' ? command.level : { mode: command.level });
       return;
     case 'view/select-reading-region':
       updateUi({ type: 'ui/set-pan', enabled: false });
       updateUi({ type: 'ui/close-overlay' });
-      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+      getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       dependencies.stage?.beginRegionSelection();
       return;
     case 'view/cancel-reading-region':
@@ -225,7 +224,7 @@ function executeViewerCommand(
       if (command.enabled) {
         updateUi({ type: 'ui/close-overlay' });
         updateUi({ type: 'ui/set-toolbar-section', section: null });
-        getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+        getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       }
       dependencies.stage?.setPresentation(command.enabled);
       return;
@@ -237,22 +236,23 @@ function executeViewerCommand(
       return;
     case 'view/rotate':
       if (dependencies.stage) dependencies.stage.rotate();
-      else getDocumentScope<RotateCapability>(registry, 'rotate', documentId)?.rotateForward();
+      else if (documentId) registry?.tryCapability(StageToken, documentId)?.rotateViewBy(90);
       return;
     case 'annotation/toggle-tool': {
       const annotation = getAnnotationScope(registry, documentId);
       if (!annotation) return;
       updateUi({ type: 'ui/set-toolbar-section', section: null });
       updateUi({ type: 'ui/set-pan', enabled: false });
-      const current = annotation.scope.getActiveTool()?.id ?? null;
-      annotation.scope.setActiveTool(current === command.toolId ? null : command.toolId);
+      const current = annotation.interaction?.getActiveToolId();
+      if (current === command.toolId) annotation.interaction?.activateDefaultTool();
+      else annotation.interaction?.activateTool(command.toolId);
       return;
     }
     case 'annotation/clear-tool':
-      getAnnotationScope(registry, documentId)?.scope.setActiveTool(null);
+      getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       return;
     case 'annotation/history': {
-      const history = getDocumentScope<HistoryCapability>(registry, 'history', documentId);
+      const history = documentId ? registry?.tryCapability(HistoryToken, documentId) : null;
       if (command.direction === 'undo') history?.undo();
       else history?.redo();
       return;
@@ -269,27 +269,32 @@ function executeViewerCommand(
 }
 
 function useViewerCapabilitySnapshot(
-  registry: PluginRegistry | undefined,
+  registry: Kernel | undefined,
   documentId: string | null | undefined,
 ): Pick<ViewerCapabilitySnapshot, 'zoomPercent' | 'zoomLevel' | 'activeTool'> {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const documentStatus = useSyncExternalStore(
+    (listener) => registry?.subscribe(listener) ?? (() => {}),
+    () => documentId ? registry?.documents.get(documentId)?.status ?? null : null,
+  );
 
   useEffect(() => {
-    const zoom = getDocumentScope<ZoomCapability>(registry, 'zoom', documentId);
+    const zoom = documentId ? registry?.tryCapability(StageToken, documentId) : null;
     if (!zoom) {
       setZoomPercent(100);
       setZoomLevel(1);
       return;
     }
-    const sync = (state = zoom.getState()) => {
-      setZoomPercent(Math.round(state.currentZoomLevel * 100));
-      setZoomLevel(state.zoomLevel);
+    const sync = () => {
+      setZoomPercent(Math.round(zoom.getZoomLevel() * 100));
+      const mode = zoom.getZoomMode();
+      setZoomLevel(mode === 'fit-page' || mode === 'fit-width' ? mode : zoom.getZoomLevel());
     };
     sync();
-    return zoom.onStateChange(sync);
-  }, [documentId, registry]);
+    return zoom.onZoomChanged(sync);
+  }, [documentId, registry, documentStatus]);
 
   useEffect(() => {
     const annotation = getAnnotationScope(registry, documentId);
@@ -297,10 +302,10 @@ function useViewerCapabilitySnapshot(
       setActiveTool(null);
       return;
     }
-    const sync = (tool = annotation.scope.getActiveTool()) => setActiveTool(tool?.id ?? null);
+    const sync = () => { const id = annotation.interaction?.getActiveToolId(); setActiveTool(id && annotation.scope.tools.get(id) ? id : null); };
     sync();
-    return annotation.scope.onActiveToolChange(sync);
-  }, [documentId, registry]);
+    return annotation.interaction?.onToolChanged(sync);
+  }, [documentId, registry, documentStatus]);
 
   return { zoomPercent, zoomLevel, activeTool };
 }

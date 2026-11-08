@@ -1,4 +1,5 @@
-import { FontCharset } from '@embedpdf/models';
+// PDFium's documented Windows charset identifiers, independent of SDK models.
+const FontCharset = { ANSI: 0, DEFAULT: 1, SYMBOL: 2, SHIFTJIS: 128, HANGEUL: 129, GB2312: 134, CHINESEBIG5: 136, GREEK: 161, VIETNAMESE: 163, HEBREW: 177, ARABIC: 178, CYRILLIC: 204, THAI: 222, EASTERNEUROPEAN: 238 };
 import type {
   PdfFontEntry,
   PdfFontFallbackConfig,

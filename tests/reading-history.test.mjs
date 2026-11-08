@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { readFileSync } from 'node:fs';
-import { ZoomMode } from '@embedpdf/plugin-zoom';
+const ZoomMode = { FitWidth: 'fit-width' };
 
 const platform = { readReadingProgress() {}, writeReadingProgress() {} };
 globalThis.__readingHistoryTestPlatform = platform;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === '../viewer/viewer-stage') return { url: 'data:text/javascript,export const ScrollStrategy={Vertical:"vertical",Horizontal:"horizontal"};export const SpreadMode={None:"none",Odd:"odd",Even:"even"};', shortCircuit: true };
     if (specifier === '#platform') return { url: 'test:reading-platform', shortCircuit: true };
     return nextResolve(specifier === '../shared/reading-region' ? `${specifier}.ts` : specifier, context);
   },

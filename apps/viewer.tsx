@@ -4,16 +4,11 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { nextDocumentFrame, waitForDocumentPaint } from './renderer/document-paint';
 import { useStore } from 'zustand';
-import type { PluginRegistry } from '@embedpdf/core';
-import { PdfErrorCode } from '@embedpdf/models';
-import pdfiumWasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
-import type { FormCapability } from '@embedpdf/plugin-form';
-import type { DocumentManagerCapability } from '@embedpdf/plugin-document-manager';
-import type { RotateCapability } from '@embedpdf/plugin-rotate';
-import type { ZoomCapability } from '@embedpdf/plugin-zoom';
-import { ScrollStrategy } from '@embedpdf/plugin-scroll/react';
+import type { Kernel } from '@embedpdf/core';
+import pdfiumWasmUrl from '@embedpdf/engine-runtime-wasm32/embedpdf.wasm?url';
+import { StageToken } from '@embedpdf/plugin-stage';
+import { ScrollStrategy } from './viewer/viewer-stage';
 import './viewer.css';
-import { getPluginCapability } from './shared/utils';
 import { getFileNameFromUrl } from './shared/url';
 import {
   Outline,
@@ -69,7 +64,6 @@ import type {
 import {
   LoadingStatus,
   PdfSurface,
-  RENDER_IMAGE_TYPE,
   VIEWER_STATUS_CLASS,
 } from './viewer/pdf-surface';
 import styles from './viewer/viewer.module.css';
@@ -134,10 +128,6 @@ function installScrollAttribute(stage: ViewerStage) {
   return stage.onStrategyChange(sync);
 }
 
-function installFormDirty(registry: PluginRegistry, onDirty: () => void) {
-  const form = getPluginCapability<FormCapability>(registry, 'form');
-  return form?.onFieldValueChange(onDirty);
-}
 
 interface AppProps {
   pdfium: PdfRuntime;
@@ -146,7 +136,7 @@ interface AppProps {
 }
 
 type ViewerSession = Readonly<{
-  registry: PluginRegistry;
+  registry: Kernel;
   stage: ViewerStage;
 }>;
 
@@ -279,7 +269,7 @@ function App({
   }, [pdfium]);
 
   const activateDocument = useCallback((
-    nextRegistry: PluginRegistry,
+    nextRegistry: Kernel,
     nextStage = new ViewerStage(nextRegistry, DOCUMENT_ID),
     stagedCleanup?: () => void,
   ) => {
@@ -294,16 +284,15 @@ function App({
     initializeAnnotationPalette(nextRegistry, nextDocumentId);
 
     const installers = [
-      () => pdfium.bindRegistry(nextRegistry),
       () => stagedCleanup ?? nextStage.install(),
       () => installStageNavigationInput(nextStage, dispatchCommand),
       () => installScrollAttribute(nextStage),
+      () => nextRegistry.documents.onOpened(({ documentId }) => initializeAnnotationPalette(nextRegistry, documentId)),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
       () => installCommentEditor(nextRegistry, (annotationId) => {
         dispatchCommand({ type: 'ui/open-comments', annotationId });
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
-      () => installFormDirty(nextRegistry, () => setDirty(true)),
       () => installPlatformReadingHistory(nextStage, documentKey, !stagedCleanup),
       () => installOutlinePrefetch(pdfium, {
         documentId: nextDocumentId,
@@ -318,15 +307,15 @@ function App({
     setSession({ registry: nextRegistry, stage: nextStage });
   }, [dispatchCommand, documentKey, pdfium, setDirty]);
 
-  const initializePlugins = useCallback(async (nextRegistry: PluginRegistry) => {
+  const initializePlugins = useCallback(async (nextRegistry: Kernel) => {
     activateDocument(nextRegistry);
   }, [activateDocument]);
 
   const reloadExternalDocument = useCallback(async (change: ExternalDocumentChange) => {
     if (!registry || !stage || !documentId) return;
     if (reloadInProgressRef.current) { queuedChangeRef.current = change; return; }
-    const manager = getPluginCapability<DocumentManagerCapability>(registry, 'document-manager');
-    if (!manager?.isDocumentOpen(documentId)) return;
+    const manager = registry.documents;
+    if (!manager.has(documentId)) return;
 
     reloadInProgressRef.current = true;
     setReloadRunning(true);
@@ -341,23 +330,16 @@ function App({
     try {
       // EmbedPDF owns loading, IDs, document state and native handle lifetime.
       // Keep the old document active until the replacement has actually painted.
-      const opened = await manager.openDocumentUrl({
-        url: change.resource.url,
-        name: resolvedDocumentName ?? 'document.pdf',
-        autoActivate: false,
-        mode: 'full-fetch',
-      }).toPromise();
-      replacementId = opened.documentId;
-      try {
-        await opened.task.toPromise();
-      } catch (error) {
-        if (manager.getDocumentState(replacementId)?.errorCode !== PdfErrorCode.Password) throw error;
-        // Retry through the SDK's password flow without removing the old view.
+      replacementId = crypto.randomUUID();
+      const opened = await manager.open({ kind: 'url', url: change.resource.url, id: replacementId }, {
+        name: resolvedDocumentName ?? 'document.pdf', activate: false, signal,
+      });
+      if (opened.document.status === 'locked') {
         await new Promise<void>((resolve, reject) => {
           const cleanup = () => { unsubscribe(); signal.removeEventListener('abort', abort); };
           const abort = () => { cleanup(); reject(new DOMException('Reload cancelled.', 'AbortError')); };
-          const unsubscribe = manager.onDocumentOpened((state) => {
-            if (state.id === replacementId) { cleanup(); resolve(); }
+          const unsubscribe = manager.onOpened((event) => {
+            if (event.documentId === replacementId) { cleanup(); resolve(); }
           });
           signal.addEventListener('abort', abort, { once: true });
           if (signal.aborted) abort(); else setReloadPasswordId(replacementId!);
@@ -371,13 +353,13 @@ function App({
       }
       const snapshot = stage.getSnapshot();
       const readingPosition = stage.captureReadingPosition();
-      const zoomLevel = getPluginCapability<ZoomCapability>(registry, 'zoom')
-        ?.forDocument(documentId).getState().zoomLevel;
-      const rotation = getPluginCapability<RotateCapability>(registry, 'rotate')
-        ?.forDocument(documentId).getRotation();
+      const nativeStage = registry.tryCapability(StageToken, documentId);
+      const zoomMode = nativeStage?.getZoomMode();
+      const zoomLevel = zoomMode === 'fit-width' || zoomMode === 'fit-page' ? zoomMode : nativeStage?.getZoomLevel();
+      const rotation = nativeStage?.getViewRotation();
       const nextStage = new ViewerStage(registry, replacementId);
       stagedCleanup = nextStage.install();
-      const nextPage = Math.min(snapshot.pageNumber, manager.getDocument(replacementId)!.pageCount);
+      const nextPage = Math.min(snapshot.pageNumber, manager.get(replacementId)!.pageCount);
       flushSync(() => setPendingDocument({
         documentId: replacementId!, stage: nextStage,
         presentationPage: snapshot.mode === 'presentation' ? nextPage : null,
@@ -385,7 +367,7 @@ function App({
       await nextDocumentFrame(signal);
       nextStage.applyLayout(snapshot.strategy, snapshot.spread);
       if (rotation !== undefined) {
-        getPluginCapability<RotateCapability>(registry, 'rotate')?.forDocument(replacementId).setRotation(rotation);
+        registry.tryCapability(StageToken, replacementId)?.setViewRotation(rotation);
       }
       if (zoomLevel !== undefined) nextStage.setZoom(zoomLevel);
       await nextDocumentFrame(signal);
@@ -403,7 +385,7 @@ function App({
         return;
       }
       flushSync(() => {
-        manager.setActiveDocument(replacementId!);
+        manager.setActive(replacementId!);
         activateDocument(registry, nextStage, stagedCleanup);
         setPendingDocument(null);
         setCurrentResource(change.resource);
@@ -413,13 +395,13 @@ function App({
       committed = true;
       change.accept();
       onResourceConsumed(change.resource);
-      await manager.closeDocument(documentId).toPromise();
+      await manager.close(documentId);
     } finally {
       if (!committed) {
         stagedCleanup?.();
         setPendingDocument(null);
-        if (replacementId && manager.isDocumentOpen(replacementId)) {
-          await manager.closeDocument(replacementId).toPromise();
+        if (replacementId && manager.has(replacementId)) {
+          await manager.close(replacementId);
         }
       }
       if (reloadAbortRef.current === controller) reloadAbortRef.current = null;
@@ -771,7 +753,6 @@ function ReadyViewer({
   const { pdfium, isLoading, error } = usePdfRuntime({
     wasmUrl: resources.wasm.url,
     fontFallback: PDFIUM_FONT_FALLBACK,
-    defaultImageType: RENDER_IMAGE_TYPE,
   });
 
   useEffect(() => {

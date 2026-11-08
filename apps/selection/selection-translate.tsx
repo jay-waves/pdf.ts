@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PluginRegistry } from '@embedpdf/core';
-import type { SelectionCapability } from '@embedpdf/plugin-selection';
+import type { Kernel } from '@embedpdf/core';
+import { SelectionToken } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from '../components';
 import { platform } from '#platform';
 import { SelectionLlm } from './selection-llm';
-import { getPluginCapability, normalizePdfText } from '../shared/utils';
+import { normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
 import { googleTranslationUrl, isLlmEnabled } from './translation-settings';
 import styles from './selection-translate.module.css';
 
-type Props = { registry?: PluginRegistry; request: ViewerTranslationRequest; onClose(): void };
+type Props = { registry?: Kernel; request: ViewerTranslationRequest; onClose(): void };
 export function SelectionTranslate(props: Props) {
   return props.request.mode === 'llm' ? <SelectionLlm {...props} /> : <TranslationPopover {...props} />;
 }
@@ -25,13 +25,13 @@ function TranslationPopover({ registry, request, onClose }: Props) {
     const active = new AbortController();
     controller.current = active;
     setSourceText(''); setText(''); setError(''); setLoading(true);
-    const scope = getPluginCapability<SelectionCapability>(registry, 'selection')?.forDocument(request.documentId);
+    const scope = registry?.tryCapability(SelectionToken, request.documentId);
     void (async () => {
       try {
         if (!scope) throw new Error('Could not read the selected text.');
-        const parts = await scope.getSelectedText().toPromise();
+        const parts = await scope.readText();
         if (active.signal.aborted) return;
-        const selected = normalizePdfText(parts.join(' ')).trim();
+        const selected = normalizePdfText(parts).trim();
         setSourceText(selected);
         if (!isLlmEnabled(platform.getPreference)) throw new Error('LLM is disabled. Open Google Translate to translate this selection.');
         if (!platform.requestAi) throw new Error('Configure LLM in Developer > LLM to translate.');

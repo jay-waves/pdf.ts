@@ -4,8 +4,8 @@ import {
   useState,
   type HTMLAttributes,
 } from 'react';
-import { useDocumentState } from '@embedpdf/core/react';
-import { MatchFlag, type SearchResult } from '@embedpdf/models';
+import { usePage } from '@embedpdf/react/runtime';
+import { MatchFlag, type SearchResult } from './pdf-search';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -36,7 +36,7 @@ export function SearchLayer({
     )) ? state.activeResultIndex : -1;
     return { pageResults, activeResultIndex };
   }));
-  const scale = useDocumentState(documentId)?.scale ?? 1;
+  const scale = usePage().transform.viewScale;
   if (!pageResults?.length) return null;
 
   return (
@@ -48,10 +48,10 @@ export function SearchLayer({
               className="pdf-search-highlight"
               style={{
                 position: 'absolute',
-                top: rect.origin.y * scale,
-                left: rect.origin.x * scale,
-                width: rect.size.width * scale,
-                height: rect.size.height * scale,
+                top: rect.y * scale,
+                left: rect.x * scale,
+                width: rect.width * scale,
+                height: rect.height * scale,
                 backgroundColor: resultIndex === activeResultIndex
                   ? ACTIVE_HIGHLIGHT_COLOR
                   : HIGHLIGHT_COLOR,
