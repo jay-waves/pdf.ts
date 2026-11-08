@@ -1,3 +1,9 @@
+/**
+ * Application navigation and reading/presentation state over EmbedPDF StageToken.
+ * Native Stage owns layout, projection, rotation and bounded scrolling. Reading-area
+ * selection is a temporary interaction tool: fit its page-space rectangle without
+ * creating annotations or dirtying the PDF.
+ */
 import type { Kernel } from '@embedpdf/core';
 import type { Rect } from '@embedpdf/core-geometry';
 import { StageToken, type ScrollBehaviorKind } from '@embedpdf/plugin-stage';

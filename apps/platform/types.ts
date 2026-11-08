@@ -1,13 +1,13 @@
-import type { PdfWritePlan, PdfWriteResult, SharedSaveState } from '../renderer/document-save';
+/**
+ * Platform boundary for browser, extension and launcher access. File writes use
+ * shared/pdf-file contracts also consumed by the engine; platform adapters must
+ * not import engine or renderer implementations.
+ */
+import type { DraftLocation, PdfFileWriter, SharedSaveState } from '../shared/pdf-file';
 export interface ReadingProgress {
   pageNumber: number;
   scrollStrategy?: string;
   spreadMode?: string;
-}
-
-export interface PdfFileWriter {
-  writeShared?(plan: PdfWritePlan): Promise<PdfWriteResult>;
-  save(data: ArrayBuffer): Promise<boolean>;
 }
 
 export interface ExternalDocumentChange {
@@ -18,8 +18,8 @@ export interface ExternalDocumentChange {
 /**
  * Cross-platform reference to the PDF currently being edited.
  *
- * Browser platforms back this with a FileSystemFileHandle, VS Code backs it
- * with the custom document Uri, and pdf.ts backs it with its daemon session.
+ * Browser platforms back this with a FileSystemFileHandle; desktop packages
+ * use a local daemon session.
  * Preparing the writer is deliberately separate from writing because browser
  * permission prompts must run while the save user gesture is still active.
  */
@@ -30,7 +30,7 @@ export interface PdfFileHandle {
 }
 
 export interface ManagedResource {
-  readonly draftLocation?: import('../renderer/draft-storage').DraftLocation;
+  readonly draftLocation?: DraftLocation;
   readonly sharedIdentity?: string | FileSystemFileHandle;
   readonly url: string;
   /** Opens the original bytes without materializing another full ArrayBuffer. */

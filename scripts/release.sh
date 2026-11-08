@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Run pnpm check and pnpm compile, commit changes, then bash scripts/release.sh vVERSION.
+# Validates package.json and a clean tree, then atomically pushes branch and tag
+# using existing Git authentication (GITHUB_TOKEN is optional). No local deployment.
 set -Eeuo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"

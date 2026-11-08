@@ -1,8 +1,7 @@
 import { get, set } from 'idb-keyval';
 import { sha256 } from 'hash-wasm';
-import { fingerprintFile } from '../platform/file-fingerprint';
-
-export interface DraftLocation { endpoint?: string; key?: string }
+import { fingerprintFile } from '../../shared/file-fingerprint';
+import type { DraftLocation } from '../../shared/pdf-file';
 export interface StoredDraft { text: string | null; version: string }
 export interface DraftStorage {
   read(): Promise<StoredDraft>;

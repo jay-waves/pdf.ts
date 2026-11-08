@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DocumentSaveCoordinator } from '../apps/renderer/document-save.ts';
+import { DocumentSaveCoordinator } from '../apps/engine/persistence/document-save.ts';
 function deferred() {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });

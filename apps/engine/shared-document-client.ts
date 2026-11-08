@@ -1,3 +1,4 @@
+import type { DraftLocation, PdfFileWriter, PdfWritePlan } from '../shared/pdf-file';
 import { decodeEngineResult } from './engine-wire';
 import { createEventHook } from '@embedpdf/core';
 import { historyPlugin } from '@embedpdf/plugin-history';
@@ -10,9 +11,7 @@ import type { PdfFontFallbackConfig, PdfFontDiagnostic } from '../fonts/types';
 import type { LocalEngineRecipeOptions } from '@embedpdf/engine';
 import { createPdfWorker } from './pdf-worker-transport';
 import type { SharedDocumentSnapshot, SharedFileIdentity } from './shared-document-host';
-import type { DraftLocation } from './draft-storage';
-import type { PdfFileWriter } from '../platform/types';
-import type { PdfWritePlan } from './document-save';
+
 const clients = new WeakMap<Engine, SharedDocumentClient>();
 export function getSharedDocumentClient(engine: Engine) { return clients.get(engine); }
 export function getRuntimeDocument(engine: Engine, id: string) { return clients.get(engine)?.getDocument(id) ?? null; }

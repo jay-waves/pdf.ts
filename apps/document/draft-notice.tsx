@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Engine } from '@embedpdf/core';
-import type { DraftState } from '../renderer/document-draft';
-import { getSharedDocumentClient } from '../renderer/shared-document-client';
+import type { DraftState } from '../engine/persistence/document-draft';
+import { getSharedDocumentClient } from '../engine/shared-document-client';
 
 export function DraftNotice({ draft, dirty, engine, documentId, name }: {
   draft: DraftState; dirty: boolean; engine: Engine; documentId: string | null; name: string;

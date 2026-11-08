@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button, DialogActions } from '../components';
 import { getErrorMessage } from '../shared/utils';
-import styles from './document-dialogs.module.css';
-import { DocumentDialog } from './document-dialog-shared';
+import styles from '../components/popup-dialog.module.css';
+import { PopupDialog } from '../components/popup-dialog';
 
 export function ExternalChangeDialog({
   open,
@@ -35,7 +35,7 @@ export function ExternalChangeDialog({
   };
 
   return (
-    <DocumentDialog
+    <PopupDialog
       open={open}
       onClose={() => {}}
       preventClose
@@ -60,6 +60,6 @@ export function ExternalChangeDialog({
           </Button>
         </DialogActions>
       </div>
-    </DocumentDialog>
+    </PopupDialog>
   );
 }

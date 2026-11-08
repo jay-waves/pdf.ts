@@ -1,3 +1,8 @@
+/**
+ * Translate one-based application pages and saved reading positions to native
+ * page indexes and viewpoints. Delegate geometry, anchors and animation to Stage;
+ * renderer adapters must not import ViewerStage or feature UI.
+ */
 import type { Kernel } from '@embedpdf/core';
 import type { Rect } from '@embedpdf/core-geometry';
 import { StageToken, type ScrollBehaviorKind, type Viewpoint } from '@embedpdf/plugin-stage';

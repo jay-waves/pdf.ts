@@ -7,7 +7,7 @@ import { interactionPlugin } from '@embedpdf/plugin-interaction';
 import { stagePlugin } from '@embedpdf/plugin-stage';
 import { renderPlugin } from '@embedpdf/plugin-render';
 import { selectionPlugin } from '@embedpdf/plugin-selection';
-import { createSharedPdfEngine, sharedHistoryPlugin } from '../apps/renderer/shared-document-client';
+import { createSharedPdfEngine, sharedHistoryPlugin } from '../apps/engine/shared-document-client';
 
 export async function openBytes(bytes: number[], identity: string | FileSystemFileHandle = 'v3-kernel-test') {
   const session = createSharedPdfEngine({ defaultFallbackFonts: false });

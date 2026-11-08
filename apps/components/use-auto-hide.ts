@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { viewerControls } from '../viewer/viewer-controls';
+import { viewerControls } from './control-visibility';
 
 function useAutoHide(shouldHide: () => boolean, delay = 900) {
   const [visible, setVisible] = useState(false);

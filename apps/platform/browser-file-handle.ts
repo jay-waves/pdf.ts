@@ -1,5 +1,5 @@
-import type { PdfWritePlan, PdfWriteResult } from '../renderer/document-save';
-import { fingerprintFile } from './file-fingerprint';
+import type { PdfWritePlan, PdfWriteResult } from '../shared/pdf-file';
+import { fingerprintFile } from '../shared/file-fingerprint';
 import { get, update } from 'idb-keyval';
 import { downloadPdf } from './browser-download';
 import type { PdfFileHandle } from './types';

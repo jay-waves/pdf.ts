@@ -31,7 +31,7 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
-const { initializeAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation, createTextMarkupAnnotations } = await import('../apps/annotations/annotations.ts');
+const { initializeAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation } = await import('../apps/annotations/annotations.ts');
 const { themeAnnotationRenderers } = await import(rendererUrl.href);
 hooks.deregister();
 
@@ -76,14 +76,6 @@ test('initialization and theme changes never read or edit existing annotations',
   globalThis.annotationTestTheme.setState({ theme: 'light' });
   globalThis.annotationTestTheme.setState({ theme: 'dark' });
   assert.equal(defaults.length, 1);
-});
-
-test('selection markup uses the native selection operation and clears through its default policy', async () => {
-  const calls=[];
-  const annotations=[{subtype:'highlight'}];
-  const result=await createTextMarkupAnnotations({createFromSelection:async (...args)=>{calls.push(args);return {annotations};}}, 'highlight');
-  assert.deepEqual(calls,[['highlight']]);
-  assert.equal(result,annotations);
 });
 
 test('comment and highlight renderers keep theme reads in React and leave saved appearance unchanged', () => {

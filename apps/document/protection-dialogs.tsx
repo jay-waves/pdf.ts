@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import { getDocument } from './viewer-document';
-import { getSharedDocumentClient } from '../renderer/shared-document-client';
+import { getSharedDocumentClient } from '../engine/shared-document-client';
 import { Button, Dialog, DialogActions } from '../components';
 import { getErrorMessage } from '../shared/utils';
-import styles from './document-dialogs.module.css';
-import { DocumentDialog } from './document-dialog-shared';
+import styles from '../components/popup-dialog.module.css';
+import { PopupDialog } from '../components/popup-dialog';
 
 export function ProtectDialog({ registry, documentId, open, onClose, onProtectionChanged }: {
   registry?: Kernel;
@@ -115,7 +115,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
   else if (isProtected && !password) actionLabel = 'Remove password';
 
   return (
-    <DocumentDialog
+    <PopupDialog
       open={open}
       onClose={onClose}
       preventClose={busy}
@@ -182,7 +182,7 @@ export function ProtectDialog({ registry, documentId, open, onClose, onProtectio
           </Button>
         </DialogActions>
       </form>
-    </DocumentDialog>
+    </PopupDialog>
   );
 }
 

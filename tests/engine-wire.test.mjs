@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { localEngine } from '@embedpdf/engine';
-import { encodeEngineResult, decodeEngineResult } from '../apps/renderer/engine-wire.ts';
+import { encodeEngineResult, decodeEngineResult } from '../apps/engine/engine-wire.ts';
 import { fixture } from '../scripts/pdf-editing-fixture.mjs';
 const roundTrip = value => decodeEngineResult(structuredClone(encodeEngineResult(value)));
 async function setup(t) {

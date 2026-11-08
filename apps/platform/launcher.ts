@@ -1,14 +1,10 @@
+import type { PdfWritePlan, PdfWriteResult, SharedSaveState } from '../shared/pdf-file';
 import { sha256 } from 'hash-wasm';
-import type { PdfWritePlan, PdfWriteResult, SharedSaveState } from '../renderer/document-save';
 import { browserAiCapabilities } from './browser-ai';
 import { browserPersistence } from './browser-storage';
 import { browserLocalDocumentCapabilities } from './browser-local-document';
 import { getExternalUrl } from '../shared/url';
-import type {
-  PlatformDocument,
-  ExternalDocumentChange,
-  ViewerPlatform,
-} from './types';
+import type { PlatformDocument, ExternalDocumentChange, ViewerPlatform } from './types';
 
 type WriteResponse = {
   version: string;

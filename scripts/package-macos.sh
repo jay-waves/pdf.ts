@@ -1,4 +1,10 @@
 #!/bin/sh
+# Run pnpm compile, then pnpm package:macos on Apple Silicon macOS.
+# Requires Xcode Command Line Tools and system signing/image tools; PDF_TS_HDIUTIL
+# can override hdiutil. Produces release/macos-arm64/pdf.ts.app and a DMG.
+# Uses ad-hoc signing, without Developer ID or notarization. Copy to /Applications;
+# autostart enable/status/disable manages the bundled SMAppService login agent.
+# Disable that agent before moving or removing the app. macOS 13+ is required.
 set -eu
 
 cd "$(dirname "$0")/.."

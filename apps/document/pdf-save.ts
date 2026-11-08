@@ -1,5 +1,5 @@
 import type { Engine, Kernel } from '@embedpdf/core';
-import { getSharedDocumentClient } from '../renderer/shared-document-client';
+import { getSharedDocumentClient } from '../engine/shared-document-client';
 import { downloadPdf } from '../platform/browser-download';
 import type { PdfFileHandle } from '../platform/types';
 

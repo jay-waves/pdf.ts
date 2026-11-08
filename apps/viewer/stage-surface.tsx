@@ -3,10 +3,10 @@ import { useOptionalCapability } from '@embedpdf/react/runtime';
 import { InteractionToken } from '@embedpdf/plugin-interaction';
 import { SelectionToken } from '@embedpdf/plugin-selection';
 import { AnnotationToken } from '@embedpdf/plugin-annotation';
-import { viewerControls } from '../viewer/viewer-controls';
+import { viewerControls } from '../components/control-visibility';
 import { useStage } from '@embedpdf/react/stage';
-import type { ViewerStage } from '../viewer/viewer-stage';
-import { installStageWheelZoom, installStageWheelScroll } from './stage-input-controller';
+import type { ViewerStage } from './viewer-stage';
+import { installStageWheelZoom, installStageWheelScroll } from '../renderer/stage-input-controller';
 
 /** App wheel policy and touch control visibility; Stage owns PDF gestures. */
 export function StageSurface({ stage, containerRef }: {

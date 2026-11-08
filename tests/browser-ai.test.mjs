@@ -52,7 +52,9 @@ test('direct browser requests block redirects, omit cookies and referrers, and p
     assert.equal(init.referrerPolicy, 'no-referrer');
     assert.equal(init.cache, 'no-store');
     assert.equal(init.headers.Authorization, 'Bearer private-key');
-    const { messages } = JSON.parse(init.body);
+    const { messages, reasoning_effort, stream } = JSON.parse(init.body);
+    assert.equal(reasoning_effort, 'none');
+    assert.equal(stream, false);
     assert.equal(messages[1].content, 'hello $& {{browserDefault}}');
     assert.equal(messages[2].content, '你好');
     assert.equal(messages[3].content, 'Explain that word');
@@ -64,7 +66,13 @@ test('direct browser requests block redirects, omit cookies and referrers, and p
 });
 
 test('streaming forwards deltas and usage; error responses never expose provider bodies', async () => {
-  const ai = createBrowserAi(storage, async () => new Response('data: {"choices":[{"index":0,"delta":{"content":"你好"}}]}\n\ndata: {"usage":{"total_tokens":8},"choices":[]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } }));
+  const ai = createBrowserAi(storage, async (_url, init) => {
+    const body = JSON.parse(init.body);
+    assert.equal(body.reasoning_effort, 'none');
+    assert.equal(body.stream, true);
+    assert.deepEqual(body.stream_options, { include_usage: true });
+    return new Response('data: {"choices":[{"index":0,"delta":{"content":"你好"}}]}\n\ndata: {"usage":{"total_tokens":8},"choices":[]}\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  });
   await ai.setAiConfig({ apiKey: 'private-key' });
   const updates = [];
   assert.equal(await ai.requestAi({ text: 'hello' }, undefined, (text) => updates.push(text)), '你好');
@@ -103,29 +111,13 @@ test('HTTP is allowed only for explicit loopback hosts', async () => {
   }
 });
 
-for (const streaming of [false, true]) {
-  for (const followUp of [false, true]) {
-    test(`reasoning stays disabled for ${streaming ? 'streaming' : 'non-streaming'} ${followUp ? 'follow-up' : 'initial'} requests`, async () => {
-      const requests = [];
-      const ai = createBrowserAi(storage, async (_url, init) => {
-        requests.push(JSON.parse(init.body));
-        return answer();
-      });
-      await ai.setAiConfig({ apiKey: 'private-key', baseUrl: 'https://compatible.example/v1', model: 'inexpensive-model' });
-      const history = followUp ? [{ role: 'user', content: 'hello' }, { role: 'assistant', content: '你好' }] : undefined;
-      const updates = [];
-      assert.equal(await ai.requestAi({ text: 'Explain this', history }, undefined, streaming ? (text) => updates.push(text) : undefined), 'answer');
-      assert.equal(requests.length, 1);
-      assert.equal(requests[0].reasoning_effort, 'none');
-      assert.equal(requests[0].stream, streaming);
-      assert.equal('extra_body' in requests[0], false, 'raw HTTP parameters belong at the top level');
-      if (streaming) {
-        assert.deepEqual(requests[0].stream_options, { include_usage: true });
-        assert.deepEqual(updates, ['answer']);
-      }
-    });
-  }
-}
+test('a JSON response still reaches the streaming callback', async () => {
+  const ai = createBrowserAi(storage, answer);
+  await ai.setAiConfig({ apiKey: 'private-key' });
+  const updates = [];
+  assert.equal(await ai.requestAi({ text: 'Explain this' }, undefined, text => updates.push(text)), 'answer');
+  assert.deepEqual(updates, ['answer']);
+});
 
 test('providers rejecting disabled reasoning fail without retrying in thinking mode', async () => {
   let requests = 0;

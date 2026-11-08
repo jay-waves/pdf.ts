@@ -1,3 +1,8 @@
+/**
+ * Reusable control visibility requests; components do not import feature folders.
+ * Mouse edge hover stays local to each control. Touch taps toggle visibility and
+ * drags hide controls; right-button arbitration belongs to viewer/mouse-page-gesture.
+ */
 type ControlsAction = 'show' | 'hide' | 'toggle';
 const listeners = new Set<(action: ControlsAction) => void>();
 

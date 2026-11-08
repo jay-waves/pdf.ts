@@ -1,5 +1,5 @@
-import type { DraftState } from '../renderer/document-draft';
-import { getSharedDocumentClient } from '../renderer/shared-document-client';
+import type { DraftState } from '../engine/persistence/document-draft';
+import { getSharedDocumentClient } from '../engine/shared-document-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import type { Engine } from '@embedpdf/core';

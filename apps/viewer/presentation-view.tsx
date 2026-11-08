@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { usePageList } from '@embedpdf/react/runtime';
 import { useStageState } from '@embedpdf/react/stage';
 import { PageView } from '@embedpdf/react/page-view';
-import { RenderLayer } from '../renderer/viewer-render-layers';
+import { RenderLayer } from './viewer-render-layers';
 import styles from './presentation-view.module.css';
 
 export function PresentationView({ documentId, pageNumber, onNavigate, onExit }: {

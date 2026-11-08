@@ -7,8 +7,9 @@ import {
   type ViewerTheme,
   viewerThemeStore,
 } from './theme';
-import styles from '../document/document-dialogs.module.css';
-import { DocumentDialog } from '../document/document-dialog-shared';
+import styles from './theme-dialog.module.css';
+import formStyles from '../components/popup-dialog.module.css';
+import { PopupDialog } from '../components/popup-dialog';
 
 const LIGHT_THEME_OPTIONS = getViewerThemeOptions('light');
 const DARK_THEME_OPTIONS = getViewerThemeOptions('dark');
@@ -75,13 +76,13 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
   };
 
   return (
-    <DocumentDialog
+    <PopupDialog
       open={open}
       onClose={onClose}
       title="Themes"
       contentClassName={styles.themeDialog}
     >
-      <div className={`${styles.form} ${styles.themeForm}`}>
+      <div className={`${formStyles.form} ${styles.themeForm}`}>
         <ThemeOptionRow
           label="Light"
           value={settings.light}
@@ -97,6 +98,6 @@ export function ThemeDialog({ open, onClose }: { open: boolean; onClose(): void 
           onValueChange={(dark) => selectTheme('dark', dark)}
         />
       </div>
-    </DocumentDialog>
+    </PopupDialog>
   );
 }

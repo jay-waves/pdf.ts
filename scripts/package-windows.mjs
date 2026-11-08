@@ -1,3 +1,9 @@
+/**
+ * pnpm package:windows builds the launcher, then invokes NSIS without a shell.
+ * Install NSIS and rsrc v0.10.2; PDF_TS_MAKENSIS and PDF_TS_RSRC override tool paths.
+ * Linux cross-builds use the same resource path. Install/upgrade/uninstall checks
+ * run on the Windows CI runner; installers are unsigned and retain user data.
+ */
 import { readFileSync, rmSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';

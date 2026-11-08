@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { usePage } from '@embedpdf/react/runtime';
-import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from '../viewer/viewer-stage';
+import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from './viewer-stage';
 const subscribeEmpty = () => () => {};
 const getEmptySnapshot = () => EMPTY_STAGE_SNAPSHOT;
 function useRegionStage(stage?: ViewerStage | null) {

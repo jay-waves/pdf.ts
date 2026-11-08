@@ -1,9 +1,16 @@
+/**
+ * Worker-owned document authority: native handles, shared history, drafts and
+ * save transactions. engine/persistence owns draft recovery and serialized writes.
+ * Engine modules may depend on shared contracts and fonts, never React, viewer state,
+ * feature UI or platform adapters.
+ */
+import type { DraftLocation, PdfWritePlan, PdfWriteResult } from '../shared/pdf-file';
 import { sha256 } from 'hash-wasm';
 import { AbortablePromise, type LocalEngine, type LocalDocumentHandle, type OpenInput, type OpenOptions, type DocumentEvent } from '@embedpdf/engine-core/runtime';
-import { captureBaseline, buildDraft, restoreDraft, type DraftBaseline, type DraftState } from './document-draft';
-import { DraftSession } from './draft-session';
-import { DraftConflict, openDraftStorage, type DraftLocation } from './draft-storage';
-import { DocumentSaveCoordinator, type PdfWritePlan, type PdfWriteResult } from './document-save';
+import { captureBaseline, buildDraft, restoreDraft, type DraftBaseline, type DraftState } from './persistence/document-draft';
+import { DraftSession } from './persistence/draft-session';
+import { DraftConflict, openDraftStorage } from './persistence/draft-storage';
+import { DocumentSaveCoordinator } from './persistence/document-save';
 export type SharedFileIdentity = string | FileSystemFileHandle;
 export type SharedDocumentSnapshot = DraftState & {
   documentId: string; sessionKey: string; revision: number; savedRevision: number; diskVersion: string; saving: boolean;

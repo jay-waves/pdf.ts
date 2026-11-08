@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Publish only after all four native installers succeed. Rolling tags use minor
+# series for 0.x and major series for 1.x+; version tags remain unchanged.
+# Only the newest series updates Latest and Pages. Uploads precede old-asset removal;
+# rerun interrupted jobs to finish non-atomic release updates. Do not enable immutable
+# Releases or protect rolling tags against workflow writes.
 set -Eeuo pipefail
 
 # Called by the tag workflow after every platform has built successfully.

@@ -1,3 +1,4 @@
+import type { DraftLocation, PdfWriteResult } from '../shared/pdf-file';
 import { encodeEngineResult } from './engine-wire';
 import type { LocalEngineRecipeOptions } from '@embedpdf/engine';
 import { createNativeRuntime } from './native-runtime';
@@ -5,8 +6,7 @@ import type { PdfFontFallbackConfig } from '../fonts/types';
 import type { PdfRenderTheme } from './pdf-render-theme';
 import type { LocalDocumentHandle, OpenInput, OpenOptions, DocumentEvent, AbortablePromise } from '@embedpdf/engine-core/runtime';
 import { SharedDocumentHost, type SharedFileIdentity } from './shared-document-host';
-import type { DraftLocation } from './draft-storage';
-import type { PdfWriteResult } from './document-save';
+
 type Endpoint = Pick<MessagePort, 'postMessage' | 'onmessage'> & { start?(): void; close?(): void };
 type Request = { type: string; id: string; documentId?: string; method?: string; args?: unknown[]; path?: Array<string | { page: unknown } | { with: unknown }>; lease?: string; options?: LocalEngineRecipeOptions & { fontFallback?: PdfFontFallbackConfig | null }; result?: PdfWriteResult; error?: string };
 type Session = { key: string; port: Endpoint; documents: Set<string>; closed: boolean; lease: AbortController; theme: PdfRenderTheme | null };

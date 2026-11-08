@@ -1,3 +1,9 @@
+# Tag pushes publish; manual runs build and verify artifacts without publishing.
+# Run checks locally before tagging. Only the frontend job installs pnpm packages;
+# packaging jobs reuse release/web. Chrome ZIPs remain a local build option.
+# Repository setup: Pages uses GitHub Actions, github-pages allows version tags,
+# and GITHUB_TOKEN may write contents. No signing certificates are required.
+# Artifacts expire after one day; rerun all jobs if they have expired.
 name: Release
 
 on:

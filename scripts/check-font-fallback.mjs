@@ -17,7 +17,7 @@ try {
   const page = await context.newPage();
   await page.goto(`${process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173'}/font-test`);
   await page.evaluate(async fontUrl => {
-    const { createSharedPdfEngine } = await import('/apps/renderer/shared-document-client.ts');
+    const { createSharedPdfEngine } = await import('/apps/engine/shared-document-client.ts');
     window.session = createSharedPdfEngine({ fontFallback: { fonts: {}, defaultFont: fontUrl }, defaultFallbackFonts: false });
     await session.client.ready;
   }, fontUrl);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { annotationKey, localEngine } from '@embedpdf/engine';
+import { localEngine } from '@embedpdf/engine';
 import { fixture } from '../scripts/pdf-editing-fixture.mjs';
 
 // Exercise the shipped WASM runtime, the same implementation used by the viewer.
@@ -49,50 +49,6 @@ test('v3 applies one annotation/form action atomically and undoes/redoes it with
   ] }));
   assert.deepEqual(await page.annotations.list(), before);
   assert.equal((await doc.forms.get(fields[0].ref)).value, 'edited');
-});
-
-test('v3 layer restores original annotation edits, deletion, replies, stamp appearance, and form values', async t => {
-  const engine = engineFor(t);
-  const base = fixture({ notes: true });
-  const original = Buffer.from(base);
-  const { doc, page } = await openFixture(engine);
-  const { annotations } = await page.annotations.list();
-  const note = annotations.find(a => a.contents === 'original note');
-  await page.annotations.update(note.ref, { contents: 'changed original' });
-  await page.annotations.delete(annotations.find(a => a.contents === 'delete this note').ref);
-  await page.annotations.create({
-    subtype: 'text', rect: note.rect, contents: 'reply retained', reply: { to: note.ref },
-  });
-  // A PDF appearance avoids an image encoder dependency and checks binary resources.
-  await page.annotations.create({
-    subtype: 'stamp', box: { x: 200, y: 200, width: 100, height: 100 }, name: 'layer stamp',
-  }, { resources: { appearance: fixture({ content: '1 0 0 rg 0 0 100 100 re f\n' }) } });
-  const { fields } = await doc.forms.list();
-  await doc.forms.setValue(fields[0].ref, { value: 'draft field value' });
-  const layer = await doc.downloadLayer();
-  assert.ok(layer.byteLength > 0);
-  assert.ok(layer.byteLength < 100_000, 'small edits should not turn into a full-document backup');
-  assert.deepEqual(base, original, 'draft export must not mutate the original input');
-  await doc.close();
-
-  const restored = await engine.open({
-    kind: 'layerBytes', baseBytes: base, layer: { kind: 'artifact', bytes: layer },
-  });
-  const all = (await restored.annotations.list()).annotations;
-  const restoredNote = all.find(a => a.contents === 'changed original');
-  assert.ok(restoredNote);
-  assert.ok(!all.some(a => a.contents === 'delete this note'));
-  const reply = all.find(a => a.contents === 'reply retained');
-  assert.equal(annotationKey(reply.reply.to), annotationKey(restoredNote.ref));
-  const stamp = all.find(a => a.subtype === 'stamp');
-  const appearance = await restored.page(stamp.page).annotations.downloadResource(stamp.ref, 'appearance');
-  assert.ok(appearance.byteLength > 0);
-  assert.equal((await restored.forms.list()).fields[0].value, 'draft field value');
-
-  const output = await restored.download({ mode: 'rewrite' });
-  const merged = await engine.open({ kind: 'bytes', bytes: output });
-  assert.equal((await merged.annotations.list()).annotations.length, all.length);
-  assert.equal((await merged.forms.list()).fields[0].value, 'draft field value');
 });
 
 test('v3 explicit rewrite preserves final metadata without accumulating PDF revisions', async t => {

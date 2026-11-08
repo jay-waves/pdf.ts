@@ -26,7 +26,7 @@ import {
   PDFIUM_FONT_FALLBACK_INFO,
   type PdfFontDiagnostic,
 } from '../fonts';
-import type { PdfRuntime } from '../renderer/pdf-engine';
+import type { PdfRuntime } from '../engine/pdf-runtime';
 import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import { LlmSettings } from './llm-settings';
 import { TranslatorSettings } from './translator-settings';

@@ -16,7 +16,7 @@ async function open(bytes = original, identity = 'v3-rpc-test') {
   page.setDefaultTimeout(20000);
   await page.goto(`${base}/v3-rpc-test`);
   await page.evaluate(async ({bytes, identity}) => {
-    const { createSharedPdfEngine } = await import('/apps/renderer/shared-document-client.ts');
+    const { createSharedPdfEngine } = await import('/apps/engine/shared-document-client.ts');
     window.session = createSharedPdfEngine({ defaultFallbackFonts: false });
     session.client.setIdentity(identity);
     await session.client.ready;

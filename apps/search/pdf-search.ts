@@ -4,7 +4,7 @@ export const MatchFlag = { MatchCase: 'matchCase', MatchWholeWord: 'wholeWord' }
 export type MatchFlag = typeof MatchFlag[keyof typeof MatchFlag];
 export interface SearchResult { pageIndex: number; rects: Rect[] }
 import { createStore } from 'zustand/vanilla';
-import type { PdfRuntime } from '../renderer/pdf-engine';
+import type { PdfRuntime } from '../engine/pdf-runtime';
 
 export interface PdfSearchState {
   documentId: string | null;

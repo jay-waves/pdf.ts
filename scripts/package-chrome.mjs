@@ -1,3 +1,8 @@
+/**
+ * Run pnpm compile, then pnpm package:chrome. Copies release/web plus the
+ * extension manifest, service worker and icons into release/chrome-extension and
+ * writes a ZIP in release/. Extract it and load unpacked via chrome://extensions.
+ */
 import {
   cpSync,
   createWriteStream,

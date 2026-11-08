@@ -1,3 +1,9 @@
+/**
+ * Build an embedded launcher from release/web (run pnpm compile first).
+ * Requires Go matching go.mod; PDF_TS_GO overrides its path. Windows icons use
+ * rsrc v0.10.2 (PDF_TS_RSRC); Linux can cross-build Windows. The darwin-arm64
+ * target requires Apple Silicon macOS. Package commands reuse the web build.
+ */
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';

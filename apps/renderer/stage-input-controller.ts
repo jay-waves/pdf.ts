@@ -1,5 +1,10 @@
+/**
+ * Application wheel policy over native Stage capabilities: frame-coalesced zoom
+ * with fit detents, plus one damped vertical-scroll path. Prevent duplicate native
+ * handling; reduced-motion preferences disable easing. Accept only the capabilities
+ * used here, without depending on the viewer controller.
+ */
 import type { StageCapability } from '@embedpdf/plugin-stage';
-import type { ViewerStage } from '../viewer/viewer-stage';
 import { ZoomDetents } from './zoom-detents';
 import { clientPointToViewport } from './viewport-geometry';
 
@@ -19,7 +24,7 @@ export function mergePendingZoom(pending: PendingZoom | null, delta: number, anc
 }
 
 /** Preserve our wheel sensitivity and fit detents; v3 owns pointer/pinch/pan lifetimes. */
-export function installStageWheelZoom(viewport: HTMLElement, native: StageCapability, stage?: ViewerStage | null) {
+export function installStageWheelZoom(viewport: HTMLElement, native: StageCapability, stage?: { getFitScales(): { page: number; width: number } | null } | null) {
   let pending: PendingZoom | null = null;
   let frame = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;

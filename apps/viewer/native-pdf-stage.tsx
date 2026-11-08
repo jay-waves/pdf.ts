@@ -1,9 +1,16 @@
+/**
+ * React bridge to the native camera surface and scrollbars. Native pointer input
+ * owns selection, touch pan, pinch, momentum and middle-button pan; StageSurface
+ * adds application wheel policy and control visibility. The viewport is not a DOM
+ * scroll container: browser checks must use wheel, scrollbars or navigation controls,
+ * not assignments to .viewer.scrollTop.
+ */
 import { useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import type { PageRef } from '@embedpdf/core';
 import { Stage, Scrollbar } from '@embedpdf/react/stage';
 import { useCapability } from '@embedpdf/react/runtime';
 import { StageToken } from '@embedpdf/plugin-stage/contract/host';
-import type { ViewerStage } from '../viewer/viewer-stage';
+import type { ViewerStage } from './viewer-stage';
 import { StageSurface } from './stage-surface';
 import { RenderLayer } from './viewer-render-layers';
 

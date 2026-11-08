@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OutlineItem, PageDestination } from '@embedpdf/engine';
 import { PanelContent, PanelState } from '../components';
-import type { PdfRuntime } from '../renderer/pdf-engine';
+import type { PdfRuntime } from '../engine/pdf-runtime';
 import type { ViewerStage } from '../viewer/viewer-stage';
 import styles from './outline.module.css';
 

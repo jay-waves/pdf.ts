@@ -1,9 +1,6 @@
 import type { Kernel, DocumentHandle } from '@embedpdf/core';
-import { getRuntimeDocument } from '../renderer/shared-document-client';
+import { getRuntimeDocument } from '../engine/shared-document-client';
 export const DOCUMENT_ID = 'pdf-ts-document';
-export function getDocumentState(kernel: Kernel | undefined, documentId: string | null | undefined) {
-  return documentId ? kernel?.documents.get(documentId) ?? null : null;
-}
 export function getDocument(kernel: Kernel | undefined, documentId: string | null | undefined) {
   return kernel && documentId ? getRuntimeDocument(kernel.engine, documentId) : null;
 }

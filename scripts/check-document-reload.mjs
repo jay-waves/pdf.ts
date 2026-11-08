@@ -31,7 +31,7 @@ await context.route('**/api/documents/reload-test*', async route => {
 const page = await context.newPage();
 await page.goto(base);
 const encrypted = Buffer.from(await page.evaluate(async source => {
-  const { createSharedPdfEngine } = await import('/apps/renderer/shared-document-client.ts');
+  const { createSharedPdfEngine } = await import('/apps/engine/shared-document-client.ts');
   const { engine, client } = createSharedPdfEngine();
   try {
     const doc = await engine.open({ kind: 'bytes', bytes: new Uint8Array(source), id: 'encrypted-fixture' });

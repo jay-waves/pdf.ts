@@ -73,7 +73,6 @@ function setup(t) {
   const regionFits = [];
   const zoomListeners = new Set();
   const subscribeZoom = (listener) => { zoomListeners.add(listener); return () => zoomListeners.delete(listener); };
-  const resizeListeners = new Set();
   const modeListeners = new Set();
   let mode = 'pointerMode';
   const interaction = {
@@ -121,7 +120,7 @@ function setup(t) {
     scroll,
   );
   t.after(stage.install());
-  return { stage, jumps, jumpBehaviors, zooms, emit, regionFits, interaction, resize: () => resizeListeners.forEach((listener) => listener({ documentId: 'doc' })), anchors: () => anchors };
+  return { stage, jumps, jumpBehaviors, zooms, emit, regionFits, interaction, anchors: () => anchors };
 }
 
 test('page steps use smooth navigation and accumulate rapid input within document bounds', (t) => {
@@ -195,8 +194,8 @@ test('presentation accumulates rapid navigation without scrolling the inactive v
 
 const region = { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 };
 
-test('rectangle selection fits once and later zoom, navigation and resize use normal behavior', (t) => {
-  const { stage, regionFits, zooms, jumps, resize, interaction } = setup(t);
+test('rectangle selection fits once and later zoom and navigation use normal behavior', (t) => {
+  const { stage, regionFits, zooms, jumps, interaction } = setup(t);
   stage.beginRegionSelection();
   stage.completeRegionSelection(1, { x: 10, y: 10, width: 100, height: 100 });
   assert.deepEqual(regionFits, [{ region, page: 2 }]);
@@ -206,7 +205,6 @@ test('rectangle selection fits once and later zoom, navigation and resize use no
   assert.equal(zooms.at(-1), ZoomMode.FitWidth);
   stage.movePages(1);
   assert.deepEqual(jumps, [3]);
-  resize();
   stage.setZoom(1.5);
   assert.equal(zooms.at(-1), 1.5);
   stage.setZoom(ZoomMode.FitPage);
@@ -240,7 +238,7 @@ test('rectangle selection cancels on toggle or mode change and ignores completio
 });
 
 test('presentation cancels selection and leaves the inactive viewport untouched', (t) => {
-  const { stage, regionFits, zooms, jumps, resize, interaction } = setup(t);
+  const { stage, regionFits, zooms, jumps, interaction } = setup(t);
   stage.beginRegionSelection();
   stage.completeRegionSelection(1, { x: 10, y: 10, width: 100, height: 100 });
   stage.beginRegionSelection();
@@ -251,7 +249,6 @@ test('presentation cancels selection and leaves the inactive viewport untouched'
   stage.beginRegionSelection();
   stage.completeRegionSelection(4, { x: 10, y: 10, width: 100, height: 100 });
   stage.setZoom(ZoomMode.FitWidth);
-  resize();
   assert.deepEqual(regionFits, [{ region, page: 2 }]);
   assert.deepEqual(zooms, [2]);
   assert.deepEqual(jumps, []);

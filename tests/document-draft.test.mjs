@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { localEngine } from '@embedpdf/engine';
-const { buildDraft, captureBaseline, restoreDraft, encodeDraft, decodeDraft } = await import('../apps/renderer/document-draft.ts');
+import { annotationKey, localEngine } from '@embedpdf/engine';
+const { buildDraft, captureBaseline, restoreDraft, encodeDraft, decodeDraft } = await import('../apps/engine/persistence/document-draft.ts');
 import { fixture } from '../scripts/pdf-editing-fixture.mjs';
 async function setup(t) {
   const engine = localEngine({ runtime: { prefer: 'wasm' }, defaultFallbackFonts: false });
@@ -30,7 +30,9 @@ test('draft records net changes and deletion, preserving replies and binary appe
   await restoreDraft(reopened, decodeDraft(encodeDraft(draft)), await captureBaseline(reopened));
   const all = (await reopened.annotations.list()).annotations;
   assert.equal(all.filter(a => a.contents === 'changed original').length, 1);
-  assert.equal(all.filter(a => a.contents === 'reply').length, 1);
+  const replies = all.filter(a => a.contents === 'reply');
+  assert.equal(replies.length, 1);
+  assert.equal(annotationKey(replies[0].reply.to), annotationKey(all.find(a => a.contents === 'changed original').ref));
   assert.ok(!all.some(a => a.contents === 'delete this note'));
   const stamp = all.find(a => a.subtype === 'stamp');
   assert.ok((await reopened.page(stamp.page).annotations.downloadResource(stamp.ref, 'appearance')).byteLength > 0);

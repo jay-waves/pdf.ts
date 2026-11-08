@@ -4,8 +4,8 @@ import { Check } from 'lucide-react';
 import { RadioGroup as RadixRadioGroup } from 'radix-ui';
 import { Button, DialogActions } from '../components';
 import { getDocument } from './viewer-document';
-import styles from './document-dialogs.module.css';
-import { DocumentDialog } from './document-dialog-shared';
+import styles from '../components/popup-dialog.module.css';
+import { PopupDialog } from '../components/popup-dialog';
 import { getErrorMessage } from '../shared/utils';
 
 type PrintMode = 'all' | 'current' | 'custom';
@@ -100,7 +100,7 @@ export function PrintDialog({ registry, documentId, open, currentPageNumber, tot
   };
 
   return (
-    <DocumentDialog open={open} onClose={onClose} preventClose={busy} title="Print">
+    <PopupDialog open={open} onClose={onClose} preventClose={busy} title="Print">
       <form className={styles.form} onSubmit={submit}>
         <RadixRadioGroup.Root
           className={styles.optionGroup}
@@ -153,6 +153,6 @@ export function PrintDialog({ registry, documentId, open, currentPageNumber, tot
           </Button>
         </DialogActions>
       </form>
-    </DocumentDialog>
+    </PopupDialog>
   );
 }

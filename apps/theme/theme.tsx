@@ -1,6 +1,6 @@
 import { createStore } from 'zustand/vanilla';
 import { platform } from '#platform';
-import type { PdfRenderTheme } from '../renderer/pdf-render-theme';
+import type { PdfRenderTheme } from '../engine/pdf-render-theme';
 
 type ViewerColorMode = 'light' | 'dark';
 type ViewerThemeMetadata = {
