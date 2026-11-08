@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { annotationKey, type Engine, type Kernel } from '@embedpdf/core';
+import { annotationKey, type Kernel } from '@embedpdf/core';
 import type { Annotation } from '@embedpdf/plugin-annotation';
 import { sliceText } from '@embedpdf/engine-core';
 import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
@@ -21,12 +21,12 @@ function getEntryIcon(subtype: string) {
     default: return Shapes;
   }
 }
-export function Comments({ engine, registry, documentId, stage, currentPageNumber }: {
-  engine: Engine; registry?: Kernel; documentId?: string | null; stage?: ViewerStage | null; currentPageNumber: number;
+export function Comments({ registry, documentId, stage, currentPageNumber }: {
+  registry?: Kernel; documentId?: string | null; stage?: ViewerStage | null; currentPageNumber: number;
 }) {
   const [revision, setRevision] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
-  const summaryCacheRef = useRef(new Map<string, string>());
+  const summaryCacheRef = useRef(new Map<string, { geometry: string; text: string }>());
   const entries = useMemo(() => {
     const scope = getAnnotationScope(registry, documentId)?.scope;
     if (!scope || !registry || !documentId) return [];
@@ -44,15 +44,25 @@ export function Comments({ engine, registry, documentId, stage, currentPageNumbe
     summaryCacheRef.current.clear();
     const scope = getAnnotationScope(registry, documentId)?.scope;
     if (!scope) return;
-    const sync = () => { summaryCacheRef.current.clear(); setRevision((value) => value + 1); };
-    const cleanups = [scope.onCreated(sync), scope.onUpdated(sync), scope.onDeleted(sync), scope.onResynced(sync)];
+    const sync = () => setRevision(value => value + 1);
+    const cleanups = [scope.onCreated(sync), scope.onUpdated(sync), scope.onDeleted(sync), scope.onResynced(event => {
+      if (event.pages === 'all') summaryCacheRef.current.clear();
+      else {
+        const pages = new Set(event.pages.map(page => JSON.stringify(page)));
+        for (const annotation of scope.list()) if (pages.has(JSON.stringify(annotation.page))) summaryCacheRef.current.delete(annotationKey(annotation.ref));
+      }
+      sync();
+    })];
     return () => cleanups.forEach((cleanup) => cleanup());
   }, [registry, documentId]);
   useEffect(() => {
     const doc = getDocument(registry, documentId);
     if (!doc) return;
     let cancelled = false;
-    const pending = entries.filter((annotation) => TEXT_MARKUP_TYPES.has(annotation.subtype) && !annotation.contents?.trim() && !summaryCacheRef.current.has(annotationKey(annotation.ref)));
+    const live = new Set(entries.map(annotation => annotationKey(annotation.ref)));
+    for (const key of summaryCacheRef.current.keys()) if (!live.has(key)) summaryCacheRef.current.delete(key);
+    const geometryKey = (annotation: Annotation) => JSON.stringify([annotation.page, getAnnotationRects(annotation)]);
+    const pending = entries.filter((annotation) => TEXT_MARKUP_TYPES.has(annotation.subtype) && !annotation.contents?.trim() && summaryCacheRef.current.get(annotationKey(annotation.ref))?.geometry !== geometryKey(annotation));
     if (!pending.length) return;
     // Both text and geometry are requested through the v3 page service. Keep
     // character-space slicing so ligatures and supplementary characters survive.
@@ -76,14 +86,14 @@ export function Comments({ engine, registry, documentId, stage, currentPageNumbe
         }
         summary = pieces.join('').replace(/\s+/g, ' ').trim().slice(0, 160);
       } catch { /* The panel still shows the annotation when text is unavailable. */ }
-      return [annotationKey(annotation.ref), summary] as const;
+      return [annotationKey(annotation.ref), { geometry: geometryKey(annotation), text: summary }] as const;
     })).then((summaries) => {
       if (cancelled) return;
       summaries.forEach(([id, summary]) => summaryCacheRef.current.set(id, summary));
       setRevision((value) => value + 1);
     });
     return () => { cancelled = true; };
-  }, [documentId, engine, entries, registry]);
+  }, [documentId, entries, registry]);
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -142,7 +152,7 @@ export function Comments({ engine, registry, documentId, stage, currentPageNumbe
                     const hasExtractedSummary = summaryCacheRef.current.has(annotationKey(annotation.ref));
                     const summary = contents || (isTextMarkup
                       ? hasExtractedSummary
-                        ? summaryCacheRef.current.get(annotationKey(annotation.ref)) || 'Text summary unavailable'
+                        ? summaryCacheRef.current.get(annotationKey(annotation.ref))?.text || 'Text summary unavailable'
                         : 'Loading text summary…'
                       : 'No text content');
 

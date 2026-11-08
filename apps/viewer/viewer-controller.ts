@@ -11,7 +11,6 @@ import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from './viewer-stage';
 const subscribeEmptyView = () => () => {};
 const getEmptyView = () => EMPTY_STAGE_SNAPSHOT;
 import { toggleViewerColorMode } from '../theme/theme';
-import type { ViewerInputSource } from './viewer-activity';
 
 type ViewerDialog = 'print' | 'protect' | 'signatures' | 'theme' | 'developer';
 type ViewerPanel = 'outline' | 'thumbnails' | 'colors' | 'comments';
@@ -114,7 +113,7 @@ function reduceViewerUi(state: ViewerUiState, action: ViewerUiCommand): ViewerUi
 export type ViewerCommand = ViewerUiCommand
   | { type: 'view/set-presentation'; enabled: boolean }
   | { type: 'navigation/go-to-page'; pageNumber: number }
-  | { type: 'navigation/move-pages'; delta: number; source?: ViewerInputSource }
+  | { type: 'navigation/move-pages'; delta: number }
   | { type: 'view/zoom-step'; direction: -1 | 1 }
   | { type: 'view/set-zoom'; level: ZoomLevel }
   | { type: 'view/select-reading-region' }

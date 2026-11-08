@@ -45,7 +45,7 @@ page.on('console', m => { if (process.env.DEBUG_PDF) console.log(m.type(), m.tex
 const activeId = () => page.locator('[data-pdf-document-layer][aria-hidden="false"]').getAttribute('data-pdf-document-layer');
 try {
   await page.goto(`${base}/?launcherDocument=reload-test`);
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-page-render-image')].some(i => i.complete && i.naturalWidth));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img')].some(i => i.complete && i.naturalWidth));
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   await page.getByRole('button', { name: 'Page', exact: true }).click();
   await page.getByRole('textbox', { name: 'Zoom percentage' }).fill('150');
@@ -54,7 +54,14 @@ try {
   await page.waitForTimeout(300);
   const originalPageSize = await page.locator('.pdf-page-surface').first().boundingBox();
   await page.locator('.viewer').hover(); await page.mouse.wheel(0, 950);
-  await page.waitForTimeout(300);
+  await page.evaluate(async () => {
+    let previous = NaN, stable = 0;
+    for (let frames = 0; frames < 120 && stable < 6; frames++) {
+      await new Promise(requestAnimationFrame);
+      const y = document.querySelector('.pdf-page-surface').getBoundingClientRect().y;
+      stable = y === previous ? stable + 1 : 0; previous = y;
+    }
+  });
   const before = await activeId();
   const position = (await page.locator('.pdf-page-surface').first().boundingBox()).y;
   await page.evaluate(() => {
@@ -63,7 +70,7 @@ try {
       if (!window.watchFrames) return;
       window.framesChecked++;
       const layer = document.querySelector('[data-pdf-document-layer][aria-hidden="false"]');
-      const images = layer ? [...layer.querySelectorAll('.pdf-page-render-image')] : [];
+      const images = layer ? [...layer.querySelectorAll('.pdf-native-render-layer img')] : [];
       if (!images.some(i => {
         const r = i.getBoundingClientRect();
         return i.complete && i.naturalWidth && r.bottom > 0 && r.top < innerHeight;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { BookImage, CornerDownLeft, CornerUpRight, Menu } from 'lucide-react';
 import { ControlButton, FloatingSurface } from '../components';
 import type { OutlineCache } from './outline';
-import { useViewerActivityAutoHide } from '../components/use-auto-hide';
+import { useViewerAutoHide } from '../components/use-auto-hide';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import styles from './bottom-navigation.module.css';
 import { useViewerControlClick, useViewerFocus } from '../components/viewer-focus';
@@ -38,8 +38,7 @@ export function BottomNav({
     setPageInput(String(pageNumber || 1));
   }, [pageNumber]);
 
-  const { visible, reveal, scheduleHide } = useViewerActivityAutoHide(
-    'navigation',
+  const { visible, reveal, scheduleHide } = useViewerAutoHide(
     () => !interactingRef.current,
   );
   const revealTemporarily = useCallback(() => {

@@ -228,8 +228,8 @@ which would break draft recovery after a manual save.
 
 The application keeps small runtime extensions for on-demand font substitution,
 PDFium's forced-color rendering and password changes, which are not all exposed
-by v3's high-level document API. Existing v2 `.swp` files have a read-only migration
-path; a failed migration preserves the draft and reopens the untouched original.
+by v3's high-level document API. Only the current draft format is supported; unsupported drafts remain available
+for explicit download or discard.
 
 Engine and shared-session checks: `node --test tests/embedpdf-v3.test.mjs`,
 `node scripts/check-shared-pdfium.mjs` and `node scripts/check-document-drafts.mjs`

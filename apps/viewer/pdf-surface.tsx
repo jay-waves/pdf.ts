@@ -15,7 +15,7 @@ import { PDF_TILE_SIZE_CSS_PX } from '../renderer/render-settings';
 import { NativePdfStage } from '../renderer/native-pdf-stage';
 import { ReadingRegionLayer, ReadingRegionControls } from '../renderer/reading-region-layer';
 import { createAnnotationPluginConfig } from '../annotations/annotations';
-import { themeAnnotationRenderers } from '../annotations/theme-renderers';
+import { themeAnnotationRenderers, AnnotationThemeStyles } from '../annotations/theme-renderers';
 import { SignatureFallbackLayer } from '../document/signatures/signature-fallback-layer';
 import { UnlockDialog } from '../document/protection-dialogs';
 import type { ManagedResource } from '../platform/types';
@@ -79,13 +79,14 @@ type SurfaceProps = {
   onResourceConsumed(resource?: ManagedResource): void;
   renderDpr: number;
   presentationPage: number | null;
-  onNavigatePresentation(delta: -1 | 1, source: 'Mouse'): void;
+  onNavigatePresentation(delta: -1 | 1): void;
   onExitPresentation(): void;
 };
 
 function LoadedPdfDocument({ documentId, stage, presentationPage, ...props }: SurfaceProps & { documentId: string }) {
   useEffect(() => props.onResourceConsumed(props.documentResource), [props.onResourceConsumed, props.documentResource]);
   return <>
+    <AnnotationThemeStyles />
     <NativePdfStage documentId={documentId} stage={stage} panMode={props.panMode} renderDpr={props.renderDpr}
       className={`viewer${props.panMode ? ' is-pan-mode' : ''}`}
       inert={presentationPage !== null} aria-hidden={presentationPage !== null}
@@ -100,7 +101,7 @@ function LoadedPdfDocument({ documentId, stage, presentationPage, ...props }: Su
       </>} />
     <ReadingRegionControls stage={stage} />
     {presentationPage !== null ? <PresentationView documentId={documentId} pageNumber={presentationPage}
-      renderDpr={props.renderDpr} onNavigate={props.onNavigatePresentation} onExit={props.onExitPresentation} /> : null}
+      onNavigate={props.onNavigatePresentation} onExit={props.onExitPresentation} /> : null}
   </>;
 }
 

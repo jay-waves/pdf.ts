@@ -74,11 +74,11 @@ export function normalizeAnnotationColor(value: unknown) {
   if (value === TRANSPARENT_ANNOTATION_COLOR || value === null) return TRANSPARENT_ANNOTATION_COLOR;
   return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
 }
-export async function createCommentAnnotation(scope: AnnotationCapability, target: Annotation, rect?: Rect) {
+export async function createCommentAnnotation(scope: AnnotationCapability, target: Pick<Annotation, 'page' | 'rect'>, rect?: Rect) {
   const { annotation } = await scope.create(target.page, { subtype: 'text', rect: rect ?? { x: Math.max(0, target.rect.x + target.rect.width - 24), y: Math.max(0, target.rect.y + target.rect.height + 4), width: 24, height: 24 }, contents: '', icon: 'comment', color: getDefaultAnnotationColor('light'), opacity: 1, print: true, noRotate: true, noZoom: true });
   return annotationKey(annotation.ref);
 }
-export async function createTextMarkupAnnotations(scope: AnnotationCapability, _selection: unknown, type: TextMarkupSubtype) { return (await scope.createFromSelection(type)).annotations; }
+export async function createTextMarkupAnnotations(scope: AnnotationCapability, type: TextMarkupSubtype) { return (await scope.createFromSelection(type)).annotations; }
 export function createAnnotationPluginConfig(): AnnotationConfig {
   return { afterCreate: { select: true, tool: 'default', editText: true },
     editable: ['text', 'highlight', 'underline', 'strikeout', 'squiggly', 'free-text', 'square', 'circle', 'polygon', 'polyline', 'line', 'ink', 'stamp'],

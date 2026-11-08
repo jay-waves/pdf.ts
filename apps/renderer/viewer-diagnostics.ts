@@ -1,29 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 
-type TimingStats = {
-  count: number;
-  last: number;
-  average: number;
-};
-
-type ViewerDiagnosticsSnapshot = {
-  basePixels: number;
-  tilePixels: number;
-  activeTiles: number;
-  baseTiming: TimingStats;
-  tileTiming: TimingStats;
-  errors: string[];
-};
-
-const EMPTY_TIMING: TimingStats = { count: 0, last: 0, average: 0 };
-const EMPTY_SNAPSHOT: ViewerDiagnosticsSnapshot = {
-  basePixels: 0,
-  tilePixels: 0,
-  activeTiles: 0,
-  baseTiming: EMPTY_TIMING,
-  tileTiming: EMPTY_TIMING,
-  errors: [],
-};
+type ViewerDiagnosticsSnapshot = { rasterPixels: number; rasterImages: number; errors: string[] };
+const EMPTY_SNAPSHOT: ViewerDiagnosticsSnapshot = { rasterPixels: 0, rasterImages: 0, errors: [] };
 
 const MAX_ERROR_EXCERPTS = 5;
 const MAX_ERROR_LENGTH = 800;
@@ -38,22 +16,7 @@ function describeError(value: unknown) {
   }
 }
 
-function appendTiming(current: TimingStats, duration: number): TimingStats {
-  const count = current.count + 1;
-  return {
-    count,
-    last: duration,
-    average: current.average + (duration - current.average) / count,
-  };
-}
-
 export const viewerDiagnosticsStore = createStore<ViewerDiagnosticsSnapshot>(() => EMPTY_SNAPSHOT);
-
-export function recordRenderTiming(kind: 'base' | 'tile', duration: number) {
-  viewerDiagnosticsStore.setState((state) => kind === 'base'
-    ? { baseTiming: appendTiming(state.baseTiming, duration) }
-    : { tileTiming: appendTiming(state.tileTiming, duration) });
-}
 
 export function recordViewerError(value: unknown) {
   const description = describeError(value).trim();
@@ -97,18 +60,11 @@ export function installErrorDiagnostics() {
 }
 
 export function sampleRasterPixels(root: ParentNode = document) {
-  const images = (selector: string) => [...root.querySelectorAll<HTMLImageElement>(selector)];
-  const pixels = (items: HTMLImageElement[]) => items
-    .reduce((total, image) => total + image.naturalWidth * image.naturalHeight, 0);
-  const baseImages = images('.pdf-page-render-image');
-  const tileImages = images('.pdf-page-tiling-layer img');
-  const basePixels = pixels(baseImages);
-  const tilePixels = pixels(tileImages);
-  const activeTiles = tileImages.length;
+  const images = [...root.querySelectorAll<HTMLImageElement>('.pdf-native-render-layer img')];
+  const rasterPixels = images.reduce((total, image) => total + image.naturalWidth * image.naturalHeight, 0);
+  const rasterImages = images.length;
   const current = viewerDiagnosticsStore.getState();
-  if (basePixels !== current.basePixels
-    || tilePixels !== current.tilePixels
-    || activeTiles !== current.activeTiles) {
-    viewerDiagnosticsStore.setState({ basePixels, tilePixels, activeTiles });
+  if (rasterPixels !== current.rasterPixels || rasterImages !== current.rasterImages) {
+    viewerDiagnosticsStore.setState({ rasterPixels, rasterImages });
   }
 }

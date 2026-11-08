@@ -26,7 +26,7 @@ export function waitForDocumentPaint(root: HTMLElement, documentId: string, sign
           && rect.left < bounds.right && rect.bottom > bounds.top && rect.top < bounds.bottom;
       }) : [];
       const ready = pages.length > 0 && pages.every((page) => {
-        const image = page.querySelector<HTMLImageElement>('img.pdf-page-render-image');
+        const image = page.querySelector<HTMLImageElement>('.pdf-native-render-layer img');
         return image?.complete && image.naturalWidth > 0;
       });
       stableFrames = ready ? stableFrames + 1 : 0;

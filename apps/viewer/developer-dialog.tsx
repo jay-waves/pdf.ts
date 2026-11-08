@@ -54,14 +54,6 @@ function formatDpr(value: number) {
   return `${Number(value.toFixed(2))}x`;
 }
 
-function formatTiming({ count, last, average }: {
-  count: number;
-  last: number;
-  average: number;
-}) {
-  return count ? `${last.toFixed(1)} / ${average.toFixed(1)} ms` : '—';
-}
-
 function formatMetadataDate(value: Date | null) {
   if (!value || Number.isNaN(value.getTime())) return 'Not provided';
   return `${new Intl.DateTimeFormat(undefined, {
@@ -107,7 +99,7 @@ export function DeveloperDialog({
   const startupSnapshot = useStore(startupLogStore);
   const dprMode = renderSettings.dprMode;
   const dpr = getEffectiveRenderDpr(dprMode, renderSettings.systemDpr);
-  const totalPixels = snapshot.basePixels + snapshot.tilePixels;
+  const totalPixels = snapshot.rasterPixels;
   useEffect(() => {
     if (!open) return;
     let active = true;
@@ -175,12 +167,8 @@ export function DeveloperDialog({
     `Font source: ${PDFIUM_FONT_FALLBACK_INFO.source}.`,
     `Font cache: ${PDFIUM_FONT_FALLBACK_INFO.cache}.`,
     `PDFium fallback requests:\n${fontRequestDetails}`,
-    `Base raster uses ${formatPixels(snapshot.basePixels)} and active tiles use ${formatPixels(snapshot.tilePixels)}.`,
-    `${snapshot.activeTiles} tile images are currently attached to mounted PDF pages.`,
+    `${snapshot.rasterImages} raster images are currently attached to mounted PDF pages.`,
     `Estimated RGBA raster memory is ${formatBytes(totalPixels * 4)}.`,
-    `Base render last / average: ${formatTiming(snapshot.baseTiming)} across ${snapshot.baseTiming.count} completed tasks.`,
-    `Tile render last / average: ${formatTiming(snapshot.tileTiming)} across ${snapshot.tileTiming.count} completed tasks.`,
-    'Timing is end-to-end task latency; averages cover completed tasks since the last rendering reset.',
     'Raster memory is an estimate and excludes PDFium WASM and GPU copies.',
     formatStartupDiagnostics(startupSnapshot),
     snapshot.errors.length
@@ -217,10 +205,8 @@ export function DeveloperDialog({
           <dl className={styles.stats}>
             <div><dt>Effective DPR</dt><dd><span>{formatDpr(dpr)}</span></dd></div>
             <div><dt>Raster pixels</dt><dd><span>{formatPixels(totalPixels)}</span></dd></div>
-            <div><dt>Active tiles</dt><dd><span>{snapshot.activeTiles}</span></dd></div>
+            <div><dt>Raster images</dt><dd><span>{snapshot.rasterImages}</span></dd></div>
             <div><dt>Raster memory</dt><dd><span>{formatBytes(totalPixels * 4)}</span></dd></div>
-            <div><dt>Base last / avg</dt><dd><span>{formatTiming(snapshot.baseTiming)}</span></dd></div>
-            <div><dt>Tiles last / avg</dt><dd><span>{formatTiming(snapshot.tileTiming)}</span></dd></div>
           </dl>
           <div className={styles.control}>
             <span>Device Pixel Ratio (DPR)</span>

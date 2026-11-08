@@ -21,6 +21,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
   const annotation = scope?.list().find((item) => annotationKey(item.ref) === annotationId);
   const [draft, setDraft] = useState(annotation?.contents ?? '');
   const draftRef = useRef(draft);
+  const initialText = useRef(draft);
   const discarded = useRef(false);
   const [anchor, setAnchor] = useState<{ x: number; y: number; height: number } | null>(null);
   const horizontalFraction = useRef<number | null>(null);
@@ -28,7 +29,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
 
   // Save on dismissal or when another annotation replaces this editor.
   useEffect(() => () => {
-    if (discarded.current || pageIndex === undefined) return;
+    if (discarded.current || pageIndex === undefined || draftRef.current === initialText.current) return;
     const currentScope = getAnnotationScope(registry, documentId)?.scope;
     const current = currentScope?.list().find((item) => annotationKey(item.ref) === annotationId);
     const contents = draftRef.current.trim();
@@ -36,6 +37,21 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
       void currentScope?.comments.setText(current.ref, contents).catch((error) => console.error('[pdf-ts] failed to save comment', error));
     }
   }, [registry, documentId, annotationId, pageIndex]);
+
+  useEffect(() => {
+    if (!scope) return;
+    const sync = () => {
+      if (draftRef.current !== initialText.current) return;
+      const current = scope.list().find(item => annotationKey(item.ref) === annotationId);
+      if (!current) return;
+      const contents = current.contents ?? '';
+      initialText.current = contents; draftRef.current = contents;
+      setDraft(contents);
+    };
+    const cleanups = [scope.onUpdated(sync), scope.onResynced(sync)];
+    sync();
+    return () => cleanups.forEach(cleanup => cleanup());
+  }, [scope, annotationId]);
 
   useEffect(() => scope?.onDeleted((event) => {
     if (event.refs.some((ref) => annotationKey(ref) === annotationId)) {
@@ -76,10 +92,24 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
       } else {
         setAnchor(null);
       }
-      frame = requestAnimationFrame(update);
     };
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; update(); });
+    };
+    const stage = registry.tryCapability(StageToken, documentId);
+    const element = document.querySelector<HTMLElement>(`[data-pdf-document-layer="${documentId}"] .viewer`);
+    const observer = new ResizeObserver(schedule);
+    if (element) observer.observe(element);
+    const cleanups = [stage?.onCameraChanged(schedule), stage?.onViewportChanged(schedule),
+      stage?.onSettingsChanged(schedule), scope?.onUpdated(schedule), scope?.onResynced(schedule)];
+    window.addEventListener('resize', schedule);
     update();
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame); observer.disconnect();
+      cleanups.forEach(cleanup => cleanup?.());
+      window.removeEventListener('resize', schedule);
+    };
   }, [registry, documentId, scope, annotation, pointerX, onClose]);
 
   if (!annotation || !anchor) return null;
@@ -119,7 +149,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
         aria-label="Comment"
         autoFocus
       />
-    <PopoverResizeHandle />
+      <PopoverResizeHandle />
     </FloatingPopover>
   );
 }

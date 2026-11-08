@@ -4,10 +4,6 @@ import type { AiConfig, AiConfigUpdate, AiRequest } from './types';
 
 export const AI_STORAGE_KEY = 'pdf.ts:ai-config';
 export const DEFAULT_AI_PROMPT = 'Translate the following text into {{browserDefault}}. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
-const LEGACY_AI_PROMPT = DEFAULT_AI_PROMPT.replace('{{browserDefault}}', 'Chinese');
-function migrateDefaultPrompt(prompt: string) {
-  return prompt === LEGACY_AI_PROMPT || prompt === LEGACY_AI_PROMPT.replace('{{selectedText}}', '%s') ? DEFAULT_AI_PROMPT : prompt;
-}
 const defaults = (): AiConfig => ({ model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', prompt: DEFAULT_AI_PROMPT, apiKeyConfigured: false, rememberApiKey: false, totalTokens: 0 });
 
 export function normalizeAiEndpoint(value: string) {
@@ -31,7 +27,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
     try {
       const saved = JSON.parse(storage().getItem(AI_STORAGE_KEY) ?? 'null');
       if (!saved || typeof saved.model !== 'string' || typeof saved.prompt !== 'string') return;
-      config = { ...defaults(), model: saved.model, prompt: saved.promptVersion === 1 ? saved.prompt : migrateDefaultPrompt(saved.prompt), baseUrl: normalizeAiEndpoint(saved.baseUrl), rememberApiKey: saved.rememberApiKey === true };
+      config = { ...defaults(), model: saved.model, prompt: saved.prompt, baseUrl: normalizeAiEndpoint(saved.baseUrl), rememberApiKey: saved.rememberApiKey === true };
       if (config.rememberApiKey && typeof saved.apiKey === 'string') apiKey = saved.apiKey;
     } catch { /* Storage may be unavailable; memory-only requests still work. */ }
   }
@@ -57,7 +53,7 @@ export function createBrowserAi(storage: () => Pick<Storage, 'getItem' | 'setIte
         // Remove the previous credential before saving non-secret settings or a replacement.
         storage().removeItem(AI_STORAGE_KEY);
         storage().setItem(AI_STORAGE_KEY, JSON.stringify({
-          model: next.model, baseUrl: next.baseUrl, prompt: next.prompt, promptVersion: 1,
+          model: next.model, baseUrl: next.baseUrl, prompt: next.prompt,
           rememberApiKey: next.rememberApiKey,
           ...(next.rememberApiKey && nextKey ? { apiKey: nextKey } : {}),
         }));

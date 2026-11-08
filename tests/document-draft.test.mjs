@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
 import { localEngine } from '@embedpdf/engine';
-import { registerHooks } from 'node:module';
-const hooks = registerHooks({ resolve(specifier, context, nextResolve) { return nextResolve(specifier === './legacy-draft' ? `${specifier}.ts` : specifier, context); } });
 const { buildDraft, captureBaseline, restoreDraft, encodeDraft, decodeDraft } = await import('../apps/renderer/document-draft.ts');
-hooks.deregister();
 import { fixture } from '../scripts/pdf-editing-fixture.mjs';
 async function setup(t) {
   const engine = localEngine({ runtime: { prefer: 'wasm' }, defaultFallbackFonts: false });
@@ -69,26 +65,9 @@ test('foreign swap formats and prototype-bearing JSON are rejected', () => {
   assert.throws(() => decodeDraft('VIM swap contents'));
   assert.throws(() => decodeDraft('{"format":"pdf.ts/swp","version":9}'));
   assert.throws(() => decodeDraft('{"__proto__":{"polluted":true}}'));
+  assert.throws(() => decodeDraft(JSON.stringify({ format: 'pdf.ts/swp', version: 1, baseVersion: 'old', revision: 1, targets: [], removed: [], upsert: [], formValues: {} })), /not a supported/);
 });
 
-
-test('legacy v2 .swp restores note edits, replies, stamp resources and form fills', async t => {
-  const { doc, baseline } = await setup(t);
-  // Captured using cached official EmbedPDF 2.15 and the pre-migration draft writer.
-  // The original /Annots contains a widget before both text notes.
-  const legacy = JSON.parse(readFileSync(new URL('./fixtures/legacy-v2-draft.json', import.meta.url), 'utf8'));
-  const appearance = fixture({ content: '1 0 0 rg 0 0 100 100 re f\n' });
-  legacy.upsert.push({ item: { annotation: { id: 'stamp', pageIndex: 0, type: 13, rect: { origin: { x: 200, y: 200 }, size: { width: 50, height: 50 } }, flags: 4 }, ctx: { data: { $bytes: appearance.toString('base64') }, mimeType: 'application/pdf' } } });
-  await restoreDraft(doc, decodeDraft(JSON.stringify(legacy)), baseline);
-  const all = (await doc.annotations.list()).annotations;
-  const edited = all.find(a => a.contents === 'legacy edited note');
-  const reply = all.find(a => a.contents === 'legacy reply');
-  assert.equal(reply.reply.to.objectNumber, edited.ref.objectNumber);
-  assert.ok(!all.some(a => a.contents === 'delete this note'));
-  const stamp = all.find(a => a.subtype === 'stamp');
-  assert.ok((await doc.page(stamp.page).annotations.downloadResource(stamp.ref, 'appearance')).byteLength > 0);
-  assert.equal((await doc.forms.list()).fields[0].value, 'legacy field');
-});
 
 test('draft preserves checkbox and multi-select values through native form value shapes', async t => {
   const { engine, doc } = await setup(t);

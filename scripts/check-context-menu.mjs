@@ -10,14 +10,14 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
-  const bytes = fixture({ content: 'BT /Helv 20 Tf 60 700 Td (Select this PDF text for highlighting.) Tj ET' });
+  const bytes = fixture({ content: 'BT /Helv 20 Tf 60 700 Td (Select this PDF text for highlighting.) Tj 0 -35 Td (Comment directly on this second line.) Tj ET' });
   const dataTransfer = await page.evaluateHandle(bytes => {
     const transfer = new DataTransfer();
     transfer.items.add(new File([new Uint8Array(bytes)], 'context-menu.pdf', { type: 'application/pdf' }));
     return transfer;
   }, [...bytes]);
   await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer });
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-page-render-image')].some(image => image.complete && image.naturalWidth));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img')].some(image => image.complete && image.naturalWidth));
   await page.mouse.move(640, 30);
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   const surface = page.locator('.pdf-page-surface').first();
@@ -87,6 +87,26 @@ try {
   await editor.waitFor({ state: 'visible' });
   const rotatedEditor = await editor.boundingBox();
   assert.ok(rotatedEditor.y > rotated.y + 350 * rotatedScale && rotatedEditor.y < rotated.y + 470 * rotatedScale, 'rotated note editor remains beside its shape');
+  await editor.getByRole('button', { name: 'Done', exact: true }).click();
+  // Direct text-selection Comment must create a note, not only a highlight.
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Rotate', exact: true }).click();
+  const upright = await surface.boundingBox();
+  const unit = upright.width / 612;
+  const noteCount = await page.locator('[data-annotation-note-icon]').count();
+  await page.mouse.move(upright.x + 61 * unit, upright.y + 120 * unit);
+  await page.mouse.down();
+  await page.mouse.move(upright.x + 360 * unit, upright.y + 120 * unit, { steps: 20 });
+  await page.mouse.up();
+  await page.mouse.click(upright.x + 250 * unit, upright.y + 120 * unit, { button: 'right' });
+  await menu.waitFor({ state: 'visible' });
+  await menu.getByRole('button', { name: 'Comment', exact: true }).click();
+  await editor.waitFor({ state: 'visible' });
+  await page.waitForFunction(count => document.querySelectorAll('[data-annotation-note-icon]').length === count + 1, noteCount);
+  assert.equal(await page.locator('[data-annotation-note-icon]').last().getAttribute('stroke'), '#202020');
+  await editor.getByRole('textbox', { name: 'Comment', exact: true }).fill('Direct selection comment');
+  await editor.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.locator('main[data-draft-status="saved"]').waitFor();
+  assert.equal(await page.locator('[data-annotation-note-icon]').count(), noteCount + 1);
   assert.deepEqual(errors, []);
   console.log('PASS text selection, copy, highlight/vector menus and nearby comment positioning');
 } finally {

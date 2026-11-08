@@ -81,7 +81,7 @@ test('initialization and theme changes never read or edit existing annotations',
 test('selection markup uses the native selection operation and clears through its default policy', async () => {
   const calls=[];
   const annotations=[{subtype:'highlight'}];
-  const result=await createTextMarkupAnnotations({createFromSelection:async (...args)=>{calls.push(args);return {annotations};}}, {}, 'highlight');
+  const result=await createTextMarkupAnnotations({createFromSelection:async (...args)=>{calls.push(args);return {annotations};}}, 'highlight');
   assert.deepEqual(calls,[['highlight']]);
   assert.equal(result,annotations);
 });

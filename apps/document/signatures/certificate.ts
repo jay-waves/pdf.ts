@@ -14,7 +14,7 @@ import {
   createSHA512,
   type IHasher,
 } from 'hash-wasm';
-export interface PdfSignatureObject { contents: ArrayBuffer; byteRange: ArrayBuffer | readonly number[]; subFilter: string; time: string; reason: string | null }
+export interface PdfSignatureObject { contents: ArrayBuffer; byteRange: readonly number[]; subFilter: string; time: string; reason: string | null }
 import type { ManagedResource } from '../../platform/types';
 
 export interface SignatureCertificateInfo {
@@ -159,19 +159,15 @@ export function getSignatureCertificateInfo(contents: ArrayBuffer): SignatureCer
   }
 }
 
-function readByteSpans(byteRange: ArrayBuffer | readonly number[]): ByteSpan[] {
-  if (byteRange instanceof ArrayBuffer && (byteRange.byteLength < 16 || byteRange.byteLength % Uint32Array.BYTES_PER_ELEMENT !== 0)) {
-    throw new Error('The signature ByteRange is malformed.');
-  }
-
-  const values = byteRange instanceof ArrayBuffer ? new Uint32Array(byteRange) : byteRange;
+function readByteSpans(byteRange: readonly number[]): ByteSpan[] {
+  const values = byteRange;
   if (values.length < 4 || values.length % 2 !== 0) throw new Error('The signature ByteRange is malformed.');
   const spans: ByteSpan[] = [];
   for (let index = 0; index < values.length; index += 2) {
     const start = values[index];
     const length = values[index + 1];
     const end = start + length;
-    if (!Number.isSafeInteger(end) || length === 0 || (spans.length && start <= spans.at(-1)!.end)) {
+    if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(length) || length <= 0 || !Number.isSafeInteger(end) || (spans.length && start <= spans.at(-1)!.end)) {
       throw new Error('The signature ByteRange is invalid.');
     }
     spans.push({ start, end });

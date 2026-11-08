@@ -6,5 +6,5 @@ export function buildLlmPrompt(template: string, text: string) {
   // Resolve the instruction template before inserting the untrusted selection.
   const prompt = template.replaceAll("{{browserDefault}}", getBrowserDefaultLanguage());
   if (prompt.includes("{{selectedText}}")) return prompt.replace("{{selectedText}}", () => text);
-  return prompt.includes("%s") ? prompt.replace("%s", () => text) : `${prompt}\n\n${text}`;
+  return `${prompt}\n\n${text}`;
 }

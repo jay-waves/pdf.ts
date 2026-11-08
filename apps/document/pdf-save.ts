@@ -12,7 +12,6 @@ async function downloadDocument(registry: Kernel | undefined, documentId: string
 }
 
 export async function exportPdf(
-  _engine: Engine,
   registry: Kernel | undefined,
   documentId: string | null | undefined,
   fileName: string,
@@ -24,7 +23,6 @@ export async function exportPdf(
 }
 
 export async function savePdfCopy(
-  _engine: Engine,
   registry: Kernel | undefined,
   documentId: string | null | undefined,
   fileHandle: PdfFileHandle | undefined,

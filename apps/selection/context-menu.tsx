@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Kernel } from '@embedpdf/core';
-import { annotationKey, type DocumentHandle, type Engine } from '@embedpdf/core';
+import { annotationKey, type DocumentHandle } from '@embedpdf/core';
 import type { Annotation } from '@embedpdf/plugin-annotation';
 import type { Rect } from '@embedpdf/core-geometry';
 import { RenderToken } from '@embedpdf/plugin-render';
@@ -113,13 +113,11 @@ async function copyAnnotationImage(registry: Kernel, documentId: string, annotat
 }
 
 export function ContextMenu({
-  engine: _engine,
   registry,
   documentId,
   container,
   dispatch,
 }: {
-  engine: Engine;
   registry?: Kernel;
   documentId?: string | null;
   container: HTMLElement | null;
@@ -194,15 +192,6 @@ export function ContextMenu({
       return hit ? annotation.getAt(hit.ref, hit.point) : null;
     };
 
-    const preserveSelection = (event: MouseEvent) => {
-      if (event.button !== 2 || !isViewerEvent(event) || event.composedPath().some(isEditableTarget)) return;
-      const selectedTextHit = selection?.hasSelection() && isTextSelectionHit(container, registry, documentId, selection, event.clientX, event.clientY);
-      if (!selectedTextHit && !annotationAt(event)) return;
-      // The selection plugin clears on pointerdown, before contextmenu fires.
-      event.stopPropagation();
-      event.preventDefault();
-    };
-
     const openAnnotationMenu = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       const commentBadge = target?.closest<HTMLElement>('[data-annotation-comment-id]');
@@ -246,11 +235,9 @@ export function ContextMenu({
       setMenu({ kind: 'annotation', x: event.clientX + 8, y: event.clientY + 8 });
     };
 
-    container.addEventListener('pointerdown', preserveSelection, { capture: true });
     container.addEventListener('click', openAnnotationMenu);
     container.addEventListener('contextmenu', openContextMenu, { capture: true });
     return () => {
-      container.removeEventListener('pointerdown', preserveSelection, { capture: true });
       container.removeEventListener('click', openAnnotationMenu);
       container.removeEventListener('contextmenu', openContextMenu, { capture: true });
     };
@@ -277,9 +264,8 @@ export function ContextMenu({
   const addTextMarkup = async (type: TextMarkupSubtype) => {
     if (!selectionScope || !annotation) return;
 
-    const created = await createTextMarkupAnnotations(annotation, selectionScope, type);
+    await createTextMarkupAnnotations(annotation, type);
     setMenu(null);
-    return created;
   };
 
   const selectionItems = [
@@ -289,11 +275,14 @@ export function ContextMenu({
     } },
     { label: 'Highlight', icon: Highlighter, action: () => addTextMarkup('highlight') },
     { label: 'Comment', icon: MessageSquareMore, action: async () => {
-      const highlights = await addTextMarkup('highlight');
-      if (!highlights?.length) return;
-      const page = container?.ownerDocument.elementFromPoint(menu.x - 8, menu.y - 8)
-        ?.closest<HTMLElement>('[data-pdf-page-index]')?.dataset.pdfPageIndex;
-      openComment(highlights.find((highlight) => String(registry.documents.getPageIndex(highlight.page, documentId)) === page) ?? highlights[0]);
+      // Capture geometry before authoring clears the selection. The worker can
+      // confirm creation before the plugin's returned annotation lookup catches up.
+      const anchor = selectionScope?.getAnchor();
+      if (!anchor || !annotation) return;
+      try {
+        await createTextMarkupAnnotations(annotation, 'highlight');
+        await openComment({ subtype: 'highlight', page: anchor.page, rect: anchor.bounds });
+      } catch (error) { console.error('[pdf-ts] failed to add selection comment', error); }
     } },
     ...(isTranslationEnabled(platform.getPreference) ? [{
       label: isLlmEnabled(platform.getPreference) ? 'Translate' : 'Translate (Google Translate)',
@@ -340,9 +329,9 @@ export function ContextMenu({
     : null;
   const document = getDocument(registry, documentId);
 
-  const openComment = async (target: Annotation) => {
+  const openComment = async (target: Annotation | { subtype: 'highlight'; page: Annotation['page']; rect: Rect }) => {
     if (annotation) {
-      let commentId = annotationKey(target.ref);
+      let commentId = target.subtype === 'text' ? annotationKey(target.ref) : '';
       if (target.subtype !== 'text') {
         const stage = registry.tryCapability(StageToken, documentId);
         const viewport = container?.querySelector<HTMLElement>('.viewer');

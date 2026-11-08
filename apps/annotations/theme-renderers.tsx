@@ -43,7 +43,7 @@ function ThemeComment({ annotation }: AnnotationRendererProps) {
   const theme = useStore(viewerThemeStore, (state) => state.theme);
   const rawColor = 'color' in annotation ? annotation.color : null;
   const color = getThemeAnnotationColor(rawColor, theme) ?? rawColor ?? getThemeHighlightPolicy(theme).color;
-  return <MessageSquareMore width="100%" height="100%" fill={color} color={isDarkViewerTheme(theme) ? '#202020' : '#fff'} strokeWidth={1.5} />;
+  return <MessageSquareMore width="100%" height="100%" data-annotation-note-icon={annotationKey(annotation.ref)} fill={color} color="#202020" strokeWidth={1.75} />;
 }
 
 function SceneShape({ node }: { node: SceneNode }) {
@@ -83,14 +83,19 @@ function ThemeFreeText(props: AnnotationRendererProps) {
   const editor = useRichTextEditor(props.annotation);
   const original = props.annotation.subtype === 'free-text' ? props.annotation.richText?.body.color : null;
   const color = getThemeAnnotationColor(original, theme) ?? original ?? undefined;
-  const selector = `[data-annotation-text-theme="${theme}"] [style*="color:"]`;
-  const rules = [`${selector}{-webkit-text-fill-color:currentColor}`];
+  return <><ThemeGeometry {...props} /><div data-annotation-text-theme={theme} ref={editor.ref} style={{ ...editor.style, WebkitTextFillColor: color }} /></>;
+}
+
+export function AnnotationThemeStyles() {
+  const theme = useStore(viewerThemeStore, state => state.theme);
+  const selector = `[data-annotation-text-theme="${theme}"]`;
+  const rules = [`${selector} [style*="color:"]{-webkit-text-fill-color:currentColor}`];
   for (const source of new Set(Object.values(ANNOTATION_PALETTES).flat())) {
-    const rgb = [1, 3, 5].map((offset) => parseInt(source.slice(offset, offset + 2), 16)).join(', ');
+    const rgb = [1, 3, 5].map(offset => parseInt(source.slice(offset, offset + 2), 16)).join(', ');
     const target = getThemeAnnotationColor(source, theme);
-    rules.push(`[data-annotation-text-theme="${theme}"] [style*="color: ${source}"],[data-annotation-text-theme="${theme}"] [style*="color: rgb(${rgb})"]{-webkit-text-fill-color:${target}}`);
+    rules.push(`${selector} [style*="color: ${source}"],${selector} [style*="color: rgb(${rgb})"]{-webkit-text-fill-color:${target}}`);
   }
-  return <><ThemeGeometry {...props} /><style>{rules.join('')}</style><div data-annotation-text-theme={theme} ref={editor.ref} style={{ ...editor.style, WebkitTextFillColor: color }} /></>;
+  return <style>{rules.join('')}</style>;
 }
 
 export const themeAnnotationRenderers: AnnotationRenderer[] = [

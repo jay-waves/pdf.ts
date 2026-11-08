@@ -1,12 +1,10 @@
-import { restoreLegacyDraft, type LegacyDraft } from './legacy-draft';
 import { annotationKey, fieldValueOf, type Annotation, type AnnotationBundle, type FormField, type FormFieldValue, type LocalDocumentHandle } from '@embedpdf/engine-core/runtime';
 
 export type DraftStatus = 'clean' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict' | 'unavailable';
 export interface DraftState { draftStatus: DraftStatus; draftRevision: number; draftError?: string }
 export interface AnnotationTarget { id: string; pageIndex: number; index: number }
 export interface DraftBaseline { annotations: Annotation[]; fields: FormField[]; pages: string[] }
-export type DocumentDraft = NativeDocumentDraft | LegacyDraft;
-export interface NativeDocumentDraft {
+export interface DocumentDraft {
   format: 'pdf.ts/swp'; version: 1; engine: 3;
   baseVersion: string; revision: number; updatedAt: string;
   targets: AnnotationTarget[]; removed: AnnotationTarget[];
@@ -29,7 +27,7 @@ export function annotationTargets(baseline: DraftBaseline) {
   }));
 }
 export async function buildDraft(doc: LocalDocumentHandle, baseVersion: string, revision: number,
-  baseline: DraftBaseline, snapshot?: DraftBaseline): Promise<NativeDocumentDraft> {
+  baseline: DraftBaseline, snapshot?: DraftBaseline): Promise<DocumentDraft> {
   const current = snapshot ?? await captureBaseline(doc);
   const previous = new Map(baseline.annotations.map(a => [annotationKey(a.ref), a]));
   const present = new Set(current.annotations.map(a => annotationKey(a.ref)));
@@ -44,7 +42,6 @@ export async function buildDraft(doc: LocalDocumentHandle, baseVersion: string, 
     formValues: Object.fromEntries(current.fields.filter(f => JSON.stringify(fieldValueOf(f)) !== JSON.stringify(oldFields.get(f.name))).filter(f => fieldValueOf(f) !== null).map(f => [f.name, fieldValueOf(f)!])) };
 }
 export async function restoreDraft(doc: LocalDocumentHandle, draft: DocumentDraft, baseline: DraftBaseline) {
-  if (draft.engine !== 3) return restoreLegacyDraft(doc, draft, baseline);
   const currentTargets = annotationTargets(baseline);
   const byPosition = new Map([...currentTargets].map(([key, t]) => [`${t.pageIndex}:${t.index}`, key]));
   const byKey = new Map(baseline.annotations.map(a => [annotationKey(a.ref), a]));
@@ -87,17 +84,15 @@ export function encodeDraft(draft: DocumentDraft): string {
 export function decodeDraft(text: string): DocumentDraft {
   const value = JSON.parse(text, (key, value) => {
     if (['__proto__', 'constructor', 'prototype'].includes(key)) throw new Error('Invalid draft property.');
-    if (value && typeof value === 'object' && Object.keys(value).length === 1 && typeof value.$date === 'string') return new Date(value.$date);
     if (value && typeof value === 'object' && Object.keys(value).length === 1 && typeof value.$bytes === 'string') return Uint8Array.from(atob(value.$bytes), c => c.charCodeAt(0));
     return value;
   });
-  if (!value || value.format !== 'pdf.ts/swp' || value.version !== 1 || (value.engine !== 3 && value.engine !== undefined) || typeof value.baseVersion !== 'string'
+  if (!value || value.format !== 'pdf.ts/swp' || value.version !== 1 || value.engine !== 3 || typeof value.baseVersion !== 'string'
     || !Number.isSafeInteger(value.revision) || value.revision < 0 || !Array.isArray(value.targets) || !Array.isArray(value.removed)
     || !value.formValues || typeof value.formValues !== 'object' || (value.bundle && (value.bundle.format !== 'embedpdf/annotations' || value.bundle.version !== 1))) {
     throw new Error('This .swp file is not a supported pdf.ts draft.');
   }
   const validTarget = (target: AnnotationTarget) => target && typeof target.id === 'string' && Number.isSafeInteger(target.pageIndex) && target.pageIndex >= 0 && Number.isSafeInteger(target.index) && target.index >= 0;
   if (!value.targets.every(validTarget) || !value.removed.every(validTarget)) throw new Error('Invalid draft annotation target.');
-  if (value.engine === undefined && (!Array.isArray(value.upsert) || value.upsert.some((c: any) => !c?.item?.annotation || !Number.isSafeInteger(c.item.annotation.pageIndex) || c.item.annotation.pageIndex < 0 || (c.target && !validTarget(c.target))))) throw new Error('Invalid legacy draft annotations.');
   return value as DocumentDraft;
 }

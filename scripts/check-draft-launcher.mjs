@@ -8,7 +8,7 @@ const original=await readFile(path);
 const browser=await chromium.launch({channel:'chrome'});
 const context=await browser.newContext({viewport:{width:1280,height:900}});
 const errors=[];context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));if(process.env.DEBUG_PDF)p.on('console',m=>console.log(m.type(),m.text()));});
-async function open(){const page=await context.newPage();page.setDefaultTimeout(15000);await page.goto(`${base}/?launcherDocument=draft-browser`);await page.waitForFunction(()=>[...document.querySelectorAll('.pdf-page-render-image')].some(i=>i.complete&&i.naturalWidth));await page.getByRole('button',{name:'Pin toolbar',exact:true}).click();return page;}
+async function open(){const page=await context.newPage();page.setDefaultTimeout(15000);await page.goto(`${base}/?launcherDocument=draft-browser`);await page.waitForFunction(()=>[...document.querySelectorAll('.pdf-native-render-layer img')].some(i=>i.complete&&i.naturalWidth));await page.getByRole('button',{name:'Pin toolbar',exact:true}).click();return page;}
 try{
  const a=await open();const b=await open();
  await a.bringToFront();await a.getByRole('button',{name:'Draw',exact:true}).click();await a.locator('[aria-label="Rectangle"]').click();

@@ -30,7 +30,7 @@
 .viewer {
   width: 100%;
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   /* Zoom/layout changes already preserve their own viewport anchor. Browser
      scroll anchoring can instead lock onto a recycled virtual page and move
      the viewport a second time during a large scale change. */
@@ -103,32 +103,13 @@
   cursor: grab !important;
 }
 
-:is(.viewer[data-pdf-panning="true"], .viewer[data-pdf-panning="true"] *) {
-  cursor: grabbing !important;
-}
-
-:root[data-pdf-scroll-strategy="vertical"] .viewer {
-  overflow-x: auto !important;
-  overflow-y: auto !important;
-}
-
-:root[data-pdf-scroll-strategy="vertical"] .pdf-viewer-scrollbar-horizontal,
-:root[data-pdf-scroll-strategy="horizontal"] .pdf-viewer-scrollbar-vertical {
-  display: none;
-}
-
-:root[data-pdf-scroll-strategy="horizontal"] .viewer {
-  overflow-x: scroll !important;
-  overflow-y: auto !important;
-}
-
 .viewer img,
 .viewer canvas {
   -webkit-user-drag: none;
   user-select: none;
 }
 
-.pdf-page-render-image {
+.pdf-native-render-layer img {
   display: block;
 }
 
@@ -138,15 +119,10 @@
     0 1px 2px var(--pdf-page-shadow);
 }
 
-.pdf-page-tiling-layer,
 .pdf-text-selection-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
-}
-
-:root[data-viewer-color-mode="dark"] .pdf-text-selection-layer > div {
-  mix-blend-mode: normal !important;
 }
 
 /* Multiply preserves the printed-page look in light mode, but muddies both

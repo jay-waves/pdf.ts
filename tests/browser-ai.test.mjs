@@ -161,15 +161,15 @@ test('Translate resolves browserDefault only in its template and keeps Ask indep
   assert.equal((await ai.getAiConfig()).prompt, 'Translate to French: {{selectedText}}', 'resetting LLM must preserve the Translate card');
 });
 
-test('moving the prompt preserves custom settings and upgrades the old shipped default', async () => {
+test('stored prompts are preserved verbatim without historical migrations', async () => {
   const disk = storage();
   const legacy = 'Translate the following text into Chinese. Preserve meaning, tone, names, formatting, and paragraph breaks. Output only the translation.\n\n{{selectedText}}';
   disk.setItem(AI_STORAGE_KEY, JSON.stringify({ model: 'custom-model', baseUrl: 'https://provider.example/v1', prompt: legacy, rememberApiKey: false }));
   const ai = createBrowserAi(() => disk);
-  assert.ok((await ai.getAiConfig()).prompt.includes('{{browserDefault}}'));
+  assert.equal((await ai.getAiConfig()).prompt, legacy);
   assert.equal((await ai.getAiConfig()).model, 'custom-model');
-  await ai.setAiConfig({ prompt: 'Translate to German: %s' });
-  assert.equal((await createBrowserAi(() => disk).getAiConfig()).prompt, 'Translate to German: %s');
+  await ai.setAiConfig({ prompt: 'Translate to German: {{selectedText}}' });
+  assert.equal((await createBrowserAi(() => disk).getAiConfig()).prompt, 'Translate to German: {{selectedText}}');
   await ai.setAiConfig({ prompt: legacy });
-  assert.equal((await createBrowserAi(() => disk).getAiConfig()).prompt, legacy, 'an explicit fixed-Chinese choice must survive reload after migration');
+  assert.equal((await createBrowserAi(() => disk).getAiConfig()).prompt, legacy, 'an explicit fixed-Chinese choice must survive reload ');
 });

@@ -5,7 +5,7 @@ import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/ind
 import { fixture } from './pdf-editing-fixture.mjs';
 const dev = process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173';
 const digest = data => createHash('sha256').update(data).digest('hex');
-const original = fixture();
+const original = fixture({ notes: true });
 let bytes = original; let writes = 0;
 const methods = [];
 let draft = null;
@@ -68,8 +68,10 @@ async function open(fallback = false) {
   const page = await context.newPage();
   if (fallback) await page.addInitScript(() => { window.SharedWorker = undefined; });
   await page.goto(`${base}/?launcherDocument=shared-ui`);
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-page-render-image')].some(i => i.complete && i.naturalWidth));
-  await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img')].some(i => i.complete && i.naturalWidth));
+  await page.mouse.move(640, 30);
+  const pin = page.getByRole('button', { name: 'Pin toolbar', exact: true });
+  if (await pin.getAttribute('aria-pressed') !== 'true') await pin.click();
   return page;
 }
 async function draw(page, offset = 0) {
@@ -83,6 +85,26 @@ async function draw(page, offset = 0) {
 }
 try {
   const a = await open(); const b = await open();
+  const openFirstComment = async page => {
+    await page.bringToFront();
+    const icon = await page.locator('[data-annotation-note-icon]').first().boundingBox();
+    await page.mouse.click(icon.x + icon.width / 2, icon.y + icon.height / 2);
+    const editor = page.getByRole('dialog', { name: 'Edit comment', exact: true });
+    await editor.waitFor();
+    return editor;
+  };
+  const firstEditor = await openFirstComment(a);
+  const secondEditor = await openFirstComment(b);
+  await secondEditor.getByRole('textbox', { name: 'Comment', exact: true }).fill('Comment updated in another window');
+  await secondEditor.getByRole('button', { name: 'Done', exact: true }).click();
+  await a.bringToFront();
+  await a.waitForFunction(() => document.querySelector('textarea[aria-label="Comment"]')?.value === 'Comment updated in another window');
+  await firstEditor.getByRole('button', { name: 'Done', exact: true }).click();
+  const checkedEditor = await openFirstComment(b);
+  assert.equal(await checkedEditor.getByRole('textbox', { name: 'Comment', exact: true }).inputValue(), 'Comment updated in another window');
+  await checkedEditor.getByRole('button', { name: 'Done', exact: true }).click();
+  console.log('PASS untouched comment editor follows remote updates and does not restore stale text');
+
   const originalId = await b.locator('[data-pdf-document-layer]').getAttribute('data-pdf-document-layer');
   const initialAnnotations = await b.locator('.pdf-annotation-layer').first().innerHTML();
   await draw(a);
@@ -105,10 +127,10 @@ try {
   await a.waitForFunction(() => !document.title.startsWith('*'));
   await b.waitForFunction(() => !document.title.startsWith('*'));
   assert.equal(writes, 2);
-  const beforeTheme = await b.locator('.pdf-page-render-image').first().getAttribute('src');
+  const beforeTheme = await b.locator('.pdf-native-render-layer img').first().getAttribute('src');
   await a.getByRole('button', { name: 'Dark theme', exact: true }).click();
   await b.waitForFunction(() => document.documentElement.dataset.viewerColorMode === 'dark');
-  await b.waitForFunction(src => document.querySelector('.pdf-page-render-image')?.src !== src, beforeTheme);
+  await b.waitForFunction(src => document.querySelector('.pdf-native-render-layer img')?.src !== src, beforeTheme);
   const c = await open(); // Reopen saved bytes should attach to the original session/history.
   await c.keyboard.press('Control+z');
   await a.waitForFunction(() => document.title.startsWith('*'));

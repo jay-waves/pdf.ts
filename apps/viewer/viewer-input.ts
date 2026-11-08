@@ -33,8 +33,8 @@ export function installViewerCommandKeys(dispatch: ViewerCommandDispatch) {
 }
 
 export function installStageNavigationInput(stage: ViewerStage, dispatch: ViewerCommandDispatch) {
-  const navigate = (delta: number, source: 'Keyboard' | 'Mouse') => {
-    dispatch({ type: 'navigation/move-pages', delta, source });
+  const navigate = (delta: number) => {
+    dispatch({ type: 'navigation/move-pages', delta });
   };
   const mouseGesture = installMousePageGesture(
     (target) => !stage.getSnapshot().selectingRegion
@@ -42,7 +42,7 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
       && target instanceof Element
       && Boolean(target.closest('.viewer, [data-viewer-presentation]')),
     (delta) => {
-      navigate(delta, 'Mouse');
+      navigate(delta);
       stage.focusViewportAfterAction();
     },
   );
@@ -87,7 +87,7 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
     if (delta === null) return;
     event.preventDefault();
     event.stopPropagation();
-    navigate(delta, 'Keyboard');
+    navigate(delta);
   };
   const stopSideButtonEvent = (event: MouseEvent | PointerEvent) => {
     if (!isViewerNavigationTarget(event.target)) return;
@@ -100,7 +100,7 @@ export function installStageNavigationInput(stage: ViewerStage, dispatch: Viewer
     if (event.button !== 3 && event.button !== 4) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    navigate(event.button === 3 ? -1 : 1, 'Mouse');
+    navigate(event.button === 3 ? -1 : 1);
   };
   const onPointerMove = (event: PointerEvent) => {
     if (!isViewerNavigationTarget(event.target) || !(event.buttons & 24)) return;

@@ -79,7 +79,7 @@ import {
 import { DOCUMENT_ID } from './document/viewer-document';
 import { useViewerController } from './viewer/viewer-controller';
 import { PDFIUM_FONT_FALLBACK } from './fonts';
-import { viewerActivity, type ViewerInputSource } from './viewer/viewer-activity';
+import { viewerControls } from './viewer/viewer-controls';
 import {
   beginStartupLog,
   completeStartupLog,
@@ -199,7 +199,7 @@ function App({
     stage,
     saveDocument: () => void saveDocument(),
     exportDocument: () => {
-      void exportPdf(engine, registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
+      void exportPdf(registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
         console.error('[pdf-ts] failed to export PDF', error);
       });
     },
@@ -212,7 +212,7 @@ function App({
     // Defer until both controls have subscribed, including under StrictMode.
     const timer = window.setTimeout(() => {
       controlsDiscoveredRef.current = true;
-      viewerActivity.pulse('Mouse', ['Discovery']);
+      viewerControls.show();
     }, 0);
     return () => window.clearTimeout(timer);
   }, [presentationPage, totalPages]);
@@ -243,8 +243,8 @@ function App({
     dispatchCommand({ type: 'ui/close-overlay' });
   }, [dispatchCommand]);
 
-  const navigatePresentation = useCallback((delta: -1 | 1, source: ViewerInputSource) => {
-    dispatchCommand({ type: 'navigation/move-pages', delta, source });
+  const navigatePresentation = useCallback((delta: -1 | 1) => {
+    dispatchCommand({ type: 'navigation/move-pages', delta });
   }, [dispatchCommand]);
 
   useEffect(() => {
@@ -448,7 +448,7 @@ function App({
   return (
     <ViewerFocusContext.Provider value={stage ? () => stage.focusViewportAfterAction() : null}>
     <main data-draft-status={draft.draftStatus} ref={viewerRootRef} inert={pendingDocument !== null} className="fixed inset-0 overflow-hidden">
-      <DraftNotice draft={draft} dirty={isDirty} engine={engine} documentId={documentId} name={resolvedDocumentName ?? 'document.pdf'} />
+      <DraftNotice key={documentId} draft={draft} dirty={isDirty} engine={engine} documentId={documentId} name={resolvedDocumentName ?? 'document.pdf'} />
       <PdfSurface
         engine={engine}
         registry={registry}
@@ -498,7 +498,6 @@ function App({
         ) : null}
         {documentPane === 'comments' ? (
           <Comments
-            engine={engine}
             registry={registry}
             documentId={documentId}
             stage={stage}
@@ -523,7 +522,6 @@ function App({
         />
       ) : null}
       <ContextMenu
-        engine={engine}
         registry={registry}
         documentId={documentId}
         container={viewerRootRef.current}
@@ -557,7 +555,7 @@ function App({
         }}
         onSaveCopy={async () => {
           if (!externalChange) return;
-          const name = await savePdfCopy(engine, registry, documentId, fileHandle);
+          const name = await savePdfCopy(registry, documentId, fileHandle);
           if (!name) throw new Error('Saving a copy is not available.');
           await reloadExternalDocument(externalChange);
           window.alert(`Your changes were saved as:\n${name}`);

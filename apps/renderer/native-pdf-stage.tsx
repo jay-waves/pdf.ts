@@ -29,7 +29,7 @@ export function NativePdfStage({ documentId, stage, panMode, renderPage, renderD
   return <div {...props} ref={root} className="pdf-viewer-scroll-area">
     <Stage className={className ?? `viewer${panMode ? ' is-pan-mode' : ''}`} style={{ width: '100%', height: '100%' }}
       overlay={<>
-        <StageSurface documentId={documentId} stage={stage} containerRef={root} />
+        <StageSurface stage={stage} containerRef={root} />
         <Scrollbar axis="x" autoHide={false} className="pdf-viewer-scrollbar pdf-viewer-scrollbar-horizontal" thumbClassName="pdf-viewer-scrollbar-thumb" />
         <Scrollbar axis="y" autoHide={false} className="pdf-viewer-scrollbar pdf-viewer-scrollbar-vertical" thumbClassName="pdf-viewer-scrollbar-thumb" />
       </>}>

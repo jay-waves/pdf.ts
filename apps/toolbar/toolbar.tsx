@@ -45,7 +45,7 @@ import {
   setStoredToolbarPinned,
 } from '../theme/theme';
 import { Search } from '../search/search';
-import { useViewerActivityAutoHide } from '../components/use-auto-hide';
+import { useViewerAutoHide } from '../components/use-auto-hide';
 import type {
   ToolbarSection,
   ViewerCapabilitySnapshot,
@@ -250,8 +250,7 @@ export function Toolbar({
     visible: toolbarVisible,
     reveal: showToolbar,
     scheduleHide: scheduleToolbarHide,
-  } = useViewerActivityAutoHide(
-    'toolbar',
+  } = useViewerAutoHide(
     () => !pinned && !searchOpen && !pointerHoveringRef.current && !portalContainer?.matches(':focus-within'),
   );
 

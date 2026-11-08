@@ -1,12 +1,3 @@
-.root {
-  display: contents;
-}
-
-/* The mapped geometry replaces EmbedPDF's sibling appearance image. */
-.root[data-themed='true'] ~ img {
-  display: none !important;
-}
-
 .commentBadge {
   position: absolute;
   display: grid;

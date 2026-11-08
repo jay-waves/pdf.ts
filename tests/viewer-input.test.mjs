@@ -126,7 +126,7 @@ test('right mouse gestures dispatch the same page command and Escape cancels the
   emit('pointermove', { clientX: 120 });
   assert.deepEqual(commands, []);
   emit('pointerup', { clientX: 120, buttons: 0 });
-  assert.deepEqual(commands, [{ type: 'navigation/move-pages', delta: 1, source: 'Mouse' }]);
+  assert.deepEqual(commands, [{ type: 'navigation/move-pages', delta: 1 }]);
   assert.equal(focus, 1);
   emit('pointerdown');
   emit('pointermove', { clientX: 280 });

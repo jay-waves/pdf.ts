@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { viewerActivity } from '../viewer/viewer-activity';
-import type { ViewerActivityAudience } from '../viewer/viewer-activity';
+import { viewerControls } from '../viewer/viewer-controls';
 
 function useAutoHide(shouldHide: () => boolean, delay = 900) {
   const [visible, setVisible] = useState(false);
@@ -42,46 +41,13 @@ function useAutoHide(shouldHide: () => boolean, delay = 900) {
   return { visible, reveal, hide, toggle, scheduleHide };
 }
 
-export function useViewerActivityAutoHide(
-  audience: Exclude<ViewerActivityAudience, 'all'>,
-  shouldHide: () => boolean,
-  delay = 900,
-) {
+export function useViewerAutoHide(shouldHide: () => boolean, delay = 900) {
   const visibility = useAutoHide(shouldHide, delay);
   const { reveal, hide, toggle, scheduleHide } = visibility;
-
-  useEffect(() => {
-    const activeSessions = new Set<number>();
-    return viewerActivity.onEvent((event) => {
-      if (event.audience !== 'all' && event.audience !== audience) return;
-      if (event.phase === 'toggle-controls') {
-        toggle();
-        return;
-      }
-      if (event.phase === 'hide-controls') {
-        hide();
-        return;
-      }
-
-      // Viewport gestures never summon chrome: mouse users have edge hover and
-      // touch users have tap-to-toggle. Touch gestures additionally clear any
-      // chrome that is already visible.
-      if (
-        event.path[0] === 'Viewport'
-        && (event.path[1] === 'Scroll' || event.path[1] === 'Pan' || event.path[1] === 'Zoom')
-      ) {
-        if (event.source === 'Touch') hide();
-        return;
-      }
-      if (event.phase === 'start') activeSessions.add(event.id);
-      if (event.phase === 'end') activeSessions.delete(event.id);
-
-      if (event.phase === 'end' && activeSessions.size === 0) {
-        scheduleHide(event.path[0] === 'Discovery' ? 3000 : delay);
-      }
-      else reveal();
-    });
-  }, [audience, delay, hide, reveal, scheduleHide, toggle]);
-
+  useEffect(() => viewerControls.subscribe(action => {
+    if (action === 'hide') hide();
+    else if (action === 'toggle') { toggle(); scheduleHide(3000); }
+    else { reveal(); scheduleHide(3000); }
+  }), [reveal, hide, toggle, scheduleHide]);
   return visibility;
 }

@@ -88,29 +88,6 @@ func OpenRegistry(directory string) (*Registry, error) {
 		if registry.state.Documents == nil {
 			registry.state.Documents = make(map[string]Document)
 		}
-		// Drop the retired server-side AI configuration without decrypting or
-		// exposing its credential to the browser.
-		var legacy struct {
-			AI json.RawMessage `json:"ai"`
-		}
-		_ = json.Unmarshal(content, &legacy)
-		migrated := len(legacy.AI) > 0
-		expiresAt := time.Now().Add(documentCapabilityLifetime)
-		for id, document := range registry.state.Documents {
-			if document.ExpiresAt.IsZero() {
-				document.ExpiresAt = expiresAt
-				registry.state.Documents[id] = document
-				migrated = true
-			}
-		}
-		if migrated {
-			if err := registry.writeLocked(); err != nil {
-				return nil, fmt.Errorf("migrate document registry: %w", err)
-			}
-		}
-		if err := os.Remove(filepath.Join(directory, "master.key")); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("remove retired AI master key: %w", err)
-		}
 	case errors.Is(err, os.ErrNotExist):
 		// The initial state is persisted when the daemon publishes its endpoint.
 	default:
