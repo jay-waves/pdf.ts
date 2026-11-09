@@ -1,442 +1,65 @@
 import { useEffect, useRef, useState } from 'react';
-import type { OutlineItem, PageDestination } from '@embedpdf/engine';
+import { useOutline, useOutlineState } from '@embedpdf/react/outline';
+import { usePageList } from '@embedpdf/react/runtime';
 import { PanelContent, PanelState } from '../components';
-import type { PdfRuntime } from '../engine/pdf-runtime';
-import type { ViewerStage } from '../viewer/viewer-stage';
 import styles from './outline.module.css';
 
-type Bookmark = Omit<OutlineItem, 'target'> & { destination?: PageDestination; pageIndex?: number; children: Bookmark[] };
-function getDestinationFromTarget(bookmark: Bookmark) {
-  return bookmark.destination && bookmark.pageIndex !== undefined ? { ...bookmark.destination, pageIndex: bookmark.pageIndex } : undefined;
-}
-
-const outlinePrefetchCache = new Map<string, OutlineCache>();
-const flattenedBookmarksCache = new WeakMap<Bookmark[], FlattenedBookmark[]>();
-const OUTLINE_CACHE_LIMIT = 4;
-
-type OutlineStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error';
-export type OutlineCache = {
-  status: OutlineStatus;
-  bookmarks: Bookmark[];
-};
-type FlattenedBookmark = {
-  key: string;
-  title: string;
-  pageNumber: number;
-};
-type CurrentBookmark = Pick<FlattenedBookmark, 'key' | 'title'>;
-
-function cacheOutline(key: string, cache: OutlineCache) {
-  if (!outlinePrefetchCache.has(key) && outlinePrefetchCache.size >= OUTLINE_CACHE_LIMIT) {
-    const oldestKey = outlinePrefetchCache.keys().next().value;
-    if (oldestKey !== undefined) outlinePrefetchCache.delete(oldestKey);
-  }
-  outlinePrefetchCache.set(key, cache);
-}
-
-function flattenBookmarks(bookmarks: Bookmark[]) {
-  const cached = flattenedBookmarksCache.get(bookmarks);
-  if (cached) return cached;
-
-  const flattened: FlattenedBookmark[] = [];
-
-  const walk = (items: Bookmark[], parentPath: number[] = []) => {
-    items.forEach((item, index) => {
-      const destination = getDestinationFromTarget(item);
-      const title = item.title?.trim();
-      const path = [...parentPath, index];
-
-      if (destination && title) {
-        flattened.push({
-          key: path.join('.'),
-          title,
-          pageNumber: destination.pageIndex + 1,
-        });
-      }
-
-      if (item.children?.length) {
-        walk(item.children, path);
-      }
-    });
-  };
-
-  walk(bookmarks);
-
-  const sorted = flattened.toSorted((left, right) => {
-    if (left.pageNumber !== right.pageNumber) {
-      return left.pageNumber - right.pageNumber;
-    }
-
-    return left.title.localeCompare(right.title, 'zh-CN');
-  });
-
-  flattenedBookmarksCache.set(bookmarks, sorted);
-  return sorted;
-}
-
-export function getCurrentBookmark(bookmarks: Bookmark[], pageNumber: number): CurrentBookmark | null {
-  if (pageNumber < 1) {
-    return null;
-  }
-
-  const flattened = flattenBookmarks(bookmarks);
-  let low = 0;
-  let high = flattened.length;
-  while (low < high) {
-    const middle = (low + high) >>> 1;
-    if (flattened[middle].pageNumber <= pageNumber) low = middle + 1;
-    else high = middle;
-  }
-  const current = flattened[low - 1];
-  return current ? { key: current.key, title: current.title } : null;
-}
-
-function isCurrentLoadedDocument(pdfium: PdfRuntime, documentId: string) {
-  return Boolean(pdfium.getDocument(documentId));
-}
-
-async function loadOutline(pdfium: PdfRuntime, documentId: string) {
-  if (!isCurrentLoadedDocument(pdfium, documentId)) {
-    return { status: 'empty', bookmarks: [] } satisfies OutlineCache;
-  }
-
-  const { outline, pages } = await pdfium.withDocument(documentId, async document => ({
-    outline: await document.outline.get(), pages: (await document.pages.list()).pages,
-  }));
-  const byId = new Map<number, Bookmark>();
-  const bookmarks: Bookmark[] = [];
-  for (const item of outline.items) {
-    const destination = item.target?.kind === 'goto' ? item.target.destination : undefined;
-    const pageIndex = destination ? pages.findIndex(page => page.ref.objectNumber === destination.page.objectNumber) : -1;
-    const bookmark: Bookmark = { ...item, destination, pageIndex: pageIndex >= 0 ? pageIndex : undefined, children: [] };
-    byId.set(item.ref.objectNumber, bookmark);
-    const parent = item.parent && byId.get(item.parent.objectNumber);
-    (parent ? parent.children : bookmarks).push(bookmark);
-  }
-
-  return {
-    status: bookmarks.length ? 'ready' : 'empty',
-    bookmarks,
-  } satisfies OutlineCache;
-}
-
-export function installOutlinePrefetch(
-  pdfium: PdfRuntime,
-  {
-    documentId,
-    stage,
-    cacheKey,
-    refresh = false,
-    onLoaded,
-  }: {
-    documentId: string;
-    stage: ViewerStage;
-    cacheKey?: string;
-    refresh?: boolean;
-    onLoaded(cache: OutlineCache): void;
-  },
-) {
-  const cached = cacheKey && !refresh ? outlinePrefetchCache.get(cacheKey) : undefined;
-  if (cached) {
-    onLoaded(cached);
-    return;
-  }
-
-  let requestedDocumentId: string | null = null;
-  let cancelled = false;
-
-  const loadForDocument = (documentId: string) => {
-    if (
-      cancelled ||
-      !isCurrentLoadedDocument(pdfium, documentId) ||
-      requestedDocumentId === documentId
-    ) {
-      return;
-    }
-
-    requestedDocumentId = documentId;
-    onLoaded({ status: 'loading', bookmarks: [] });
-
-    loadOutline(pdfium, documentId)
-      .then((cache) => {
-        if (cancelled || !isCurrentLoadedDocument(pdfium, documentId)) {
-          requestedDocumentId = null;
-          return;
-        }
-
-        if (cacheKey && (cache.status === 'ready' || cache.status === 'empty')) {
-          cacheOutline(cacheKey, cache);
-        }
-
-        onLoaded(cache);
-      })
-      .catch((error) => {
-        requestedDocumentId = null;
-        if (cancelled || !isCurrentLoadedDocument(pdfium, documentId)) {
-          return;
-        }
-        console.error('[pdf-ts] outline prefetch failed after initial layout', {
-          documentId,
-          error,
-        });
-        onLoaded({ status: 'error', bookmarks: [] });
-      });
-  };
-
-  const unsubscribeLayoutReady = stage.onLayoutReady((_totalPages, initial) => {
-    if (!initial) return;
-    loadForDocument(documentId);
-  });
-
-  loadForDocument(documentId);
-
-  return () => {
-    cancelled = true;
-    unsubscribeLayoutReady();
-  };
-}
-
-function revealBookmark(stage: ViewerStage, bookmark: Bookmark) {
-  const destination = getDestinationFromTarget(bookmark);
-  if (!destination) {
-    return;
-  }
-
-  stage.reveal(destination.pageIndex, [{
-    x: 'x' in destination ? destination.x ?? 0 : 0,
-    y: 'y' in destination ? destination.y ?? 0 : 0,
-    width: 0, height: 0,
-  }]);
-}
-
-export function Outline({
-  pdfium,
-  documentId,
-  stage,
-  cache,
-  currentBookmarkKey,
-  onCacheChange,
-}: {
-  pdfium: PdfRuntime;
-  documentId?: string | null;
-  stage?: ViewerStage | null;
-  cache: OutlineCache;
-  currentBookmarkKey: string;
-  onCacheChange: (cache: OutlineCache) => void;
-}) {
+/** The v3 plugin owns loading, hierarchy, expansion, selection and PDF actions. */
+export function Outline() {
+  const outline = useOutline();
+  const { status, rows, current, selected, incomplete } = useOutlineState();
+  const pages = usePageList();
   const contentRef = useRef<HTMLDivElement>(null);
-  const retriedOnOpenRef = useRef(false);
-  const [selectedBookmarkKey, setSelectedBookmarkKey] = useState(currentBookmarkKey);
-  const [expandedBookmarkKeys, setExpandedBookmarkKeys] = useState<Set<string>>(() => new Set());
+  const [error, setError] = useState('');
+  const active = selected[0] ?? current;
 
   useEffect(() => {
-    setSelectedBookmarkKey(currentBookmarkKey);
-  }, [currentBookmarkKey]);
+    const frame = requestAnimationFrame(() => {
+      const root = contentRef.current;
+      const item = root?.querySelector<HTMLElement>('[data-current="true"]');
+      if (!root || !item) return;
+      root.scrollTo({ top: Math.max(0, root.scrollTop + item.getBoundingClientRect().top
+        - root.getBoundingClientRect().top - root.clientHeight / 2 + item.offsetHeight / 2), behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active?.objectNumber, status]);
 
-  useEffect(() => {
-    setExpandedBookmarkKeys(new Set());
-  }, [cache.bookmarks]);
-
-  useEffect(() => {
-    if (!documentId || cache.status !== 'error' || retriedOnOpenRef.current) {
-      return;
-    }
-
-    retriedOnOpenRef.current = true;
-    let cancelled = false;
-    onCacheChange({ status: 'loading', bookmarks: [] });
-
-    loadOutline(pdfium, documentId)
-      .then((nextCache) => {
-        if (cancelled) {
-          return;
-        }
-        onCacheChange(nextCache);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.error('[pdf-ts] outline retry failed when panel opened', {
-            error,
-          });
-          onCacheChange({ status: 'error', bookmarks: [] });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cache.status, documentId, onCacheChange, pdfium]);
-
-  useEffect(() => {
-    if (cache.status !== 'ready') {
-      return;
-    }
-
-    scrollCurrentBookmarkIntoView(contentRef.current);
-  }, [cache.status, selectedBookmarkKey]);
-
-  const renderBody = () => {
-    if (cache.status === 'idle' || cache.status === 'loading') {
-      return <PanelState className="text-[11px]">Loading outline...</PanelState>;
-    }
-
-    if (cache.status === 'empty') {
-      return <PanelState className="text-[11px]">This PDF does not include an outline.</PanelState>;
-    }
-
-    if (cache.status === 'error') {
-      return <PanelState className="text-[11px]">Failed to load the outline.</PanelState>;
-    }
-
-    return (
-      <BookmarkList
-        bookmarks={cache.bookmarks}
-        selectedBookmarkKey={selectedBookmarkKey}
-        expandedBookmarkKeys={expandedBookmarkKeys}
-        path={[]}
-        onSelect={(bookmark, bookmarkKey, hasChildren) => {
-          if (!stage) return;
-
-          const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
-          const destination = getDestinationFromTarget(bookmark);
-
-          if (hasChildren && !isExpanded) {
-            setExpandedBookmarkKeys((current) => {
-              const next = new Set(current);
-              next.add(bookmarkKey);
-              return next;
-            });
-            return;
-          }
-
-          if (hasChildren && selectedBookmarkKey === bookmarkKey) {
-            setExpandedBookmarkKeys((current) => {
-              const next = new Set(current);
-              next.delete(bookmarkKey);
-              return next;
-            });
-            return;
-          }
-
-          if (!destination) {
-            return;
-          }
-
-          setSelectedBookmarkKey(bookmarkKey);
-          revealBookmark(stage, bookmark);
-        }}
-      />
-    );
+  const retry = () => {
+    setError('');
+    void outline.refresh().catch(failure => setError(failure instanceof Error ? failure.message : 'Failed to load the outline.'));
   };
 
-  return (
-    <PanelContent ref={contentRef}>
-      {renderBody()}
-    </PanelContent>
-  );
-}
-
-function BookmarkList({
-  bookmarks,
-  selectedBookmarkKey,
-  expandedBookmarkKeys,
-  path,
-  onSelect,
-}: {
-  bookmarks: Bookmark[];
-  selectedBookmarkKey: string;
-  expandedBookmarkKeys: Set<string>;
-  path: number[];
-  onSelect: (bookmark: Bookmark, bookmarkKey: string, hasChildren: boolean) => void;
-}) {
-  return (
-    <ol className={path.length ? styles.nestedList : styles.list}>
-      {bookmarks.map((bookmark, index) => {
-        const destination = getDestinationFromTarget(bookmark);
-        const pageNumber = destination ? destination.pageIndex + 1 : undefined;
-        const children = bookmark.children ?? [];
-        const title = bookmark.title || `Item ${index + 1}`;
-        const bookmarkPath = [...path, index];
-        const bookmarkKey = bookmarkPath.join('.');
-        const isExpanded = expandedBookmarkKeys.has(bookmarkKey);
-        const isCurrent = selectedBookmarkKey.length > 0 && (
-          bookmarkKey === selectedBookmarkKey
-          || (children.length > 0 && !isExpanded && selectedBookmarkKey.startsWith(`${bookmarkKey}.`))
-        );
-
-        if (children.length) {
-          return (
-            <li key={bookmarkKey}>
-              <details open={isExpanded}>
-                <summary
-                  className={styles.bookmark}
-                  data-outline-bookmark
-                  data-current={isCurrent ? 'true' : undefined}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onSelect(bookmark, bookmarkKey, true);
-                  }}
-                >
-                  <span className={styles.title}>{title}</span>
-                  {pageNumber ? <span className={styles.page}>{pageNumber}</span> : null}
-                </summary>
-                <BookmarkList
-                  bookmarks={children}
-                  selectedBookmarkKey={selectedBookmarkKey}
-                  expandedBookmarkKeys={expandedBookmarkKeys}
-                  path={bookmarkPath}
-                  onSelect={onSelect}
-                />
-              </details>
-            </li>
-          );
-        }
-
-        return (
-          <li key={bookmarkKey}>
-            <button
-              type="button"
-              className={styles.bookmark}
-              data-outline-bookmark
-              data-current={isCurrent ? 'true' : undefined}
-              style={{ marginLeft: `${path.length * 18}px`, width: `calc(100% - ${path.length * 18}px)` }}
-              onClick={() => onSelect(bookmark, bookmarkKey, false)}
-              disabled={!destination}
-            >
-              <span className={styles.title}>{title}</span>
-              {pageNumber ? <span className={styles.page}>{pageNumber}</span> : null}
-            </button>
-          </li>
-        );
+  return <PanelContent ref={contentRef}>
+    {status === 'idle' || status === 'loading' ? <PanelState>Loading outline...</PanelState> : null}
+    {status === 'forbidden' ? <PanelState>This document does not allow reading its outline.</PanelState> : null}
+    {status === 'error' ? <PanelState>Failed to load the outline. <button type="button" onClick={retry}>Retry</button></PanelState> : null}
+    {status === 'ready' && !rows.length ? <PanelState>This PDF does not include an outline.</PanelState> : null}
+    {incomplete ? <p role="status">Some outline entries could not be read.</p> : null}
+    {error ? <p role="alert">{error}</p> : null}
+    <ol className={styles.list}>
+      {rows.map(({ item, depth, hasChildren, expanded }) => {
+        const destination = item.target?.kind === 'goto' ? item.target.destination : null;
+        const pageIndex = destination ? pages.findIndex(page => page.ref.objectNumber === destination.page.objectNumber) : -1;
+        const isCurrent = active?.objectNumber === item.ref.objectNumber;
+        return <li key={item.ref.objectNumber}>
+          <button type="button" className={styles.bookmark} data-outline-bookmark
+            data-current={isCurrent ? 'true' : undefined}
+            aria-expanded={hasChildren ? expanded : undefined}
+            style={{ marginLeft: depth * 18, width: `calc(100% - ${depth * 18}px)` }}
+            disabled={!hasChildren && !item.target && !item.action}
+            onClick={() => {
+              setError('');
+              if (hasChildren && (!expanded || isCurrent)) { outline.toggle(item.ref); return; }
+              outline.select([item.ref]);
+              try { outline.activate(item.ref); }
+              catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not open this outline entry.'); }
+            }}>
+            {hasChildren ? <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> : null}
+            <span className={styles.title}>{item.title || 'Untitled'}</span>
+            {pageIndex >= 0 ? <span className={styles.page}>{pages[pageIndex]?.label ?? pageIndex + 1}</span> : null}
+          </button>
+        </li>;
       })}
     </ol>
-  );
-}
-
-function scrollCurrentBookmarkIntoView(root: HTMLElement | null) {
-  if (!root) {
-    return;
-  }
-
-  const scrollToCurrent = () => {
-    const currentBookmark = root.querySelector<HTMLElement>('[data-outline-bookmark][data-current="true"]');
-    if (!currentBookmark) {
-      root.scrollTo({ top: 0, behavior: 'auto' });
-      return;
-    }
-
-    const rootRect = root.getBoundingClientRect();
-    const bookmarkRect = currentBookmark.getBoundingClientRect();
-    if (!rootRect.height || !bookmarkRect.height) {
-      return;
-    }
-
-    const centeredDelta = bookmarkRect.top - rootRect.top - root.clientHeight / 2 + bookmarkRect.height / 2;
-    root.scrollTo({
-      top: Math.max(0, root.scrollTop + centeredDelta),
-      behavior: 'smooth',
-    });
-  };
-
-  requestAnimationFrame(scrollToCurrent);
+  </PanelContent>;
 }

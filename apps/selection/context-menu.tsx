@@ -5,6 +5,7 @@ import type { Annotation } from '@embedpdf/plugin-annotation';
 import type { Rect } from '@embedpdf/core-geometry';
 import { RenderToken } from '@embedpdf/plugin-render';
 import { StageToken } from '@embedpdf/plugin-stage';
+import { readMarkupPage } from '../annotations/markup-text';
 import { SelectionToken, type SelectionCapability } from '@embedpdf/plugin-selection';
 import {
   createCommentAnnotation,
@@ -13,7 +14,6 @@ import {
   getAnnotationScope,
   isCaptureAnnotation,
   isTextMarkupAnnotation,
-  rectsIntersect,
   type CaptureAnnotation,
   type TextMarkupAnnotation,
   type TextMarkupSubtype,
@@ -79,19 +79,8 @@ function copySelectedText(selection: SelectionCapability) {
   return selection.readText().then(copyText).catch((error) => console.error('[pdf-ts] failed to copy selected text', error));
 }
 async function getTextMarkupText(document: DocumentHandle, annotation: TextMarkupAnnotation) {
-  const page = document.page(annotation.page);
-  const geometry = await page.text.layout();
-  const rects = getAnnotationRects(annotation);
-  let first: number | undefined, last: number | undefined;
-  for (let index = 0; index < geometry.charCount; index++) {
-    const quad = geometry.charQuad(index);
-    if (!quad) continue;
-    const points = [quad.upperLeft, quad.upperRight, quad.lowerLeft, quad.lowerRight];
-    const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
-    const rect = { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
-    if (rects.some((target) => rectsIntersect(target, rect))) { first ??= index; last = index; }
-  }
-  return first === undefined || last === undefined ? '' : page.text.slice({ start: first, count: last - first + 1 });
+  const text = await readMarkupPage(document.page(annotation.page));
+  return text(getAnnotationRects(annotation));
 }
 async function copyAnnotationImage(registry: Kernel, documentId: string, annotation: CaptureAnnotation) {
   const render = registry.tryCapability(RenderToken, documentId);
@@ -249,12 +238,12 @@ export function ContextMenu({
     const close = () => setMenu(null);
 
     window.addEventListener('resize', close);
-    window.addEventListener('scroll', close, { capture: true, passive: true });
+    const unsubscribeCamera = documentId ? registry?.tryCapability(StageToken, documentId)?.onCameraChanged(close) : undefined;
     return () => {
       window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, { capture: true });
+      unsubscribeCamera?.();
     };
-  }, [menu]);
+  }, [menu, registry, documentId]);
 
   if (!menu || !registry || !documentId) return null;
 

@@ -1,200 +1,86 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type HTMLAttributes,
-} from 'react';
-import { usePage } from '@embedpdf/react/runtime';
-import { MatchFlag, type SearchResult } from './pdf-search';
+import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
+import { SearchLayer as NativeSearchLayer, useSearch, useSearchState, type SearchHit } from '@embedpdf/react/search';
 import { ChevronLeft, ChevronRight, Search as SearchIcon, X } from 'lucide-react';
-import { useStore } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
 import { ControlButton, Tooltip } from '../components';
-import { pdfSearchStore } from './pdf-search';
 import type { ViewerStage } from '../viewer/viewer-stage';
 import styles from './search.module.css';
 
-const HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38%, transparent)';
-const ACTIVE_HIGHLIGHT_COLOR = 'color-mix(in srgb, var(--pdf-danger-primary) 62%, transparent)';
-
-export function SearchLayer({
-  documentId,
-  pageIndex,
-  style,
-  ...props
-}: HTMLAttributes<HTMLDivElement> & {
-  documentId: string;
-  pageIndex: number;
-}) {
-  const { pageResults, activeResultIndex } = useStore(pdfSearchStore, useShallow((state) => {
-    if (state.documentId !== documentId) {
-      return { pageResults: undefined, activeResultIndex: -1 };
-    }
-    const pageResults = state.resultsByPage.get(pageIndex);
-    const activeResultIndex = pageResults?.some(({ resultIndex }) => (
-      resultIndex === state.activeResultIndex
-    )) ? state.activeResultIndex : -1;
-    return { pageResults, activeResultIndex };
-  }));
-  const scale = usePage().transform.viewScale;
-  if (!pageResults?.length) return null;
-
-  return (
-    <div {...props} style={{ ...style, position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-      {pageResults.map(({ result, resultIndex }) => (
-        result.rects.map((rect, rectIndex) => (
-            <div
-              key={`${resultIndex}-${rectIndex}`}
-              className="pdf-search-highlight"
-              style={{
-                position: 'absolute',
-                top: rect.y * scale,
-                left: rect.x * scale,
-                width: rect.width * scale,
-                height: rect.height * scale,
-                backgroundColor: resultIndex === activeResultIndex
-                  ? ACTIVE_HIGHLIGHT_COLOR
-                  : HIGHLIGHT_COLOR,
-                mixBlendMode: 'multiply',
-                transform: 'scale(1.02)',
-                transformOrigin: 'center',
-              }}
-            />
-          ))
-      ))}
-    </div>
-  );
+export function SearchLayer({ documentId: _documentId, pageIndex: _pageIndex, style, ...props }:
+  HTMLAttributes<HTMLDivElement> & { documentId: string; pageIndex: number }) {
+  return <div {...props} style={{ ...style, position: 'absolute', inset: 0, pointerEvents: 'none',
+    '--epdf-search-highlight': 'color-mix(in srgb, var(--pdf-annotation-auto-stroke) 38%, transparent)',
+    '--epdf-search-highlight-active': 'color-mix(in srgb, var(--pdf-danger-primary) 62%, transparent)',
+    '--epdf-search-blend-mode': 'normal',
+  } as CSSProperties}><NativeSearchLayer /></div>;
 }
 
-function revealResult(
-  stage: ViewerStage | null | undefined,
-  result?: SearchResult,
-) {
-  if (!stage || !result) return;
-  stage.reveal(result.pageIndex, result.rects, {
-    behavior: 'smooth',
-    insets: { top: 64 },
-  });
-}
-
-export function Search({
-  stage,
-  documentId,
-}: {
-  stage?: ViewerStage | null;
-  documentId?: string | null;
-}) {
+export function Search({ stage, documentId }: { stage?: ViewerStage | null; documentId?: string | null }) {
+  const search = useSearch();
+  const state = useSearchState();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState('');
-  const state = useStore(pdfSearchStore);
-  const { clear, move, run, setDocument, toggleFlag: toggleSearchFlag } = state;
-  const canSearch = Boolean(documentId);
-  const total = state.results.length;
+  const generation = useRef(0);
+  const revealedHit = useRef<SearchHit | null>(null);
+  const [query, setQuery] = useState(state.query?.text ?? '');
+  const [matchCase, setMatchCase] = useState(state.query?.matchCase ?? false);
+  const [wholeWord, setWholeWord] = useState(state.query?.wholeWord ?? false);
+  const [error, setError] = useState('');
+  const canSearch = Boolean(documentId) && search.canSearch();
+  const total = state.hitCount;
+  const loading = state.status === 'searching';
 
   useEffect(() => {
-    if (!documentId) return;
-    setDocument(documentId);
-    setQuery(pdfSearchStore.getState().query);
-    return clear;
-  }, [clear, documentId, setDocument]);
+    const frame = requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.select(); });
+    return () => { generation.current++; cancelAnimationFrame(frame); search.clear(); };
+  }, [search, documentId]);
 
+  // The plugin keeps active-hit identity stable as subsequent batches arrive.
   useEffect(() => {
-    if (!canSearch) return;
-    const frame = requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [canSearch]);
+    if (state.activeHit && state.activeHit !== revealedHit.current) {
+      revealedHit.current = state.activeHit;
+      search.revealActiveHit();
+    }
+  }, [search, state.activeHit]);
 
-  useEffect(() => {
-    revealResult(stage, state.results[state.activeResultIndex]);
-  }, [stage, state.activeResultIndex, state.results]);
+  const runSearch = (nextCase = matchCase, nextWholeWord = wholeWord) => {
+    const current = ++generation.current;
+    setError('');
+    revealedHit.current = null;
+    void search.search({ text: query.trim(), matchCase: nextCase, wholeWord: nextWholeWord },
+      { from: Math.max(0, (stage?.getCurrentPage() ?? 1) - 1) })
+      .catch(failure => {
+        if (generation.current !== current) return;
+        search.clear();
+        setError(failure instanceof Error ? failure.message : 'Search failed.');
+      });
+  };
+  const move = (direction: -1 | 1) => {
+    revealedHit.current = direction > 0 ? search.nextHit() : search.previousHit();
+  };
+  const clearSearch = () => { generation.current++; revealedHit.current = null; setQuery(''); setError(''); search.clear(); inputRef.current?.focus(); };
 
-  const runSearch = () => {
-    run(query, state.flags, Math.max(0, (stage?.getCurrentPage() ?? 1) - 1));
-  };
-  const clearSearch = () => {
-    setQuery('');
-    clear();
-    inputRef.current?.focus();
-  };
-  const toggleFlag = (flag: MatchFlag) => {
-    toggleSearchFlag(flag, query, Math.max(0, (stage?.getCurrentPage() ?? 1) - 1));
-  };
-
-  return (
-    <div className={styles.bar} role="search" aria-label="PDF search">
-      <Tooltip content="Previous result">
-        <ControlButton
-          className={styles.button}
-          onClick={() => move(-1)}
-          disabled={!total}
-          aria-label="Previous result"
-        >
-          <ChevronLeft size={16} strokeWidth={2} />
-        </ControlButton>
-      </Tooltip>
-      <div className={styles.status}>
-        {state.loading ? 'Searching...' : `${state.activeResultIndex >= 0 ? state.activeResultIndex + 1 : 0} / ${total}`}
-      </div>
-      <Tooltip content="Next result">
-        <ControlButton
-          className={styles.button}
-          onClick={() => move(1)}
-          disabled={!total}
-          aria-label="Next result"
-        >
-          <ChevronRight size={16} strokeWidth={2} />
-        </ControlButton>
-      </Tooltip>
-      <form
-        className={styles.form}
-        onSubmit={(event) => {
-          event.preventDefault();
-          runSearch();
-        }}
-      >
-        <div className={styles.inputWrap}>
-          <input
-            ref={inputRef}
-            className={styles.input}
-            value={query}
-            type="search"
-            placeholder={canSearch ? 'Search' : 'Search is not ready'}
-            disabled={!canSearch}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-          <div className={styles.inputActions}>
-            {query || total || state.loading ? (
-              <button type="button" className={styles.clear} aria-label="Clear search" onClick={clearSearch}>
-                <X size={13} strokeWidth={2} />
-              </button>
-            ) : null}
-            <SearchFlagButton
-              label="Match case"
-              icon="Aa"
-              active={state.flags.includes(MatchFlag.MatchCase)}
-              disabled={!canSearch}
-              onClick={() => toggleFlag(MatchFlag.MatchCase)}
-            />
-            <SearchFlagButton
-              label="Match whole word"
-              icon="'ab'"
-              active={state.flags.includes(MatchFlag.MatchWholeWord)}
-              disabled={!canSearch}
-              onClick={() => toggleFlag(MatchFlag.MatchWholeWord)}
-            />
-          </div>
+  return <div className={styles.bar} role="search" aria-label="PDF search">
+    <Tooltip content="Previous result"><ControlButton className={styles.button} onClick={() => move(-1)}
+      disabled={!total} aria-label="Previous result"><ChevronLeft size={16} strokeWidth={2} /></ControlButton></Tooltip>
+    <div className={styles.status}>{loading ? 'Searching...' : `${state.activeHitIndex >= 0 ? state.activeHitIndex + 1 : 0} / ${total}`}</div>
+    <Tooltip content="Next result"><ControlButton className={styles.button} onClick={() => move(1)}
+      disabled={!total} aria-label="Next result"><ChevronRight size={16} strokeWidth={2} /></ControlButton></Tooltip>
+    <form className={styles.form} onSubmit={event => { event.preventDefault(); runSearch(); }}>
+      <div className={styles.inputWrap}>
+        <input ref={inputRef} className={styles.input} value={query} type="search"
+          aria-label="Search PDF text" placeholder={canSearch ? 'Search' : 'Search is not ready'}
+          disabled={!canSearch} onChange={event => setQuery(event.currentTarget.value)} />
+        <div className={styles.inputActions}>
+          {query || total || loading ? <button type="button" className={styles.clear} aria-label="Clear search" onClick={clearSearch}><X size={13} strokeWidth={2} /></button> : null}
+          <SearchFlagButton label="Match case" icon="Aa" active={matchCase} disabled={!canSearch}
+            onClick={() => { setMatchCase(!matchCase); if (query.trim()) runSearch(!matchCase, wholeWord); }} />
+          <SearchFlagButton label="Match whole word" icon="'ab'" active={wholeWord} disabled={!canSearch}
+            onClick={() => { setWholeWord(!wholeWord); if (query.trim()) runSearch(matchCase, !wholeWord); }} />
         </div>
-        <Tooltip content="Search">
-          <ControlButton type="submit" className={styles.button} disabled={!canSearch} aria-label="Search">
-            <SearchIcon size={15} strokeWidth={2} />
-          </ControlButton>
-        </Tooltip>
-      </form>
-    </div>
-  );
+      </div>
+      <Tooltip content="Search"><ControlButton type="submit" className={styles.button} disabled={!canSearch} aria-label="Search"><SearchIcon size={15} strokeWidth={2} /></ControlButton></Tooltip>
+    </form>
+    {error || state.error ? <span role="alert">{error || state.error?.message}</span> : null}
+  </div>;
 }
 
 function SearchFlagButton({

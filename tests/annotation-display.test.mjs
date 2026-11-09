@@ -31,7 +31,7 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
-const { initializeAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation } = await import('../apps/annotations/annotations.ts');
+const { initializeAnnotationPalette, getAnnotationPresetPatch, createCommentAnnotation, installAnnotationLinks } = await import('../apps/annotations/annotations.ts');
 const { themeAnnotationRenderers } = await import(rendererUrl.href);
 hooks.deregister();
 
@@ -129,4 +129,24 @@ test('free-text palette uses the native rich-text body and interior fill fields'
   assert.equal('textColor' in text, false);
   const fill = getAnnotationPresetPatch('freeText', 'interiorColor', '#f0f0f0');
   assert.equal(fill.interiorColor, '#ffe066');
+});
+
+
+test('PDF action adapters print the document and unregister when the session ends', async () => {
+  const prints = [];
+  let adapter, disposed = false;
+  const kernel = {
+    documents: {
+      list: () => [{ id: 'doc' }],
+      onOpened: () => () => {},
+      print: async (id, options) => { prints.push({ id, options }); },
+    },
+    tryCapability: () => ({ setUiAdapter(value) { adapter = value; return () => { disposed = true; }; } }),
+  };
+  const uninstall = installAnnotationLinks(kernel, () => {});
+  adapter.print();
+  await Promise.resolve();
+  assert.deepEqual(prints, [{ id: 'doc', options: { includeAnnotations: true } }]);
+  uninstall();
+  assert.equal(disposed, true);
 });

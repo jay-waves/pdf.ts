@@ -6,14 +6,14 @@
  */
 import { useDocumentReplacement } from './use-document-replacement';
 import { DraftNotice } from '../document/draft-notice';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import type { Kernel } from '@embedpdf/core';
+import { KernelProvider, DocumentScope, DocumentGate } from '@embedpdf/react/runtime';
 import { ScrollStrategy } from './viewer-stage';
 import { getFileNameFromUrl } from '../shared/url';
-import { Outline, getCurrentBookmark, installOutlinePrefetch, type OutlineCache } from '../navigation/outline';
+import { Outline } from '../navigation/outline';
 import { BottomNav } from '../navigation/bottom-navigation';
-import { pdfSearchStore } from '../search/pdf-search';
 import { ViewerStage } from './viewer-stage';
 import { installBrowserGestureZoomGuard } from '../renderer/stage-input-controller';
 import { installStageNavigationInput, installViewerCommandKeys } from './viewer-input';
@@ -118,10 +118,6 @@ export function ViewerApp({
   const renderDpr = useStore(renderSettingsStore, (state) => (
     getEffectiveRenderDpr(state.dprMode, state.systemDpr)
   ));
-  const [outlineCache, setOutlineCache] = useState<OutlineCache>({
-    status: 'idle',
-    bookmarks: [],
-  });
   const registry = session?.registry;
   const stage = session?.stage ?? null;
   const signatures = useDocumentSignatures(engine, registry, documentId);
@@ -137,7 +133,6 @@ export function ViewerApp({
   const {
     dispatch: dispatchCommand,
     uiSnapshot,
-    capabilitySnapshot,
     stageSnapshot,
   } = useViewerController({
     registry,
@@ -168,12 +163,6 @@ export function ViewerApp({
   const translationRequest = uiSnapshot.overlay?.type === 'translation'
     ? uiSnapshot.overlay.request
     : null;
-  const currentBookmark = useMemo(
-    () => getCurrentBookmark(outlineCache.bookmarks, currentPageNumber),
-    [currentPageNumber, outlineCache.bookmarks],
-  );
-  const currentBookmarkKey = currentBookmark?.key ?? '';
-  const currentTitle = currentBookmark?.title ?? '';
   const commentTarget = uiSnapshot.overlay?.type === 'comment-editor' ? uiSnapshot.overlay : null;
   const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
   const viewerRootRef = useRef<HTMLElement>(null);
@@ -201,10 +190,8 @@ export function ViewerApp({
     sessionCleanupRef.current?.();
     sessionCleanupRef.current = null;
     const nextDocumentId = nextStage.documentId;
-    setOutlineCache({ status: 'idle', bookmarks: [] });
     dispatchCommand({ type: stagedCleanup ? 'ui/close-overlay' : 'ui/reset' });
     resetViewerDiagnostics();
-    pdfSearchStore.getState().clear();
     setDirty(false);
     initializeAnnotationPalette(nextRegistry, nextDocumentId);
 
@@ -219,18 +206,11 @@ export function ViewerApp({
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
       () => installPlatformReadingHistory(nextStage, documentKey, !stagedCleanup),
-      () => installOutlinePrefetch(pdfium, {
-        documentId: nextDocumentId,
-        stage: nextStage,
-        cacheKey: documentKey,
-        refresh: !!stagedCleanup,
-        onLoaded: setOutlineCache,
-      }),
     ];
 
     sessionCleanupRef.current = installAll(installers);
     setSession({ registry: nextRegistry, stage: nextStage });
-  }, [dispatchCommand, documentKey, pdfium, setDirty]);
+  }, [dispatchCommand, documentKey, setDirty]);
 
   const initializePlugins = useCallback(async (nextRegistry: Kernel) => {
     activateDocument(nextRegistry);
@@ -248,18 +228,12 @@ export function ViewerApp({
     return () => {
       sessionCleanupRef.current?.();
       sessionCleanupRef.current = null;
-      pdfSearchStore.getState().dispose();
     };
   }, []);
-
-  useEffect(() => {
-    pdfSearchStore.getState().attach(pdfium);
-  }, [pdfium]);
 
   useEffect(() => pendingDocument ? undefined : installViewerCommandKeys(dispatchCommand), [dispatchCommand, pendingDocument]);
 
   const toolbarSnapshot: ToolbarSnapshot = {
-    ...capabilitySnapshot,
     section: toolbarSection,
     documentId,
     thumbnailsOpen: sidePanel?.type === 'thumbnails',
@@ -289,6 +263,9 @@ export function ViewerApp({
         onNavigatePresentation={navigatePresentation}
         onExitPresentation={() => dispatchCommand({ type: 'view/set-presentation', enabled: false })}
       />
+      {registry && documentId ? <KernelProvider kernel={registry}>
+      <DocumentScope key={documentId} id={documentId}>
+      <DocumentGate fallback={null}>
       {presentationPage === null ? <Toolbar
         stage={stage}
         snapshot={toolbarSnapshot}
@@ -312,14 +289,7 @@ export function ViewerApp({
           />
         ) : null}
         {documentPane === 'outline' ? (
-          <Outline
-            pdfium={pdfium}
-            documentId={documentId}
-            stage={stage}
-            cache={outlineCache}
-            currentBookmarkKey={currentBookmarkKey}
-            onCacheChange={setOutlineCache}
-          />
+          <Outline />
         ) : null}
         {documentPane === 'comments' ? (
           <Comments
@@ -331,8 +301,6 @@ export function ViewerApp({
         ) : null}
       </Dialog>
       <ColorPalette
-        registry={registry}
-        documentId={documentId}
         open={sidePanel?.type === 'colors'}
         onClose={closeOverlay}
       />
@@ -414,11 +382,12 @@ export function ViewerApp({
       />
       <BottomNav
         dispatch={dispatchCommand}
-        title={currentTitle}
         pageNumber={currentPageNumber}
         totalPages={totalPages}
-        outlineStatus={outlineCache.status}
       />
+      </DocumentGate>
+      </DocumentScope>
+      </KernelProvider> : null}
     </main>
     </ViewerFocusContext.Provider>
   );

@@ -26,13 +26,14 @@ export type StageSnapshot = Readonly<{
   strategy: ScrollStrategy;
   spread: SpreadMode;
   selectingRegion: boolean;
-  regionPreview: { pageIndex: number; rect: Rect } | null;
 }>;
+
+export type RegionPreview = Readonly<{ pageIndex: number; rect: Rect }> | null;
 
 export const EMPTY_STAGE_SNAPSHOT: StageSnapshot = {
   mode: 'reading', pageNumber: 1, totalPages: 0,
   strategy: ScrollStrategy.Vertical, spread: SpreadMode.None,
-  selectingRegion: false, regionPreview: null,
+  selectingRegion: false,
 };
 
 /**
@@ -43,6 +44,8 @@ export const EMPTY_STAGE_SNAPSHOT: StageSnapshot = {
 export class ViewerStage {
   private state: StageSnapshot = EMPTY_STAGE_SNAPSHOT;
   private listeners = new Set<() => void>();
+  private regionPreview: RegionPreview = null;
+  private regionListeners = new Set<() => void>();
   private cleanup: Array<() => void> = [];
   private transitioning = false;
 
@@ -61,6 +64,22 @@ export class ViewerStage {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
   };
+
+  // Pointer movement is local to the preview; navigation subscribers stay idle.
+  getRegionPreview = () => this.regionPreview;
+  subscribeRegionPreview = (listener: () => void) => {
+    this.regionListeners.add(listener);
+    return () => { this.regionListeners.delete(listener); };
+  };
+
+  private publishRegionPreview(next: RegionPreview) {
+    const previous = this.regionPreview;
+    if (previous === next || (previous && next && previous.pageIndex === next.pageIndex
+      && previous.rect.x === next.rect.x && previous.rect.y === next.rect.y
+      && previous.rect.width === next.rect.width && previous.rect.height === next.rect.height)) return;
+    this.regionPreview = next;
+    this.regionListeners.forEach(listener => listener());
+  }
 
   private publish(patch: Partial<StageSnapshot>) {
     const next = { ...this.state, ...patch };
@@ -149,7 +168,8 @@ export class ViewerStage {
   }
 
   cancelRegionSelection() {
-    this.publish({ selectingRegion: false, regionPreview: null });
+    this.publishRegionPreview(null);
+    this.publish({ selectingRegion: false });
     const scope = this.registry.tryCapability(InteractionToken, this.documentId);
     if (scope?.getActiveToolId() === READING_REGION_MODE) scope.activateDefaultTool();
   }
@@ -225,11 +245,11 @@ export class ViewerStage {
         if (!event.page) return false;
         origin = { pageIndex, ...event.page.point }; return true;
       },
-      onPointerMove: event => this.publish({ regionPreview: preview(event) }),
-      onPointerCancel: () => { origin = null; this.publish({ regionPreview: null }); },
+      onPointerMove: event => this.publishRegionPreview(this.state.selectingRegion ? preview(event) : null),
+      onPointerCancel: () => { origin = null; this.publishRegionPreview(null); },
       onPointerUp: event => {
         const region = preview(event); origin = null;
-        this.publish({ regionPreview: null });
+        this.publishRegionPreview(null);
         if (region && Math.min(region.rect.width, region.rect.height) * (this.spread?.getZoomLevel() ?? 1) >= 5) this.completeRegionSelection(region.pageIndex, region.rect);
       },
     });
@@ -246,7 +266,10 @@ export class ViewerStage {
       this.scroll.onPageChange(sync), this.scroll.onLayoutReady(sync),
       this.scroll.onStrategyChange(sync), this.spread?.onSettingsChanged(sync) ?? (() => {}),
       interaction?.onToolChanged(({ toolId }) => {
-        if (toolId !== READING_REGION_MODE && this.state.selectingRegion) this.publish({ selectingRegion: false, regionPreview: null });
+        if (toolId !== READING_REGION_MODE) {
+          origin = null;
+          if (this.state.selectingRegion) this.cancelRegionSelection();
+        }
       }) ?? (() => {}),
     ];
     sync();

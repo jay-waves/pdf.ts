@@ -1,154 +1,73 @@
+import { annotationKey } from '@embedpdf/core';
 import { RadioGroup } from 'radix-ui';
 import { useEffect, useState, type CSSProperties } from 'react';
-import type { Kernel } from '@embedpdf/core';
-import type { Annotation } from '@embedpdf/plugin-annotation';
+import { useAnnotation, useAnnotationProperties, useAnnotationState } from '@embedpdf/react/annotation';
+import { useInteractionState } from '@embedpdf/react/interaction';
 import { useStore } from 'zustand';
 import { viewerThemeStore } from '../theme/theme';
 import { ANNOTATION_PALETTES, getAnnotationPaletteIndex, getDefaultAnnotationColor } from './theme-palette';
-import {
-  TRANSPARENT_ANNOTATION_COLOR,
-  getAnnotationCapability,
-  getAnnotationColorFields,
-  getAnnotationPresetPatch,
-  getAnnotationScope,
-  getAnnotationToolLabel,
-  getCommonAnnotationTool,
-  normalizeAnnotationColor,
-  type AnnotationColorFieldKey,
-  type AnnotationToolLike,
-} from './annotations';
+import { TRANSPARENT_ANNOTATION_COLOR, getAnnotationPresetPatch, getAnnotationToolLabel, getCommonAnnotationTool, normalizeAnnotationColor } from './annotations';
 import { Dialog, PanelContent, PanelState } from '../components';
 import styles from './color-palette.module.css';
 
-interface PaletteSnapshot {
-  activeTool: AnnotationToolLike | null;
-  contextTool: AnnotationToolLike | null;
-  defaults: Record<string, unknown>;
-  selectedAnnotations: readonly Annotation[];
-}
-
-const EMPTY_SNAPSHOT: PaletteSnapshot = {
-  activeTool: null,
-  contextTool: null,
-  defaults: {},
-  selectedAnnotations: [],
-};
-
-function getAnnotationValues(
-  defaults: Record<string, unknown>,
-  selectedAnnotations: readonly Annotation[],
-): Record<string, unknown> {
-  const selected = (selectedAnnotations[0] ?? {}) as unknown as Record<string, unknown>;
-  const values = { ...selected, ...defaults };
-  const richText = values.richText as { body?: { color?: string } } | undefined;
-  return richText ? { ...values, textColor: richText.body?.color } : values;
-}
-
-export function ColorPalette({
-  registry,
-  documentId,
-  open,
-  onClose,
-}: {
-  registry?: Kernel;
-  documentId?: string | null;
-  open: boolean;
-  onClose(): void;
-}) {
-  const capability = getAnnotationCapability(registry, documentId);
-  const theme = useStore(viewerThemeStore, (state) => state.theme);
-  const [snapshot, setSnapshot] = useState<PaletteSnapshot>(EMPTY_SNAPSHOT);
-  const [selectedField, setSelectedField] = useState<AnnotationColorFieldKey>('color');
-  const { activeTool, contextTool, defaults, selectedAnnotations } = snapshot;
-
-  useEffect(() => {
-    const scoped = open ? getAnnotationScope(registry, documentId) : null;
-    if (!scoped) {
-      setSnapshot(EMPTY_SNAPSHOT);
-      return;
-    }
-
-    const sync = () => {
-      const active = scoped.interaction?.getActiveToolId();
-      const resolvedActive = active ? scoped.scope.tools.get(active) : null;
-      const selected = scoped.scope.selection.getSelected();
-      const context = resolvedActive ?? getCommonAnnotationTool(scoped.capability, selected);
-      const nextDefaults = resolvedActive ? scoped.scope.tools.getDefaults(resolvedActive.id) as Record<string, unknown> : {};
-      const fields = getAnnotationColorFields(
-        context?.id ?? null,
-        getAnnotationValues(nextDefaults, selected),
-      );
-
-      setSnapshot({
-        activeTool: resolvedActive,
-        contextTool: context,
-        defaults: nextDefaults,
-        selectedAnnotations: selected,
-      });
-      setSelectedField((current) => (
-        fields.some(({ key }) => key === current) ? current : fields[0].key
-      ));
-    };
-
-    sync();
-    const unsubscribeTool = scoped.interaction?.onToolChanged(sync) ?? (() => {});
-    const unsubscribeState = registry!.subscribe(sync);
-    const unsubscribeTools = scoped.scope.tools.onDefaultsChanged(sync);
-    return () => {
-      unsubscribeTool();
-      unsubscribeState();
-      unsubscribeTools();
-    };
-  }, [documentId, open, registry]);
-
+export function ColorPalette({ open, onClose }: { open: boolean; onClose(): void }) {
+  const capability = useAnnotation();
+  const activeId = useInteractionState(state => state.activeToolId);
+  const selected = useAnnotationState(state => state.selected);
+  const activeTool = activeId ? capability.tools.get(activeId) : null;
+  const contextTool = activeTool ?? getCommonAnnotationTool(capability, selected);
+  const { properties, values, mixed } = useAnnotationProperties(activeTool?.id);
+  const theme = useStore(viewerThemeStore, state => state.theme);
+  const [selectedField, setSelectedField] = useState('color');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const selectionKey = selected.map(annotation => annotationKey(annotation.ref)).join(',');
+  useEffect(() => { setError(''); }, [open, activeId, selectionKey]);
+  const labels: Record<string, string> = { color: 'Stroke', interiorColor: 'Fill', fontColor: 'Text' };
+  const colorFields = properties.filter(property => property.key in labels)
+    .map(property => ({ key: property.key, label: labels[property.key] }));
+  const field = colorFields.some(item => item.key === selectedField) ? selectedField : colorFields[0]?.key ?? 'color';
   const colors = ANNOTATION_PALETTES[theme];
-
-  const toolId = contextTool?.id ?? null;
-  const values = getAnnotationValues(defaults, selectedAnnotations);
-  const colorFields = getAnnotationColorFields(toolId, values);
-  const currentColor =
-    normalizeAnnotationColor(values[selectedField]) ??
-    getDefaultAnnotationColor(theme);
+  const readOnly = !activeTool && selected.length > 0 && selected.every(annotation => !capability.canUpdate(annotation.ref));
+  const currentColor = normalizeAnnotationColor(values[field]) ?? getDefaultAnnotationColor(theme);
   const currentIndex = getAnnotationPaletteIndex(currentColor);
-  const presetValue = currentColor === TRANSPARENT_ANNOTATION_COLOR
-    ? TRANSPARENT_ANNOTATION_COLOR
-    : currentIndex !== null ? colors[currentIndex] : '';
+  const presetValue = mixed.includes(field) ? '' : currentColor === TRANSPARENT_ANNOTATION_COLOR
+    ? TRANSPARENT_ANNOTATION_COLOR : currentIndex !== null ? colors[currentIndex] : '';
 
-  const applyPatch = (patch: Record<string, unknown>) => {
-    const scoped = getAnnotationScope(registry, documentId);
-    if (!scoped) return;
-
-    if (activeTool?.id) {
-      scoped.scope.tools.updateDefaults(activeTool.id, patch);
-      setSnapshot((current) => ({
-        ...current,
-        defaults: { ...current.defaults, ...patch },
-      }));
-    }
-
-    if (selectedAnnotations.length) {
-      void scoped.scope.selection.update(patch).catch((error) => console.error('[pdf-ts] failed to update annotation colors', error));
-    }
-  };
-
-  const applyColor = (value: string) => {
+  const applyColor = async (value: string) => {
     const color = normalizeAnnotationColor(value);
-    if (!color || !capability) return;
-
-    applyPatch(getAnnotationPresetPatch(toolId, selectedField, color));
+    if (!color || busy || readOnly) return;
+    const patch = getAnnotationPresetPatch(contextTool?.id ?? null,
+      field === 'fontColor' ? 'textColor' : field as 'color' | 'interiorColor', color);
+    // The plugin's style fields respect an active rich-text range or caret.
+    const changes = field === 'fontColor'
+      ? { ...patch, richText: undefined, fontColor: (patch.richText as { body: { color: string } }).body.color }
+      : patch;
+    setBusy(true); setError('');
+    try {
+      if (activeTool) capability.tools.updateDefaults(activeTool.id, changes);
+      if (selected.length) {
+        const lockedCount = selected.filter(annotation => !capability.canUpdate(annotation.ref)).length;
+        const result = await capability.selection.update(annotation => capability.canUpdate(annotation.ref) ? changes : {});
+        const failedCount = lockedCount + result.failed.length;
+        if (failedCount) setError(`${failedCount} annotation(s) could not be updated. They may be locked or read-only.`);
+      }
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Failed to update colors.'); }
+    finally { setBusy(false); }
   };
 
-  const body = !capability
-    ? <PanelState>Color tools are not ready.</PanelState>
+  const body = !colorFields.length
+    ? <PanelState>Select an annotation or drawing tool to change its colors.</PanelState>
     : <div className={styles.content}>
         <div className={styles.meta}>
+          {mixed.includes(field) ? <span>Mixed colors</span> : null}
           <span>{getAnnotationToolLabel(contextTool)}</span>
         </div>
 
         {colorFields.length > 1 ? <RadioGroup.Root
           className={styles.targets}
-          value={selectedField}
-          onValueChange={(value) => setSelectedField(value as AnnotationColorFieldKey)}
+          value={field}
+          onValueChange={(value) => setSelectedField(value)}
           orientation="horizontal"
           aria-label="Color target"
         >
@@ -170,22 +89,26 @@ export function ColorPalette({
               value={color}
               className={styles.swatch}
               style={{ '--pdf-swatch-color': color } as CSSProperties}
-              onClick={() => applyColor(color)}
+              disabled={busy || readOnly}
+              onClick={() => void applyColor(color)}
               aria-label={`Color ${number}`}
             >
               <span className={styles.color} />
             </RadioGroup.Item>;
           })}
-          {selectedField === 'color' || selectedField === 'interiorColor' ? <RadioGroup.Item
+          {field === 'color' || field === 'interiorColor' ? <RadioGroup.Item
             value={TRANSPARENT_ANNOTATION_COLOR}
             className={styles.swatch}
-            onClick={() => applyColor(TRANSPARENT_ANNOTATION_COLOR)}
+            disabled={busy || readOnly}
+            onClick={() => void applyColor(TRANSPARENT_ANNOTATION_COLOR)}
             aria-label="Transparent"
           >
             <span className={`${styles.color} ${styles.transparent}`} />
           </RadioGroup.Item> : null}
         </RadioGroup.Root>
 
+        {readOnly ? <p role="status">Selected annotations are locked or read-only.</p> : null}
+        {error ? <p role="alert">{error}</p> : null}
       </div>;
 
   return (

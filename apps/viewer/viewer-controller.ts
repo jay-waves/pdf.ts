@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useReducer, useRef, useSyncExternalStore } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import { HistoryToken } from '@embedpdf/plugin-history';
 import { StageToken } from '@embedpdf/plugin-stage';
 import { ScrollStrategy } from './viewer-stage';
-import { SpreadMode } from './viewer-stage';
 import type { ZoomLevel } from './viewer-stage';
 import { getAnnotationScope } from '../annotations/annotations';
 import { EMPTY_STAGE_SNAPSHOT, type ViewerStage } from './viewer-stage';
@@ -129,15 +128,6 @@ export type ViewerCommand = ViewerUiCommand
   | { type: 'document/export' };
 
 export type ViewerCommandDispatch = (command: ViewerCommand) => void;
-
-export type ViewerCapabilitySnapshot = {
-  zoomPercent: number;
-  zoomLevel: ZoomLevel;
-  activeTool: string | null;
-  spreadMode: SpreadMode;
-  scrollStrategy: ScrollStrategy;
-  selectingRegion: boolean;
-};
 
 type ViewerControllerDependencies = {
   registry?: Kernel;
@@ -267,48 +257,6 @@ function executeViewerCommand(
   }
 }
 
-function useViewerCapabilitySnapshot(
-  registry: Kernel | undefined,
-  documentId: string | null | undefined,
-): Pick<ViewerCapabilitySnapshot, 'zoomPercent' | 'zoomLevel' | 'activeTool'> {
-  const [zoomPercent, setZoomPercent] = useState(100);
-  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(1);
-  const [activeTool, setActiveTool] = useState<string | null>(null);
-  const documentStatus = useSyncExternalStore(
-    (listener) => registry?.subscribe(listener) ?? (() => {}),
-    () => documentId ? registry?.documents.get(documentId)?.status ?? null : null,
-  );
-
-  useEffect(() => {
-    const zoom = documentId ? registry?.tryCapability(StageToken, documentId) : null;
-    if (!zoom) {
-      setZoomPercent(100);
-      setZoomLevel(1);
-      return;
-    }
-    const sync = () => {
-      setZoomPercent(Math.round(zoom.getZoomLevel() * 100));
-      const mode = zoom.getZoomMode();
-      setZoomLevel(mode === 'fit-page' || mode === 'fit-width' ? mode : zoom.getZoomLevel());
-    };
-    sync();
-    return zoom.onZoomChanged(sync);
-  }, [documentId, registry, documentStatus]);
-
-  useEffect(() => {
-    const annotation = getAnnotationScope(registry, documentId);
-    if (!annotation) {
-      setActiveTool(null);
-      return;
-    }
-    const sync = () => { const id = annotation.interaction?.getActiveToolId(); setActiveTool(id && annotation.scope.tools.get(id) ? id : null); };
-    sync();
-    return annotation.interaction?.onToolChanged(sync);
-  }, [documentId, registry, documentStatus]);
-
-  return { zoomPercent, zoomLevel, activeTool };
-}
-
 export function useViewerController(dependencies: ViewerControllerDependencies) {
   const [uiSnapshot, updateUi] = useReducer(reduceViewerUi, INITIAL_VIEWER_UI);
   const dependenciesRef = useRef<ViewerCommandContext>({ ...dependencies, updateUi });
@@ -316,11 +264,6 @@ export function useViewerController(dependencies: ViewerControllerDependencies) 
   const dispatch = useCallback<ViewerCommandDispatch>((command) => {
     executeViewerCommand(command, dependenciesRef.current);
   }, []);
-  const capabilitySnapshot = useViewerCapabilitySnapshot(
-    dependencies.registry,
-    dependencies.documentId,
-  );
-
   const stageSnapshot = useSyncExternalStore(
     dependencies.stage?.subscribe ?? subscribeEmptyView,
     dependencies.stage?.getSnapshot ?? getEmptyView,
@@ -329,12 +272,5 @@ export function useViewerController(dependencies: ViewerControllerDependencies) 
     dispatch,
     uiSnapshot,
     stageSnapshot,
-    capabilitySnapshot: {
-      ...capabilitySnapshot,
-      zoomLevel: capabilitySnapshot.zoomLevel,
-      spreadMode: stageSnapshot.spread,
-      scrollStrategy: stageSnapshot.strategy,
-      selectingRegion: stageSnapshot.selectingRegion,
-    },
   };
 }

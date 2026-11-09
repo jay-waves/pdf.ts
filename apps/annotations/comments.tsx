@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { annotationKey, type Kernel } from '@embedpdf/core';
 import type { Annotation } from '@embedpdf/plugin-annotation';
-import { sliceText } from '@embedpdf/engine-core';
+import { usePageList } from '@embedpdf/react/runtime';
+import { useAnnotationList, useAnnotationState, useAnnotationEvent } from '@embedpdf/react/annotation';
+import { readMarkupPage } from './markup-text';
 import { Highlighter, MessageSquareMore, PenLine, Shapes, Strikethrough, Type, Underline } from 'lucide-react';
 import { PanelContent, PanelState } from '../components';
-import { TEXT_MARKUP_TYPES, getAnnotationLabel, getAnnotationRects, getAnnotationScope, rectsIntersect } from './annotations';
+import { TEXT_MARKUP_TYPES, getAnnotationLabel, getAnnotationRects, getAnnotationScope } from './annotations';
 import type { ViewerStage } from '../viewer/viewer-stage';
 import { getDocument } from '../document/viewer-document';
 import styles from './comments.module.css';
@@ -24,76 +26,59 @@ function getEntryIcon(subtype: string) {
 export function Comments({ registry, documentId, stage, currentPageNumber }: {
   registry?: Kernel; documentId?: string | null; stage?: ViewerStage | null; currentPageNumber: number;
 }) {
-  const [revision, setRevision] = useState(0);
+  const [, setRevision] = useState(0);
+  const [textRevision, setTextRevision] = useState(0);
+  const annotations = useAnnotationList();
+  const pages = usePageList();
+  const pageIndices = useMemo(() => new Map(pages.map((page, index) => [page.ref.objectNumber, index])), [pages]);
+  const status = useAnnotationState(state => state.status);
   const contentRef = useRef<HTMLDivElement>(null);
   const summaryCacheRef = useRef(new Map<string, { geometry: string; text: string }>());
+  useAnnotationEvent(annotation => annotation.onResynced, event => {
+    if (event.pages === 'all') summaryCacheRef.current.clear();
+    else {
+      const changed = new Set(event.pages.map(page => page.objectNumber));
+      for (const annotation of annotations) if (changed.has(annotation.page.objectNumber)) summaryCacheRef.current.delete(annotationKey(annotation.ref));
+    }
+    setTextRevision(value => value + 1);
+  });
   const entries = useMemo(() => {
-    const scope = getAnnotationScope(registry, documentId)?.scope;
-    if (!scope || !registry || !documentId) return [];
-    return scope.list().filter((annotation) => !['link', 'popup', 'widget'].includes(annotation.subtype))
-      .toSorted((a, b) => registry.documents.getPageIndex(a.page, documentId) - registry.documents.getPageIndex(b.page, documentId) || a.rect.y - b.rect.y || a.rect.x - b.rect.x);
-  }, [registry, documentId, revision]);
+    return annotations.filter((annotation) => pageIndices.has(annotation.page.objectNumber) && !['link', 'popup', 'widget'].includes(annotation.subtype))
+      .toSorted((a, b) => pageIndices.get(a.page.objectNumber)! - pageIndices.get(b.page.objectNumber)! || a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+  }, [annotations, pageIndices]);
   const pageGroups = useMemo(() => entries.reduce<{ pageIndex: number; entries: Annotation[] }[]>((groups, annotation) => {
-    const pageIndex = registry!.documents.getPageIndex(annotation.page, documentId!);
+    const pageIndex = pageIndices.get(annotation.page.objectNumber)!;
     const previous = groups.at(-1);
     if (previous?.pageIndex === pageIndex) previous.entries.push(annotation);
     else groups.push({ pageIndex, entries: [annotation] });
     return groups;
-  }, []), [entries, registry, documentId]);
-  useEffect(() => {
-    summaryCacheRef.current.clear();
-    const scope = getAnnotationScope(registry, documentId)?.scope;
-    if (!scope) return;
-    const sync = () => setRevision(value => value + 1);
-    const cleanups = [scope.onCreated(sync), scope.onUpdated(sync), scope.onDeleted(sync), scope.onResynced(event => {
-      if (event.pages === 'all') summaryCacheRef.current.clear();
-      else {
-        const pages = new Set(event.pages.map(page => JSON.stringify(page)));
-        for (const annotation of scope.list()) if (pages.has(JSON.stringify(annotation.page))) summaryCacheRef.current.delete(annotationKey(annotation.ref));
-      }
-      sync();
-    })];
-    return () => cleanups.forEach((cleanup) => cleanup());
-  }, [registry, documentId]);
+  }, []), [entries, pageIndices]);
+  useEffect(() => { summaryCacheRef.current.clear(); }, [documentId]);
   useEffect(() => {
     const doc = getDocument(registry, documentId);
     if (!doc) return;
-    let cancelled = false;
+    const controller = new AbortController();
     const live = new Set(entries.map(annotation => annotationKey(annotation.ref)));
     for (const key of summaryCacheRef.current.keys()) if (!live.has(key)) summaryCacheRef.current.delete(key);
     const geometryKey = (annotation: Annotation) => JSON.stringify([annotation.page, getAnnotationRects(annotation)]);
     const pending = entries.filter((annotation) => TEXT_MARKUP_TYPES.has(annotation.subtype) && !annotation.contents?.trim() && summaryCacheRef.current.get(annotationKey(annotation.ref))?.geometry !== geometryKey(annotation));
     if (!pending.length) return;
-    // Both text and geometry are requested through the v3 page service. Keep
-    // character-space slicing so ligatures and supplementary characters survive.
-    const pages = new Map<string, Promise<[Awaited<ReturnType<ReturnType<typeof doc.page>['text']['get']>>, Awaited<ReturnType<ReturnType<typeof doc.page>['text']['layout']>>]>>();
+    const pages = new Map<number, ReturnType<typeof readMarkupPage>>();
     void Promise.all(pending.map(async (annotation) => {
-      const key = JSON.stringify(annotation.page);
+      const key = annotation.page.objectNumber;
       let page = pages.get(key);
-      if (!page) { const handle = doc.page(annotation.page); page = Promise.all([handle.text.get(), handle.text.layout()]); pages.set(key, page); }
+      if (!page) { page = readMarkupPage(doc.page(annotation.page), controller.signal); pages.set(key, page); }
       let summary = '';
-      try {
-        const [text, layout] = await page;
-        const rects = getAnnotationRects(annotation);
-        const pieces: string[] = [];
-        for (let index = 0; index < layout.charCount; index++) {
-          const quad = layout.charQuad(index);
-          if (!quad) continue;
-          const points = [quad.upperLeft, quad.upperRight, quad.lowerLeft, quad.lowerRight];
-          const x = Math.min(...points.map((point) => point.x)), y = Math.min(...points.map((point) => point.y));
-          const rect = { x, y, width: Math.max(...points.map((point) => point.x)) - x, height: Math.max(...points.map((point) => point.y)) - y };
-          if (rects.some((target) => rectsIntersect(target, rect))) pieces.push(sliceText(text, { start: index, count: 1 }));
-        }
-        summary = pieces.join('').replace(/\s+/g, ' ').trim().slice(0, 160);
-      } catch { /* The panel still shows the annotation when text is unavailable. */ }
+      try { summary = (await page)(getAnnotationRects(annotation)).replace(/\s+/g, ' ').trim().slice(0, 160); }
+      catch { /* The panel still shows the annotation when copying text is unavailable. */ }
       return [annotationKey(annotation.ref), { geometry: geometryKey(annotation), text: summary }] as const;
     })).then((summaries) => {
-      if (cancelled) return;
+      if (controller.signal.aborted) return;
       summaries.forEach(([id, summary]) => summaryCacheRef.current.set(id, summary));
       setRevision((value) => value + 1);
     });
-    return () => { cancelled = true; };
-  }, [documentId, entries, registry]);
+    return () => controller.abort();
+  }, [documentId, entries, registry, textRevision]);
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -118,8 +103,9 @@ export function Comments({ registry, documentId, stage, currentPageNumber }: {
   return (
     <div className={styles.layout}>
       <PanelContent ref={contentRef} padding="compact" className={styles.panel}>
-        {!registry ? <PanelState>Loading comments...</PanelState> : null}
-        {registry && !entries.length ? (
+        {status === 'loading' ? <PanelState>Loading comments...</PanelState> : null}
+        {status === 'forbidden' || status === 'error' ? <PanelState>Comments are unavailable.</PanelState> : null}
+        {status === 'ready' && !entries.length ? (
           <div className={styles.empty}>
             <span className={styles.emptyIcon}>
               <MessageSquareMore size={20} strokeWidth={1.6} />
@@ -140,7 +126,7 @@ export function Comments({ registry, documentId, stage, currentPageNumber }: {
                 data-current={group.pageIndex + 1 === currentPageNumber ? 'true' : undefined}
               >
                 <div className={styles.pageHeader}>
-                  <span>Page {group.pageIndex + 1}</span>
+                  <span>Page {pages[group.pageIndex]?.label ?? group.pageIndex + 1}</span>
                   <span className={styles.pageCount}>{group.entries.length}</span>
                 </div>
                 <ol className={styles.entries}>

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import { annotationKey } from '@embedpdf/core';
 import { StageToken } from '@embedpdf/plugin-stage';
-import { annotationAnchor, fromDTO, initialModel } from '@embedpdf/core-annotation';
+import { useAnnotation, useAnnotationList, useAnnotationAnchor } from '@embedpdf/react/annotation';
 import { CircleCheckBig, MessageSquareMore, Trash } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
 import { getAnnotationLabel, getAnnotationScope } from './annotations';
@@ -17,11 +17,16 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
   pointerX?: number;
   onClose(): void;
 }) {
-  const scope = getAnnotationScope(registry, documentId)?.scope;
-  const annotation = scope?.list().find((item) => annotationKey(item.ref) === annotationId);
-  const [draft, setDraft] = useState(annotation?.contents ?? '');
+  const scope = useAnnotation();
+  const annotations = useAnnotationList();
+  const annotation = annotations.find((item) => annotationKey(item.ref) === annotationId);
+  const visual = useAnnotationAnchor(annotation?.ref ?? null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  // Untouched content comes directly from EmbedPDF. Only user edits are local.
+  const [draft, setDraft] = useState<{ base: string; text: string } | null>(null);
   const draftRef = useRef(draft);
-  const initialText = useRef(draft);
+  const contents = annotation?.contents ?? '';
   const discarded = useRef(false);
   const [anchor, setAnchor] = useState<{ x: number; y: number; height: number } | null>(null);
   const horizontalFraction = useRef<number | null>(null);
@@ -29,29 +34,14 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
 
   // Save on dismissal or when another annotation replaces this editor.
   useEffect(() => () => {
-    if (discarded.current || pageIndex === undefined || draftRef.current === initialText.current) return;
+    if (discarded.current || pageIndex === undefined || !draftRef.current) return;
     const currentScope = getAnnotationScope(registry, documentId)?.scope;
     const current = currentScope?.list().find((item) => annotationKey(item.ref) === annotationId);
-    const contents = draftRef.current.trim();
-    if (current && contents !== (current.contents ?? '')) {
+    const contents = draftRef.current.text.trim();
+    if (current && currentScope?.comments.canSetText(current.ref) && contents !== (current.contents ?? '')) {
       void currentScope?.comments.setText(current.ref, contents).catch((error) => console.error('[pdf-ts] failed to save comment', error));
     }
   }, [registry, documentId, annotationId, pageIndex]);
-
-  useEffect(() => {
-    if (!scope) return;
-    const sync = () => {
-      if (draftRef.current !== initialText.current) return;
-      const current = scope.list().find(item => annotationKey(item.ref) === annotationId);
-      if (!current) return;
-      const contents = current.contents ?? '';
-      initialText.current = contents; draftRef.current = contents;
-      setDraft(contents);
-    };
-    const cleanups = [scope.onUpdated(sync), scope.onResynced(sync)];
-    sync();
-    return () => cleanups.forEach(cleanup => cleanup());
-  }, [scope, annotationId]);
 
   useEffect(() => scope?.onDeleted((event) => {
     if (event.refs.some((ref) => annotationKey(ref) === annotationId)) {
@@ -67,12 +57,9 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
       const stage = registry.tryCapability(StageToken, documentId);
       const current = scope?.get(annotation.ref);
       const pageFrame = current && stage?.getPageBox(current.page);
-      const record = current && fromDTO(current);
-      const visual = record && pageFrame && stage && annotationAnchor(
-        { ...initialModel, byId: { [record.id]: record }, order: [record.id] }, record.id,
-        { zoom: stage.getZoomLevel(), rotation: pageFrame.rotation },
-      );
-      const projection = visual && stage?.pageRectToViewport(visual.page, visual.bounds);
+      const bounds = visual && pageFrame && stage
+        ? visual.boundsIn?.({ zoom: stage.getZoomLevel(), rotation: pageFrame.rotation }) ?? visual.bounds : null;
+      const projection = visual && bounds && stage?.pageRectToViewport(visual.page, bounds);
       const element = document.querySelector<HTMLElement>(`[data-pdf-document-layer="${documentId}"] .viewer`);
       if (projection && element) {
         const bounds = element.getBoundingClientRect();
@@ -102,7 +89,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
     const observer = new ResizeObserver(schedule);
     if (element) observer.observe(element);
     const cleanups = [stage?.onCameraChanged(schedule), stage?.onViewportChanged(schedule),
-      stage?.onSettingsChanged(schedule), scope?.onUpdated(schedule), scope?.onResynced(schedule)];
+      stage?.onSettingsChanged(schedule)];
     window.addEventListener('resize', schedule);
     update();
     return () => {
@@ -110,14 +97,28 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
       cleanups.forEach(cleanup => cleanup?.());
       window.removeEventListener('resize', schedule);
     };
-  }, [registry, documentId, scope, annotation, pointerX, onClose]);
+  }, [registry, documentId, scope, annotation, visual, pointerX, onClose]);
+
+  async function saveAndClose() {
+    if (busy || !annotation) return;
+    const contents = (draftRef.current?.text ?? annotation.contents ?? '').trim();
+    if (!scope.comments.canSetText(annotation.ref) || contents === (annotation.contents ?? '')) { onClose(); return; }
+    setBusy(true); setError('');
+    try {
+      await scope.comments.setText(annotation.ref, contents);
+      draftRef.current = null;
+      setDraft(null);
+      onClose();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : 'Failed to save comment.'); }
+    finally { setBusy(false); }
+  }
 
   if (!annotation || !anchor) return null;
   return (
     <FloatingPopover
       anchor={anchor}
       sideOffset={10}
-      onClose={onClose}
+      onClose={() => void saveAndClose()}
       dismissOnFocusOutside={false}
       label="Edit comment"
       role="dialog"
@@ -127,28 +128,35 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
         <MessageSquareMore size={14} className="text-accent" />
         <span className={styles.type}>{getAnnotationLabel(annotation)}</span>
         <div className={styles.actions}>
-          <IconButton label="Delete annotation" icon={Trash} onClick={() => {
-            discarded.current = true;
-            void scope?.comments.delete(annotation.ref).catch((error) => console.error('[pdf-ts] failed to delete annotation', error));
-            onClose();
+          <IconButton label="Delete annotation" icon={Trash} disabled={busy || !scope.comments.canDelete(annotation.ref)} onClick={() => {
+            setBusy(true); setError('');
+            void scope.comments.delete(annotation.ref).then(() => {
+              discarded.current = true; onClose();
+            }).catch(failure => setError(failure instanceof Error ? failure.message : 'Failed to delete comment.'))
+              .finally(() => setBusy(false));
           }} />
-          <IconButton label="Done" icon={CircleCheckBig} onClick={onClose} />
+          <IconButton label="Done" icon={CircleCheckBig} disabled={busy} onClick={() => void saveAndClose()} />
         </div>
       </div>
       <AutoGrowingTextarea
         className={styles.textarea}
-        value={draft}
+        value={draft?.text ?? contents}
+        readOnly={busy || !scope.comments.canSetText(annotation.ref)}
         onChange={(event) => {
-          draftRef.current = event.currentTarget.value;
-          setDraft(event.currentTarget.value);
+          const text = event.currentTarget.value;
+          const base = draftRef.current?.base ?? contents;
+          const next = text === base ? null : { base, text };
+          draftRef.current = next;
+          setDraft(next);
         }}
         onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') onClose();
+          if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void saveAndClose();
         }}
         placeholder="Write a comment…"
         aria-label="Comment"
         autoFocus
       />
+      {error ? <p role="alert">{error}</p> : null}
       <PopoverResizeHandle />
     </FloatingPopover>
   );

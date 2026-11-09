@@ -1,3 +1,6 @@
+import { useStageState, useStageSettings } from '@embedpdf/react/stage';
+import { useInteractionState } from '@embedpdf/react/interaction';
+import { useAnnotation } from '@embedpdf/react/annotation';
 import { useEffect, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from 'react';
 import { ScrollStrategy } from '../viewer/viewer-stage';
 import { SpreadMode } from '../viewer/viewer-stage';
@@ -48,7 +51,6 @@ import { Search } from '../search/search';
 import { useViewerAutoHide } from '../components/use-auto-hide';
 import type {
   ToolbarSection,
-  ViewerCapabilitySnapshot,
   ViewerCommandDispatch,
 } from '../viewer/viewer-controller';
 import styles from './toolbar.module.css';
@@ -67,7 +69,8 @@ function IconButton(props: ComponentProps<typeof BaseIconButton>) {
   return <BaseIconButton iconSize={13} {...props} />;
 }
 
-export interface ToolbarSnapshot extends ViewerCapabilitySnapshot {
+/** Application UI state only; document capabilities are read in this scope. */
+export interface ToolbarSnapshot {
   section: ToolbarSection | null;
   documentId?: string | null;
   thumbnailsOpen: boolean;
@@ -233,13 +236,16 @@ export function Toolbar({
     canSave,
     canPresent,
     darkAppearance,
-    zoomPercent,
-    activeTool,
-    spreadMode,
-    scrollStrategy,
   },
   dispatch,
 }: ToolbarProps) {
+  const zoomPercent = useStageState(state => Math.round(state.zoomLevel * 100));
+  const spreadMode = useStageSettings(settings => settings.spread);
+  const scrollStrategy = useStageSettings(settings => settings.layout === 'horizontal' ? ScrollStrategy.Horizontal : ScrollStrategy.Vertical);
+  const toolId = useInteractionState(state => state.activeToolId);
+  const annotation = useAnnotation();
+  // Pointer, pan and reading-area tools are not annotation drawing tools.
+  const activeTool = toolId && annotation.tools.get(toolId) ? toolId : null;
   const [pinned, setPinned] = useState(() => getStoredToolbarPinned());
   const [touchInput, setTouchInput] = useState(false);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);

@@ -5,6 +5,8 @@ import { AnnotationLayer, annotationPlugin } from '@embedpdf/react/annotation';
 import { SelectionLayer, selectionPlugin } from '@embedpdf/react/selection';
 import { FormLayer, formPlugin } from '@embedpdf/react/form';
 import { LinkLayer, linkPlugin, type LinkRenderProps } from '@embedpdf/react/link';
+import { outlinePlugin } from '@embedpdf/react/outline';
+import { searchPlugin } from '@embedpdf/react/search';
 import { actionsPlugin } from '@embedpdf/plugin-actions';
 import { platform } from '#platform';
 import { interactionPlugin } from '@embedpdf/plugin-interaction';
@@ -44,7 +46,7 @@ export function LoadingStatus({ label }: { label: string }) {
 function createPlugins() {
   return [stagePlugin({ padding: 10, gap: { px: 10 }, zoom: { mode: 'fit-page' }, minZoom: 0.2, maxZoom: 60, viewUnitsPerPoint: 1 }),
     renderPlugin({ format: 'bmp', tiles: { size: PDF_TILE_SIZE_CSS_PX, bleedPx: 2, prefetch: { margin: 0, velocityBias: false } } }),
-    interactionPlugin(), selectionPlugin({ color: 'var(--pdf-text-selection-color)' }), actionsPlugin(), linkPlugin(),
+    interactionPlugin(), selectionPlugin({ color: 'var(--pdf-text-selection-color)' }), actionsPlugin(), linkPlugin(), outlinePlugin(), searchPlugin({ reveal: { align: { y: 0.35 }, behavior: 'smooth' } }),
     annotationPlugin(createAnnotationPluginConfig()), sharedHistoryPlugin(), formPlugin()];
 }
 

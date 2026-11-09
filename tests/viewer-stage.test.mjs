@@ -75,10 +75,11 @@ function setup(t) {
   const subscribeZoom = (listener) => { zoomListeners.add(listener); return () => zoomListeners.delete(listener); };
   const modeListeners = new Set();
   let mode = 'pointerMode';
+  let regionHandler;
   const interaction = {
     getActiveToolId: () => mode,
     registerTool: () => () => {},
-    registerHandler: () => () => {},
+    registerHandler: handler => { regionHandler = handler; return () => {}; },
     activateTool(value) { mode = value; modeListeners.forEach((listener) => listener({toolId:value})); },
     activateDefaultTool() { this.activateTool('pointerMode'); },
     onToolChanged(listener) { modeListeners.add(listener); return () => modeListeners.delete(listener); },
@@ -115,12 +116,12 @@ function setup(t) {
     rotateViewBy() { page = 8; emit(); },
   };
   const stage = new ViewerStage(
-    { tryCapability: token => token === InteractionToken ? interaction : native, documents: { listPages: () => [] } },
+    { tryCapability: token => token === InteractionToken ? interaction : native, documents: { listPages: () => [{ ref: { objectNumber: 1 }, size: { width: 600, height: 800 } }] } },
     'doc',
     scroll,
   );
   t.after(stage.install());
-  return { stage, jumps, jumpBehaviors, zooms, emit, regionFits, interaction, anchors: () => anchors };
+  return { stage, jumps, jumpBehaviors, zooms, emit, regionFits, interaction, regionHandler, anchors: () => anchors };
 }
 
 test('page steps use smooth navigation and accumulate rapid input within document bounds', (t) => {
@@ -256,4 +257,38 @@ test('presentation cancels selection and leaves the inactive viewport untouched'
   stage.setPresentation(false);
   assert.deepEqual(jumps, [3]);
   assert.deepEqual(regionFits, [{ region, page: 2 }]);
+});
+
+test('continuous region dragging leaves navigation subscribers idle and clears on cancellation', t => {
+  const { stage, regionHandler, interaction } = setup(t);
+  const sample = (x, y) => ({ page: { ref: { objectNumber: 1 }, point: { x, y } } });
+  stage.beginRegionSelection();
+  const snapshot = stage.getSnapshot();
+  let navigationUpdates = 0;
+  let previewUpdates = 0;
+  t.after(stage.subscribe(() => navigationUpdates++));
+  const unsubscribe = stage.subscribeRegionPreview(() => previewUpdates++);
+  regionHandler.onPointerDown(sample(10, 20));
+  for (let x = 30; x < 130; x++) regionHandler.onPointerMove(sample(x, 100));
+  assert.equal(navigationUpdates, 0);
+  assert.equal(stage.getSnapshot(), snapshot);
+  assert.equal(previewUpdates, 100);
+  assert.deepEqual(stage.getRegionPreview(), { pageIndex: 0, rect: { x: 10, y: 20, width: 119, height: 80 } });
+  regionHandler.onPointerMove(sample(129, 100));
+  assert.equal(previewUpdates, 100, 'identical coordinates keep the snapshot stable');
+  interaction.activateDefaultTool();
+  assert.equal(stage.getRegionPreview(), null);
+  assert.equal(navigationUpdates, 1);
+  regionHandler.onPointerMove(sample(200, 200));
+  assert.equal(stage.getRegionPreview(), null);
+  stage.beginRegionSelection();
+  regionHandler.onPointerDown(sample(10, 20));
+  regionHandler.onPointerMove(sample(50, 60));
+  regionHandler.onPointerCancel();
+  assert.equal(stage.getRegionPreview(), null);
+  unsubscribe();
+  const count = previewUpdates;
+  regionHandler.onPointerDown(sample(10, 20));
+  regionHandler.onPointerMove(sample(50, 60));
+  assert.equal(previewUpdates, count);
 });

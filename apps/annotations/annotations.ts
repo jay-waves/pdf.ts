@@ -22,6 +22,7 @@ export interface AnnotationToolLike { id: string; name?: string; defaults?: Reco
 const VECTOR_TOOL_IDS = new Set(['square', 'circle', 'polygon', 'line', 'lineArrow', 'polyline', 'ink', 'underline', 'strikeout', 'squiggly', 'freeTextCallout']);
 const TOOL_LABELS: Record<string, string> = {
   highlight: 'Highlight', underline: 'Underline', strikeout: 'Strikeout', squiggly: 'Squiggly',
+  note: 'Comment', 'free-text': 'Text', 'free-text-callout': 'Callout', 'ink-highlight': 'Highlighter',
   ink: 'Ink', inkHighlighter: 'Highlighter', square: 'Rectangle', circle: 'Circle', polygon: 'Polygon',
   line: 'Line', lineArrow: 'Arrow', polyline: 'Polyline', text: 'Comment', textComment: 'Comment',
   freeText: 'Text', freeTextCallout: 'Callout', freetext: 'Text', stamp: 'Stamp',
@@ -50,7 +51,6 @@ export function getAnnotationRects(annotation: Annotation): Rect[] {
   }
   return [annotation.rect];
 }
-export function rectsIntersect(a: Rect, b: Rect) { return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y; }
 export function getAnnotationLabel(annotation: Annotation) { return TOOL_LABELS[annotation.subtype] ?? 'Annotation'; }
 export function getAnnotationToolLabel(tool: AnnotationToolLike | null) { return tool ? TOOL_LABELS[tool.id] ?? tool.name ?? 'Annotation tool' : 'Selected annotation'; }
 export function getCommonAnnotationTool(capability: AnnotationCapability, annotations: readonly Annotation[]) {
@@ -58,17 +58,11 @@ export function getCommonAnnotationTool(capability: AnnotationCapability, annota
   return subtype && annotations.every((annotation) => annotation.subtype === subtype)
     ? capability.tools.list().find((tool) => tool.subtype === subtype) ?? null : null;
 }
-export function getAnnotationColorFields(toolId: string | null, values: Record<string, unknown>): { key: AnnotationColorFieldKey; label: string }[] {
-  if (toolId && ['square', 'circle', 'polygon'].includes(toolId)) return [{ key: 'color', label: 'Stroke' }, { key: 'interiorColor', label: 'Fill' }];
-  if (toolId && ['freeText', 'freeTextCallout', 'free-text'].includes(toolId)) return [{ key: 'textColor', label: 'Text' }, { key: 'interiorColor', label: 'Background' }];
-  if ('textColor' in values) return [{ key: 'textColor', label: 'Text' }];
-  return [{ key: 'color', label: 'Color' }];
-}
 export function getAnnotationColorPatch(_toolId: string | null, field: AnnotationColorFieldKey, color: string) { return field === 'textColor' ? { richText: { body: { color: color === TRANSPARENT_ANNOTATION_COLOR ? '#000000' : color } } } : { [field]: color === TRANSPARENT_ANNOTATION_COLOR ? null : color }; }
 export function getAnnotationPresetPatch(toolId: string | null, field: AnnotationColorFieldKey, color: string) {
   return { ...getAnnotationColorPatch(toolId, field, getThemeAnnotationColor(color, 'light') ?? color),
     opacity: toolId && VECTOR_TOOL_IDS.has(toolId) ? VECTOR_ANNOTATION_OPACITY : 1,
-    ...(toolId === 'highlight' || toolId === 'inkHighlighter' ? { blendMode: 'multiply' } : {}) };
+    ...(toolId === 'highlight' || toolId === 'inkHighlighter' ? { blendMode: 'multiply' as const } : {}) };
 }
 export function normalizeAnnotationColor(value: unknown) {
   if (value === TRANSPARENT_ANNOTATION_COLOR || value === null) return TRANSPARENT_ANNOTATION_COLOR;
@@ -112,7 +106,7 @@ export function installAnnotationLinks(kernel: Kernel, openExternal: (uri: strin
   const attach = (id: string) => {
     cleanups.get(id)?.();
     const actions = kernel.tryCapability(ActionsToken, id);
-    if (actions) cleanups.set(id, actions.setUiAdapter({ openUri: openExternal, print: () => window.print() }));
+    if (actions) cleanups.set(id, actions.setUiAdapter({ openUri: openExternal, print: () => { void kernel.documents.print(id, { includeAnnotations: true }).catch(error => console.error('[pdf-ts] PDF action print failed', error)); } }));
   };
   kernel.documents.list().forEach((info) => attach(info.id));
   const unsubscribe = kernel.documents.onOpened(({ documentId }) => attach(documentId));

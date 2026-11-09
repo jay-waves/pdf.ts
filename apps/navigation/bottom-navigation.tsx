@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { BookImage, CornerDownLeft, CornerUpRight, Menu } from 'lucide-react';
 import { ControlButton, FloatingSurface } from '../components';
-import type { OutlineCache } from './outline';
+import { useOutlineState } from '@embedpdf/react/outline';
 import { useViewerAutoHide } from '../components/use-auto-hide';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import styles from './bottom-navigation.module.css';
@@ -9,16 +9,12 @@ import { useViewerControlClick, useViewerFocus } from '../components/viewer-focu
 
 export function BottomNav({
   dispatch,
-  title,
   pageNumber,
   totalPages,
-  outlineStatus,
 }: {
   dispatch: ViewerCommandDispatch;
-  title: string;
   pageNumber: number;
   totalPages: number;
-  outlineStatus: OutlineCache['status'];
 }) {
   const [pageInput, setPageInput] = useState(String(pageNumber || 1));
   const focusViewer = useViewerFocus();
@@ -28,10 +24,12 @@ export function BottomNav({
   const canNavigate = totalPages > 0;
   const canGoPrevious = canNavigate && pageNumber > 1;
   const canGoNext = canNavigate && pageNumber < totalPages;
-  const outlineTitle = title.trim();
-  const shouldShowOutline = outlineStatus === 'ready';
+  const { status, items, current } = useOutlineState();
+  const outlineTitle = items.find(item => item.ref.objectNumber === current?.objectNumber)?.title.trim() ?? '';
+  // Keep a route to the loading/error state, so a failed read can be retried.
+  const shouldShowOutline = status !== 'ready' || items.length > 0;
   const isOutlinePlaceholder = outlineTitle.length === 0;
-  const shouldShowThumbnails = outlineStatus === 'empty';
+  const shouldShowThumbnails = status === 'ready' && items.length === 0;
   const pageInputDigits = Math.max(pageInput.length, 1);
 
   useEffect(() => {
