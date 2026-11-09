@@ -1,0 +1,8 @@
+/* Hide native scrollbar chrome without disabling scrolling. */
+.quietScroll {
+  scrollbar-width: none;
+}
+
+.quietScroll::-webkit-scrollbar {
+  display: none;
+}

@@ -1,3 +1,4 @@
+import scrollStyles from '../components/quiet-scroll.module.css';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import type { PageInfo } from '@embedpdf/core';
@@ -158,7 +159,7 @@ function ThumbnailFlow({
   }, [currentPageIndex]);
 
   return (
-    <div className={`h-full overflow-y-auto ${styles.grid}`} ref={scrollRef}>
+    <div className={`h-full overflow-y-auto ${scrollStyles.quietScroll} ${styles.grid}`} ref={scrollRef}>
         {items.map((item) => (
           <ThumbnailCard
             key={item.pageIndex}

@@ -34,7 +34,7 @@ export const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app tex
 
 export function LoadingStatus({ label }: { label: string }) {
   return (
-    <div className={VIEWER_STATUS_CLASS} role="status" aria-live="polite">
+    <div className={`${VIEWER_STATUS_CLASS} ${styles.loadingContainer}`} role="status" aria-live="polite">
       <div className={styles.loadingStatus}>
         <span className={styles.loadingSpinner} aria-hidden="true" />
         <span>{label}</span>

@@ -115,8 +115,15 @@
 
 .pdf-page-surface {
   box-shadow:
-    0 0 0 1px var(--pdf-page-border),
-    0 1px 2px var(--pdf-page-shadow);
+    0 0 0 0.5px color-mix(in srgb, var(--pdf-page-border) 45%, transparent),
+    0 1px 3px color-mix(in srgb, var(--pdf-page-shadow) 40%, transparent),
+    0 8px 24px -8px color-mix(in srgb, var(--pdf-page-shadow) 65%, transparent);
+}
+
+:root[data-viewer-color-mode="dark"] .pdf-page-surface {
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--pdf-page-border) 70%, transparent),
+    0 2px 8px -2px color-mix(in srgb, var(--pdf-page-shadow) 45%, transparent);
 }
 
 .pdf-text-selection-layer {
