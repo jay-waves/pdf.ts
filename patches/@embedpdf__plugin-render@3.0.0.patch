@@ -1,5 +1,5 @@
 diff --git a/dist/contract-hCcLRGkU.d.cts b/dist/contract-hCcLRGkU.d.cts
-index bed41681cccaac86396d276b7b60df7b9024b0b3..abb529ed673011fcdbb960d5cf9e2d5601e34ece 100644
+index bed4168..abb529e 100644
 --- a/dist/contract-hCcLRGkU.d.cts
 +++ b/dist/contract-hCcLRGkU.d.cts
 @@ -1,4 +1,4 @@
@@ -18,7 +18,7 @@ index bed41681cccaac86396d276b7b60df7b9024b0b3..abb529ed673011fcdbb960d5cf9e2d56
  /**
   * What a tile plane paints right now. `paint` draws only from resolved
 diff --git a/dist/contract-hCcLRGkU.d.ts b/dist/contract-hCcLRGkU.d.ts
-index d93c1d40f44534b4c5bbe8b443af92e086d68149..ae549192f12b6282fa35d6288e35b04b91a590d1 100644
+index d93c1d4..ae54919 100644
 --- a/dist/contract-hCcLRGkU.d.ts
 +++ b/dist/contract-hCcLRGkU.d.ts
 @@ -1,4 +1,4 @@
@@ -37,7 +37,7 @@ index d93c1d40f44534b4c5bbe8b443af92e086d68149..ae549192f12b6282fa35d6288e35b04b
  /**
   * What a tile plane paints right now. `paint` draws only from resolved
 diff --git a/dist/host-contract-1kMniEqe.d.cts b/dist/host-contract-1kMniEqe.d.cts
-index 7a3525d80fe96854e9e64502dc7cef8c1a931eb8..083c8153af3b195684faa0d45e79568376296e79 100644
+index 7a3525d..083c815 100644
 --- a/dist/host-contract-1kMniEqe.d.cts
 +++ b/dist/host-contract-1kMniEqe.d.cts
 @@ -1,5 +1,5 @@
@@ -66,7 +66,7 @@ index 7a3525d80fe96854e9e64502dc7cef8c1a931eb8..083c8153af3b195684faa0d45e795683
     * The identity of the raster `renderSource` would produce — conformed
     * width + the parts it draws + epoch (+ format), as one stable string.
 diff --git a/dist/host-contract-DIjZWyjI.d.ts b/dist/host-contract-DIjZWyjI.d.ts
-index 8ff30295faa4e5569d3419e5aae85be766c9226c..1b40cd485de8f6856f06303c84330dd464e63882 100644
+index 8ff3029..1b40cd4 100644
 --- a/dist/host-contract-DIjZWyjI.d.ts
 +++ b/dist/host-contract-DIjZWyjI.d.ts
 @@ -1,5 +1,5 @@
@@ -95,7 +95,7 @@ index 8ff30295faa4e5569d3419e5aae85be766c9226c..1b40cd485de8f6856f06303c84330dd4
     * The identity of the raster `renderSource` would produce — conformed
     * width + the parts it draws + epoch (+ format), as one stable string.
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48f77ff7ed 100644
+index 36974a0..f780e3a 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -419,6 +419,8 @@ var RasterStore = class {
@@ -143,7 +143,35 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  	if (handle.source?.kind === "bytes") return handle.source.bytes.byteLength;
  	if (handle.width !== void 0 && handle.height !== void 0) return handle.width * handle.height;
  	return 1;
-@@ -1087,6 +1097,7 @@ var TileManager = class {
+@@ -974,17 +984,13 @@ var TileManager = class {
+ 		if (state.planCache && state.planCache.demandKey === demandKey && state.planCache.version === state.version) return state.planCache.plan;
+ 		const paint = [];
+ 		const fetching = [];
+-		const stale = [];
+ 		const bleedPx = this.deps.getOptions().tiles.bleedPx;
+ 		for (const entry of state.entries.values()) {
+ 			const visiblePart = (0, _embedpdf_core_geometry.intersectRects)(entry.rect, visible);
+ 			if (entry.resolved) {
+ 				if (visiblePart.width > 0 && visiblePart.height > 0) {
+-					const handle = this.deps.store.peek(entry.key);
+-					if (!handle) {
+-						stale.push(entry.key);
+-						continue;
+-					}
++					// Active tiles own their pixels independently of the bounded reuse cache.
++					const handle = entry.handle;
+ 					paint.push({
+ 						key: entry.key,
+ 						scale: entry.scale,
+@@ -995,7 +1001,6 @@ var TileManager = class {
+ 				}
+ 			} else if (entry.scale === wantScale) fetching.push(entry.key);
+ 		}
+-		for (const key of stale) state.entries.delete(key);
+ 		const rank = /* @__PURE__ */ new Map();
+ 		const scales = [...new Set(paint.map((source) => source.scale))];
+ 		for (const scale of scales.sort((left, right) => left - right)) rank.set(scale, rank.size);
+@@ -1087,6 +1092,7 @@ var TileManager = class {
  				state.entries.delete(key);
  			} else if (entry.scale === wantScale) state.entries.delete(key);
  		}
@@ -151,7 +179,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		const centerX = visible.x + visible.width / 2;
  		const centerY = visible.y + visible.height / 2;
  		const span = grid.tileSize / grid.scale;
-@@ -1112,6 +1123,27 @@ var TileManager = class {
+@@ -1112,6 +1118,27 @@ var TileManager = class {
  			};
  			this.pump();
  		};
@@ -179,7 +207,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		if (levelChanged && options.tiles.settleMs > 0) {
  			this.deps.debug?.(`arm settle page=${pageObjectNumber} level=${wantWidth}`);
  			state.queue = null;
-@@ -1140,7 +1172,8 @@ var TileManager = class {
+@@ -1140,7 +1167,8 @@ var TileManager = class {
  	*/
  	pump() {
  		const started = /* @__PURE__ */ new Map();
@@ -189,7 +217,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  			let next = null;
  			for (const state of this.pages.values()) {
  				const queued = this.nextToStart(state);
-@@ -1159,6 +1192,7 @@ var TileManager = class {
+@@ -1159,6 +1187,7 @@ var TileManager = class {
  	}
  	/** The first tile of the state's queue not started yet, nor failed at this level. */
  	nextToStart(state) {
@@ -197,7 +225,19 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		const queue = state.queue;
  		if (!queue) return null;
  		for (; queue.next < queue.coords.length; queue.next += 1) {
-@@ -1268,6 +1302,10 @@ var TileManager = class {
+@@ -1193,9 +1222,10 @@ var TileManager = class {
+ 		};
+ 		state.entries.set(key, entry);
+ 		state.planCache = null;
+-		this.deps.store.acquire(key, (signal) => this.deps.fetchTile(state.view, pageObjectNumber, bleedPt > 0 ? bleedRect(logical, bleedPt, page) : logical, grid.scale, layers, signal), abort.signal).then(() => {
++		this.deps.store.acquire(key, (signal) => this.deps.fetchTile(state.view, pageObjectNumber, bleedPt > 0 ? bleedRect(logical, bleedPt, page) : logical, grid.scale, layers, signal), abort.signal).then((handle) => {
+ 			this.releaseSlot(entry);
+ 			if (state.entries.get(key) === entry) {
++				entry.handle = handle;
+ 				entry.resolved = true;
+ 				state.version += 1;
+ 				state.planCache = null;
+@@ -1268,6 +1298,10 @@ var TileManager = class {
  		this.inFlight -= 1;
  	}
  	abortAll(state) {
@@ -208,7 +248,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		state.queue = null;
  		state.cancelSettle?.();
  		state.cancelSettle = null;
-@@ -1286,7 +1324,7 @@ var TileManager = class {
+@@ -1286,7 +1320,7 @@ var TileManager = class {
  	*  format under a live store. */
  	tileKey(pageObjectNumber, levelWidth, coord, layers, epoch) {
  		const { tiles } = this.deps.getOptions();
@@ -217,7 +257,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		const geometry = `g${tiles.size}.${tiles.bleedPx}${format ? `.${format}` : ""}`;
  		return `t:${pageObjectNumber}|w${levelWidth}|${coord.ix},${coord.iy}|${layersKeyOf(layers)}|e${epoch}|${geometry}`;
  	}
-@@ -1340,10 +1378,10 @@ const DEFAULT_BATCH_CONCURRENCY = 4;
+@@ -1340,10 +1374,10 @@ const DEFAULT_BATCH_CONCURRENCY = 4;
  * live handles and abort controllers); a re-plan wakes readers with
  * `ctx.notify()`.
  */
@@ -230,7 +270,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  	const appearances = new AppearanceStore();
  	const recentAppearances = new RecentPictures();
  	const invalidated = ctx.events.source();
-@@ -1441,15 +1479,16 @@ function createRenderController(ctx) {
+@@ -1441,15 +1475,16 @@ function createRenderController(ctx) {
  				const task = ctx.doc.with({
  					priority: "high",
  					...request.view !== void 0 ? { view: request.view } : {}
@@ -251,7 +291,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  			};
  			const drawnWhenHeld = (drawn) => isPending(drawn) ? whenHeld(drawn, storeSignal).then(() => draw(drawn)) : draw(drawn);
  			return drawnWhenHeld(copiedFrom(page) ?? page);
-@@ -1480,7 +1519,8 @@ function createRenderController(ctx) {
+@@ -1480,7 +1515,8 @@ function createRenderController(ctx) {
  		const layers = pictureLayers(options, "render.renderSource");
  		const viewport = conformViewport(page, scale);
  		const strategy = currentStrategy();
@@ -261,7 +301,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  			viewport,
  			layers,
  			format: strategy.format,
-@@ -1667,6 +1707,9 @@ function createRenderController(ctx) {
+@@ -1667,6 +1703,9 @@ function createRenderController(ctx) {
  	};
  	const tiles = new TileManager({
  		store,
@@ -271,7 +311,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		getOptions: resolvedOptions,
  		getPolicy: renderPolicy,
  		getPageSize: (pageObjectNumber) => ctx.getPage((0, _embedpdf_core.toPageRef)(pageObjectNumber))?.size,
-@@ -1680,7 +1723,7 @@ function createRenderController(ctx) {
+@@ -1680,7 +1719,7 @@ function createRenderController(ctx) {
  			const task = ctx.doc.with({
  				priority: "high",
  				view
@@ -280,7 +320,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  				target: {
  					kind: "rect",
  					rect
-@@ -1693,9 +1736,10 @@ function createRenderController(ctx) {
+@@ -1693,9 +1732,10 @@ function createRenderController(ctx) {
  				...strategy.format !== void 0 ? { format: strategy.format } : {},
  				...strategy.quality !== void 0 ? { quality: strategy.quality } : {}
  			});
@@ -294,7 +334,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  		},
  		onAdvance: wake,
  		debug: (message) => {
-@@ -1739,6 +1783,16 @@ function createRenderController(ctx) {
+@@ -1739,6 +1779,16 @@ function createRenderController(ctx) {
  				});
  				if (plan !== previous?.plan) ctx.notify();
  			},
@@ -311,7 +351,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  			getPlan: (page) => pages.get(page.objectNumber)?.plan ?? require_contract.EMPTY_TILE_PLAN,
  			markPainted: (page, key) => tiles.sourcePainted(viewId, page.objectNumber, key),
  			markUnpainted: (page, key) => tiles.sourceUnpainted(viewId, page.objectNumber, key),
-@@ -1753,6 +1807,7 @@ function createRenderController(ctx) {
+@@ -1753,6 +1803,7 @@ function createRenderController(ctx) {
  				if (view.refs > 0) return;
  				for (const pageObjectNumber of [...view.pages.keys()]) tiles.releasePage(viewId, pageObjectNumber);
  				view.pages.clear();
@@ -319,7 +359,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  			}
  		};
  		views.set(viewId, {
-@@ -1762,6 +1817,14 @@ function createRenderController(ctx) {
+@@ -1762,6 +1813,14 @@ function createRenderController(ctx) {
  		});
  		return handle;
  	}
@@ -334,7 +374,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  	const paintSettings = (0, _embedpdf_core.memo)(() => [resolvedOptions().tiles.enabled], (enabled) => Object.freeze({ tiles: enabled }));
  	ctx.listen(settings.api.onSettingsChanged, () => {
  		const shown = /* @__PURE__ */ new Set();
-@@ -1799,7 +1862,7 @@ function createRenderController(ctx) {
+@@ -1799,7 +1858,7 @@ function createRenderController(ctx) {
  			getSourceKey: (page, { scale, view: _view, thumbnail, ...options }) => {
  				if (thumbnail) return thumbnailKey(page.objectNumber, layersOf(options), currentStrategy().format, void 0);
  				const viewport = conformViewport(page, scale);
@@ -343,7 +383,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  			},
  			conformViewport,
  			getPaintSettings: paintSettings,
-@@ -1835,7 +1898,7 @@ function createRenderController(ctx) {
+@@ -1835,7 +1894,7 @@ function createRenderController(ctx) {
  * The interaction plugin is optional: with it, the plugin adds the
  * `snapshot` tool.
  */
@@ -352,7 +392,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  	id: "render",
  	scope: "document",
  	token: require_contract_host.RenderToken,
-@@ -1846,7 +1909,7 @@ const renderPlugin = (config) => (0, _embedpdf_core.definePlugin)({
+@@ -1846,7 +1905,7 @@ const renderPlugin = (config) => (0, _embedpdf_core.definePlugin)({
  		registered: config,
  		whole: ["snapshot.box"]
  	},
@@ -362,7 +402,7 @@ index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48
  //#endregion
  exports.RENDER_DEFAULTS = require_contract.RENDER_DEFAULTS;
 diff --git a/dist/index.d.cts b/dist/index.d.cts
-index 6c7b84708341698df42482cc97937ac1022ea9f7..76e7b98371cddd78f0c3e25d0576c8836f03486c 100644
+index 6c7b847..76e7b98 100644
 --- a/dist/index.d.cts
 +++ b/dist/index.d.cts
 @@ -50,7 +50,7 @@ interface SnapshotBox {
@@ -376,7 +416,7 @@ index 6c7b84708341698df42482cc97937ac1022ea9f7..76e7b98371cddd78f0c3e25d0576c883
  //# sourceMappingURL=index.d.cts.map
 \ No newline at end of file
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 3e3d2abc6506ab77d5afb36b26c984f722aa33e9..0a84e23caf5e9ce5dcb309f0c587bc1c99d25c23 100644
+index 3e3d2ab..0a84e23 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -50,7 +50,7 @@ interface SnapshotBox {
@@ -390,7 +430,7 @@ index 3e3d2abc6506ab77d5afb36b26c984f722aa33e9..0a84e23caf5e9ce5dcb309f0c587bc1c
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520261e4d1b 100644
+index 140d21c..4c6d4dc 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -418,6 +418,8 @@ var RasterStore = class {
@@ -438,7 +478,35 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  	if (handle.source?.kind === "bytes") return handle.source.bytes.byteLength;
  	if (handle.width !== void 0 && handle.height !== void 0) return handle.width * handle.height;
  	return 1;
-@@ -1086,6 +1096,7 @@ var TileManager = class {
+@@ -973,17 +983,13 @@ var TileManager = class {
+ 		if (state.planCache && state.planCache.demandKey === demandKey && state.planCache.version === state.version) return state.planCache.plan;
+ 		const paint = [];
+ 		const fetching = [];
+-		const stale = [];
+ 		const bleedPx = this.deps.getOptions().tiles.bleedPx;
+ 		for (const entry of state.entries.values()) {
+ 			const visiblePart = intersectRects$1(entry.rect, visible);
+ 			if (entry.resolved) {
+ 				if (visiblePart.width > 0 && visiblePart.height > 0) {
+-					const handle = this.deps.store.peek(entry.key);
+-					if (!handle) {
+-						stale.push(entry.key);
+-						continue;
+-					}
++					// Active tiles own their pixels independently of the bounded reuse cache.
++					const handle = entry.handle;
+ 					paint.push({
+ 						key: entry.key,
+ 						scale: entry.scale,
+@@ -994,7 +1000,6 @@ var TileManager = class {
+ 				}
+ 			} else if (entry.scale === wantScale) fetching.push(entry.key);
+ 		}
+-		for (const key of stale) state.entries.delete(key);
+ 		const rank = /* @__PURE__ */ new Map();
+ 		const scales = [...new Set(paint.map((source) => source.scale))];
+ 		for (const scale of scales.sort((left, right) => left - right)) rank.set(scale, rank.size);
+@@ -1086,6 +1091,7 @@ var TileManager = class {
  				state.entries.delete(key);
  			} else if (entry.scale === wantScale) state.entries.delete(key);
  		}
@@ -446,7 +514,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		const centerX = visible.x + visible.width / 2;
  		const centerY = visible.y + visible.height / 2;
  		const span = grid.tileSize / grid.scale;
-@@ -1111,6 +1122,27 @@ var TileManager = class {
+@@ -1111,6 +1117,27 @@ var TileManager = class {
  			};
  			this.pump();
  		};
@@ -474,7 +542,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		if (levelChanged && options.tiles.settleMs > 0) {
  			this.deps.debug?.(`arm settle page=${pageObjectNumber} level=${wantWidth}`);
  			state.queue = null;
-@@ -1139,7 +1171,8 @@ var TileManager = class {
+@@ -1139,7 +1166,8 @@ var TileManager = class {
  	*/
  	pump() {
  		const started = /* @__PURE__ */ new Map();
@@ -484,7 +552,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  			let next = null;
  			for (const state of this.pages.values()) {
  				const queued = this.nextToStart(state);
-@@ -1158,6 +1191,7 @@ var TileManager = class {
+@@ -1158,6 +1186,7 @@ var TileManager = class {
  	}
  	/** The first tile of the state's queue not started yet, nor failed at this level. */
  	nextToStart(state) {
@@ -492,7 +560,19 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		const queue = state.queue;
  		if (!queue) return null;
  		for (; queue.next < queue.coords.length; queue.next += 1) {
-@@ -1267,6 +1301,10 @@ var TileManager = class {
+@@ -1192,9 +1221,10 @@ var TileManager = class {
+ 		};
+ 		state.entries.set(key, entry);
+ 		state.planCache = null;
+-		this.deps.store.acquire(key, (signal) => this.deps.fetchTile(state.view, pageObjectNumber, bleedPt > 0 ? bleedRect(logical, bleedPt, page) : logical, grid.scale, layers, signal), abort.signal).then(() => {
++		this.deps.store.acquire(key, (signal) => this.deps.fetchTile(state.view, pageObjectNumber, bleedPt > 0 ? bleedRect(logical, bleedPt, page) : logical, grid.scale, layers, signal), abort.signal).then((handle) => {
+ 			this.releaseSlot(entry);
+ 			if (state.entries.get(key) === entry) {
++				entry.handle = handle;
+ 				entry.resolved = true;
+ 				state.version += 1;
+ 				state.planCache = null;
+@@ -1267,6 +1297,10 @@ var TileManager = class {
  		this.inFlight -= 1;
  	}
  	abortAll(state) {
@@ -503,7 +583,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		state.queue = null;
  		state.cancelSettle?.();
  		state.cancelSettle = null;
-@@ -1285,7 +1323,7 @@ var TileManager = class {
+@@ -1285,7 +1319,7 @@ var TileManager = class {
  	*  format under a live store. */
  	tileKey(pageObjectNumber, levelWidth, coord, layers, epoch) {
  		const { tiles } = this.deps.getOptions();
@@ -512,7 +592,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		const geometry = `g${tiles.size}.${tiles.bleedPx}${format ? `.${format}` : ""}`;
  		return `t:${pageObjectNumber}|w${levelWidth}|${coord.ix},${coord.iy}|${layersKeyOf(layers)}|e${epoch}|${geometry}`;
  	}
-@@ -1339,10 +1377,10 @@ const DEFAULT_BATCH_CONCURRENCY = 4;
+@@ -1339,10 +1373,10 @@ const DEFAULT_BATCH_CONCURRENCY = 4;
  * live handles and abort controllers); a re-plan wakes readers with
  * `ctx.notify()`.
  */
@@ -525,7 +605,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  	const appearances = new AppearanceStore();
  	const recentAppearances = new RecentPictures();
  	const invalidated = ctx.events.source();
-@@ -1440,15 +1478,16 @@ function createRenderController(ctx) {
+@@ -1440,15 +1474,16 @@ function createRenderController(ctx) {
  				const task = ctx.doc.with({
  					priority: "high",
  					...request.view !== void 0 ? { view: request.view } : {}
@@ -546,7 +626,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  			};
  			const drawnWhenHeld = (drawn) => isPending(drawn) ? whenHeld(drawn, storeSignal).then(() => draw(drawn)) : draw(drawn);
  			return drawnWhenHeld(copiedFrom(page) ?? page);
-@@ -1479,7 +1518,8 @@ function createRenderController(ctx) {
+@@ -1479,7 +1514,8 @@ function createRenderController(ctx) {
  		const layers = pictureLayers(options, "render.renderSource");
  		const viewport = conformViewport(page, scale);
  		const strategy = currentStrategy();
@@ -556,7 +636,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  			viewport,
  			layers,
  			format: strategy.format,
-@@ -1666,6 +1706,9 @@ function createRenderController(ctx) {
+@@ -1666,6 +1702,9 @@ function createRenderController(ctx) {
  	};
  	const tiles = new TileManager({
  		store,
@@ -566,7 +646,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		getOptions: resolvedOptions,
  		getPolicy: renderPolicy,
  		getPageSize: (pageObjectNumber) => ctx.getPage(toPageRef(pageObjectNumber))?.size,
-@@ -1679,7 +1722,7 @@ function createRenderController(ctx) {
+@@ -1679,7 +1718,7 @@ function createRenderController(ctx) {
  			const task = ctx.doc.with({
  				priority: "high",
  				view
@@ -575,7 +655,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  				target: {
  					kind: "rect",
  					rect
-@@ -1692,9 +1735,10 @@ function createRenderController(ctx) {
+@@ -1692,9 +1731,10 @@ function createRenderController(ctx) {
  				...strategy.format !== void 0 ? { format: strategy.format } : {},
  				...strategy.quality !== void 0 ? { quality: strategy.quality } : {}
  			});
@@ -589,7 +669,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  		},
  		onAdvance: wake,
  		debug: (message) => {
-@@ -1738,6 +1782,16 @@ function createRenderController(ctx) {
+@@ -1738,6 +1778,16 @@ function createRenderController(ctx) {
  				});
  				if (plan !== previous?.plan) ctx.notify();
  			},
@@ -606,7 +686,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  			getPlan: (page) => pages.get(page.objectNumber)?.plan ?? EMPTY_TILE_PLAN,
  			markPainted: (page, key) => tiles.sourcePainted(viewId, page.objectNumber, key),
  			markUnpainted: (page, key) => tiles.sourceUnpainted(viewId, page.objectNumber, key),
-@@ -1752,6 +1806,7 @@ function createRenderController(ctx) {
+@@ -1752,6 +1802,7 @@ function createRenderController(ctx) {
  				if (view.refs > 0) return;
  				for (const pageObjectNumber of [...view.pages.keys()]) tiles.releasePage(viewId, pageObjectNumber);
  				view.pages.clear();
@@ -614,7 +694,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  			}
  		};
  		views.set(viewId, {
-@@ -1761,6 +1816,14 @@ function createRenderController(ctx) {
+@@ -1761,6 +1812,14 @@ function createRenderController(ctx) {
  		});
  		return handle;
  	}
@@ -629,7 +709,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  	const paintSettings = memo(() => [resolvedOptions().tiles.enabled], (enabled) => Object.freeze({ tiles: enabled }));
  	ctx.listen(settings.api.onSettingsChanged, () => {
  		const shown = /* @__PURE__ */ new Set();
-@@ -1798,7 +1861,7 @@ function createRenderController(ctx) {
+@@ -1798,7 +1857,7 @@ function createRenderController(ctx) {
  			getSourceKey: (page, { scale, view: _view, thumbnail, ...options }) => {
  				if (thumbnail) return thumbnailKey(page.objectNumber, layersOf(options), currentStrategy().format, void 0);
  				const viewport = conformViewport(page, scale);
@@ -638,7 +718,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  			},
  			conformViewport,
  			getPaintSettings: paintSettings,
-@@ -1834,7 +1897,7 @@ function createRenderController(ctx) {
+@@ -1834,7 +1893,7 @@ function createRenderController(ctx) {
  * The interaction plugin is optional: with it, the plugin adds the
  * `snapshot` tool.
  */
@@ -647,7 +727,7 @@ index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520
  	id: "render",
  	scope: "document",
  	token: RenderToken$1,
-@@ -1845,7 +1908,7 @@ const renderPlugin = (config) => definePlugin({
+@@ -1845,7 +1904,7 @@ const renderPlugin = (config) => definePlugin({
  		registered: config,
  		whole: ["snapshot.box"]
  	},

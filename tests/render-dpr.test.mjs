@@ -12,12 +12,15 @@ registerHooks({
     if (specifier === '#platform') {
       return { url: 'data:text/javascript,export const platform = globalThis.__dprTestPlatform;', shortCircuit: true };
     }
-    return nextResolve(specifier, context);
+    return nextResolve(specifier === './energy-saving' ? './energy-saving.ts' : specifier, context);
   },
 });
 
 const queries = [];
+const windowEvents = new EventTarget();
 globalThis.window = {
+  addEventListener: windowEvents.addEventListener.bind(windowEvents),
+  removeEventListener: windowEvents.removeEventListener.bind(windowEvents),
   devicePixelRatio: 2,
   matchMedia(media) {
     const query = new EventTarget();

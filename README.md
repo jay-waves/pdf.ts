@@ -115,7 +115,10 @@ Page viewing uses raw RGBA → transferable worker buffer → Canvas for both th
 base raster and tiles. There is no viewer mode switch or BMP fallback. EmbedPDF's
 TileManager and RasterStore own scheduling, deduplication, LRU and retention;
 the React layer only paints and reports presentation. Tiles use 768-pixel edges
-with 2-pixel bleed. The viewer uses a 32 MiB raster cache, two concurrent tile
+with 2-pixel bleed and sqrt(2)-spaced resolution levels (0.5–128 device pixels
+per PDF point). Active tiles retain their raster references independently of
+cache eviction; the cache budget does not cap active pixels or Canvas memory.
+The viewer uses a 32 MiB raster cache, two concurrent tile
 requests per render controller, and a 60 ms fixed window that coalesces the newest
 demand during motion. This is a tile request limit, not a global Worker byte
 budget. Old tiles remain until replacement coverage is presented.

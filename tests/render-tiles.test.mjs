@@ -6,6 +6,7 @@ import { createTestContext, manualClock } from '@embedpdf/core/testing';
 import { AbortablePromise } from '@embedpdf/engine-core/runtime';
 import { toPageRef } from '@embedpdf/core';
 import { renderPlugin } from '@embedpdf/plugin-render';
+import { PDF_TILE_SCALES } from '../apps/renderer/tile-levels.ts';
 
 // Exercise the installed patched store, not a copied implementation. This test-only
 // export is deliberately tied to our version-pinned patch and never shipped.
@@ -55,10 +56,10 @@ test('last consumer cancels in-flight work; a late result cannot pollute replace
   assert.equal(store.size, 0); assert.equal(store.costUsed, 0);
 });
 
-function setup(t, plugin = renderPlugin, transport = {}) {
+function setup(t, plugin = renderPlugin, transport = {}, tileSettings = {}) {
   const clock = manualClock();
   const calls = [];
-  const definition = plugin({ fullPage: { maxWidth: 64 }, tiles: { size: 128, settleMs: 0, bleedPx: 2, prefetch: { margin: 0, velocityBias: false } } }, { rawPixels: true, ...transport });
+  const definition = plugin({ fullPage: { maxWidth: 64 }, tiles: { size: 128, settleMs: 0, bleedPx: 2, prefetch: { margin: 0, velocityBias: false }, ...tileSettings } }, { rawPixels: true, ...transport });
   const render = kind => options => AbortablePromise.run(async () => {
     calls.push({ kind, options });
     const area = options.target?.rect ?? { width: 612, height: 792 };
@@ -188,3 +189,68 @@ test('normal fixed window starts latest demand during continuous camera updates'
   assert.ok(f.calls.every(call => call.options.viewport.scale === 4), 'only latest demand starts');
   await f.drain(); view.destroy();
 });
+
+for (const [name, plugin] of [['ESM', renderPlugin], ['CJS', createRequire(import.meta.url)('@embedpdf/plugin-render').renderPlugin]]) {
+  test(`${name}: active tiles survive cache pressure without rerendering at rest`, async t => {
+    // Even a single tile exceeds this reuse budget. Active coverage must still converge.
+    const f = setup(t, plugin, { cacheBytes: 16, maxInFlight: 2 });
+    const view = f.api.createViewDemand('pressure');
+    const demand = { desiredDeviceWidth: 1224, visibleRect: { x: 0, y: 0, width: 150, height: 150 } };
+    view.setDemand(f.page, demand); await f.drain();
+    const initial = view.getPlan(f.page).paint;
+    assert.equal(initial.length, 9, 'all visible tiles survive eviction from the reuse cache');
+    initial.forEach(tile => view.markPainted(f.page, tile.key));
+    const count = f.calls.length;
+    for (let i = 0; i < 5; i++) {
+      view.setDemand(f.page, demand); await f.drain();
+      assert.deepEqual(view.getPlan(f.page).paint.map(tile => tile.key), initial.map(tile => tile.key));
+    view.getPlan(f.page).paint.forEach((tile, i) => assert.equal(tile.handle, initial[i].handle, 'reuse the same raster object, not a pixel copy'));
+    }
+    assert.equal(f.calls.length, count, 'stationary demand must not cycle evicted tiles');
+    view.setDemand(f.page, { ...demand, desiredDeviceWidth: 2448 }); await f.drain();
+    assert.ok(view.getPlan(f.page).paint.some(tile => tile.key === initial[0].key), 'retain previous coverage during zoom');
+    view.getPlan(f.page).paint.filter(tile => tile.scale === 4).forEach(tile => view.markPainted(f.page, tile.key));
+    await f.drain();
+    assert.equal(view.getPlan(f.page).paint.length, 25);
+    assert.ok(view.getPlan(f.page).paint.every(tile => tile.scale === 4));
+    view.destroy();
+  });
+}
+
+for (const [name, plugin] of [['ESM', renderPlugin], ['CJS', createRequire(import.meta.url)('@embedpdf/plugin-render').renderPlugin]]) {
+  test(`${name}: scale ladder reuses within a rung and on return, retaining coverage across rungs`, async t => {
+    const f = setup(t, plugin, { cacheBytes: 32 * 1024 * 1024, demandWindowMs: 60 }, { quantize: PDF_TILE_SCALES });
+    const view = f.api.createViewDemand('ladder');
+    const demand = { desiredDeviceWidth: 1224, visibleRect: { x: 0, y: 0, width: 150, height: 150 } };
+    async function zoom(scale) {
+      view.setDemand(f.page, { ...demand, desiredDeviceWidth: 612 * scale });
+      f.clock.advance(60); await f.drain();
+    }
+    await zoom(1.5);
+    const initial = view.getPlan(f.page).paint;
+    assert.ok(initial.length > 0 && initial.every(tile => tile.scale === 2));
+    initial.forEach(tile => view.markPainted(f.page, tile.key));
+    const count = f.calls.length;
+    for (const scale of [1.6, 1.8, 2, 1.5]) await zoom(scale);
+    assert.equal(f.calls.length, count, 'same rung must reuse the existing pixels');
+    assert.deepEqual(view.getPlan(f.page).paint.map(tile => tile.key), initial.map(tile => tile.key));
+    view.getPlan(f.page).paint.forEach((tile, i) => assert.equal(tile.handle, initial[i].handle, 'reuse the same raster object, not a pixel copy'));
+    await zoom(2.1);
+    const next = view.getPlan(f.page).paint;
+    assert.ok(next.some(tile => tile.scale === 2), 'old coverage stays until replacement paints');
+    const higher = next.filter(tile => tile.scale > 2);
+    assert.ok(higher.length > 0);
+    assert.ok(higher.every(tile => tile.scale === 2 ** 1.5));
+    higher.forEach(tile => view.markPainted(f.page, tile.key));
+    await f.drain();
+    assert.ok(view.getPlan(f.page).paint.every(tile => tile.scale > 2));
+    const afterCrossing = f.calls.length;
+    await zoom(1.8);
+    assert.equal(f.calls.length, afterCrossing, 'returning to the previous rung hits cache');
+    view.getPlan(f.page).paint.filter(tile => tile.scale === 2).forEach(tile => view.markPainted(f.page, tile.key));
+    await f.drain();
+    assert.deepEqual(view.getPlan(f.page).paint.map(tile => tile.key), initial.map(tile => tile.key));
+    view.getPlan(f.page).paint.forEach((tile, i) => assert.equal(tile.handle, initial[i].handle, 'reuse the same raster object, not a pixel copy'));
+    view.destroy();
+  });
+}

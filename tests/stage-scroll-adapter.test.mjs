@@ -86,9 +86,9 @@ test('reading-area tool cancels without fitting or creating PDF edits and commit
   const zoom = native.getZoomLevel();
   interaction.dispatchPointer(sample('down', 100, 100));
   interaction.dispatchPointer(sample('move', 300, 400));
-  assert.ok(stage.getSnapshot().regionPreview);
+  assert.ok(stage.getRegionPreview());
   interaction.dispatchPointer(sample('cancel', 300, 400));
-  assert.equal(stage.getSnapshot().regionPreview, null);
+  assert.equal(stage.getRegionPreview(), null);
   assert.equal(native.getZoomLevel(), zoom);
   interaction.dispatchPointer(sample('down', 100, 100));
   interaction.dispatchPointer(sample('move', 300, 400));
