@@ -105,6 +105,9 @@ settings:
   autoInstallPeers: false
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@embedpdf/plugin-render@3.0.0': 0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879
+
 importers:
 
   .:
@@ -153,7 +156,7 @@ importers:
         version: 3.0.0
       '@embedpdf/plugin-render':
         specifier: 3.0.0
-        version: 3.0.0
+        version: 3.0.0(patch_hash=0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879)
       '@embedpdf/plugin-selection':
         specifier: 3.0.0
         version: 3.0.0
@@ -2027,7 +2030,7 @@ snapshots:
       '@embedpdf/plugin-actions': 3.0.0
       '@embedpdf/plugin-fonts': 3.0.0
       '@embedpdf/plugin-interaction': 3.0.0
-      '@embedpdf/plugin-render': 3.0.0
+      '@embedpdf/plugin-render': 3.0.0(patch_hash=0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879)
       '@embedpdf/plugin-selection': 3.0.0
 
   '@embedpdf/plugin-attachment@3.0.0':
@@ -2044,7 +2047,7 @@ snapshots:
       '@embedpdf/plugin-annotation': 3.0.0
       '@embedpdf/plugin-i18n': 3.0.0
       '@embedpdf/plugin-interaction': 3.0.0
-      '@embedpdf/plugin-render': 3.0.0
+      '@embedpdf/plugin-render': 3.0.0(patch_hash=0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879)
       '@embedpdf/plugin-selection': 3.0.0
       '@embedpdf/plugin-shell': 3.0.0
       '@embedpdf/plugin-stage': 3.0.0
@@ -2070,7 +2073,7 @@ snapshots:
       '@embedpdf/plugin-annotation': 3.0.0
       '@embedpdf/plugin-fonts': 3.0.0
       '@embedpdf/plugin-interaction': 3.0.0
-      '@embedpdf/plugin-render': 3.0.0
+      '@embedpdf/plugin-render': 3.0.0(patch_hash=0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879)
       '@embedpdf/plugin-stage': 3.0.0
 
   '@embedpdf/plugin-history@3.0.0':
@@ -2133,7 +2136,7 @@ snapshots:
       '@embedpdf/plugin-search': 3.0.0
       '@embedpdf/plugin-selection': 3.0.0
 
-  '@embedpdf/plugin-render@3.0.0':
+  '@embedpdf/plugin-render@3.0.0(patch_hash=0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879)':
     dependencies:
       '@embedpdf/core': 3.0.0
       '@embedpdf/core-geometry': 3.0.0
@@ -2212,7 +2215,7 @@ snapshots:
       '@embedpdf/plugin-outline': 3.0.0
       '@embedpdf/plugin-page-edit': 3.0.0
       '@embedpdf/plugin-redaction': 3.0.0
-      '@embedpdf/plugin-render': 3.0.0
+      '@embedpdf/plugin-render': 3.0.0(patch_hash=0a85b7d8e41d50df9fe30c5451fae0120ac74b12e0eb7d18a7010a6dc70a6879)
       '@embedpdf/plugin-search': 3.0.0
       '@embedpdf/plugin-selection': 3.0.0
       '@embedpdf/plugin-shell': 3.0.0

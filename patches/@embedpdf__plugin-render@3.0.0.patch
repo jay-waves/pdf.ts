@@ -1,0 +1,658 @@
+diff --git a/dist/contract-hCcLRGkU.d.cts b/dist/contract-hCcLRGkU.d.cts
+index bed41681cccaac86396d276b7b60df7b9024b0b3..abb529ed673011fcdbb960d5cf9e2d5601e34ece 100644
+--- a/dist/contract-hCcLRGkU.d.cts
++++ b/dist/contract-hCcLRGkU.d.cts
+@@ -1,4 +1,4 @@
+-import { BatchResult, DeepPartial, EngineRenderPolicy, EventHook, EventOrigin, OperationOptions, PageImageHandle, PageImageOptions, PageRef, ResourceStatus, SettingsApi } from "@embedpdf/core";
++import { BatchResult, DeepPartial, EngineRenderPolicy, EventHook, EventOrigin, OperationOptions, PageImageHandle, PageRenderRaster, PageImageOptions, PageRef, ResourceStatus, SettingsApi } from "@embedpdf/core";
+ import { PageTransform, Rect, Rotation } from "@embedpdf/core-geometry";
+ //#region src/paint-plan.d.ts
+ /**
+@@ -37,7 +37,7 @@ interface TilePaintSource {
+   scale: number;
+   rect: Rect;
+   z: number;
+-  handle: PageImageHandle;
++  handle: PageImageHandle | PageRenderRaster;
+ }
+ /**
+  * What a tile plane paints right now. `paint` draws only from resolved
+diff --git a/dist/contract-hCcLRGkU.d.ts b/dist/contract-hCcLRGkU.d.ts
+index d93c1d40f44534b4c5bbe8b443af92e086d68149..ae549192f12b6282fa35d6288e35b04b91a590d1 100644
+--- a/dist/contract-hCcLRGkU.d.ts
++++ b/dist/contract-hCcLRGkU.d.ts
+@@ -1,4 +1,4 @@
+-import { BatchResult, DeepPartial, EngineRenderPolicy, EventHook, EventOrigin, OperationOptions, PageImageHandle, PageImageOptions, PageRef, ResourceStatus, SettingsApi } from "@embedpdf/core";
++import { BatchResult, DeepPartial, EngineRenderPolicy, EventHook, EventOrigin, OperationOptions, PageImageHandle, PageRenderRaster, PageImageOptions, PageRef, ResourceStatus, SettingsApi } from "@embedpdf/core";
+ import { PageTransform, Rect, Rotation } from "@embedpdf/core-geometry";
+ //#region src/paint-plan.d.ts
+ /**
+@@ -37,7 +37,7 @@ interface TilePaintSource {
+   scale: number;
+   rect: Rect;
+   z: number;
+-  handle: PageImageHandle;
++  handle: PageImageHandle | PageRenderRaster;
+ }
+ /**
+  * What a tile plane paints right now. `paint` draws only from resolved
+diff --git a/dist/host-contract-1kMniEqe.d.cts b/dist/host-contract-1kMniEqe.d.cts
+index 7a3525d80fe96854e9e64502dc7cef8c1a931eb8..083c8153af3b195684faa0d45e79568376296e79 100644
+--- a/dist/host-contract-1kMniEqe.d.cts
++++ b/dist/host-contract-1kMniEqe.d.cts
+@@ -1,5 +1,5 @@
+ import { A as TilePaintPlan, i as PageLayerOptions, k as PageViewDemand, l as PictureReport, p as RenderCapability, r as PageImage } from "./contract-hCcLRGkU.cjs";
+-import { AnnotationAppearanceImage, AnnotationRef, EventHook, OperationOptions, PageLayerRights, PageRef, PageRenderViewport, PluginErrorInfo } from "@embedpdf/core";
++import { AnnotationAppearanceImage, AnnotationRef, EventHook, OperationOptions, PageLayerRights, PageRef, PageRenderViewport, PageRenderRaster, PluginErrorInfo } from "@embedpdf/core";
+ import { Rect } from "@embedpdf/core-geometry";
+ //#region src/host-contract.d.ts
+ /** Layer-facing paint settings (resolved config the view layers need). Reference-stable. */
+@@ -35,6 +35,8 @@ interface RenderSourceOptions extends PageLayerOptions {
+  * `destroy`.
+  */
+ interface ViewDemand {
++  /** Pause new tile work while preserving resolved paint sources. Call setDemand to resume. */
++  setPaused(page: PageRef, paused: boolean): void;
+   /** What this view wants for a page right now. Idempotent; schedules the want set. */
+   setDemand(page: PageRef, demand: PageViewDemand, options?: PageLayerOptions): void;
+   /** The current paint plan for a page under this view's demand. Pure. */
+@@ -90,7 +92,7 @@ interface RenderHostCapability extends RenderCapability {
+    * ladder under a lattice — with same-key asks collapsing in the raster
+    * store. Layers key their fetch on {@link getSourceKey}.
+    */
+-  renderSource(page: PageRef, options: RenderSourceOptions & OperationOptions): Promise<PageImage>;
++  renderSource(page: PageRef, options: RenderSourceOptions & OperationOptions): Promise<PageImage | PageRenderRaster>;
+   /**
+    * The identity of the raster `renderSource` would produce — conformed
+    * width + the parts it draws + epoch (+ format), as one stable string.
+diff --git a/dist/host-contract-DIjZWyjI.d.ts b/dist/host-contract-DIjZWyjI.d.ts
+index 8ff30295faa4e5569d3419e5aae85be766c9226c..1b40cd485de8f6856f06303c84330dd464e63882 100644
+--- a/dist/host-contract-DIjZWyjI.d.ts
++++ b/dist/host-contract-DIjZWyjI.d.ts
+@@ -1,5 +1,5 @@
+ import { A as TilePaintPlan, i as PageLayerOptions, k as PageViewDemand, l as PictureReport, p as RenderCapability, r as PageImage } from "./contract-hCcLRGkU.js";
+-import { AnnotationAppearanceImage, AnnotationRef, EventHook, OperationOptions, PageLayerRights, PageRef, PageRenderViewport, PluginErrorInfo } from "@embedpdf/core";
++import { AnnotationAppearanceImage, AnnotationRef, EventHook, OperationOptions, PageLayerRights, PageRef, PageRenderViewport, PageRenderRaster, PluginErrorInfo } from "@embedpdf/core";
+ import { Rect } from "@embedpdf/core-geometry";
+ //#region src/host-contract.d.ts
+ /** Layer-facing paint settings (resolved config the view layers need). Reference-stable. */
+@@ -35,6 +35,8 @@ interface RenderSourceOptions extends PageLayerOptions {
+  * `destroy`.
+  */
+ interface ViewDemand {
++  /** Pause new tile work while preserving resolved paint sources. Call setDemand to resume. */
++  setPaused(page: PageRef, paused: boolean): void;
+   /** What this view wants for a page right now. Idempotent; schedules the want set. */
+   setDemand(page: PageRef, demand: PageViewDemand, options?: PageLayerOptions): void;
+   /** The current paint plan for a page under this view's demand. Pure. */
+@@ -90,7 +92,7 @@ interface RenderHostCapability extends RenderCapability {
+    * ladder under a lattice — with same-key asks collapsing in the raster
+    * store. Layers key their fetch on {@link getSourceKey}.
+    */
+-  renderSource(page: PageRef, options: RenderSourceOptions & OperationOptions): Promise<PageImage>;
++  renderSource(page: PageRef, options: RenderSourceOptions & OperationOptions): Promise<PageImage | PageRenderRaster>;
+   /**
+    * The identity of the raster `renderSource` would produce — conformed
+    * width + the parts it draws + epoch (+ format), as one stable string.
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 36974a03d65c72d0ef7463c4e03237113171e664..9e893dc7c2a919ca3cb79d926b66ae48f77ff7ed 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -419,6 +419,8 @@ var RasterStore = class {
+ 			used: ++this.tick
+ 		};
+ 		entry.promise = fetch(abort.signal).then((handle) => {
++			// An aborted/closed request may still settle. It no longer owns a cache slot.
++			if (this.entries.get(key) !== entry) return handle;
+ 			entry.handle = handle;
+ 			entry.cost = costOf(handle);
+ 			this.total += entry.cost;
+@@ -452,6 +454,7 @@ var RasterStore = class {
+ 		if (!signal) {
+ 			const release = () => {
+ 				entry.refs -= 1;
++				this.evict();
+ 			};
+ 			entry.promise.then(release, release);
+ 			return entry.promise;
+@@ -474,6 +477,7 @@ var RasterStore = class {
+ 				settled = true;
+ 				entry.refs -= 1;
+ 				signal.removeEventListener("abort", onAbort);
++				this.evict();
+ 				resolve(handle);
+ 			}, (error) => {
+ 				if (settled) return;
+@@ -484,6 +488,11 @@ var RasterStore = class {
+ 			});
+ 		});
+ 	}
++	clear() {
++		for (const entry of this.entries.values()) entry.abort.abort();
++		this.entries.clear();
++		this.total = 0;
++	}
+ 	/** Remove an entry, keeping the cost ledger honest. */
+ 	drop(key, entry) {
+ 		if (this.entries.get(key) !== entry) return;
+@@ -502,6 +511,7 @@ var RasterStore = class {
+ /** Approximate memory cost: encoded bytes when known, pixel count as a
+ *  decoded-order estimate for URL handles, 1 when nothing is known. */
+ function costOf(handle) {
++	if (handle.data instanceof ArrayBuffer) return handle.data.byteLength;
+ 	if (handle.source?.kind === "bytes") return handle.source.bytes.byteLength;
+ 	if (handle.width !== void 0 && handle.height !== void 0) return handle.width * handle.height;
+ 	return 1;
+@@ -1087,6 +1097,7 @@ var TileManager = class {
+ 				state.entries.delete(key);
+ 			} else if (entry.scale === wantScale) state.entries.delete(key);
+ 		}
++		if (state.paused) return;
+ 		const centerX = visible.x + visible.width / 2;
+ 		const centerY = visible.y + visible.height / 2;
+ 		const span = grid.tileSize / grid.scale;
+@@ -1112,6 +1123,27 @@ var TileManager = class {
+ 			};
+ 			this.pump();
+ 		};
++		// One fixed window coalesces camera updates; repeated plans never postpone
++		// it indefinitely. Keep the newest queue and cancel obsolete work above.
++		const demandWindowMs = typeof this.deps.demandWindowMs === "function" ? this.deps.demandWindowMs() : this.deps.demandWindowMs;
++		if (demandWindowMs > 0) {
++			const demandKey = [...wanted].join("|");
++			if (state.cancelDemand) { state.scheduledDemand = demandKey; state.pendingKickoff = kickoff; return; }
++			if (state.scheduledDemand !== demandKey) {
++				state.scheduledDemand = demandKey;
++				state.queue = null;
++				state.pendingKickoff = kickoff;
++				state.cancelDemand = this.deps.after(demandWindowMs, () => {
++					state.cancelDemand = null;
++					const latest = state.pendingKickoff;
++					state.pendingKickoff = null;
++					latest?.();
++				});
++				return;
++			}
++			kickoff();
++			return;
++		}
+ 		if (levelChanged && options.tiles.settleMs > 0) {
+ 			this.deps.debug?.(`arm settle page=${pageObjectNumber} level=${wantWidth}`);
+ 			state.queue = null;
+@@ -1140,7 +1172,8 @@ var TileManager = class {
+ 	*/
+ 	pump() {
+ 		const started = /* @__PURE__ */ new Map();
+-		while (this.inFlight < MAX_IN_FLIGHT) {
++		const maxInFlight = typeof this.deps.maxInFlight === "function" ? this.deps.maxInFlight() : this.deps.maxInFlight;
++		while (this.inFlight < (maxInFlight ?? MAX_IN_FLIGHT)) {
+ 			let next = null;
+ 			for (const state of this.pages.values()) {
+ 				const queued = this.nextToStart(state);
+@@ -1159,6 +1192,7 @@ var TileManager = class {
+ 	}
+ 	/** The first tile of the state's queue not started yet, nor failed at this level. */
+ 	nextToStart(state) {
++		if (state.paused) return null;
+ 		const queue = state.queue;
+ 		if (!queue) return null;
+ 		for (; queue.next < queue.coords.length; queue.next += 1) {
+@@ -1268,6 +1302,10 @@ var TileManager = class {
+ 		this.inFlight -= 1;
+ 	}
+ 	abortAll(state) {
++		state.cancelDemand?.();
++		state.cancelDemand = null;
++		state.pendingKickoff = null;
++		state.scheduledDemand = null;
+ 		state.queue = null;
+ 		state.cancelSettle?.();
+ 		state.cancelSettle = null;
+@@ -1286,7 +1324,7 @@ var TileManager = class {
+ 	*  format under a live store. */
+ 	tileKey(pageObjectNumber, levelWidth, coord, layers, epoch) {
+ 		const { tiles } = this.deps.getOptions();
+-		const format = this.strategy().format;
++		const format = this.deps.rawPixels ? "rgba" : this.strategy().format;
+ 		const geometry = `g${tiles.size}.${tiles.bleedPx}${format ? `.${format}` : ""}`;
+ 		return `t:${pageObjectNumber}|w${levelWidth}|${coord.ix},${coord.iy}|${layersKeyOf(layers)}|e${epoch}|${geometry}`;
+ 	}
+@@ -1340,10 +1378,10 @@ const DEFAULT_BATCH_CONCURRENCY = 4;
+ * live handles and abort controllers); a re-plan wakes readers with
+ * `ctx.notify()`.
+ */
+-function createRenderController(ctx) {
++function createRenderController(ctx, { rawPixels = false, cacheBytes, maxInFlight = MAX_IN_FLIGHT, demandWindowMs = 0 } = {}) {
+ 	const settings = ctx.settings();
+ 	const resolvedOptions = (0, _embedpdf_core.memo)(() => [settings.get()], (current) => require_contract.resolveRenderOptions(current));
+-	const store = new RasterStore();
++	const store = new RasterStore(cacheBytes);
+ 	const appearances = new AppearanceStore();
+ 	const recentAppearances = new RecentPictures();
+ 	const invalidated = ctx.events.source();
+@@ -1441,15 +1479,16 @@ function createRenderController(ctx) {
+ 				const task = ctx.doc.with({
+ 					priority: "high",
+ 					...request.view !== void 0 ? { view: request.view } : {}
+-				}).page(drawn).render.image({
++				}).page(drawn).render[request.raw ? "raw" : "image"]({
+ 					viewport: request.viewport,
+ 					...request.layers,
+ 					...request.format !== void 0 ? { format: request.format } : {},
+ 					...request.quality !== void 0 ? { quality: request.quality } : {}
+ 				});
+-				if (storeSignal.aborted) task.abort(reasonOf(storeSignal));
+-				else storeSignal.addEventListener("abort", () => task.abort(reasonOf(storeSignal)), { once: true });
+-				return task;
++				const abort = () => task.abort(reasonOf(storeSignal));
++				if (storeSignal.aborted) abort();
++				else storeSignal.addEventListener("abort", abort, { once: true });
++				return task.finally(() => storeSignal.removeEventListener("abort", abort));
+ 			};
+ 			const drawnWhenHeld = (drawn) => isPending(drawn) ? whenHeld(drawn, storeSignal).then(() => draw(drawn)) : draw(drawn);
+ 			return drawnWhenHeld(copiedFrom(page) ?? page);
+@@ -1480,7 +1519,8 @@ function createRenderController(ctx) {
+ 		const layers = pictureLayers(options, "render.renderSource");
+ 		const viewport = conformViewport(page, scale);
+ 		const strategy = currentStrategy();
+-		return acquireRaster(page, rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layers, strategy.format, void 0), {
++		return acquireRaster(page, rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layers, strategy.format, void 0) + (rawPixels ? "|rgba" : ""), {
++			raw: rawPixels,
+ 			viewport,
+ 			layers,
+ 			format: strategy.format,
+@@ -1667,6 +1707,9 @@ function createRenderController(ctx) {
+ 	};
+ 	const tiles = new TileManager({
+ 		store,
++		rawPixels,
++		maxInFlight,
++		demandWindowMs,
+ 		getOptions: resolvedOptions,
+ 		getPolicy: renderPolicy,
+ 		getPageSize: (pageObjectNumber) => ctx.getPage((0, _embedpdf_core.toPageRef)(pageObjectNumber))?.size,
+@@ -1680,7 +1723,7 @@ function createRenderController(ctx) {
+ 			const task = ctx.doc.with({
+ 				priority: "high",
+ 				view
+-			}).page(page).render.image({
++			}).page(page).render[rawPixels ? "raw" : "image"]({
+ 				target: {
+ 					kind: "rect",
+ 					rect
+@@ -1693,9 +1736,10 @@ function createRenderController(ctx) {
+ 				...strategy.format !== void 0 ? { format: strategy.format } : {},
+ 				...strategy.quality !== void 0 ? { quality: strategy.quality } : {}
+ 			});
+-			if (signal.aborted) task.abort(reasonOf(signal));
+-			else signal.addEventListener("abort", () => task.abort(reasonOf(signal)), { once: true });
+-			return task;
++			const abort = () => task.abort(reasonOf(signal));
++			if (signal.aborted) abort();
++			else signal.addEventListener("abort", abort, { once: true });
++			try { return await task; } finally { signal.removeEventListener("abort", abort); }
+ 		},
+ 		onAdvance: wake,
+ 		debug: (message) => {
+@@ -1739,6 +1783,16 @@ function createRenderController(ctx) {
+ 				});
+ 				if (plan !== previous?.plan) ctx.notify();
+ 			},
++			setPaused: (page, paused) => {
++				const state = tiles.pageState(page.objectNumber, viewId);
++				state.paused = paused;
++				if (paused) {
++					state.queue = null;
++					state.cancelDemand?.(); state.cancelDemand = null;
++					state.pendingKickoff = null; state.scheduledDemand = null;
++					state.cancelSettle?.(); state.cancelSettle = null;
++				}
++			},
+ 			getPlan: (page) => pages.get(page.objectNumber)?.plan ?? require_contract.EMPTY_TILE_PLAN,
+ 			markPainted: (page, key) => tiles.sourcePainted(viewId, page.objectNumber, key),
+ 			markUnpainted: (page, key) => tiles.sourceUnpainted(viewId, page.objectNumber, key),
+@@ -1753,6 +1807,7 @@ function createRenderController(ctx) {
+ 				if (view.refs > 0) return;
+ 				for (const pageObjectNumber of [...view.pages.keys()]) tiles.releasePage(viewId, pageObjectNumber);
+ 				view.pages.clear();
++				views.delete(viewId);
+ 			}
+ 		};
+ 		views.set(viewId, {
+@@ -1762,6 +1817,14 @@ function createRenderController(ctx) {
+ 		});
+ 		return handle;
+ 	}
++	ctx.cleanup(() => {
++		for (const [viewId, view] of views) {
++			for (const page of view.pages.keys()) tiles.releasePage(viewId, page);
++			view.pages.clear();
++		}
++		views.clear();
++		store.clear();
++	});
+ 	const paintSettings = (0, _embedpdf_core.memo)(() => [resolvedOptions().tiles.enabled], (enabled) => Object.freeze({ tiles: enabled }));
+ 	ctx.listen(settings.api.onSettingsChanged, () => {
+ 		const shown = /* @__PURE__ */ new Set();
+@@ -1799,7 +1862,7 @@ function createRenderController(ctx) {
+ 			getSourceKey: (page, { scale, view: _view, thumbnail, ...options }) => {
+ 				if (thumbnail) return thumbnailKey(page.objectNumber, layersOf(options), currentStrategy().format, void 0);
+ 				const viewport = conformViewport(page, scale);
+-				return rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layersOf(options), currentStrategy().format, void 0);
++				return rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layersOf(options), currentStrategy().format, void 0) + (rawPixels ? "|rgba" : "");
+ 			},
+ 			conformViewport,
+ 			getPaintSettings: paintSettings,
+@@ -1835,7 +1898,7 @@ function createRenderController(ctx) {
+ * The interaction plugin is optional: with it, the plugin adds the
+ * `snapshot` tool.
+ */
+-const renderPlugin = (config) => (0, _embedpdf_core.definePlugin)({
++const renderPlugin = (config, transport) => (0, _embedpdf_core.definePlugin)({
+ 	id: "render",
+ 	scope: "document",
+ 	token: require_contract_host.RenderToken,
+@@ -1846,7 +1909,7 @@ const renderPlugin = (config) => (0, _embedpdf_core.definePlugin)({
+ 		registered: config,
+ 		whole: ["snapshot.box"]
+ 	},
+-	create: createRenderController
++	create: (ctx) => createRenderController(ctx, transport)
+ });
+ //#endregion
+ exports.RENDER_DEFAULTS = require_contract.RENDER_DEFAULTS;
+diff --git a/dist/index.d.cts b/dist/index.d.cts
+index 6c7b84708341698df42482cc97937ac1022ea9f7..76e7b98371cddd78f0c3e25d0576c8836f03486c 100644
+--- a/dist/index.d.cts
++++ b/dist/index.d.cts
+@@ -50,7 +50,7 @@ interface SnapshotBox {
+  * The interaction plugin is optional: with it, the plugin adds the
+  * `snapshot` tool.
+  */
+-declare const renderPlugin: (config?: RenderConfig) => import("@embedpdf/core").PluginDefinition<RenderState, RenderHostCapability, RenderSettings>;
++declare const renderPlugin: (config?: RenderConfig, transport?: { rawPixels?: boolean; cacheBytes?: number; maxInFlight?: number | (() => number); demandWindowMs?: number | (() => number) }) => import("@embedpdf/core").PluginDefinition<RenderState, RenderHostCapability, RenderSettings>;
+ //#endregion
+ export { type FullPageSettings, InvalidateOptions, InvalidateScope, PageImage, PageLayerOptions, PageRender, type PageViewDemand, type PageViewDemand as ViewDemandInput, PaintedPicture, PicturePage, PicturePainter, PictureReport, PictureState, PictureStateChangedEvent, RENDER_DEFAULTS, RenderCapability, RenderConfig, RenderFormat, RenderInvalidatedEvent, RenderPageOptions, RenderPagesOptions, RenderSettings, RenderThumbnailOptions, RenderToken, SNAPSHOT_MAX_PIXELS, SNAPSHOT_TOOL, Snapshot, SnapshotBoxLook, SnapshotChangedEvent, SnapshotSettings, type TilesSettings, renderPlugin, samePageViewDemand };
+ //# sourceMappingURL=index.d.cts.map
+\ No newline at end of file
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 3e3d2abc6506ab77d5afb36b26c984f722aa33e9..0a84e23caf5e9ce5dcb309f0c587bc1c99d25c23 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -50,7 +50,7 @@ interface SnapshotBox {
+  * The interaction plugin is optional: with it, the plugin adds the
+  * `snapshot` tool.
+  */
+-declare const renderPlugin: (config?: RenderConfig) => import("@embedpdf/core").PluginDefinition<RenderState, RenderHostCapability, RenderSettings>;
++declare const renderPlugin: (config?: RenderConfig, transport?: { rawPixels?: boolean; cacheBytes?: number; maxInFlight?: number | (() => number); demandWindowMs?: number | (() => number) }) => import("@embedpdf/core").PluginDefinition<RenderState, RenderHostCapability, RenderSettings>;
+ //#endregion
+ export { type FullPageSettings, InvalidateOptions, InvalidateScope, PageImage, PageLayerOptions, PageRender, type PageViewDemand, type PageViewDemand as ViewDemandInput, PaintedPicture, PicturePage, PicturePainter, PictureReport, PictureState, PictureStateChangedEvent, RENDER_DEFAULTS, RenderCapability, RenderConfig, RenderFormat, RenderInvalidatedEvent, RenderPageOptions, RenderPagesOptions, RenderSettings, RenderThumbnailOptions, RenderToken, SNAPSHOT_MAX_PIXELS, SNAPSHOT_TOOL, Snapshot, SnapshotBoxLook, SnapshotChangedEvent, SnapshotSettings, type TilesSettings, renderPlugin, samePageViewDemand };
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
+diff --git a/dist/index.js b/dist/index.js
+index 140d21c06d4585b1afffea287a791284d3182d5a..bd878327d884ea1cfc903876f6153520261e4d1b 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -418,6 +418,8 @@ var RasterStore = class {
+ 			used: ++this.tick
+ 		};
+ 		entry.promise = fetch(abort.signal).then((handle) => {
++			// An aborted/closed request may still settle. It no longer owns a cache slot.
++			if (this.entries.get(key) !== entry) return handle;
+ 			entry.handle = handle;
+ 			entry.cost = costOf(handle);
+ 			this.total += entry.cost;
+@@ -451,6 +453,7 @@ var RasterStore = class {
+ 		if (!signal) {
+ 			const release = () => {
+ 				entry.refs -= 1;
++				this.evict();
+ 			};
+ 			entry.promise.then(release, release);
+ 			return entry.promise;
+@@ -473,6 +476,7 @@ var RasterStore = class {
+ 				settled = true;
+ 				entry.refs -= 1;
+ 				signal.removeEventListener("abort", onAbort);
++				this.evict();
+ 				resolve(handle);
+ 			}, (error) => {
+ 				if (settled) return;
+@@ -483,6 +487,11 @@ var RasterStore = class {
+ 			});
+ 		});
+ 	}
++	clear() {
++		for (const entry of this.entries.values()) entry.abort.abort();
++		this.entries.clear();
++		this.total = 0;
++	}
+ 	/** Remove an entry, keeping the cost ledger honest. */
+ 	drop(key, entry) {
+ 		if (this.entries.get(key) !== entry) return;
+@@ -501,6 +510,7 @@ var RasterStore = class {
+ /** Approximate memory cost: encoded bytes when known, pixel count as a
+ *  decoded-order estimate for URL handles, 1 when nothing is known. */
+ function costOf(handle) {
++	if (handle.data instanceof ArrayBuffer) return handle.data.byteLength;
+ 	if (handle.source?.kind === "bytes") return handle.source.bytes.byteLength;
+ 	if (handle.width !== void 0 && handle.height !== void 0) return handle.width * handle.height;
+ 	return 1;
+@@ -1086,6 +1096,7 @@ var TileManager = class {
+ 				state.entries.delete(key);
+ 			} else if (entry.scale === wantScale) state.entries.delete(key);
+ 		}
++		if (state.paused) return;
+ 		const centerX = visible.x + visible.width / 2;
+ 		const centerY = visible.y + visible.height / 2;
+ 		const span = grid.tileSize / grid.scale;
+@@ -1111,6 +1122,27 @@ var TileManager = class {
+ 			};
+ 			this.pump();
+ 		};
++		// One fixed window coalesces camera updates; repeated plans never postpone
++		// it indefinitely. Keep the newest queue and cancel obsolete work above.
++		const demandWindowMs = typeof this.deps.demandWindowMs === "function" ? this.deps.demandWindowMs() : this.deps.demandWindowMs;
++		if (demandWindowMs > 0) {
++			const demandKey = [...wanted].join("|");
++			if (state.cancelDemand) { state.scheduledDemand = demandKey; state.pendingKickoff = kickoff; return; }
++			if (state.scheduledDemand !== demandKey) {
++				state.scheduledDemand = demandKey;
++				state.queue = null;
++				state.pendingKickoff = kickoff;
++				state.cancelDemand = this.deps.after(demandWindowMs, () => {
++					state.cancelDemand = null;
++					const latest = state.pendingKickoff;
++					state.pendingKickoff = null;
++					latest?.();
++				});
++				return;
++			}
++			kickoff();
++			return;
++		}
+ 		if (levelChanged && options.tiles.settleMs > 0) {
+ 			this.deps.debug?.(`arm settle page=${pageObjectNumber} level=${wantWidth}`);
+ 			state.queue = null;
+@@ -1139,7 +1171,8 @@ var TileManager = class {
+ 	*/
+ 	pump() {
+ 		const started = /* @__PURE__ */ new Map();
+-		while (this.inFlight < MAX_IN_FLIGHT) {
++		const maxInFlight = typeof this.deps.maxInFlight === "function" ? this.deps.maxInFlight() : this.deps.maxInFlight;
++		while (this.inFlight < (maxInFlight ?? MAX_IN_FLIGHT)) {
+ 			let next = null;
+ 			for (const state of this.pages.values()) {
+ 				const queued = this.nextToStart(state);
+@@ -1158,6 +1191,7 @@ var TileManager = class {
+ 	}
+ 	/** The first tile of the state's queue not started yet, nor failed at this level. */
+ 	nextToStart(state) {
++		if (state.paused) return null;
+ 		const queue = state.queue;
+ 		if (!queue) return null;
+ 		for (; queue.next < queue.coords.length; queue.next += 1) {
+@@ -1267,6 +1301,10 @@ var TileManager = class {
+ 		this.inFlight -= 1;
+ 	}
+ 	abortAll(state) {
++		state.cancelDemand?.();
++		state.cancelDemand = null;
++		state.pendingKickoff = null;
++		state.scheduledDemand = null;
+ 		state.queue = null;
+ 		state.cancelSettle?.();
+ 		state.cancelSettle = null;
+@@ -1285,7 +1323,7 @@ var TileManager = class {
+ 	*  format under a live store. */
+ 	tileKey(pageObjectNumber, levelWidth, coord, layers, epoch) {
+ 		const { tiles } = this.deps.getOptions();
+-		const format = this.strategy().format;
++		const format = this.deps.rawPixels ? "rgba" : this.strategy().format;
+ 		const geometry = `g${tiles.size}.${tiles.bleedPx}${format ? `.${format}` : ""}`;
+ 		return `t:${pageObjectNumber}|w${levelWidth}|${coord.ix},${coord.iy}|${layersKeyOf(layers)}|e${epoch}|${geometry}`;
+ 	}
+@@ -1339,10 +1377,10 @@ const DEFAULT_BATCH_CONCURRENCY = 4;
+ * live handles and abort controllers); a re-plan wakes readers with
+ * `ctx.notify()`.
+ */
+-function createRenderController(ctx) {
++function createRenderController(ctx, { rawPixels = false, cacheBytes, maxInFlight = MAX_IN_FLIGHT, demandWindowMs = 0 } = {}) {
+ 	const settings = ctx.settings();
+ 	const resolvedOptions = memo(() => [settings.get()], (current) => resolveRenderOptions(current));
+-	const store = new RasterStore();
++	const store = new RasterStore(cacheBytes);
+ 	const appearances = new AppearanceStore();
+ 	const recentAppearances = new RecentPictures();
+ 	const invalidated = ctx.events.source();
+@@ -1440,15 +1478,16 @@ function createRenderController(ctx) {
+ 				const task = ctx.doc.with({
+ 					priority: "high",
+ 					...request.view !== void 0 ? { view: request.view } : {}
+-				}).page(drawn).render.image({
++				}).page(drawn).render[request.raw ? "raw" : "image"]({
+ 					viewport: request.viewport,
+ 					...request.layers,
+ 					...request.format !== void 0 ? { format: request.format } : {},
+ 					...request.quality !== void 0 ? { quality: request.quality } : {}
+ 				});
+-				if (storeSignal.aborted) task.abort(reasonOf(storeSignal));
+-				else storeSignal.addEventListener("abort", () => task.abort(reasonOf(storeSignal)), { once: true });
+-				return task;
++				const abort = () => task.abort(reasonOf(storeSignal));
++				if (storeSignal.aborted) abort();
++				else storeSignal.addEventListener("abort", abort, { once: true });
++				return task.finally(() => storeSignal.removeEventListener("abort", abort));
+ 			};
+ 			const drawnWhenHeld = (drawn) => isPending(drawn) ? whenHeld(drawn, storeSignal).then(() => draw(drawn)) : draw(drawn);
+ 			return drawnWhenHeld(copiedFrom(page) ?? page);
+@@ -1479,7 +1518,8 @@ function createRenderController(ctx) {
+ 		const layers = pictureLayers(options, "render.renderSource");
+ 		const viewport = conformViewport(page, scale);
+ 		const strategy = currentStrategy();
+-		return acquireRaster(page, rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layers, strategy.format, void 0), {
++		return acquireRaster(page, rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layers, strategy.format, void 0) + (rawPixels ? "|rgba" : ""), {
++			raw: rawPixels,
+ 			viewport,
+ 			layers,
+ 			format: strategy.format,
+@@ -1666,6 +1706,9 @@ function createRenderController(ctx) {
+ 	};
+ 	const tiles = new TileManager({
+ 		store,
++		rawPixels,
++		maxInFlight,
++		demandWindowMs,
+ 		getOptions: resolvedOptions,
+ 		getPolicy: renderPolicy,
+ 		getPageSize: (pageObjectNumber) => ctx.getPage(toPageRef(pageObjectNumber))?.size,
+@@ -1679,7 +1722,7 @@ function createRenderController(ctx) {
+ 			const task = ctx.doc.with({
+ 				priority: "high",
+ 				view
+-			}).page(page).render.image({
++			}).page(page).render[rawPixels ? "raw" : "image"]({
+ 				target: {
+ 					kind: "rect",
+ 					rect
+@@ -1692,9 +1735,10 @@ function createRenderController(ctx) {
+ 				...strategy.format !== void 0 ? { format: strategy.format } : {},
+ 				...strategy.quality !== void 0 ? { quality: strategy.quality } : {}
+ 			});
+-			if (signal.aborted) task.abort(reasonOf(signal));
+-			else signal.addEventListener("abort", () => task.abort(reasonOf(signal)), { once: true });
+-			return task;
++			const abort = () => task.abort(reasonOf(signal));
++			if (signal.aborted) abort();
++			else signal.addEventListener("abort", abort, { once: true });
++			try { return await task; } finally { signal.removeEventListener("abort", abort); }
+ 		},
+ 		onAdvance: wake,
+ 		debug: (message) => {
+@@ -1738,6 +1782,16 @@ function createRenderController(ctx) {
+ 				});
+ 				if (plan !== previous?.plan) ctx.notify();
+ 			},
++			setPaused: (page, paused) => {
++				const state = tiles.pageState(page.objectNumber, viewId);
++				state.paused = paused;
++				if (paused) {
++					state.queue = null;
++					state.cancelDemand?.(); state.cancelDemand = null;
++					state.pendingKickoff = null; state.scheduledDemand = null;
++					state.cancelSettle?.(); state.cancelSettle = null;
++				}
++			},
+ 			getPlan: (page) => pages.get(page.objectNumber)?.plan ?? EMPTY_TILE_PLAN,
+ 			markPainted: (page, key) => tiles.sourcePainted(viewId, page.objectNumber, key),
+ 			markUnpainted: (page, key) => tiles.sourceUnpainted(viewId, page.objectNumber, key),
+@@ -1752,6 +1806,7 @@ function createRenderController(ctx) {
+ 				if (view.refs > 0) return;
+ 				for (const pageObjectNumber of [...view.pages.keys()]) tiles.releasePage(viewId, pageObjectNumber);
+ 				view.pages.clear();
++				views.delete(viewId);
+ 			}
+ 		};
+ 		views.set(viewId, {
+@@ -1761,6 +1816,14 @@ function createRenderController(ctx) {
+ 		});
+ 		return handle;
+ 	}
++	ctx.cleanup(() => {
++		for (const [viewId, view] of views) {
++			for (const page of view.pages.keys()) tiles.releasePage(viewId, page);
++			view.pages.clear();
++		}
++		views.clear();
++		store.clear();
++	});
+ 	const paintSettings = memo(() => [resolvedOptions().tiles.enabled], (enabled) => Object.freeze({ tiles: enabled }));
+ 	ctx.listen(settings.api.onSettingsChanged, () => {
+ 		const shown = /* @__PURE__ */ new Set();
+@@ -1798,7 +1861,7 @@ function createRenderController(ctx) {
+ 			getSourceKey: (page, { scale, view: _view, thumbnail, ...options }) => {
+ 				if (thumbnail) return thumbnailKey(page.objectNumber, layersOf(options), currentStrategy().format, void 0);
+ 				const viewport = conformViewport(page, scale);
+-				return rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layersOf(options), currentStrategy().format, void 0);
++				return rasterKey(page.objectNumber, viewport.kind === "width" ? viewport.width : 0, layersOf(options), currentStrategy().format, void 0) + (rawPixels ? "|rgba" : "");
+ 			},
+ 			conformViewport,
+ 			getPaintSettings: paintSettings,
+@@ -1834,7 +1897,7 @@ function createRenderController(ctx) {
+ * The interaction plugin is optional: with it, the plugin adds the
+ * `snapshot` tool.
+ */
+-const renderPlugin = (config) => definePlugin({
++const renderPlugin = (config, transport) => definePlugin({
+ 	id: "render",
+ 	scope: "document",
+ 	token: RenderToken$1,
+@@ -1845,7 +1908,7 @@ const renderPlugin = (config) => definePlugin({
+ 		registered: config,
+ 		whole: ["snapshot.box"]
+ 	},
+-	create: createRenderController
++	create: (ctx) => createRenderController(ctx, transport)
+ });
+ //#endregion
+ export { RENDER_DEFAULTS, RenderToken, SNAPSHOT_MAX_PIXELS, SNAPSHOT_TOOL, renderPlugin, samePageViewDemand };

@@ -115,15 +115,9 @@ func (app *App) handleDraft(resource *Resource, response http.ResponseWriter, re
 		writeJSONError(response, http.StatusBadRequest, "invalid_draft", "Invalid pdf.ts .swp draft.")
 		return
 	}
-	current, err := fileVersion(resource.path)
-	if err != nil {
-		writeMutationError(response, err, "draft_failed")
-		return
-	}
-	if current != envelope.BaseVersion {
-		writeJSONError(response, http.StatusConflict, "version_conflict", "The PDF changed before its draft could be saved.")
-		return
-	}
+	// A draft retains its original baseVersion even if the PDF changes externally.
+	// Only the sidecar version is compared here. Recovery and PDF replacement
+	// validate the base before applying edits or overwriting the document.
 	if err := writeDraft(path, incoming); err != nil {
 		writeMutationError(response, err, "draft_failed")
 		return

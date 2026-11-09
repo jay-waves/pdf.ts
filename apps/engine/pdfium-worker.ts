@@ -1,5 +1,5 @@
 import type { DraftLocation, PdfWriteResult } from '../shared/pdf-file';
-import { encodeEngineResult } from './engine-wire';
+import { encodeEngineResult, engineResultTransfers, ownEngineResponseBuffer } from './engine-wire';
 import type { LocalEngineRecipeOptions } from '@embedpdf/engine';
 import { createNativeRuntime } from './native-runtime';
 import type { PdfFontFallbackConfig } from '../fonts/types';
@@ -12,7 +12,28 @@ type Request = { type: string; id: string; documentId?: string; method?: string;
 type Session = { key: string; port: Endpoint; documents: Set<string>; closed: boolean; lease: AbortController; theme: PdfRenderTheme | null };
 const sessions = new Set<Session>();
 let host: SharedDocumentHost | undefined;
-let native: Awaited<ReturnType<typeof createNativeRuntime>>;
+let native: Awaited<ReturnType<typeof createNativeRuntime>> | undefined;
+let runtimeOptions: Request['options'];
+let runtimeGeneration = 0;
+const RUNTIME_IDLE_MS = 10_000;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+function cancelIdleRelease() { clearTimeout(idleTimer); idleTimer = undefined; }
+function canReleaseRuntime() {
+  return !!native && !host?.all().length && !closing.size && !writes.size && !pendingKeys.size && !active.size;
+}
+function scheduleIdleRelease() {
+  if (idleTimer !== undefined || !canReleaseRuntime()) return;
+  idleTimer = setTimeout(() => {
+    idleTimer = undefined;
+    void run(async () => {
+      if (!canReleaseRuntime()) return;
+      const previous = native!;
+      // Release all roots; the connected ports can reopen a fresh runtime later.
+      host = undefined; native = undefined; initializing = undefined; currentTheme = null;
+      await previous.engine.destroy();
+    }).catch(error => console.error('[pdf-ts] Idle runtime cleanup failed', error));
+  }, RUNTIME_IDLE_MS);
+}
 let initializing: Promise<void> | undefined;
 let currentTheme: PdfRenderTheme | null = null;
 let serial = Promise.resolve();
@@ -36,33 +57,41 @@ function security(doc: LocalDocumentHandle) {
 }
 function initialize(options?: LocalEngineRecipeOptions & { fontFallback?: PdfFontFallbackConfig | null }) {
   return initializing ??= (async () => {
-    native = await createNativeRuntime(options ?? {}, () => currentTheme);
+    runtimeOptions ??= options ?? {};
+    native = await createNativeRuntime(runtimeOptions, () => currentTheme);
+    runtimeGeneration++;
     host = new SharedDocumentHost(native.engine, { run, notify,
-      protect: (bytes, sourcePassword, password) => native.protect(bytes, sourcePassword, password),
+      protect: (bytes, sourcePassword, password) => native!.protect(bytes, sourcePassword, password),
       event: (id: string, event: DocumentEvent) => broadcast(id, { type: 'documentEvent', documentId: id, event, security: security(host!.document(id)!) }) });
   })();
 }
 function releaseDocument(id: string) {
   if ([...sessions].some(s => !s.closed && s.documents.has(id))) return Promise.resolve();
   const existing = closing.get(id); if (existing) return existing;
-  const task = serial.then(() => host!.close(id)).finally(() => { closing.delete(id); });
+  const task = serial.then(() => host!.close(id)).finally(() => { closing.delete(id); scheduleIdleRelease(); });
   closing.set(id, task); return task;
 }
 async function closeSession(s: Session) {
   if (s.closed) return; s.closed = true; sessions.delete(s); s.lease.abort(); native?.fonts?.releaseDiagnosticContext(s.key);
   for (const [id, w] of writes) if (w.session === s) { w.reject(new Error('The saving tab closed.')); writes.delete(id); }
   for (const id of s.documents) await releaseDocument(id);
+  s.documents.clear(); scheduleIdleRelease();
 }
 async function dispatch(s: Session, req: Request) {
   if (cancelled.delete(`${s.key}:${req.id}`)) throw Object.assign(new Error('PDF operation cancelled.'), { code: 'Aborted' });
+  if (s.closed) throw new Error('PDF session is closed.');
   const args = req.args ?? [];
-  currentTheme = s.theme; native.fonts?.setDiagnosticContext(s.key);
+  if (req.type === 'runtimeDiagnostics') return { active: !!native, generation: runtimeGeneration, documents: host?.all().length ?? 0, idleMs: RUNTIME_IDLE_MS,
+    parsedPageBudgetBytes: 64 * 1024 * 1024, decodedImageBudgetBytes: 32 * 1024 * 1024 };
+  if (req.type === 'open') await initialize();
+  currentTheme = s.theme; native?.fonts?.setDiagnosticContext(s.key);
   if (req.type === 'theme') { s.theme = args[0] as PdfRenderTheme | null; return true; }
-  if (req.type === 'fontDiagnostics') return native.fonts?.getDiagnostics() ?? [];
+  if (req.type === 'fontDiagnostics') return native?.fonts?.getDiagnostics() ?? [];
   if (req.type === 'open') {
-    native.fonts?.resetDiagnostics();
+    native!.fonts?.resetDiagnostics();
     const [input, options, identity, location] = args as [OpenInput, OpenOptions | undefined, SharedFileIdentity, DraftLocation | undefined];
     const doc = await host!.open(identity, input, options, location);
+    if (s.closed) { void releaseDocument(doc.id); throw new Error('PDF session closed while opening.'); }
     s.documents.add(doc.id);
     return { id: doc.id, security: security(doc), snapshot: host!.state(doc.id) };
   }
@@ -108,6 +137,9 @@ async function dispatch(s: Session, req: Request) {
       host!.unlocked(id, (args[0] as { password: string }).password);
       broadcast(id, { type: 'securityState', documentId: id, security: security(doc) });
     }
+    // Local render.raw() returns a fresh standalone raster; only this owned
+    // allocation may be detached. Other SDK result buffers remain borrowed.
+    if (req.method === 'raw' && req.path?.at(-1) === 'render' && result?.data instanceof ArrayBuffer) ownEngineResponseBuffer(result.data);
     return encodeEngineResult(result);
   } finally { active.delete(`${s.key}:${req.id}`); }
 }
@@ -116,7 +148,8 @@ function connect(port: Endpoint) {
   port.onmessage = (event: MessageEvent<Request>) => {
     const req = event.data;
     if (req.type === 'init') {
-      void initialize(req.options).then(() => port.postMessage({ type: 'ready' }), error => port.postMessage({ type: 'error', error: String(error) }));
+      cancelIdleRelease();
+      void run(() => initialize(req.options)).then(() => { port.postMessage({ type: 'ready' }); scheduleIdleRelease(); }, error => port.postMessage({ type: 'error', error: String(error) }));
       if (req.lease) void navigator.locks.request(req.lease, { signal: s.lease.signal }, () => closeSession(s)).catch(() => {});
       return;
     }
@@ -129,14 +162,15 @@ function connect(port: Endpoint) {
       const w = writes.get(req.id); if (!w || w.session !== s) return; writes.delete(req.id);
       if (req.error) w.reject(new Error(req.error)); else w.resolve(req.result!); return;
     }
+    if (req.type !== 'runtimeDiagnostics') cancelIdleRelease();
     pendingKeys.add(`${s.key}:${req.id}`);
     // Saves wait on the disk lane outside the native operation lane, so other tabs can edit.
     const task = req.type === 'save' || req.type === 'close' ? dispatch(s, req)
       : req.type === 'open' ? Promise.all([...closing.values()]).then(() => run(() => dispatch(s, req)))
       : run(() => dispatch(s, req));
-    void task.then(result => { if (!s.closed) port.postMessage({ type: 'result', id: req.id, result }); }).catch(error => {
+    void task.then(result => { if (!s.closed) port.postMessage({ type: 'result', id: req.id, result }, engineResultTransfers(result)); }).catch(error => {
       if (!s.closed) port.postMessage({ type: 'result', id: req.id, error: { message: error?.message ?? String(error), code: error?.code, details: error?.details } });
-    }).finally(() => { const key = `${s.key}:${req.id}`; pendingKeys.delete(key); cancelled.delete(key); });
+    }).finally(() => { const key = `${s.key}:${req.id}`; pendingKeys.delete(key); cancelled.delete(key); scheduleIdleRelease(); });
   };
   port.start?.();
 }

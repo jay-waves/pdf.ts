@@ -74,3 +74,26 @@ func TestReadableRouteLoadsViewer(t *testing.T) {
 		}
 	}
 }
+
+func TestViewerAssetCachePolicy(t *testing.T) {
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	writer.Write([]byte("asset"))
+	writer.Close()
+	files := fstest.MapFS{}
+	for _, name := range []string{"index.html", "assets/embedpdf-BzwSuc3l.wasm", "assets/app.js"} {
+		files[name+".gz"] = &fstest.MapFile{Data: compressed.Bytes()}
+	}
+	handler := newViewerAssetHandler(files)
+	for _, tc := range []struct{ path, want string }{
+		{"/", "no-cache"}, {"/read/document.pdf", "no-cache"},
+		{"/assets/app.js", "no-cache"},
+		{"/assets/embedpdf-BzwSuc3l.wasm", "public, max-age=31536000, immutable"},
+	} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest("GET", tc.path, nil))
+		if got := response.Header().Get("Cache-Control"); got != tc.want {
+			t.Fatalf("%s: %q", tc.path, got)
+		}
+	}
+}

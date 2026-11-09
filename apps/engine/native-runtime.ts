@@ -1,3 +1,4 @@
+import { ownEngineResponseBuffer } from './engine-wire';
 import { LocalEngine, PortableImageEncoder, type Transport, type WorkerResponse } from '@embedpdf/engine';
 import { createPdfRuntime, toWrappedPdfiumModule, type PdfRuntimeModule, type Ptr } from '@embedpdf/engine-runtime';
 import { WorkerHost, ensureInitialized, openFatMemoryDocument } from '@embedpdf/engine-services';
@@ -32,22 +33,41 @@ export async function createNativeRuntime(options: { wasmUrl?: string; fontFallb
   const fonts = options.fontFallback ? new PdfiumFontFallbackManager(options.fontFallback, () => {}) : null;
   if (fonts) fonts.initialize(toWrappedPdfiumModule(runtime) as Parameters<typeof fonts.initialize>[0], (data, pointer) => runtime.mem.writeBytes(BigInt(pointer) as Ptr, data));
   const listeners = new Set<(value: WorkerResponse) => void>();
-  const host = new WorkerHost(runtime, pack => { for (const listener of listeners) listener(pack.payload); });
+  const host = new WorkerHost(runtime, pack => { for (const listener of listeners) listener(pack.payload); }, {
+    parsedPageBudgetBytes: 64 * 1024 * 1024,
+    decodedImageBudgetBytes: 32 * 1024 * 1024,
+  });
   const transport: Transport = { send: pack => host.receive(pack.payload), onMessage: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    terminate: async () => { fonts?.disable(); await runtime.destroy(); } };
+    terminate: async () => {
+      // EmbedPDF 3.0 shutdown closes pages but leaves its 30s residency timer
+      // holding the runtime. Cancel that final root before dropping the heap.
+      (host as unknown as { residency: { disarmTimer(): void } }).residency.disarmTimer();
+      fonts?.disable(); await runtime.destroy(); listeners.clear();
+    } };
   const engine = LocalEngine.fromTransport({ transport, imageEncoder: { async encode(raster, options, signal) {
-    if (options.format === 'bmp') return new PortableImageEncoder().encode(raster, options, signal);
+    if (options.format === 'bmp') {
+      const image = await new PortableImageEncoder().encode(raster, options, signal);
+      if (image.source.kind === 'bytes' && image.source.bytes.buffer instanceof ArrayBuffer) ownEngineResponseBuffer(image.source.bytes.buffer);
+      return image;
+    }
     signal.throwIfAborted();
     const canvas = new OffscreenCanvas(raster.width, raster.height);
     const context = canvas.getContext('2d'); if (!context) throw new Error('Offscreen image encoding is unavailable.');
-    const pixels = new Uint8ClampedArray(raster.width * raster.height * 4);
-    const source = new Uint8Array(raster.data);
-    for (let row = 0; row < raster.height; row++) pixels.set(source.subarray(row * raster.stride, row * raster.stride + raster.width * 4), row * raster.width * 4);
+    const rowBytes = raster.width * 4;
+    const pixels = raster.stride === rowBytes
+      ? new Uint8ClampedArray(raster.data, 0, rowBytes * raster.height)
+      : new Uint8ClampedArray(rowBytes * raster.height);
+    if (raster.stride !== rowBytes) {
+      const source = new Uint8Array(raster.data);
+      for (let row = 0; row < raster.height; row++) pixels.set(source.subarray(row * raster.stride, row * raster.stride + rowBytes), row * rowBytes);
+    }
     context.putImageData(new ImageData(pixels, raster.width, raster.height), 0, 0);
     const format = options.format ?? 'png'; const mimeType = format === 'webp' ? 'image/webp' : 'image/png';
     const blob = await canvas.convertToBlob({ type: mimeType, quality: options.quality });
     signal.throwIfAborted();
-    return { width: raster.width, height: raster.height, format, mimeType, source: { kind: 'bytes' as const, bytes: new Uint8Array(await blob.arrayBuffer()) } };
+    const buffer = await blob.arrayBuffer();
+    ownEngineResponseBuffer(buffer);
+    return { width: raster.width, height: raster.height, format, mimeType, source: { kind: 'bytes' as const, bytes: new Uint8Array(buffer) } };
   } } });
   return { engine, fonts,
     protect(bytes: Uint8Array, sourcePassword: string | undefined, password: string | null) {

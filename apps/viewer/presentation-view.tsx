@@ -36,7 +36,7 @@ export function PresentationView({ documentId, pageNumber, onNavigate, onExit }:
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: ownWidth * scale, height: ownHeight * scale,
           transform: `translate(-50%, -50%) rotate(${viewRotation}deg)` }}>
           <PageView documentId={documentId} page={page.ref} width={ownWidth * scale}>
-            <RenderLayer tiles={false} />
+            <RenderLayer layers="flattened" />
           </PageView>
         </div>
       </div> : null}

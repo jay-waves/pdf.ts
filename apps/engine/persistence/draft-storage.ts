@@ -1,6 +1,5 @@
 import { get, set } from 'idb-keyval';
 import { sha256 } from 'hash-wasm';
-import { fingerprintFile } from '../../shared/file-fingerprint';
 import type { DraftLocation } from '../../shared/pdf-file';
 export interface StoredDraft { text: string | null; version: string }
 export interface DraftStorage {
@@ -19,7 +18,7 @@ export async function openDraftStorage(identity: string | FileSystemFileHandle, 
       const response = await fetch(endpoint, { method, cache: 'no-store', body: text,
         headers: { ...(expected ? { 'If-Match': `"${expected}"` } : {}),
           ...(text ? { 'Content-Type': 'application/json', 'X-Pdf-Ts-Version': baseVersion! } : {}) } });
-      if (response.status === 409 || response.status === 412) throw new DraftConflict('The PDF or its .swp draft changed elsewhere. Your edits have not overwritten it.');
+      if (response.status === 409 || response.status === 412) throw new DraftConflict('The .swp draft changed elsewhere. Your edits have not overwritten it.');
       if (!response.ok) throw new Error(`Could not ${method === 'GET' ? 'read' : 'save'} the .swp draft (${response.status}).`);
       return response;
     };
@@ -46,10 +45,9 @@ export async function openDraftStorage(identity: string | FileSystemFileHandle, 
   const lock = <T>(operation: () => Promise<T>) => navigator.locks.request(`pdf-ts-draft:${name}`, operation);
   return {
     read: () => lock(read),
-    write: (text, expected, baseVersion) => lock(async () => {
-      if (typeof identity !== 'string' && await fingerprintFile(await identity.getFile()) !== baseVersion) {
-        throw new DraftConflict('The PDF changed since the draft was opened.');
-      }
+    // Preserve edits against their original base even if the PDF changes externally.
+    // Recovery and PDF replacement validate the base; draft writes only CAS the sidecar.
+    write: (text, expected) => lock(async () => {
       if ((await read()).version !== expected) throw new DraftConflict('The browser draft changed in another session.');
       const writer = await (await directory.getFileHandle(name, { create: true })).createWritable();
       try { await writer.write(text); await writer.close(); } catch (error) { await writer.abort().catch(() => {}); throw error; }

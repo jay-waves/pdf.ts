@@ -10,7 +10,7 @@ import { AbortablePromise, type LocalEngine, type LocalDocumentHandle, type Open
 import { captureBaseline, buildDraft, restoreDraft, type DraftBaseline, type DraftState } from './persistence/document-draft';
 import { DraftSession } from './persistence/draft-session';
 import { DraftConflict, openDraftStorage } from './persistence/draft-storage';
-import { DocumentSaveCoordinator } from './persistence/document-save';
+import { DocumentSaveCoordinator, ownedPdfBuffer } from './persistence/document-save';
 export type SharedFileIdentity = string | FileSystemFileHandle;
 export type SharedDocumentSnapshot = DraftState & {
   documentId: string; sessionKey: string; revision: number; savedRevision: number; diskVersion: string; saving: boolean;
@@ -127,7 +127,9 @@ export class SharedDocumentHost {
         const pdf = await this.callbacks.run(async () => {
           const output = await e.document.download({ mode: 'rewrite' });
           const baseline = e.baseline ? await captureBaseline(e.document) : undefined;
-          return { data: output.slice().buffer, hash: await sha256(output), revision: e.revision, baseline,
+          // download owns these bytes; reuse a full standalone buffer for transfer.
+          const data = ownedPdfBuffer(output);
+          return { data, hash: await sha256(output), revision: e.revision, baseline,
             draft: baseline && e.baseline ? await buildDraft(e.document, e.persistence.diskVersion, e.revision, e.baseline, baseline) : undefined };
         });
         if (pdf.draft) await e.draft.beforeMerge(pdf.draft, pdf.hash);

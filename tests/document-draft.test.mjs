@@ -3,10 +3,10 @@ import test from 'node:test';
 import { annotationKey, localEngine } from '@embedpdf/engine';
 const { buildDraft, captureBaseline, restoreDraft, encodeDraft, decodeDraft } = await import('../apps/engine/persistence/document-draft.ts');
 import { fixture } from '../scripts/pdf-editing-fixture.mjs';
-async function setup(t) {
+async function setup(t, options = {}) {
   const engine = localEngine({ runtime: { prefer: 'wasm' }, defaultFallbackFonts: false });
   t.after(() => engine.destroy());
-  const bytes = fixture({ notes: true });
+  const bytes = fixture({ notes: true, ...options });
   const doc = await engine.open({ kind: 'bytes', bytes });
   return { engine, doc, bytes, baseline: await captureBaseline(doc) };
 }
@@ -89,4 +89,25 @@ test('draft preserves checkbox and multi-select values through native form value
   const fields = (await reopened.forms.list()).fields;
   assert.equal(fields.find(f => f.name === 'Agree').checked, true);
   assert.deepEqual(fields.find(f => f.name === 'Choices').selectedValues, ['A', 'C']);
+});
+
+
+test('repeated small annotation drafts stay bounded instead of embedding the PDF or accumulating history', async t => {
+  const { doc, bytes, baseline } = await setup(t, { content: '% padding to expose accidental PDF embedding\n'.repeat(8192) });
+  const original = Uint8Array.from(bytes);
+  const note = baseline.annotations[0];
+  let firstSize;
+  for (const contents of ['小批注', 'a longer annotation', '小批注', '小批注']) {
+    await doc.page(note.page).annotations.update(note.ref, { contents });
+    const snapshot = await buildDraft(doc, 'base', 1, baseline);
+    // Normalize the timestamp so the same net edit must serialize identically in size.
+    snapshot.updatedAt = '2026-01-01T00:00:00Z';
+    const encoded = encodeDraft(snapshot);
+    const size = Buffer.byteLength(encoded, 'utf8');
+    assert.ok(size < 16 * 1024, `one small note produced an unexpectedly large draft: ${size} bytes`);
+    assert.equal(snapshot.bundle.items.length, 1, 'only the changed note belongs in this draft');
+    if (firstSize === undefined) firstSize = size;
+    else if (contents === '小批注') assert.equal(size, firstSize, 'returning to the same net edit must not accumulate history');
+    assert.deepEqual(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), original, 'draft capture must not mutate original PDF bytes');
+  }
 });

@@ -1,16 +1,17 @@
 /**
- * Native RenderLayer owns base/tile retention, invalidation, cancellation and
- * image lifetime. This viewer wrapper reports startup and exposes a raster container
- * for replacement paint checks; it must not mutate SDK image elements.
+ * The SDK owns the base/tile plan; Canvas only presents its raw pixels. This viewer wrapper reports startup and exposes a raster container
+ * for replacement paint checks; the render plan remains the single authority.
  */
+import { CanvasRenderLayer } from '../renderer/canvas-render-layer';
 import { useEffect } from 'react';
-import { RenderLayer as NativeRenderLayer, usePictureState } from '@embedpdf/react/render';
+import { usePictureState } from '@embedpdf/react/render';
 import { usePage } from '@embedpdf/react/runtime';
 import { completeStartupLog, writeStartupLogOnce } from './startup-log';
 
-/** v3 owns the retained base/tile planes and their cancellation and URL lifetime. */
-export function RenderLayer({ tiles = true }: {
+/** v3 owns the retained base/tile planes and their cancellation and raster lifetime. */
+export function RenderLayer({ tiles = true, layers = 'overlays' }: {
   tiles?: boolean;
+  layers?: 'overlays' | 'flattened';
 }) {
   const page = usePage();
   const picture = usePictureState();
@@ -20,5 +21,5 @@ export function RenderLayer({ tiles = true }: {
   useEffect(() => {
     if (picture.status === 'ready') completeStartupLog('First page ready', `page ${page.pageIndex + 1}`);
   }, [page.pageIndex, picture.status]);
-  return <div className="pdf-native-render-layer" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}><NativeRenderLayer tiles={tiles} /></div>;
+  return <div className="pdf-native-render-layer" data-pdf-picture-layers={layers} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}><CanvasRenderLayer tiles={tiles} overlays={layers === 'overlays'} /></div>;
 }

@@ -1,5 +1,5 @@
 /** Wait for the staged document's visible base rasters, not merely PDF parsing.
- * Hidden staging layers still lay out and decode images at their final size. */
+ * Hidden staging layers still lay out and paint canvases at their final size. */
 export function waitForDocumentPaint(root: HTMLElement, documentId: string, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     let frame = 0;
@@ -26,8 +26,8 @@ export function waitForDocumentPaint(root: HTMLElement, documentId: string, sign
           && rect.left < bounds.right && rect.bottom > bounds.top && rect.top < bounds.bottom;
       }) : [];
       const ready = pages.length > 0 && pages.every((page) => {
-        const image = page.querySelector<HTMLImageElement>('.pdf-native-render-layer img');
-        return image?.complete && image.naturalWidth > 0;
+        const canvas = page.querySelector<HTMLCanvasElement>('.pdf-native-render-layer canvas[data-plane="base"][data-painted="true"]');
+        return !!canvas && canvas.width > 0 && canvas.height > 0;
       });
       stableFrames = ready ? stableFrames + 1 : 0;
       if (stableFrames >= 2) finish();

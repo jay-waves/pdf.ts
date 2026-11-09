@@ -1,5 +1,11 @@
 import type { PdfWritePlan, PdfWriteResult } from '../../shared/pdf-file';
 
+/** Consumes owned download bytes. Only a partial/shared view needs a standalone copy. */
+export function ownedPdfBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? bytes.buffer : bytes.slice().buffer;
+}
+
 export interface SerializedPdf {
   data: ArrayBuffer;
   hash: string;

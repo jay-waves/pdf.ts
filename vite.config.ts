@@ -27,6 +27,29 @@ export default defineConfig({
     tailwindcss(),
     {
       name: 'viewer-static-files',
+      configurePreviewServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const pathname = request.url?.split('?')[0] ?? '';
+          if (/^\/assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/.test(pathname)) {
+            const writeHead = response.writeHead;
+            response.writeHead = function (...args: Parameters<typeof writeHead>) {
+              // Apply after Vite's static handler; never cache an HTML fallback.
+              const headers = (typeof args[1] === 'object' ? args[1] : args[2]) as Record<string, string> | undefined;
+              const contentType = headers?.['Content-Type'] ?? headers?.['content-type'] ?? this.getHeader('Content-Type');
+              if ((args[0] === 200 || args[0] === 304) && !String(contentType).includes('text/html')) {
+                const value = 'public, max-age=31536000, immutable';
+                if (headers) {
+                  for (const key of Object.keys(headers)) if (key.toLowerCase() === 'cache-control') delete headers[key];
+                  headers['Cache-Control'] = value;
+                }
+                this.setHeader('Cache-Control', value);
+              }
+              return writeHead.apply(this, args);
+            };
+          }
+          next();
+        });
+      },
       configureServer(server) {
         server.middlewares.use('/logo.png', (request, response, next) => {
           if (request.method !== 'GET' && request.method !== 'HEAD') return next();

@@ -8,10 +8,13 @@ import (
 	"mime"
 	"net/http"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var hashedViewerAsset = regexp.MustCompile(`^assets/[^/]+-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$`)
 
 type viewerAssetHandler struct {
 	files fs.FS
@@ -74,6 +77,11 @@ func (handler viewerAssetHandler) ServeHTTP(response http.ResponseWriter, reques
 		contentType = "application/octet-stream"
 	}
 	response.Header().Set("Content-Type", contentType)
+	if hashedViewerAsset.MatchString(name) {
+		response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		response.Header().Set("Cache-Control", "no-cache")
+	}
 	http.ServeContent(response, request, name, time.Time{}, bytes.NewReader(content))
 }
 

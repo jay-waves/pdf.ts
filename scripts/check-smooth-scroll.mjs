@@ -14,7 +14,7 @@ try {
     return transfer;
   }, [...fixture({ secondPage: true })]);
   await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer });
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img')].some(image => image.complete && image.naturalWidth));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   assert.deepEqual(await page.locator('.viewer').evaluate(element => {
     const style = getComputedStyle(element);
     return [style.overflowX, style.overflowY, element.scrollTop, element.scrollLeft];

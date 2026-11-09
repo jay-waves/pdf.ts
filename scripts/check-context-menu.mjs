@@ -17,7 +17,7 @@ try {
     return transfer;
   }, [...bytes]);
   await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer });
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img')].some(image => image.complete && image.naturalWidth));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   await page.mouse.move(640, 30);
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   const surface = page.locator('.pdf-page-surface').first();

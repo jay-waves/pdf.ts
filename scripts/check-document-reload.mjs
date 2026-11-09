@@ -45,7 +45,7 @@ page.on('console', m => { if (process.env.DEBUG_PDF) console.log(m.type(), m.tex
 const activeId = () => page.locator('[data-pdf-document-layer][aria-hidden="false"]').getAttribute('data-pdf-document-layer');
 try {
   await page.goto(`${base}/?launcherDocument=reload-test`);
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img')].some(i => i.complete && i.naturalWidth));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(i => (i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth)));
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   await page.getByRole('button', { name: 'Page', exact: true }).click();
   await page.getByRole('textbox', { name: 'Zoom percentage' }).fill('150');
@@ -70,10 +70,10 @@ try {
       if (!window.watchFrames) return;
       window.framesChecked++;
       const layer = document.querySelector('[data-pdf-document-layer][aria-hidden="false"]');
-      const images = layer ? [...layer.querySelectorAll('.pdf-native-render-layer img')] : [];
+      const images = layer ? [...layer.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')] : [];
       if (!images.some(i => {
         const r = i.getBoundingClientRect();
-        return i.complete && i.naturalWidth && r.bottom > 0 && r.top < innerHeight;
+        return (i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth) && r.bottom > 0 && r.top < innerHeight;
       })) window.blankFrames++;
       requestAnimationFrame(check);
     };requestAnimationFrame(check);

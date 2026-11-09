@@ -85,64 +85,69 @@ export class SharedDocumentClient {
       const reply = await this.rpc<{ id: string; security: Security; snapshot: SharedDocumentSnapshot }>('open', {
         args: [input, options, this.identity ?? `unshared:${crypto.randomUUID()}`, this.draftLocation],
       }).abortWith(signal);
-      this.securities.set(reply.id, reply.security); this.scopes.set(reply.id, options?.scope ?? ['*']);
-      this.snapshots.set(reply.id, reply.snapshot);
-      const publicId = 'id' in input && input.id ? input.id : reply.id;
-      const existing = this.documents.get(publicId); if (existing) return existing;
-      this.aliases.set(publicId, reply.id);
-      const events = this.events.get(reply.id) ?? emitter<DocumentEvent>(); this.events.set(reply.id, events);
-      const held: number[] = [];
-      const client = this;
-      const security = new Proxy({}, { get(_target, property: string) {
-        const state = client.securities.get(reply.id)!;
-        const rawScope = client.scopes.get(reply.id)!;
-        const flags = state.state.permissions.flags ?? permissionFlagsOf(null);
-        if (property in state) return state[property as keyof Security];
-        if (property === 'allows') return (permission: string) => pluginOfPermission(permission) === null
-          ? checkCapability(permission as Parameters<typeof checkCapability>[0], rawScope, flags)
-          : checkPluginPermission(permission, rawScope, new Set([permission]));
-        if (property === 'allowsAnnotation') return (action: any, target: any = {}) => action === 'set-group'
-          ? checkSetGroup('annotations', target.groupId, state.identity?.groupId, rawScope)
-          : checkCollab(action, action === 'create' ? { userId: state.identity?.userId, groupId: state.identity?.groupId } : collabTargetOf(target), rawScope, state.identity ?? {}, flags);
-        if (property === 'allowsField') return (action: any, target: any) => action === 'set-group'
-          ? checkSetGroup('fields', target.groupId, state.identity?.groupId, rawScope)
-          : checkFieldAction(action, target.groupId, rawScope, flags);
-        if (property === 'fieldRights') return () => fieldRightsOf(rawScope, flags, null, state.identity?.groupId);
-        return (...args: unknown[]) => client.rpc('call', { documentId: reply.id, path: ['security'], method: property, args });
-      } });
-      const services = new Set(['metadata', 'annotations', 'actions', 'attachments', 'forms', 'fonts', 'outline', 'search', 'render', 'pages', 'redaction', 'signatures', 'text', 'measure', 'pieceInfo', 'custom']);
-      const build = (path: Path = []): any => new Proxy({}, { get(_target, property: string | symbol) {
-        if (typeof property !== 'string' || property === 'then' || property === 'grant') return undefined;
-        if (!path.length && property === 'id') return publicId;
-        if (!path.length && property === 'security') return security;
-        if (property === 'events') return { subscribe: events.on, on: (type: string, fn: (e: DocumentEvent) => void) => events.on(e => { if (e.type === type) fn(e); }), lastServerSequence: () => null };
-        if (property === 'objectNumbers') return { take: () => held.shift() ?? null, get held() { return held.length; },
-          reserve: (count: number) => AbortablePromise.run(async () => {
-            if (held.length < count) held.push(...await client.rpc<number[]>('reserve', { documentId: reply.id, args: [count - held.length] }));
-          }), onLost: () => () => {} };
-        if (property === 'page') return (page: PageRef) => build([...path, { page }]);
-        if (property === 'with') return (facts: unknown) => build([...path, { with: facts }]);
-        if (property === 'ref') return (path.find(p => typeof p === 'object' && 'page' in p) as { page: PageRef } | undefined)?.page;
-        if (services.has(property)) return build([...path, property]);
-        if (property === 'close') return () => AbortablePromise.run(async () => {
-          client.documents.delete(publicId); client.aliases.delete(publicId);
-          if (![...client.aliases.values()].includes(reply.id)) {
-            await client.rpc('close', { documentId: reply.id }); client.events.delete(reply.id); client.snapshots.delete(reply.id);
-          }
-        });
-        return (...args: unknown[]) => {
-          const task = client.rpc<any>('call', { documentId: reply.id, path, method: property, args });
-          if (property === 'setWorkingSet') { void task.catch(() => {}); return; }
-          return task;
-        };
-      } });
-      const doc = build() as DocumentHandle; this.documents.set(publicId, doc);
-      this.changes.emit({ ...reply.snapshot, documentId: publicId });
-      return doc;
+      return this.attachDocument(reply, 'id' in input && input.id ? input.id : reply.id, options?.scope ?? ['*']);
     });
+  }
+  // Keep proxy closures out of open's scope: they must not retain its file bytes.
+  private attachDocument(reply: { id: string; security: Security; snapshot: SharedDocumentSnapshot }, publicId: string, scope: readonly string[]): DocumentHandle {
+    this.securities.set(reply.id, reply.security); this.scopes.set(reply.id, scope);
+    this.snapshots.set(reply.id, reply.snapshot);
+    const existing = this.documents.get(publicId); if (existing) return existing;
+    this.aliases.set(publicId, reply.id);
+    const events = this.events.get(reply.id) ?? emitter<DocumentEvent>(); this.events.set(reply.id, events);
+    const held: number[] = [];
+    const client = this;
+    const security = new Proxy({}, { get(_target, property: string) {
+      const state = client.securities.get(reply.id)!;
+      const rawScope = client.scopes.get(reply.id)!;
+      const flags = state.state.permissions.flags ?? permissionFlagsOf(null);
+      if (property in state) return state[property as keyof Security];
+      if (property === 'allows') return (permission: string) => pluginOfPermission(permission) === null
+        ? checkCapability(permission as Parameters<typeof checkCapability>[0], rawScope, flags)
+        : checkPluginPermission(permission, rawScope, new Set([permission]));
+      if (property === 'allowsAnnotation') return (action: any, target: any = {}) => action === 'set-group'
+        ? checkSetGroup('annotations', target.groupId, state.identity?.groupId, rawScope)
+        : checkCollab(action, action === 'create' ? { userId: state.identity?.userId, groupId: state.identity?.groupId } : collabTargetOf(target), rawScope, state.identity ?? {}, flags);
+      if (property === 'allowsField') return (action: any, target: any) => action === 'set-group'
+        ? checkSetGroup('fields', target.groupId, state.identity?.groupId, rawScope)
+        : checkFieldAction(action, target.groupId, rawScope, flags);
+      if (property === 'fieldRights') return () => fieldRightsOf(rawScope, flags, null, state.identity?.groupId);
+      return (...args: unknown[]) => client.rpc('call', { documentId: reply.id, path: ['security'], method: property, args });
+    } });
+    const services = new Set(['metadata', 'annotations', 'actions', 'attachments', 'forms', 'fonts', 'outline', 'search', 'render', 'pages', 'redaction', 'signatures', 'text', 'measure', 'pieceInfo', 'custom']);
+    const build = (path: Path = []): any => new Proxy({}, { get(_target, property: string | symbol) {
+      if (typeof property !== 'string' || property === 'then' || property === 'grant') return undefined;
+      if (!path.length && property === 'id') return publicId;
+      if (!path.length && property === 'security') return security;
+      if (property === 'events') return { subscribe: events.on, on: (type: string, fn: (e: DocumentEvent) => void) => events.on(e => { if (e.type === type) fn(e); }), lastServerSequence: () => null };
+      if (property === 'objectNumbers') return { take: () => held.shift() ?? null, get held() { return held.length; },
+        reserve: (count: number) => AbortablePromise.run(async () => {
+          if (held.length < count) held.push(...await client.rpc<number[]>('reserve', { documentId: reply.id, args: [count - held.length] }));
+        }), onLost: () => () => {} };
+      if (property === 'page') return (page: PageRef) => build([...path, { page }]);
+      if (property === 'with') return (facts: unknown) => build([...path, { with: facts }]);
+      if (property === 'ref') return (path.find(p => typeof p === 'object' && 'page' in p) as { page: PageRef } | undefined)?.page;
+      if (services.has(property)) return build([...path, property]);
+      if (property === 'close') return () => AbortablePromise.run(async () => {
+        client.documents.delete(publicId); client.aliases.delete(publicId);
+        if (![...client.aliases.values()].includes(reply.id)) {
+          await client.rpc('close', { documentId: reply.id }); client.events.delete(reply.id); client.snapshots.delete(reply.id);
+          client.securities.delete(reply.id); client.scopes.delete(reply.id);
+        }
+      });
+      return (...args: unknown[]) => {
+        const task = client.rpc<any>('call', { documentId: reply.id, path, method: property, args });
+        if (property === 'setWorkingSet') { void task.catch(() => {}); return; }
+        return task;
+      };
+    } });
+    const doc = build() as DocumentHandle; this.documents.set(publicId, doc);
+    this.changes.emit({ ...reply.snapshot, documentId: publicId });
+    return doc;
   }
   private nativeId(id: string) { return this.aliases.get(id) ?? id; }
   setRenderTheme(theme: PdfRenderTheme | null) { return this.rpc<boolean>('theme', { args: [theme] }); }
+  getRuntimeDiagnostics() { return this.rpc<{ active: boolean; generation: number; documents: number; idleMs: number; parsedPageBudgetBytes: number; decodedImageBudgetBytes: number }>('runtimeDiagnostics'); }
   getFontDiagnostics() { return this.rpc<PdfFontDiagnostic[]>('fontDiagnostics'); }
   setIdentity(identity: SharedFileIdentity, location?: DraftLocation) { this.identity = identity; this.draftLocation = location; }
   getDocument(id: string) { return this.documents.get(id) ?? null; }

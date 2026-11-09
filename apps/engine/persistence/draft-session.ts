@@ -10,7 +10,6 @@ export class DraftSession {
   private timer?: ReturnType<typeof setTimeout>;
   private busy = false;
   private blocked = false;
-  private raw: string | null = null;
   private storage?: DraftStorage;
   constructor(private readonly options: {
     lane: SaveLane;
@@ -34,13 +33,13 @@ export class DraftSession {
   async initialize(storage: Promise<DraftStorage>, baseVersion: string): Promise<DocumentDraft | null> {
     try {
       this.storage = await storage;
-      const record = await this.storage.read(); this.token = record.version; this.raw = record.text;
+      const record = await this.storage.read(); this.token = record.version;
       if (!record.text) return null;
       let draft: DocumentDraft;
       try { draft = decodeDraft(record.text); }
       catch (error) { throw new DraftConflict(error instanceof Error ? error.message : String(error)); }
       if (draft.mergeOutputVersion === baseVersion) {
-        await this.storage.remove(this.token); this.token = 'missing'; this.raw = null; return null;
+        await this.storage.remove(this.token); this.token = 'missing'; return null;
       }
       if (draft.baseVersion !== baseVersion) throw new DraftConflict('The PDF changed since this .swp draft was saved. Download or discard the draft before continuing.');
       return draft;
@@ -70,7 +69,6 @@ export class DraftSession {
     if (!this.storage) throw new Error('Draft storage is unavailable. Save to PDF to keep your changes.');
     const text = encodeDraft(draft);
     this.token = await this.storage.write(text, this.token, draft.baseVersion);
-    this.raw = text;
     // Unsupported edits may arrive while the snapshot is being written.
     // A successful older write must not claim those edits are safely drafted.
     if (this.blocked) this.publish({ draftRevision: draft.revision });
@@ -93,7 +91,7 @@ export class DraftSession {
   async afterMerge(allowDrafts = true) {
     try {
       if (this.storage && this.token !== 'missing') await this.storage.remove(this.token);
-      this.token = 'missing'; this.raw = null;
+      this.token = 'missing';
       allowDrafts = allowDrafts && !!this.storage;
       this.blocked = !allowDrafts;
       this.publish({ draftStatus: allowDrafts ? 'clean' : 'unavailable', draftRevision: this.options.savedRevision(),
@@ -106,11 +104,11 @@ export class DraftSession {
     // Re-read only for this explicit user action, never to bypass a CAS conflict.
     const record = await this.storage.read();
     await this.storage.remove(record.version);
-    this.token = 'missing'; this.raw = null; this.blocked = false;
+    this.token = 'missing'; this.blocked = false;
     this.publish({ draftStatus: 'clean', draftRevision: 0, draftError: undefined });
     if (this.options.revision() > this.options.savedRevision()) this.changed();
   }
-  async download() { return this.storage ? (await this.storage.read()).text : this.raw; }
+  async download() { return this.storage ? (await this.storage.read()).text : null; }
   /** Last-tab close is already inside the native queue; use an inline snapshot. */
   async close(capture: () => Promise<DocumentDraft>) {
     clearTimeout(this.timer);

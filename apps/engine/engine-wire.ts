@@ -1,4 +1,26 @@
 import { createTextLayout, createPageImageHandle, type PageImageResult, type PageRenderTransform, type PageRenderMatrix } from '@embedpdf/engine-core/runtime';
+// Only buffers freshly allocated by our encoder are owned by the RPC response.
+// Never detach arbitrary SDK results, caches, or caller-provided inputs.
+const responseBuffers = new WeakSet<ArrayBuffer>();
+export function ownEngineResponseBuffer(buffer: ArrayBuffer) { responseBuffers.add(buffer); }
+export function engineResultTransfers(value: unknown): ArrayBuffer[] {
+  const transfers = new Set<ArrayBuffer>();
+  const seen = new WeakSet<object>();
+  function visit(item: unknown) {
+    if (item === null || typeof item !== 'object' || seen.has(item)) return;
+    seen.add(item);
+    const buffer = item instanceof ArrayBuffer ? item : ArrayBuffer.isView(item) ? item.buffer : undefined;
+    if (buffer) {
+      if (buffer instanceof ArrayBuffer && responseBuffers.has(buffer)) transfers.add(buffer);
+      return;
+    }
+    if (item instanceof Blob) return;
+    for (const child of Object.values(item)) visit(child);
+  }
+  visit(value);
+  return [...transfers];
+}
+
 /** Public v3 results may carry local convenience methods. Only their data crosses ports. */
 export function encodeEngineResult(value: any): any {
   if (value === null || typeof value !== 'object' || value instanceof ArrayBuffer || ArrayBuffer.isView(value) || value instanceof Blob) return value;
@@ -36,7 +58,7 @@ export function decodeEngineResult(value: any): any {
   if (result.source && result.mimeType && typeof result.width === 'number') {
     const image = result as PageImageResult;
     return Object.assign(createPageImageHandle(image, { blob: async signal => image.source.kind === 'bytes'
-      ? new Blob([image.source.bytes.slice().buffer], { type: image.mimeType }) : (await fetch(image.source.url, { signal })).blob() }), result);
+      ? new Blob([image.source.bytes as Uint8Array<ArrayBuffer>], { type: image.mimeType }) : (await fetch(image.source.url, { signal })).blob() }), result);
   }
   return result;
 }

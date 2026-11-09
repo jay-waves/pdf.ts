@@ -45,7 +45,7 @@ export function LoadingStatus({ label }: { label: string }) {
 
 function createPlugins() {
   return [stagePlugin({ padding: 10, gap: { px: 10 }, zoom: { mode: 'fit-page' }, minZoom: 0.2, maxZoom: 60, viewUnitsPerPoint: 1 }),
-    renderPlugin({ format: 'bmp', tiles: { size: PDF_TILE_SIZE_CSS_PX, bleedPx: 2, prefetch: { margin: 0, velocityBias: false } } }),
+    renderPlugin({ format: 'png', tiles: { size: PDF_TILE_SIZE_CSS_PX, bleedPx: 2, settleMs: 0, prefetch: { margin: 0, velocityBias: false } } }, { rawPixels: true, cacheBytes: 32 * 1024 * 1024, maxInFlight: 2, demandWindowMs: 80 }),
     interactionPlugin(), selectionPlugin({ color: 'var(--pdf-text-selection-color)' }), actionsPlugin(), linkPlugin(), outlinePlugin(), searchPlugin({ reveal: { align: { y: 0.35 }, behavior: 'smooth' } }),
     annotationPlugin(createAnnotationPluginConfig()), sharedHistoryPlugin(), formPlugin()];
 }
