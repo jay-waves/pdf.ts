@@ -71,6 +71,8 @@ Section "pdf.ts" SEC_MAIN
   nsExec::ExecToLog '"$INSTDIR\${APP_EXE}" stop'
 
 install_files:
+  ; Remove the legacy all-users login shortcut when upgrading.
+  Delete "$SMSTARTUP\pdf.ts.lnk"
   SetOutPath "$INSTDIR"
   File "${LAUNCHER_FILE}"
   Delete "$INSTDIR\pdf.ts-startup.cmd"
@@ -101,7 +103,7 @@ install_files:
 SectionEnd
 
 Section /o "-Startup" SEC_STARTUP
-  SetShellVarContext all
+  SetShellVarContext current
   SetOutPath "$INSTDIR"
   ClearErrors
   CreateShortCut "$SMSTARTUP\pdf.ts.lnk" "$INSTDIR\${APP_EXE}" "daemon"
@@ -111,7 +113,7 @@ SectionEnd
 
 Section "-Startup cleanup"
   ${IfNot} ${SectionIsSelected} ${SEC_STARTUP}
-    SetShellVarContext all
+    SetShellVarContext current
     Delete "$SMSTARTUP\pdf.ts.lnk"
   ${EndIf}
 SectionEnd
@@ -128,7 +130,7 @@ Function StartupPage
   ${If} ${SectionIsSelected} ${SEC_STARTUP}
     ${NSD_Check} $StartupCheckbox
   ${EndIf}
-  ${NSD_CreateLabel} 12u 30u 94% 36u "Applies to all users on this computer. Starts the background service without opening a browser window."
+  ${NSD_CreateLabel} 12u 30u 94% 36u "Applies to the current user. Starts the background service without opening a browser window."
   Pop $0
   ${NSD_OnClick} $StartupCheckbox StartupChanged
   nsDialogs::Show
@@ -155,6 +157,10 @@ Function .onInit
   ${EndIf}
   SetRegView 64
   SetShellVarContext all
+  IfFileExists "$SMSTARTUP\pdf.ts.lnk" 0 check_user_startup
+    !insertmacro SelectSection ${SEC_STARTUP}
+check_user_startup:
+  SetShellVarContext current
   IfFileExists "$SMSTARTUP\pdf.ts.lnk" 0 startup_arguments
     !insertmacro SelectSection ${SEC_STARTUP}
 startup_arguments:
@@ -179,6 +185,9 @@ Section "Uninstall"
 
 remove_files:
   Delete "$SMSTARTUP\pdf.ts.lnk"
+  SetShellVarContext current
+  Delete "$SMSTARTUP\pdf.ts.lnk"
+  SetShellVarContext all
   DeleteRegKey HKLM "Software\Classes\${APP_ID}.Document"
   DeleteRegValue HKLM "Software\Classes\.pdf\OpenWithProgids" "${APP_ID}.Document"
   DeleteRegKey /ifempty HKLM "Software\Classes\.pdf\OpenWithProgids"

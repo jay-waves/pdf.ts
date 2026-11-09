@@ -12,7 +12,8 @@ $installDir = Join-Path $env:RUNNER_TEMP 'pdf ts package check\app'
 $installed = Join-Path $installDir 'pdf.ts.exe'
 $uninstallKey = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\pdf.ts'
 $associationKey = 'HKLM:\Software\Classes\pdf.ts.Document\shell\open\command'
-$startupShortcut = Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'pdf.ts.lnk'
+$commonStartupShortcut = Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'pdf.ts.lnk'
+$startupShortcut = Join-Path ([Environment]::GetFolderPath('Startup')) 'pdf.ts.lnk'
 
 function Invoke-PackageProcess([string] $Path, [string] $Arguments) {
     $process = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru
@@ -66,6 +67,7 @@ $shortcut = $shell.CreateShortcut($startupShortcut)
 if (-not (Test-Path $startupShortcut) -or $shortcut.TargetPath -ne $installed -or $shortcut.Arguments -ne 'daemon') {
     throw 'Startup shortcut target or arguments are incorrect.'
 }
+if (Test-Path $commonStartupShortcut) { throw 'Startup must apply only to the current user.' }
 # Reinstallation exercises stopping the running daemon and replacing its executable.
 Invoke-PackageProcess $installer "/S /D=$installDir"
 if (-not (Test-Path $startupShortcut)) {
