@@ -1,3 +1,4 @@
+import { energySavingEnabled, energySavingStore } from '../renderer/energy-saving';
 /**
  * Composition boundary for React, feature panels, themes and stage controls.
  * Keep feature wiring here; engine and renderer modules depend on capabilities
@@ -115,8 +116,9 @@ export function ViewerApp({
   const resolvedDocumentName = documentName ?? (fileUrl ? getFileNameFromUrl(fileUrl) : undefined);
   const [session, setSession] = useState<ViewerSession | null>(null);
   const documentId = session?.stage.documentId ?? (fileUrl ? DOCUMENT_ID : null);
+  const energySaving = useStore(energySavingStore, energySavingEnabled);
   const renderDpr = useStore(renderSettingsStore, (state) => (
-    getEffectiveRenderDpr(state.dprMode, state.systemDpr)
+    getEffectiveRenderDpr(state.dprMode, state.systemDpr, energySaving)
   ));
   const registry = session?.registry;
   const stage = session?.stage ?? null;

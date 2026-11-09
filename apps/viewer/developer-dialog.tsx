@@ -1,3 +1,5 @@
+import { energySavingStore, energySavingEnabled, setEnergySaving } from '../renderer/energy-saving';
+import { SettingsToggle } from './settings-toggle';
 import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { platform } from '#platform';
 import { supportsLlm } from '../platform/llm';
@@ -96,6 +98,7 @@ export function DeveloperDialog({
   const loggedOpenRef = useRef(false);
   const snapshot = useStore(viewerDiagnosticsStore);
   const renderSettings = useStore(renderSettingsStore);
+  const energy = useStore(energySavingStore);
   const startupSnapshot = useStore(startupLogStore);
   const dprMode = renderSettings.dprMode;
   const dpr = getEffectiveRenderDpr(dprMode, renderSettings.systemDpr);
@@ -110,7 +113,7 @@ export function DeveloperDialog({
       });
     };
     sample();
-    const timer = window.setInterval(sample, 500);
+    const timer = window.setInterval(sample, 2000);
     return () => {
       active = false;
       window.clearInterval(timer);
@@ -213,7 +216,8 @@ export function DeveloperDialog({
             <Select
               className={styles.select}
               contentClassName={styles.selectContent}
-              value={dprMode}
+              value={energySavingEnabled(energy) ? '1.25' : dprMode}
+              disabled={energySavingEnabled(energy)}
               options={DPR_OPTIONS}
               label="Device Pixel Ratio"
               onValueChange={(value) => setRenderDprMode(value as RenderDprMode)}
@@ -222,6 +226,10 @@ export function DeveloperDialog({
           <p className={styles.hint}>
             DPR profiles adjust tile raster scale; tile edges follow a fixed {PDF_TILE_SIZE_CSS_PX} CSS px × DPR ratio.
           </p>
+          <div className="flex items-center justify-between gap-4">
+            <span>Energy saving</span>
+            <SettingsToggle label="Energy saving" checked={energySavingEnabled(energy)} onCheckedChange={enabled => setEnergySaving(enabled ? 'on' : 'off')} />
+          </div>
         </section>
 
         <section className={cardStyles.card} aria-labelledby="developer-metadata">

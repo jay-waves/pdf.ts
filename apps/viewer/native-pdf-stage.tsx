@@ -1,3 +1,4 @@
+import { EnergySavingMotion } from '../renderer/energy-motion';
 /**
  * React bridge to the native camera surface and scrollbars. Native pointer input
  * owns selection, touch pan, pinch, momentum and middle-button pan; StageSurface
@@ -33,7 +34,7 @@ export function NativePdfStage({ documentId, stage, panMode, renderPage, renderD
   useLayoutEffect(() => {
     if (renderDpr) native.setDevicePixelRatio(renderDpr);
   }, [native, renderDpr]);
-  return <div {...props} ref={root} className="pdf-viewer-scroll-area">
+  return <EnergySavingMotion stage={native}><div {...props} ref={root} className="pdf-viewer-scroll-area">
     <Stage className={className ?? `viewer${panMode ? ' is-pan-mode' : ''}`} style={{ width: '100%', height: '100%' }}
       overlay={<>
         <StageSurface stage={stage} containerRef={root} />
@@ -45,5 +46,5 @@ export function NativePdfStage({ documentId, stage, panMode, renderPage, renderD
         {renderPage({ pageIndex: page.pageIndex, pageRef: page.ref, width: page.transform.contentWidth, height: page.transform.contentHeight })}
       </div>}
     </Stage>
-  </div>;
+  </div></EnergySavingMotion>;
 }

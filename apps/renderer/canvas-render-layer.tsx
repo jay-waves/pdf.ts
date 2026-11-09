@@ -1,3 +1,4 @@
+import { useEnergyTilesPaused } from './energy-motion';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCapability, usePage, useSelector } from '@embedpdf/react/runtime';
 import { RenderToken, type OpenPictureReport, type TilePaintPlan, type TilePaintSource, type ViewDemand } from '@embedpdf/plugin-render/contract/host';
@@ -41,6 +42,7 @@ export function CanvasRenderLayer({ tiles = true, overlays }: { tiles?: boolean;
 }
 
 function CanvasTiles({ overlays }: { overlays: boolean }) {
+  const tilesPaused = useEnergyTilesPaused();
   const page = usePage();
   const render = useCapability(RenderToken);
   const [view, setView] = useState<ViewDemand | null>(null);
@@ -51,13 +53,14 @@ function CanvasTiles({ overlays }: { overlays: boolean }) {
     return () => opened.destroy();
   }, [render, page.view]);
   useLayoutEffect(() => {
+    view?.setPaused(page.ref, tilesPaused);
     view?.setDemand(page.ref, page.getViewDemand?.() ?? { desiredDeviceWidth: page.transform.deviceWidth },
       overlays ? { includeAnnotations: false, includeFormFields: false } : {});
   });
   const plan = useSelector(RenderToken, () => view?.getPlan(page.ref) ?? EMPTY_PLAN);
   useEffect(() => () => view?.release(page.ref), [view, page.ref]);
   const scale = page.transform.viewScale;
-  return <div data-canvas-tiles data-fetching={plan.fetching.length} style={{ ...fill, isolation: 'isolate' }}>
+  return <div data-canvas-tiles data-paused={tilesPaused} data-fetching={plan.fetching.length} style={{ ...fill, isolation: 'isolate' }}>
     {view && plan.paint.map(source => <CanvasTile key={source.key} source={source} view={view} page={page.ref} scale={scale} />)}
   </div>;
 }

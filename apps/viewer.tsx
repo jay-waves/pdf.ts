@@ -1,3 +1,4 @@
+import { installBatteryMonitor } from './renderer/energy-saving';
 /**
  * Application entry: install page-wide services and mount ViewerBootstrap.
  * Startup/resource ownership lives in viewer-bootstrap; viewer-app composes
@@ -23,6 +24,7 @@ writeStartupInfo(
 );
 writeStartupInfo('PDFium WASM asset resolved', describeStartupUrl(BUNDLED_PDFIUM_WASM_URL));
 
+const disposeBattery = installBatteryMonitor();
 const disposeTheme = initializeViewerTheme();
 const disposeDiagnostics = installErrorDiagnostics();
 const disposeDpr = installRenderDprMonitor();
@@ -30,6 +32,7 @@ writeStartupInfo('Viewer environment ready', navigator.platform || 'Web');
 
 function ViewerLifecycle() {
   useEffect(() => () => {
+    disposeBattery();
     disposeDpr();
     disposeDiagnostics();
     disposeTheme();

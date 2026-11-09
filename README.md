@@ -116,7 +116,7 @@ base raster and tiles. There is no viewer mode switch or BMP fallback. EmbedPDF'
 TileManager and RasterStore own scheduling, deduplication, LRU and retention;
 the React layer only paints and reports presentation. Tiles use 768-pixel edges
 with 2-pixel bleed. The viewer uses a 32 MiB raster cache, two concurrent tile
-requests per render controller, and an 80 ms fixed window that coalesces the newest
+requests per render controller, and a 60 ms fixed window that coalesces the newest
 demand during motion. This is a tile request limit, not a global Worker byte
 budget. Old tiles remain until replacement coverage is presented.
 Unmount releases canvas backing stores. Annotation/form image assets and image
@@ -147,6 +147,15 @@ worker/RPC and presentation-submission times. It excludes pixel readback, GPU
 compositing and RSS; it is not a full-viewer scrolling benchmark. Transfer volume
 is almost identical: BMP adds 66 header bytes; the saving is encoding/copying and
 image decoding, not compression.
+
+Both modes retain painted tiles during camera motion. Normal mode coalesces the
+latest demand in fixed 60 ms windows and continues rendering during motion, with
+two concurrent tile requests. Energy saving pauses new work until 120 ms without
+camera changes, uses one concurrent request and fixes DPR at 1.25. It has no
+additional scheduling delay after settling. Settings diagnostics
+refresh every two seconds while the dialog is open. Temporary memory tracing has
+been removed. `node scripts/check-energy-motion.mjs` verifies retention and resume
+in both modes against the local preview.
 
 ## Rendering and Worker pipeline
 
