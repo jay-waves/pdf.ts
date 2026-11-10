@@ -160,12 +160,13 @@ function executeViewerCommand(
     case 'ui/reset':
       updateUi(command);
       return;
-    case 'ui/set-pan':
-      if (command.enabled) {
-        getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
-      }
+    case 'ui/set-pan': {
+      const interaction = getAnnotationScope(registry, documentId)?.interaction;
+      if (command.enabled) interaction?.activateTool('pan');
+      else interaction?.activateDefaultTool();
       updateUi(command);
       return;
+    }
     case 'ui/set-toolbar-section':
       if (command.section === 'search') {
         getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
@@ -203,7 +204,6 @@ function executeViewerCommand(
     case 'view/select-reading-region':
       updateUi({ type: 'ui/set-pan', enabled: false });
       updateUi({ type: 'ui/close-overlay' });
-      getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       dependencies.stage?.beginRegionSelection();
       return;
     case 'view/cancel-reading-region':
@@ -211,6 +211,7 @@ function executeViewerCommand(
       return;
     case 'view/set-presentation':
       if (command.enabled) {
+        updateUi({ type: 'ui/set-pan', enabled: false });
         updateUi({ type: 'ui/close-overlay' });
         updateUi({ type: 'ui/set-toolbar-section', section: null });
         getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
@@ -238,6 +239,7 @@ function executeViewerCommand(
       return;
     }
     case 'annotation/clear-tool':
+      updateUi({ type: 'ui/set-pan', enabled: false });
       getAnnotationScope(registry, documentId)?.interaction?.activateDefaultTool();
       return;
     case 'annotation/history': {

@@ -296,7 +296,7 @@ export class ViewerStage {
       return;
     }
     if (this.state.pageNumber > this.state.totalPages) {
-      if (delta < 0) this.publish({ pageNumber: Math.max(1, this.state.totalPages - 1) });
+      if (delta < 0) this.publish({ pageNumber: this.state.totalPages });
       return;
     }
     if (delta > 0 && this.state.pageNumber === this.state.totalPages) {

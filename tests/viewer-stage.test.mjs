@@ -195,6 +195,21 @@ test('presentation accumulates rapid navigation without scrolling the inactive v
 
 const region = { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 };
 
+test('back from the presentation end screen returns to the last page', t => {
+  const { stage, jumps } = setup(t);
+  stage.setPresentation(true);
+  stage.goToPage(10);
+  stage.movePages(1);
+  assert.equal(stage.getSnapshot().pageNumber, 11);
+  stage.movePages(1);
+  assert.equal(stage.getSnapshot().pageNumber, 11);
+  stage.movePages(-1);
+  assert.equal(stage.getSnapshot().pageNumber, 10);
+  stage.movePages(-1);
+  assert.equal(stage.getSnapshot().pageNumber, 9);
+  assert.deepEqual(jumps, []);
+});
+
 test('rectangle selection fits once and later zoom and navigation use normal behavior', (t) => {
   const { stage, regionFits, zooms, jumps, interaction } = setup(t);
   stage.beginRegionSelection();
