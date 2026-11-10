@@ -7,6 +7,7 @@ import { viewerControls } from '../components/control-visibility';
 import { useStage } from '@embedpdf/react/stage';
 import type { ViewerStage } from './viewer-stage';
 import { installStageWheelZoom, installStageWheelScroll } from '../renderer/stage-input-controller';
+import { installMiddleButtonPan } from './middle-button-pan';
 
 /** App wheel policy and touch control visibility; Stage owns PDF gestures. */
 export function StageSurface({ stage, containerRef }: {
@@ -22,6 +23,7 @@ export function StageSurface({ stage, containerRef }: {
     if (!viewport) return;
     const disposeZoom = installStageWheelZoom(viewport, native, stage);
     const disposeScroll = installStageWheelScroll(viewport, native);
+    const disposeMiddlePan = installMiddleButtonPan(viewport, native);
     let touch: { id: number; x: number; y: number; time: number; moved: boolean } | null = null;
     const down = (event: PointerEvent) => {
       touch = null;
@@ -51,7 +53,7 @@ export function StageSurface({ stage, containerRef }: {
     window.addEventListener('pointercancel', cancel);
     window.addEventListener('blur', cancel);
     return () => {
-      disposeScroll(); disposeZoom();
+      disposeMiddlePan(); disposeScroll(); disposeZoom();
       viewport.removeEventListener('pointerdown', down, { capture: true });
       window.removeEventListener('pointermove', move, { capture: true });
       window.removeEventListener('pointerup', up, { capture: true });

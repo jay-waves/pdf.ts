@@ -20,16 +20,20 @@ try {
   await page.mouse.move(640, 25);
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   const pan = page.getByRole('button', { name: 'Pan', exact: true });
-  async function drag() {
+  async function drag(button = 'left') {
     const before = await paper.boundingBox();
     const x = before.x + before.width / 2;
     await page.mouse.move(x, 550);
-    await page.mouse.down();
+    await page.mouse.down({ button });
     await page.mouse.move(x, 430, { steps: 12 });
     const after = await paper.boundingBox();
-    await page.mouse.up();
+    await page.mouse.up({ button });
     return before.y - after.y;
   }
+  assert.ok(await drag('middle') > 80, 'Middle button must pan without enabling the Pan tool');
+  assert.equal(await pan.getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.locator('.viewer').getAttribute('data-pdf-middle-panning'), null);
+  assert.ok(Math.abs(await drag()) < 2, 'Releasing middle button must restore ordinary left-button input');
   await pan.click();
   assert.equal(await pan.getAttribute('aria-pressed'), 'true');
   assert.ok(await drag() > 80, 'Pan must move the page with the left mouse button');

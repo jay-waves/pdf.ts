@@ -1,8 +1,8 @@
 import { EnergySavingMotion } from '../renderer/energy-motion';
 /**
  * React bridge to the native camera surface and scrollbars. Native pointer input
- * owns selection, touch pan, pinch, momentum and middle-button pan; StageSurface
- * adds application wheel policy and control visibility. The viewport is not a DOM
+ * owns selection, touch pan, pinch and momentum; StageSurface adds middle-button
+ * pan, application wheel policy and control visibility. The viewport is not a DOM
  * scroll container: browser checks must use wheel, scrollbars or navigation controls,
  * not assignments to .viewer.scrollTop.
  */

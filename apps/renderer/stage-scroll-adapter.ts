@@ -72,15 +72,28 @@ export class StageScrollAdapter {
   }
   onLayoutReady(listener: (totalPages: number, initial: boolean) => void) {
     let initialized = false;
+    let disposed = false;
+    let current: ReturnType<Kernel['tryCapability']> = null;
+    let offViewport = () => {};
     const notify = () => {
+      if (disposed) return;
       const total = this.getTotalPages();
       if (!total || !this.capability?.getViewportSize().width) return;
       listener(total, !initialized); initialized = true;
     };
-    const off = this.capability?.onViewportChanged(notify) ?? (() => {});
-    // The document can already be placed when its controller is installed.
-    queueMicrotask(notify);
-    return off;
+    const connect = () => {
+      const capability = this.capability;
+      if (capability === current) return;
+      offViewport();
+      current = capability;
+      offViewport = capability?.onViewportChanged(notify) ?? (() => {});
+      queueMicrotask(notify);
+    };
+    // History can be installed before Stage exists. Subscribe when it becomes
+    // available instead of permanently missing the first ready viewport.
+    const offRegistry = this.kernel.subscribe?.(connect) ?? (() => {});
+    connect();
+    return () => { disposed = true; offRegistry(); offViewport(); };
   }
   reveal(pageIndex: number, rects: Rect[], { behavior = 'smooth', insets = {} }: { behavior?: ScrollBehaviorKind; insets?: Insets } = {}) {
     const stage = this.capability;

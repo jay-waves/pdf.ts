@@ -139,6 +139,8 @@
 }
 
 /* A held right button uses the same grabbed-paper cue as panning. */
+.viewer[data-pdf-middle-panning='true'],
+.viewer[data-pdf-middle-panning='true'] *,
 :is(.viewer, [data-viewer-presentation])[data-pdf-page-grabbing='true'],
 :is(.viewer, [data-viewer-presentation])[data-pdf-page-grabbing='true'] * {
   cursor: grabbing !important;

@@ -97,3 +97,34 @@ test('reading-area tool cancels without fitting or creating PDF edits and commit
   assert.ok(native.getZoomLevel() > zoom);
   assert.equal(kernel.documents.get('test').hasUnsavedChanges, false);
 });
+
+test('layout readiness follows a Stage capability created after history subscribes', async () => {
+  let capability = null;
+  const registryListeners = new Set();
+  const viewportListeners = new Set();
+  const kernel = {
+    tryCapability: () => capability,
+    subscribe(listener) { registryListeners.add(listener); return () => registryListeners.delete(listener); },
+  };
+  const scroll = new StageScrollAdapter(kernel, 'late-document');
+  const ready = [];
+  const dispose = scroll.onLayoutReady((total, initial) => ready.push({ total, initial }));
+  await Promise.resolve();
+  assert.deepEqual(ready, []);
+  capability = {
+    getPageCount: () => 12,
+    getViewportSize: () => ({ width: 800, height: 600 }),
+    onViewportChanged(listener) { viewportListeners.add(listener); return () => viewportListeners.delete(listener); },
+  };
+  registryListeners.forEach(listener => listener());
+  await Promise.resolve();
+  assert.deepEqual(ready, [{ total: 12, initial: true }]);
+  viewportListeners.forEach(listener => listener());
+  assert.deepEqual(ready.at(-1), { total: 12, initial: false });
+  dispose();
+  assert.equal(registryListeners.size, 0);
+  assert.equal(viewportListeners.size, 0);
+  const cancelEarly = scroll.onLayoutReady(() => assert.fail('disposed readiness must not run'));
+  cancelEarly();
+  await Promise.resolve();
+});
