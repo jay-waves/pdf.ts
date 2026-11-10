@@ -187,6 +187,21 @@ export class ViewerStage {
     return this.scroll.getAnchor();
   }
 
+  getReadingViewpoint() {
+    return this.spread?.getViewpoint();
+  }
+
+  // Subscribe after layout readiness; camera events include scrolling within
+  // the same page and zooming, without causing React navigation renders.
+  onReadingPositionChange(listener: () => void) {
+    const stage = this.spread;
+    if (!stage) return () => {};
+    const offCamera = stage.onCameraChanged(listener);
+    // A fit-mode change can preserve the numeric zoom and camera position.
+    const offSettings = stage.onSettingsChanged(listener);
+    return () => { offCamera(); offSettings(); };
+  }
+
   restoreReadingPosition(position: ReturnType<StageScrollAdapter['getAnchor']>) {
     this.scroll.cancelPendingNavigation();
     this.scroll.restoreAnchor(position);

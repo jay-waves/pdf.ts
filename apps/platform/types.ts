@@ -4,10 +4,12 @@
  * not import engine or renderer implementations.
  */
 import type { DraftLocation, PdfFileWriter, SharedSaveState } from '../shared/pdf-file';
+import type { Viewpoint } from '@embedpdf/plugin-stage';
 export interface ReadingProgress {
   pageNumber: number;
   scrollStrategy?: string;
   spreadMode?: string;
+  viewpoint?: Viewpoint;
 }
 
 export interface ExternalDocumentChange {

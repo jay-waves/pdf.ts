@@ -2,6 +2,7 @@ import { ScrollStrategy } from '../viewer/viewer-stage';
 import { SpreadMode } from '../viewer/viewer-stage';
 import { platform } from '#platform';
 import type { ViewerStage } from '../viewer/viewer-stage';
+import type { ReadingProgress } from '../platform/types';
 
 function isScrollStrategy(value: unknown): value is ScrollStrategy {
   return value === ScrollStrategy.Vertical || value === ScrollStrategy.Horizontal;
@@ -15,6 +16,17 @@ function isValidPageNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
+function validViewpoint(value: ReadingProgress['viewpoint']): value is NonNullable<ReadingProgress['viewpoint']> {
+  if (!value || typeof value !== 'object' || !value.anchor || typeof value.anchor !== 'object'
+    || !value.zoom || typeof value.zoom !== 'object') return false;
+  const { anchor, zoom } = value;
+  if (!Number.isInteger(anchor.pageIndex) || anchor.pageIndex < 0
+    || !Number.isFinite(anchor.fractionX) || !Number.isFinite(anchor.fractionY)) return false;
+  if ('mode' in zoom) return ['automatic', 'fit-page', 'fit-width', 'fit-all'].includes(zoom.mode);
+  const level = 'level' in zoom ? zoom.level : 'pageWidth' in zoom ? zoom.pageWidth : 'pageHeight' in zoom ? zoom.pageHeight : NaN;
+  return Number.isFinite(level) && level > 0;
+}
+
 export function installReadingHistory(
   stage: ViewerStage,
   documentKey?: string,
@@ -25,12 +37,19 @@ export function installReadingHistory(
   let historyReady = false;
   let disposed = false;
   let pendingWriteId = 0;
-  let finalWrite: Promise<void> | null = null;
+  let maxWaitId = 0;
+  let queued: ReadingProgress | null = null;
+  let writing = false;
+  let lastWritten = '';
+  let unsubscribePosition = () => {};
 
   const getProgress = () => {
     const { pageNumber, strategy, spread: spreadMode } = stage.getSnapshot();
+    const viewpoint = stage.getReadingViewpoint();
     return {
-      pageNumber,
+      // Presentation uses a separate page counter; persist the reading camera.
+      pageNumber: viewpoint ? viewpoint.anchor.pageIndex + 1 : pageNumber,
+      ...(viewpoint ? { viewpoint } : {}),
       scrollStrategy: strategy,
       spreadMode: isSpreadMode(spreadMode) ? spreadMode : undefined,
     };
@@ -46,6 +65,7 @@ export function installReadingHistory(
       spreadMode: view.spread,
       selectingRegion: view.selectingRegion,
       ...position,
+      zoom: JSON.stringify(stage.getReadingViewpoint()?.zoom),
     };
   };
 
@@ -53,7 +73,8 @@ export function installReadingHistory(
     before: ReturnType<typeof getViewSnapshot>,
     after: ReturnType<typeof getViewSnapshot>,
   ) => (
-    before.pageNumber !== after.pageNumber
+    before.zoom !== after.zoom
+    || before.pageNumber !== after.pageNumber
     || before.mode !== after.mode
     || before.scrollStrategy !== after.scrollStrategy
     || before.spreadMode !== after.spreadMode
@@ -70,17 +91,41 @@ export function installReadingHistory(
     )
   );
 
-  const flushPendingWrite = () => {
-    pendingWriteId = 0;
-    return platform.writeReadingProgress(documentKey, getProgress());
+  const clearTimers = () => {
+    if (pendingWriteId) window.clearTimeout(pendingWriteId);
+    if (maxWaitId) window.clearTimeout(maxWaitId);
+    pendingWriteId = maxWaitId = 0;
   };
-
+  const drainWrites = async () => {
+    if (writing) return;
+    writing = true;
+    try {
+      while (queued) {
+        const progress = queued;
+        queued = null;
+        const encoded = JSON.stringify(progress);
+        if (encoded === lastWritten) continue;
+        try {
+          await platform.writeReadingProgress(documentKey, progress);
+          lastWritten = encoded;
+        } catch (error) {
+          console.warn('[pdf-ts] failed to write reading history', error);
+        }
+      }
+    } finally { writing = false; }
+  };
+  const flushPendingWrite = () => {
+    clearTimers();
+    if (!historyReady) return;
+    queued = getProgress();
+    void drainWrites();
+  };
   const scheduleHistoryWrite = () => {
     if (!historyReady) return;
     if (pendingWriteId) window.clearTimeout(pendingWriteId);
-    pendingWriteId = window.setTimeout(() => {
-      flushPendingWrite().catch((error) => console.warn('[pdf-ts] failed to write reading history', error));
-    }, 300);
+    pendingWriteId = window.setTimeout(flushPendingWrite, 500);
+    // Continuous scrolling still checkpoints, without writing every frame.
+    if (!maxWaitId) maxWaitId = window.setTimeout(flushPendingWrite, 5000);
   };
 
   const unsubscribePageChange = stage.subscribe(scheduleHistoryWrite);
@@ -91,6 +136,7 @@ export function installReadingHistory(
     layoutReadyHandled = true;
     unsubscribeLayoutReady?.();
     unsubscribeLayoutReady = null;
+    unsubscribePosition = stage.onReadingPositionChange(scheduleHistoryWrite);
     if (!restore) { historyReady = true; return; }
     const initialView = getViewSnapshot();
 
@@ -107,10 +153,14 @@ export function installReadingHistory(
             isScrollStrategy(saved.scrollStrategy) ? saved.scrollStrategy : view.strategy,
             isSpreadMode(saved.spreadMode) ? saved.spreadMode : view.spread,
           );
-          stage.goToPage(saved.pageNumber);
+          if (validViewpoint(saved.viewpoint)
+            && saved.viewpoint.anchor.pageIndex < view.totalPages) {
+            stage.restoreReadingPosition({ pageNumber: saved.viewpoint.anchor.pageIndex + 1, viewpoint: saved.viewpoint });
+          } else stage.goToPage(saved.pageNumber);
         }
         historyReady = true;
-        if (viewChangedWhileReading) scheduleHistoryWrite();
+        // Also lazily migrate a legacy record to its per-document key.
+        if (viewChangedWhileReading || saved) scheduleHistoryWrite();
       })
       .catch((error) => {
         if (disposed) return;
@@ -124,28 +174,19 @@ export function installReadingHistory(
     unsubscribeLayoutReady = null;
   }
 
-  const flushFinalHistoryWrite = () => {
-    if (pendingWriteId) {
-      window.clearTimeout(pendingWriteId);
-    }
-    return historyReady ? flushPendingWrite() : Promise.resolve();
+  const onHidden = () => {
+    if (document.visibilityState === 'hidden') flushPendingWrite();
   };
-
-  const onClose = () => {
-    if (finalWrite) return;
-    finalWrite = flushFinalHistoryWrite()
-      .catch((error) => console.warn('[pdf-ts] failed to write final reading history', error))
-      .finally(() => {
-        finalWrite = null;
-      });
-  };
-  window.addEventListener('pagehide', onClose);
+  window.addEventListener('pagehide', flushPendingWrite);
+  document.addEventListener('visibilitychange', onHidden);
 
   return () => {
-    onClose();
+    flushPendingWrite();
     disposed = true;
-    window.removeEventListener('pagehide', onClose);
+    window.removeEventListener('pagehide', flushPendingWrite);
+    document.removeEventListener('visibilitychange', onHidden);
     unsubscribePageChange();
+    unsubscribePosition();
     unsubscribeLayoutReady?.();
   };
 }
