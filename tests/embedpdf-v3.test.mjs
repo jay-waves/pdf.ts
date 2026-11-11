@@ -65,3 +65,23 @@ test('v3 explicit rewrite preserves final metadata without accumulating PDF revi
   assert.equal(metadata.title, 'second');
   assert.equal(metadata.author, 'retained author');
 });
+
+test('v3.1 batch scales expose viewports in page layouts and undo each previous scale', async t => {
+  const engine = engineFor(t);
+  const doc = await engine.open({ kind: 'bytes', bytes: fixture({ secondPage: true }) });
+  const refs = (await doc.pages.list()).pages.map(page => page.ref);
+  const measure = conversion => ({ subtype: 'rectilinear', ratio: `1:${conversion}`,
+    x: [{ unit: 'm', conversion }], distance: [{ unit: 'm', conversion: 1 }],
+    area: [{ unit: 'sq m', conversion: 1 }] });
+  await doc.page(refs[0]).measure.setScale(measure(2));
+  const before = (await doc.pages.list()).pages.map(page => page.viewports ?? []);
+  const changed = await doc.pages.setScale(refs, measure(4));
+  assert.equal(changed.meta.undoable, true);
+  // The public result identifies the first page and carries every page's layout.
+  assert.deepEqual(changed.page, refs[0]);
+  const after = (await doc.pages.list()).pages.map(page => page.viewports);
+  assert.deepEqual(changed.layout.pages.map(page => page.viewports), after);
+  for (const viewports of after) assert.equal(viewports[0].measure.x[0].conversion, 4);
+  await doc.apply({ undoOf: changed.meta.opId });
+  assert.deepEqual((await doc.pages.list()).pages.map(page => page.viewports ?? []), before);
+});

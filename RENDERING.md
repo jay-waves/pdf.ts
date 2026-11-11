@@ -104,7 +104,7 @@ across documents; these budgets do not cap the WASM heap.
 After the last document closes and pending saves/drafts finish, a 10-second grace
 period precedes native runtime teardown. Reopening cancels teardown; opening
 after teardown initializes a new runtime through the existing tab ports.
-Shutdown explicitly cancels EmbedPDF 3.0's residual page-residency timer.
+Shutdown explicitly cancels EmbedPDF 3.1's residual page-residency timer.
 
 Forced-color rendering uses a deadline-based PDFium pause callback and routes
 continuations through the SDK's normal slice/yield/abort loop. Render close
@@ -113,7 +113,7 @@ are cooperative, not a hard bound on individual native operations.
 
 ## SDK patch
 
-`patches/@embedpdf__plugin-render@3.0.0.patch` adds raw viewer transport while
+`patches/@embedpdf__plugin-render@3.1.0.patch` adds raw viewer transport while
 preserving encoded exports. It fixes cache byte accounting, eviction after
 consumer release, late canceled results, and view cleanup. Revalidate the patch
 and runtime cleanup when upgrading EmbedPDF.

@@ -53,7 +53,7 @@ export async function createNativeRuntime(options: { wasmUrl?: string; fontFallb
   });
   const transport: Transport = { send: pack => host.receive(pack.payload), onMessage: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     terminate: async () => {
-      // EmbedPDF 3.0 shutdown closes pages but leaves its 30s residency timer
+      // EmbedPDF 3.1 shutdown closes pages but leaves its 30s residency timer
       // holding the runtime. Cancel that final root before dropping the heap.
       (host as unknown as { residency: { disarmTimer(): void } }).residency.disarmTimer();
       fonts?.disable(); await runtime.destroy(); listeners.clear();

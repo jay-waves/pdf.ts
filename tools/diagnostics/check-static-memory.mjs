@@ -13,7 +13,7 @@ const engine = LocalEngine.fromTransport({ transport: {
   onMessage: listener => { listeners.add(listener); return () => listeners.delete(listener); },
   terminate: () => runtime.destroy(),
 } });
-// These diagnostic fields are private SDK implementation details, pinned to 3.0.0.
+// These diagnostic fields are private SDK implementation details, pinned to 3.1.0.
 // Read scalar counts only; do not retain sessions or pixel buffers.
 const samples=[];
 async function sample(stage) {
