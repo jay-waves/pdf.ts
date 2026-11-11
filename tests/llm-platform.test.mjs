@@ -2,20 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { supportsLlm } from '../apps/platform/llm.ts';
 
-test('LLM requires request and configuration capabilities on any platform', () => {
+test('LLM is exposed as one complete optional service', () => {
   assert.equal(supportsLlm({}), false);
-  const launcher = {
-    requestAi: async () => 'result',
-    getAiConfig: async () => ({}),
-    setAiConfig: async () => {},
-  };
-  assert.equal(supportsLlm(launcher), true);
-  for (const capability of Object.keys(launcher)) {
-    assert.equal(supportsLlm({ ...launcher, [capability]: undefined }), false);
-  }
+  assert.equal(supportsLlm({ ai: { request: async () => 'result', getConfig: async () => ({}), configure: async () => {} } }), true);
 });
 
-const { readAiStream } = await import('../apps/platform/ai-stream.ts');
+const { readAiStream } = await import('../apps/ai/ai-stream.ts');
 function streamBytes(text) {
   const bytes = new TextEncoder().encode(text);
   return new ReadableStream({ start(controller) {

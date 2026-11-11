@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { annotationKey, localEngine } from '@embedpdf/engine';
 const { buildDraft, captureBaseline, restoreDraft, encodeDraft, decodeDraft } = await import('../apps/engine/persistence/document-draft.ts');
-import { fixture } from '../scripts/pdf-editing-fixture.mjs';
+import { fixture } from './support/pdf-editing-fixture.mjs';
 async function setup(t, options = {}) {
   const engine = localEngine({ runtime: { prefer: 'wasm' }, defaultFallbackFonts: false });
   t.after(() => engine.destroy());

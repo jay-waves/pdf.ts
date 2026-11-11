@@ -81,14 +81,11 @@ jobs:
       - name: Package Debian and Fedora
         if: runner.os == 'Linux'
         run: |
-          node scripts/package-launcher.mjs linux-amd64
-          sh scripts/package-linux.sh deb
-          sh scripts/package-linux.sh rpm
+          node packaging/build.mjs linux
       - name: Package macOS ARM64
         if: runner.os == 'macOS'
         run: |
-          node scripts/package-launcher.mjs darwin-arm64
-          sh scripts/package-macos.sh
+          node packaging/build.mjs macos
       - name: Verify macOS login registration and launcher
         if: runner.os == 'macOS'
         timeout-minutes: 5
@@ -123,10 +120,8 @@ jobs:
           go install github.com/akavel/rsrc@v0.10.2
           sudo apt-get update
           sudo apt-get install --yes nsis
-      - name: Build Windows x64 launcher
-        run: node scripts/package-launcher.mjs windows-amd64
       - name: Package Windows installer
-        run: node scripts/package-windows.mjs
+        run: node packaging/build.mjs windows
       - uses: actions/upload-artifact@v6
         with:
           name: windows-installer

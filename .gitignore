@@ -144,6 +144,6 @@ vite.config.ts.timestamp-*
 .vite/
 
 # Generated assets embedded by the launcher build
-launcher/viewer/*
-!launcher/viewer/placeholder.txt
-launcher/icon_windows_amd64.syso
+desktop/viewer/*
+!desktop/viewer/placeholder.txt
+desktop/icon_windows_amd64.syso

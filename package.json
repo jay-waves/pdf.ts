@@ -2,7 +2,7 @@
   "name": "pdf.ts",
   "license": "MIT",
   "private": true,
-  "version": "1.1.4",
+  "version": "1.1.5",
   "packageManager": "pnpm@12.3.4+sha512.961aa41fb077da3a04a441d9f8e15ebc0c96da8ef710b2eb67bf9ee7cb0610eabd48f1fd85f51cffe73846785fa0f87c56a3a872a1d893f8446741b5cce45457",
   "engines": {
     "node": ">=24"
@@ -23,18 +23,19 @@
     "dev": "vite",
     "dev:wsl": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "compile": "pnpm typecheck && vite build",
-    "package:chrome": "node scripts/package-chrome.mjs",
-    "package:linux:binary": "node scripts/package-launcher.mjs linux-amd64",
-    "package:windows:binary": "node scripts/package-launcher.mjs windows-amd64",
-    "package:macos:binary": "node scripts/package-launcher.mjs darwin-arm64",
-    "package:deb": "pnpm package:linux:binary && sh scripts/package-linux.sh deb",
-    "package:rpm": "pnpm package:linux:binary && sh scripts/package-linux.sh rpm",
-    "package:linux": "pnpm package:linux:binary && sh scripts/package-linux.sh deb && sh scripts/package-linux.sh rpm",
-    "package:windows": "pnpm package:windows:binary && node scripts/package-windows.mjs",
-    "package:macos": "pnpm package:macos:binary && sh scripts/package-macos.sh",
+    "package:chrome": "node packaging/build.mjs chrome",
+    "package:linux:binary": "node packaging/build.mjs linux binary",
+    "package:windows:binary": "node packaging/build.mjs windows binary",
+    "package:macos:binary": "node packaging/build.mjs macos binary",
+    "package:deb": "node packaging/build.mjs linux deb",
+    "package:rpm": "node packaging/build.mjs linux rpm",
+    "package:linux": "node packaging/build.mjs linux",
+    "package:windows": "node packaging/build.mjs windows",
+    "package:macos": "node packaging/build.mjs macos",
     "package:all": "pnpm package:chrome && pnpm package:linux && pnpm package:windows",
     "build:all": "pnpm compile && pnpm package:all",
-    "check": "pnpm typecheck && pnpm test"
+    "check": "pnpm typecheck && pnpm test",
+    "test:browser": "node tests/browser/run.mjs"
   },
   "dependencies": {
     "@embedpdf/core": "3.0.0",

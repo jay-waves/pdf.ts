@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ViewerPlatform } from '../platform/types';
-import { DEFAULT_AI_PROMPT } from '../platform/browser-ai';
+import type { AiService } from '../ai/types';
+import { DEFAULT_AI_PROMPT } from '../ai/config';
 
 let promptSaveQueue: Promise<void> = Promise.resolve();
 
-export function useTranslationPrompt(getConfig: ViewerPlatform['getAiConfig'], setConfig: ViewerPlatform['setAiConfig']) {
+export function useTranslationPrompt(ai: AiService | undefined) {
+  const getConfig = ai?.getConfig;
+  const setConfig = ai?.configure;
   const [prompt, setPrompt] = useState(DEFAULT_AI_PROMPT);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');

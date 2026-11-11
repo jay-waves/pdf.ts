@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import type { Kernel } from '@embedpdf/core';
-import { StageToken } from '@embedpdf/plugin-stage';
 import type { ExternalDocumentChange, ManagedResource, PlatformDocument } from '../platform/types';
 import { ViewerStage } from './viewer-stage';
-import { nextDocumentFrame, waitForDocumentPaint } from './document-paint';
+import { waitForDocumentPaint } from './document-paint';
 
 /** Stage external updates offscreen; the active view owns the old document until commit. */
 export function useDocumentReplacement({
@@ -75,12 +74,7 @@ export function useDocumentReplacement({
         setExternalChange(change);
         return;
       }
-      const snapshot = stage.getSnapshot();
-      const readingPosition = stage.captureReadingPosition();
-      const nativeStage = registry.tryCapability(StageToken, documentId);
-      const zoomMode = nativeStage?.getZoomMode();
-      const zoomLevel = zoomMode === 'fit-width' || zoomMode === 'fit-page' ? zoomMode : nativeStage?.getZoomLevel();
-      const rotation = nativeStage?.getViewRotation();
+      const snapshot = stage.captureView();
       const nextStage = new ViewerStage(registry, replacementId);
       stagedCleanup = nextStage.install();
       const nextPage = Math.min(snapshot.pageNumber, manager.get(replacementId)!.pageCount);
@@ -88,20 +82,7 @@ export function useDocumentReplacement({
         documentId: replacementId!, stage: nextStage,
         presentationPage: snapshot.mode === 'presentation' ? nextPage : null,
       }));
-      await nextDocumentFrame(signal);
-      nextStage.applyLayout(snapshot.strategy, snapshot.spread);
-      if (rotation !== undefined) {
-        registry.tryCapability(StageToken, replacementId)?.setViewRotation(rotation);
-      }
-      if (zoomLevel !== undefined) nextStage.setZoom(zoomLevel);
-      await nextDocumentFrame(signal);
-      await nextDocumentFrame(signal);
-      if (snapshot.mode === 'presentation') {
-        nextStage.setPresentation(true);
-        nextStage.goToPage(nextPage);
-      } else {
-        nextStage.restoreReadingPosition(readingPosition);
-      }
+      await nextStage.restoreView(snapshot, signal);
       await waitForDocumentPaint(viewerRootRef.current!, replacementId, signal);
       signal.throwIfAborted();
       if (!discardConfirmed && hasUnsavedChanges()) {

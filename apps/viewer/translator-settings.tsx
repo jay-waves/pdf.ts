@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { platform } from '#platform';
-import { getBrowserDefaultLanguage } from '../platform/ai-prompt';
+import { getBrowserDefaultLanguage } from '../ai/ai-prompt';
 import { isTranslationEnabled, TRANSLATION_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { SettingsToggle } from './settings-toggle';
 import { useTranslationPrompt } from './use-translation-prompt';
@@ -9,7 +9,7 @@ import cardStyles from '../components/settings-card.module.css';
 
 export function TranslatorSettings({ llmEnabled }: { llmEnabled: boolean }) {
   const [enabled, setEnabled] = useState(() => isTranslationEnabled(platform.getPreference));
-  const editor = useTranslationPrompt(platform.getAiConfig, platform.setAiConfig);
+  const editor = useTranslationPrompt(platform.ai);
   return <section className={cardStyles.card} data-enabled={enabled} aria-labelledby="translator-title" onBlur={editor.save}>
     <div className={styles.heading}><div><h2 id="translator-title">Translate</h2>
       <p>{llmEnabled ? 'Uses the model and API key configured in LLM. The prompt controls the translation language.' : 'LLM is off. Translate opens Google Translate in a new tab.'}</p>

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { localEngine, PortableImageEncoder } from '@embedpdf/engine';
 import { encodeEngineResult, decodeEngineResult, ownEngineResponseBuffer, engineResultTransfers } from '../apps/engine/engine-wire.ts';
-import { fixture } from '../scripts/pdf-editing-fixture.mjs';
+import { fixture } from './support/pdf-editing-fixture.mjs';
 const roundTrip = value => decodeEngineResult(structuredClone(encodeEngineResult(value)));
 async function setup(t) {
   const engine = localEngine({ runtime: { prefer: 'wasm' }, defaultFallbackFonts: false });

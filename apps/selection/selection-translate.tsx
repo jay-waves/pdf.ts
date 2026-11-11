@@ -34,8 +34,8 @@ function TranslationPopover({ registry, request, onClose }: Props) {
         const selected = normalizePdfText(parts).trim();
         setSourceText(selected);
         if (!isLlmEnabled(platform.getPreference)) throw new Error('LLM is disabled. Open Google Translate to translate this selection.');
-        if (!platform.requestAi) throw new Error('Configure LLM in Developer > LLM to translate.');
-        const result = await platform.requestAi({ text: selected, task: 'translate' }, active.signal, (reply) => {
+        if (!platform.ai?.request) throw new Error('Configure LLM in Developer > LLM to translate.');
+        const result = await platform.ai?.request({ text: selected, task: 'translate' }, active.signal, (reply) => {
           if (!active.signal.aborted) setText(reply);
         });
         if (active.signal.aborted) return;

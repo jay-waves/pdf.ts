@@ -59,9 +59,11 @@ for (const failure of ['resource compiler', 'missing web build']) {
     if (process.platform === 'win32') return t.skip('fixture executable uses a POSIX shebang');
     const root = mkdtempSync(join(tmpdir(), 'pdf ts launcher '));
     t.after(() => rmSync(root, { recursive: true, force: true }));
-    for (const dir of ['scripts', 'release/web', 'launcher/viewer']) mkdirSync(join(root, dir), { recursive: true });
+    for (const dir of ['scripts', 'release/web', 'desktop/viewer']) mkdirSync(join(root, dir), { recursive: true });
     copyFileSync(resolve('scripts/package-launcher.mjs'), join(root, 'scripts/package-launcher.mjs'));
-    writeFileSync(join(root, 'launcher/viewer/placeholder.txt'), '');
+    writeFileSync(join(root, 'desktop/viewer/placeholder.txt'), '');
+    writeFileSync(join(root, 'go.mod'), 'module fixture\n');
+    writeFileSync(join(root, 'go.sum'), '');
     writeFileSync(join(root, 'release/pdf.ts.exe'), 'old executable');
     if (failure !== 'missing web build') writeFileSync(join(root, 'release/web/index.html'), '<html>viewer</html>');
     const resourceTool = join(root, 'mock rsrc');
@@ -76,8 +78,45 @@ process.exit(7);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, failure === 'resource compiler' ? /exited with status 7/ : /Run pnpm compile first/);
     assert.equal(existsSync(join(root, 'release/pdf.ts.exe')), false);
-    assert.equal(existsSync(join(root, 'launcher/icon_windows_amd64.syso')), false);
-    assert.equal(existsSync(join(root, 'launcher/viewer/index.html.gz')), false);
-    assert.equal(existsSync(join(root, 'launcher/viewer/placeholder.txt')), true);
+    assert.equal(existsSync(join(root, 'desktop/icon_windows_amd64.syso')), false);
+    assert.equal(existsSync(join(root, 'desktop/viewer/index.html.gz')), false);
+    assert.equal(existsSync(join(root, 'desktop/viewer/placeholder.txt')), true);
   });
 }
+
+test('desktop build isolates embedded assets and removes its workspace', t => {
+  if (process.platform === 'win32') return t.skip('fixture executable uses a POSIX shebang');
+  const root = mkdtempSync(join(tmpdir(), 'pdf isolated build '));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (const dir of ['scripts', 'release/web', 'desktop/viewer']) mkdirSync(join(root, dir), { recursive: true });
+  copyFileSync(resolve('scripts/package-launcher.mjs'), join(root, 'scripts/package-launcher.mjs'));
+  writeFileSync(join(root, 'go.mod'), 'module fixture\n');
+  writeFileSync(join(root, 'go.sum'), '');
+  writeFileSync(join(root, 'desktop/main.go'), 'package main');
+  writeFileSync(join(root, 'desktop/viewer/placeholder.txt'), 'source sentinel');
+  writeFileSync(join(root, 'release/web/index.html'), 'viewer bytes');
+  const log = join(root, 'workspace.json');
+  const compiler = join(root, 'fake go');
+  writeFileSync(compiler, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const decoded = require('node:zlib').gunzipSync(fs.readFileSync('desktop/viewer/index.html.gz')).toString();
+fs.writeFileSync(process.env.BUILD_LOG, JSON.stringify({ cwd: process.cwd(), decoded, args }));
+fs.writeFileSync(args[args.indexOf('-o') + 1], 'binary');
+process.exit(Number(process.env.BUILD_STATUS));
+`, { mode: 0o755 });
+  for (const status of [0, 7]) {
+    const result = spawnSync(process.execPath, [join(root, 'scripts/package-launcher.mjs'), 'linux-amd64'], {
+      encoding: 'utf8', env: { ...process.env, PDF_TS_GO: compiler, BUILD_LOG: log, BUILD_STATUS: String(status) },
+    });
+    assert.equal(result.status === 0, status === 0, result.stderr);
+    const record = JSON.parse(readFileSync(log, 'utf8'));
+    assert.notEqual(record.cwd, root);
+    assert.equal(record.decoded, 'viewer bytes');
+    assert.ok(record.args.includes('-buildvcs=false'));
+    assert.equal(existsSync(record.cwd), false);
+    assert.equal(readFileSync(join(root, 'desktop/viewer/placeholder.txt'), 'utf8'), 'source sentinel');
+    assert.equal(existsSync(join(root, 'desktop/viewer/index.html.gz')), false);
+    assert.equal(existsSync(join(root, 'release/pdf.ts')), status === 0);
+  }
+});

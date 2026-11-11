@@ -8,10 +8,10 @@ import { stagePlugin } from '@embedpdf/plugin-stage';
 import { StageToken } from '@embedpdf/plugin-stage/contract/host';
 import { interactionPlugin } from '@embedpdf/plugin-interaction';
 import { InteractionToken } from '@embedpdf/plugin-interaction/contract/host';
-import { fixture } from '../scripts/pdf-editing-fixture.mjs';
+import { fixture } from './support/pdf-editing-fixture.mjs';
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    return nextResolve(['../shared/reading-region', '../renderer/stage-scroll-adapter'].includes(specifier) ? `${specifier}.ts` : specifier, context);
+    return nextResolve(['../shared/reading-region', '../renderer/stage-scroll-adapter', './document-paint'].includes(specifier) ? `${specifier}.ts` : specifier, context);
   },
   load(url, context, nextLoad) {
     if (url.endsWith('/stage-scroll-adapter.ts') || url.endsWith('/viewer-stage.ts')) return {

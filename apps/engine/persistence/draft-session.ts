@@ -55,15 +55,15 @@ export class DraftSession {
   private enqueue() {
     if (this.busy || this.blocked || this.options.revision() <= this.state.draftRevision) return;
     this.busy = true;
-    const operation = this.options.lane.tail.then(() => this.persist());
-    const done = operation.catch(error => this.fail(error)).finally(() => {
-      this.busy = false;
-      // Edits arriving during IO remain pending and get their own snapshot.
-      if (!this.blocked && this.state.draftStatus !== 'error' && this.options.revision() > this.state.draftRevision
-        && this.options.revision() > this.options.savedRevision()) this.changed();
-      this.options.settled();
-    });
-    this.options.lane.tail = done;
+    void this.options.lane.run(async () => {
+      try { await this.persist(); } catch (error) { this.fail(error); } finally {
+        this.busy = false;
+        // Edits arriving during IO remain pending and get their own snapshot.
+        if (!this.blocked && this.state.draftStatus !== 'error' && this.options.revision() > this.state.draftRevision
+          && this.options.revision() > this.options.savedRevision()) this.changed();
+        this.options.settled();
+      }
+    }).catch(error => this.fail(error));
   }
   private async write(draft: DocumentDraft) {
     if (!this.storage) throw new Error('Draft storage is unavailable. Save to PDF to keep your changes.');

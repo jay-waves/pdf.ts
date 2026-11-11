@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { platform } from '#platform';
 import { supportsLlm as platformSupportsLlm } from '../platform/llm';
-import type { AiConfig, AiConfigUpdate } from '../platform/types';
-import { DEFAULT_AI_PROMPT } from '../platform/browser-ai';
+import type { AiConfig, AiConfigUpdate } from '../ai/types';
+import { createDefaultAiConfig } from '../ai/config';
 import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
 import cardStyles from '../components/settings-card.module.css';
 
-const DEFAULT_PROMPT = DEFAULT_AI_PROMPT;
-const EMPTY_CONFIG: AiConfig = { model: 'deepseek-flash', baseUrl: 'https://api.deepseek.com', apiKeyConfigured: false, rememberApiKey: false, prompt: DEFAULT_PROMPT, totalTokens: 0 };
+const EMPTY_CONFIG = createDefaultAiConfig();
 // Keep saves ordered even when the settings dialog is closed and reopened.
 let saveQueue: Promise<void> = Promise.resolve();
 const supportsLlm = platformSupportsLlm(platform);
@@ -41,7 +40,7 @@ export function LlmSettings({ enabled, onEnabledChange }: {
   useEffect(() => {
     if (!supportsLlm) return;
     let active = true;
-    void saveQueue.then(() => platform.getAiConfig!()).then((value) => {
+    void saveQueue.then(() => platform.ai!.getConfig()).then((value) => {
       if (!active) return;
       // Preserve edits made while the browser configuration is loading.
       const next = draft.current.revision === 0 ? value : {
@@ -79,8 +78,8 @@ export function LlmSettings({ enabled, onEnabledChange }: {
     if (mounted.current) { setError(''); setStatus('Saving…'); }
     saveQueue = saveQueue.then(async () => {
       try {
-        await platform.setAiConfig!(update);
-        const saved = await platform.getAiConfig!();
+        await platform.ai!.configure(update);
+        const saved = await platform.ai!.getConfig();
         if (!mounted.current) return;
         // A slow response must never replace text typed after this save began.
         if (draft.current.revision !== snapshot.revision) return;
@@ -121,10 +120,10 @@ export function LlmSettings({ enabled, onEnabledChange }: {
     try {
       await saveQueue;
       if (dirty.current && action === 'test') throw new Error('Save valid LLM settings before testing the connection.');
-      if (action === 'test') await platform.requestAi!({ text: 'hello' });
-      if (action === 'clear') await platform.setAiConfig!({ apiKey: '', rememberApiKey: false });
-      if (action === 'reset') await platform.setAiConfig!({ reset: true });
-      const value = await platform.getAiConfig!();
+      if (action === 'test') await platform.ai!.request({ text: 'hello' });
+      if (action === 'clear') await platform.ai!.configure({ apiKey: '', rememberApiKey: false });
+      if (action === 'reset') await platform.ai!.configure({ reset: true });
+      const value = await platform.ai!.getConfig();
       draft.current = { config: value, apiKey: '', revision: draft.current.revision + 1 };
       setConfig(value); setApiKey('');
       setStatus(action === 'test' ? 'LLM connection successful.' : '');

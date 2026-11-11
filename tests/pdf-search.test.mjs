@@ -4,7 +4,7 @@ import { localEngine } from '@embedpdf/engine';
 import { createKernel } from '@embedpdf/core';
 import { searchPlugin, SearchToken } from '@embedpdf/react/search';
 import { outlinePlugin, OutlineToken } from '@embedpdf/react/outline';
-import { viewerFeaturesFixture } from '../scripts/viewer-features-fixture.mjs';
+import { viewerFeaturesFixture } from './support/viewer-features-fixture.mjs';
 
 async function setup(t) {
   const engine = localEngine({ runtime: { prefer: 'wasm' }, defaultFallbackFonts: false });

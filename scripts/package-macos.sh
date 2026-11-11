@@ -30,7 +30,7 @@ mkdir -p "$contents/MacOS" "$resources" "$contents/Library/LaunchAgents"
 cp "$binary" "$contents/MacOS/pdf-ts-launcher"
 chmod 0755 "$contents/MacOS/pdf-ts-launcher"
 xcrun swiftc -O -target arm64-apple-macosx13.0 \
-  packaging/macos/main.swift -o "$contents/MacOS/pdf.ts"
+  desktop/macos/main.swift -o "$contents/MacOS/pdf.ts"
 cp packaging/macos/io.github.jay-waves.pdf.ts.agent.plist "$contents/Library/LaunchAgents/"
 sed \
   -e "s/@@SHORT_VERSION@@/$version/g" \

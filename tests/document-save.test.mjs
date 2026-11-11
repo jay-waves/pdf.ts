@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DocumentSaveCoordinator, ownedPdfBuffer } from '../apps/engine/persistence/document-save.ts';
+import { DocumentSaveCoordinator, SaveLane, ownedPdfBuffer } from '../apps/engine/persistence/document-save.ts';
 function deferred() {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
@@ -124,7 +124,7 @@ test('save forwards the owned buffer and retry-copy prepares fresh bytes after t
   assert.deepEqual(received.map(buffer => [...new Uint8Array(buffer)]), [[1, 2, 3], [2, 2, 3]]);
   assert.equal(f.coordinator.candidateVersion, undefined);
   assert.equal(f.coordinator.saving, false);
-  assert.equal(await f.coordinator.lane.tail, false, 'settled lane returns only the save status, not PDF bytes');
+  assert.equal(await f.coordinator.lane.settled(), undefined, 'lane does not retain PDF bytes or operation results');
 });
 
 test('failed save after transfer releases pending state and permits a fresh save', async () => {
@@ -135,6 +135,26 @@ test('failed save after transfer releases pending state and permits a fresh save
   } }), /disk failed/);
   assert.equal(f.coordinator.candidateVersion, undefined);
   assert.equal(f.coordinator.saving, false);
-  assert.equal(await f.coordinator.lane.tail, undefined);
+  assert.equal(await f.coordinator.lane.settled(), undefined);
   assert.equal(await f.coordinator.save(f.options), true);
+});
+
+ test('save lane preserves FIFO across failures and waits for cleanup', async () => {
+  const lane = new SaveLane();
+  const gate = deferred();
+  const events = [];
+  const first = lane.run(async () => {
+    try { throw Error('failed'); }
+    finally { await gate.promise; events.push('cleanup'); }
+  });
+  const rejected = assert.rejects(first, /failed/);
+  const second = lane.run(async () => { events.push('next'); return 42; });
+  const settled = lane.settled();
+  await Promise.resolve();
+  assert.deepEqual(events, []);
+  gate.resolve();
+  await rejected;
+  assert.equal(await second, 42);
+  await settled;
+  assert.deepEqual(events, ['cleanup', 'next']);
 });

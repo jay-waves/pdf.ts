@@ -1,9 +1,6 @@
+import { browserCapabilities } from './browser-capabilities';
 import type { PdfWritePlan, PdfWriteResult, SharedSaveState } from '../shared/pdf-file';
 import { sha256 } from 'hash-wasm';
-import { browserAiCapabilities } from './browser-ai';
-import { browserPersistence } from './browser-storage';
-import { browserLocalDocumentCapabilities } from './browser-local-document';
-import { getExternalUrl } from '../shared/url';
 import type { PlatformDocument, ExternalDocumentChange, ViewerPlatform } from './types';
 
 type WriteResponse = {
@@ -221,17 +218,11 @@ const launcherDocumentId = new URLSearchParams(window.location.search).get('laun
 const launcher = launcherDocumentId ? new PdfLauncherSession(launcherDocumentId) : null;
 
 export const platform: ViewerPlatform = {
+  ...browserCapabilities,
   async loadViewerResources(bundledWasmUrl) {
     return {
       wasm: { url: bundledWasmUrl },
       document: await launcher?.openDocument(),
     };
   },
-  ...browserLocalDocumentCapabilities,
-  openExternal(url) {
-    const target = getExternalUrl(url, window.location.href);
-    if (target) window.open(target, '_blank', 'noopener,noreferrer');
-  },
-  ...browserPersistence,
-  ...browserAiCapabilities,
 };

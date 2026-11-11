@@ -6,7 +6,7 @@ import { SelectionToken } from '@embedpdf/plugin-selection';
 import { Check, Copy, MessageSquareMore, Pencil, Send } from 'lucide-react';
 import { FloatingPopover, IconButton } from '../components';
 import { platform } from '#platform';
-import type { AiMessage } from '../platform/types';
+import type { AiMessage } from '../ai/types';
 import { normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
 import styles from '../annotations/comments.module.css';
@@ -86,8 +86,8 @@ export function SelectionLlm({ registry, request, onClose }: {
       const onText = (text: string) => {
         if (!active.signal.aborted) setText(text);
       };
-      if (!platform.requestAi) throw new Error('LLM is unavailable in this environment.');
-      const answer = await platform.requestAi({ text: prompt, history: history.current }, active.signal, onText);
+      if (!platform.ai?.request) throw new Error('LLM is unavailable in this environment.');
+      const answer = await platform.ai?.request({ text: prompt, history: history.current }, active.signal, onText);
       if (active.signal.aborted) return;
       history.current = [...history.current, { role: 'user', content: prompt }, { role: 'assistant', content: answer }];
       setText(answer);

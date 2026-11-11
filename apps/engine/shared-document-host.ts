@@ -144,7 +144,7 @@ export class SharedDocumentHost {
   async downloadDraft(id: string) { return this.entries.get(id)!.draft.download(); }
   async close(id: string) {
     const e = this.entries.get(id); if (!e) return;
-    await e.persistence.lane.tail;
+    await e.persistence.lane.settled();
     await e.draft.close(() => this.callbacks.run(() => this.capture(id)));
     await this.callbacks.run(async () => { await e.document.close(); this.entries.delete(id); });
   }

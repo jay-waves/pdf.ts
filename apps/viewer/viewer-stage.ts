@@ -1,3 +1,4 @@
+import { nextDocumentFrame } from './document-paint';
 /**
  * Application navigation and reading/presentation state over EmbedPDF StageToken.
  * Native Stage owns layout, projection, rotation and bounded scrolling. Reading-area
@@ -5,7 +6,7 @@
  * creating annotations or dirtying the PDF.
  */
 import type { Kernel } from '@embedpdf/core';
-import type { Rect } from '@embedpdf/core-geometry';
+import type { Rect, Rotation } from '@embedpdf/core-geometry';
 import { StageToken, type ScrollBehaviorKind } from '@embedpdf/plugin-stage';
 import { InteractionToken, samplePointOn, type PointerSample } from '@embedpdf/plugin-interaction/contract/host';
 import { READING_REGION_MODE, type ReadingRegion } from '../shared/reading-region';
@@ -27,6 +28,17 @@ export type StageSnapshot = Readonly<{
   spread: SpreadMode;
   selectingRegion: boolean;
 }>;
+
+/** Portable view state for replacing a PDF; native SDK details stay here. */
+export interface ViewCheckpoint {
+  readonly mode: StageSnapshot['mode'];
+  readonly pageNumber: number;
+  readonly strategy: ScrollStrategy;
+  readonly spread: SpreadMode;
+  readonly position: ReturnType<StageScrollAdapter['getAnchor']>;
+  readonly zoom?: ZoomLevel;
+  readonly rotation?: Rotation;
+}
 
 export type RegionPreview = Readonly<{ pageIndex: number; rect: Rect }> | null;
 
@@ -181,6 +193,34 @@ export class ViewerStage {
     this.publish({ pageNumber: pageIndex + 1 });
     this.cancelRegionSelection();
     this.fitReadingRegion(region, pageIndex + 1);
+  }
+
+  captureView(): ViewCheckpoint {
+    const native = this.spread;
+    const mode = native?.getZoomMode();
+    return {
+      mode: this.state.mode, pageNumber: this.state.pageNumber,
+      strategy: this.state.strategy, spread: this.state.spread,
+      position: this.captureReadingPosition(),
+      zoom: mode === 'fit-width' || mode === 'fit-page' ? mode : native?.getZoomLevel(),
+      rotation: native?.getViewRotation(),
+    };
+  }
+
+  /** Call after mounting the replacement surface. Owns layout/zoom ordering and
+   * frame settling; the caller still decides when a painted document is committed. */
+  async restoreView(view: ViewCheckpoint, signal: AbortSignal) {
+    await nextDocumentFrame(signal);
+    this.applyLayout(view.strategy, view.spread);
+    if (view.rotation !== undefined) this.spread?.setViewRotation(view.rotation);
+    if (view.zoom !== undefined) this.setZoom(view.zoom);
+    await nextDocumentFrame(signal);
+    await nextDocumentFrame(signal);
+    signal.throwIfAborted();
+    if (view.mode === 'presentation') {
+      this.setPresentation(true);
+      this.goToPage(Math.min(view.pageNumber, this.registry.documents.get(this.documentId)!.pageCount));
+    } else this.restoreReadingPosition(view.position);
   }
 
   captureReadingPosition() {

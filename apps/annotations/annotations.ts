@@ -58,9 +58,9 @@ export function getCommonAnnotationTool(capability: AnnotationCapability, annota
   return subtype && annotations.every((annotation) => annotation.subtype === subtype)
     ? capability.tools.list().find((tool) => tool.subtype === subtype) ?? null : null;
 }
-export function getAnnotationColorPatch(_toolId: string | null, field: AnnotationColorFieldKey, color: string) { return field === 'textColor' ? { richText: { body: { color: color === TRANSPARENT_ANNOTATION_COLOR ? '#000000' : color } } } : { [field]: color === TRANSPARENT_ANNOTATION_COLOR ? null : color }; }
+function getAnnotationColorPatch(field: AnnotationColorFieldKey, color: string) { return field === 'textColor' ? { richText: { body: { color: color === TRANSPARENT_ANNOTATION_COLOR ? '#000000' : color } } } : { [field]: color === TRANSPARENT_ANNOTATION_COLOR ? null : color }; }
 export function getAnnotationPresetPatch(toolId: string | null, field: AnnotationColorFieldKey, color: string) {
-  return { ...getAnnotationColorPatch(toolId, field, getThemeAnnotationColor(color, 'light') ?? color),
+  return { ...getAnnotationColorPatch(field, getThemeAnnotationColor(color, 'light') ?? color),
     opacity: toolId && VECTOR_TOOL_IDS.has(toolId) ? VECTOR_ANNOTATION_OPACITY : 1,
     ...(toolId === 'highlight' || toolId === 'inkHighlighter' ? { blendMode: 'multiply' as const } : {}) };
 }

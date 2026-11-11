@@ -1,3 +1,4 @@
+import type { AiService } from '../ai/types';
 /**
  * Platform boundary for browser, extension and launcher access. File writes use
  * shared/pdf-file contracts also consumed by the engine; platform adapters must
@@ -61,18 +62,5 @@ export interface ViewerPlatform {
   setPreference(key: string, value: string): void;
   readReadingProgress(documentKey: string): Promise<ReadingProgress | undefined>;
   writeReadingProgress(documentKey: string, progress: ReadingProgress): Promise<void>;
-  requestAi?(request: AiRequest, signal?: AbortSignal, onText?: (text: string) => void): Promise<string>;
-  getAiConfig?(): Promise<AiConfig>;
-  setAiConfig?(config: AiConfigUpdate): Promise<void>;
+  ai?: AiService;
 }
-
-export type AiConfig = { model: string; baseUrl: string; apiKeyConfigured: boolean; rememberApiKey: boolean; prompt: string; totalTokens: number };
-export type AiConfigUpdate = Partial<Omit<AiConfig, 'apiKeyConfigured' | 'totalTokens'>> & { apiKey?: string; reset?: boolean };
-
-export type AiMessage = { role: 'user' | 'assistant'; content: string };
-
-export type AiRequest = {
-  history?: AiMessage[];
-  text: string;
-  task?: 'translate';
-};

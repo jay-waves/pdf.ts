@@ -1,9 +1,9 @@
 import type { DraftState } from '../engine/persistence/document-draft';
 import { getSharedDocumentClient } from '../engine/shared-document-client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import type { Engine } from '@embedpdf/core';
-import { savePdf } from './pdf-save';
+import { createDocumentOutput } from './pdf-save';
 import type { PdfFileHandle } from '../platform/types';
 
 function isAbortError(error: unknown) {
@@ -23,6 +23,8 @@ export function useDocumentPersistence({
   fileHandle?: PdfFileHandle;
   title: string;
 }) {
+  const output = useMemo(() => createDocumentOutput({ engine, registry, documentId, fileHandle }),
+    [engine, registry, documentId, fileHandle]);
   const saveInProgressRef = useRef<Promise<boolean> | null>(null);
   const changesRef = useRef({ dirty: false, version: 0 });
   const [isDirty, setIsDirty] = useState(false);
@@ -73,7 +75,7 @@ export function useDocumentPersistence({
       if (saveInProgressRef.current) return saveInProgressRef.current;
 
       const versionAtStart = changes.version;
-      const save = savePdf(engine, registry, documentId, fileHandle)
+      const save = output.save()
         .then((saved) => {
           // Preserve edits made while serialization or disk I/O was in progress.
           if (saved && !getSharedDocumentClient(engine) && changesRef.current.version === versionAtStart) {
@@ -93,7 +95,7 @@ export function useDocumentPersistence({
       saveInProgressRef.current = save;
       return save;
     },
-    [documentId, engine, fileHandle, registry, setDirty],
+    [engine, output, setDirty],
   );
 
   useEffect(() => {
@@ -104,7 +106,7 @@ export function useDocumentPersistence({
 
   const hasUnsavedChanges = useCallback(() => changesRef.current.dirty, []);
 
-  return { isDirty, draft, saveDocument, setDirty, hasUnsavedChanges };
+  return { isDirty, draft, saveDocument, exportDocument: output.export, saveCopy: output.saveCopy, setDirty, hasUnsavedChanges };
 }
 
 function handleBeforeUnload(event: BeforeUnloadEvent) {

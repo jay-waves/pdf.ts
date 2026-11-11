@@ -33,7 +33,6 @@ import { DeveloperDialog } from './developer-dialog';
 import { ContextMenu } from '../selection/context-menu';
 import { Dialog } from '../components';
 import { ViewerFocusContext } from '../components/viewer-focus';
-import { exportPdf, savePdfCopy } from '../document/pdf-save';
 import { useRenderThemeVersion } from './use-pdf-runtime';
 import type { PdfRuntime } from '../engine/pdf-runtime';
 import { useDocumentPersistence } from '../document/viewer-document-persistence';
@@ -125,7 +124,7 @@ export function ViewerApp({
   const signatures = useDocumentSignatures(engine, registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
   const viewerTheme = useStore(viewerThemeStore, (state) => state.theme);
-  const { isDirty, draft, saveDocument, setDirty, hasUnsavedChanges } = useDocumentPersistence({
+  const { isDirty, draft, saveDocument, exportDocument, saveCopy, setDirty, hasUnsavedChanges } = useDocumentPersistence({
     engine,
     registry,
     documentId,
@@ -142,7 +141,7 @@ export function ViewerApp({
     stage,
     saveDocument: () => void saveDocument(),
     exportDocument: () => {
-      void exportPdf(registry, documentId, resolvedDocumentName ?? 'document.pdf').catch((error) => {
+      void exportDocument(resolvedDocumentName ?? 'document.pdf').catch((error) => {
         console.error('[pdf-ts] failed to export PDF', error);
       });
     },
@@ -350,7 +349,7 @@ export function ViewerApp({
         }}
         onSaveCopy={async () => {
           if (!externalChange) return;
-          const name = await savePdfCopy(registry, documentId, fileHandle);
+          const name = await saveCopy();
           if (!name) throw new Error('Saving a copy is not available.');
           await reloadExternalDocument(externalChange);
           window.alert(`Your changes were saved as:\n${name}`);

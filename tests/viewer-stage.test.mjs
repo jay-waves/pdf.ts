@@ -6,7 +6,7 @@ import { InteractionToken } from '@embedpdf/plugin-interaction/contract/host';
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const sourceModules = new Set(['../shared/utils', '../shared/reading-region', '../renderer/stage-scroll-adapter', './viewport-geometry']);
+    const sourceModules = new Set(['../shared/utils', '../shared/reading-region', '../renderer/stage-scroll-adapter', './viewport-geometry', './document-paint']);
     return nextResolve(sourceModules.has(specifier) ? `${specifier}.ts` : specifier, context);
   },
   load(url, context, nextLoad) {
@@ -306,4 +306,29 @@ test('continuous region dragging leaves navigation subscribers idle and clears o
   regionHandler.onPointerDown(sample(10, 20));
   regionHandler.onPointerMove(sample(50, 60));
   assert.equal(previewUpdates, count);
+});
+
+ test('view replacement restores fit mode, rotation and reading anchor in order', async t => {
+  const calls = [];
+  const frames = [];
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'requestAnimationFrame');
+  globalThis.requestAnimationFrame = callback => { frames.push(callback); return frames.length; };
+  t.after(() => previous ? Object.defineProperty(globalThis, 'requestAnimationFrame', previous) : delete globalThis.requestAnimationFrame);
+  const native = {
+    getZoomMode: () => 'fit-width', getViewRotation: () => 90,
+    setViewRotation: value => calls.push(['rotation', value]),
+  };
+  const stage = new ViewerStage({ tryCapability: () => native }, 'doc', { getAnchor: () => ({ page: 3 }) });
+  const checkpoint = stage.captureView();
+  assert.equal(checkpoint.zoom, 'fit-width');
+  stage.applyLayout = (...args) => calls.push(['layout', ...args]);
+  stage.setZoom = value => calls.push(['zoom', value]);
+  stage.restoreReadingPosition = value => calls.push(['anchor', value]);
+  const restored = stage.restoreView(checkpoint, new AbortController().signal);
+  assert.deepEqual(calls, []);
+  frames.shift()(); await Promise.resolve();
+  assert.deepEqual(calls, [['layout', 'vertical', 'none'], ['rotation', 90], ['zoom', 'fit-width']]);
+  frames.shift()(); await Promise.resolve();
+  frames.shift()(); await restored;
+  assert.deepEqual(calls.at(-1), ['anchor', { page: 3 }]);
 });

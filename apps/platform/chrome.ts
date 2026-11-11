@@ -1,7 +1,5 @@
-import { browserAiCapabilities } from './browser-ai';
+import { browserCapabilities } from './browser-capabilities';
 import { getFileNameFromUrl, parseUrl } from '../shared/url';
-import { browserPersistence } from './browser-storage';
-import { browserLocalDocumentCapabilities } from './browser-local-document';
 import {
   createBrowserWriter,
   pickPdfFileHandle,
@@ -69,6 +67,7 @@ function getDocumentUrl() {
 }
 
 export const platform: ViewerPlatform = {
+  ...browserCapabilities,
   async loadViewerResources(bundledWasmUrl) {
     const documentUrl = getDocumentUrl();
     const documentName = documentUrl ? getFileNameFromUrl(documentUrl) ?? 'document.pdf' : undefined;
@@ -83,12 +82,9 @@ export const platform: ViewerPlatform = {
       } : undefined,
     };
   },
-  ...browserLocalDocumentCapabilities,
   openExternal(url) {
     const target = parseUrl(url, activeDocumentUrl ?? window.location.href);
     if (!target || !['file:', 'http:', 'https:'].includes(target.protocol)) return;
     void (globalThis as ChromeGlobal).chrome.tabs.create({ url: target.href });
   },
-  ...browserPersistence,
-  ...browserAiCapabilities,
 };

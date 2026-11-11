@@ -1,3 +1,4 @@
+import { SaveLane } from '../apps/engine/persistence/document-save.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks, stripTypeScriptTypes } from 'node:module';
@@ -55,7 +56,7 @@ function draft(revision = 1) {
     updatedAt: '2026-01-01T00:00:00Z', targets: [], removed: [], bundle: null, formValues: { Name: { value: 'edited' } } };
 }
 function session() {
-  return new DraftSession({ lane: { tail: Promise.resolve() }, revision: () => 2, savedRevision: () => 0,
+  return new DraftSession({ lane: new SaveLane(), revision: () => 2, savedRevision: () => 0,
     capture: async () => draft(2), notify() {}, settled() {} });
 }
 

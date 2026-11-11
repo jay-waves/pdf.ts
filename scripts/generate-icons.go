@@ -51,7 +51,7 @@ func main() {
 		}
 		check(os.WriteFile(filepath.Join(root, "assets", name), encoded[size], 0o644))
 	}
-	check(os.WriteFile(filepath.Join(root, "launcher", "icon.png"), encoded[128], 0o644))
+	check(os.WriteFile(filepath.Join(root, "desktop", "icon.png"), encoded[128], 0o644))
 	check(writeICO(filepath.Join(root, "assets", "icon.ico"), encoded))
 }
 

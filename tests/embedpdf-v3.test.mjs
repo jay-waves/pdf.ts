@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { localEngine } from '@embedpdf/engine';
-import { fixture } from '../scripts/pdf-editing-fixture.mjs';
+import { fixture } from './support/pdf-editing-fixture.mjs';
 
 // Exercise the shipped WASM runtime, the same implementation used by the viewer.
 // No v2 adapter, mocked executor, timing delay, or network font fetch is involved.
