@@ -1,7 +1,6 @@
 import { useCallback, useReducer, useRef, useSyncExternalStore } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import { HistoryToken } from '@embedpdf/plugin-history';
-import { StageToken } from '@embedpdf/plugin-stage';
 import { ScrollStrategy } from './viewer-stage';
 import type { ZoomLevel } from './viewer-stage';
 import { getAnnotationScope } from '../annotations/annotations';
@@ -20,10 +19,8 @@ export type ViewerTranslationRequest = {
   anchor: { x: number; y: number };
 };
 
-type ViewerSidePanel = { type: ViewerPanel };
-
 type ViewerOverlay =
-  | { type: 'side-panel'; panel: ViewerSidePanel }
+  | { type: 'side-panel'; panel: ViewerPanel }
   | { type: 'dialog'; dialog: ViewerDialog }
   | { type: 'translation'; request: ViewerTranslationRequest }
   | { type: 'comment-editor'; annotationId: string; pointerX?: number }
@@ -40,10 +37,7 @@ type ViewerUiCommand =
   | { type: 'ui/set-pan'; enabled: boolean }
   | { type: 'ui/set-toolbar-section'; section: ToolbarSection | null }
   | { type: 'ui/toggle-panel'; panel: Extract<ViewerPanel, 'thumbnails' | 'colors'> }
-  | { type: 'ui/open-panel'; panel: ViewerPanel }
-  | { type: 'ui/open-comments'; annotationId: string; pointerX?: number }
-  | ({ type: 'ui/open-translation' } & ViewerTranslationRequest)
-  | { type: 'ui/open-dialog'; dialog: ViewerDialog }
+  | { type: 'ui/open-overlay'; overlay: NonNullable<ViewerOverlay> }
   | { type: 'ui/close-overlay' };
 
 const INITIAL_VIEWER_UI: ViewerUiState = {
@@ -73,37 +67,15 @@ function reduceViewerUi(state: ViewerUiState, action: ViewerUiCommand): ViewerUi
       return {
         ...state,
         toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
-        overlay: current?.type === action.panel
+        overlay: current === action.panel
           ? null
-          : { type: 'side-panel', panel: { type: action.panel } },
+          : { type: 'side-panel', panel: action.panel },
       };
     }
-    case 'ui/open-panel': return {
+    case 'ui/open-overlay': return {
       ...state,
       toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
-      overlay: { type: 'side-panel', panel: { type: action.panel } },
-    };
-    case 'ui/open-comments': return {
-      ...state,
-      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
-      overlay: {
-        type: 'comment-editor',
-        annotationId: action.annotationId,
-        pointerX: action.pointerX,
-      },
-    };
-    case 'ui/open-dialog': return {
-      ...state,
-      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
-      overlay: { type: 'dialog', dialog: action.dialog },
-    };
-    case 'ui/open-translation': return {
-      ...state,
-      toolbarSection: state.toolbarSection === 'search' ? null : state.toolbarSection,
-      overlay: {
-        type: 'translation',
-        request: { documentId: action.documentId, anchor: action.anchor, mode: action.mode },
-      },
+      overlay: action.overlay,
     };
     case 'ui/close-overlay': return { ...state, overlay: null };
   }
@@ -174,10 +146,7 @@ function executeViewerCommand(
       updateUi(command);
       return;
     case 'ui/toggle-panel':
-    case 'ui/open-panel':
-    case 'ui/open-comments':
-    case 'ui/open-translation':
-    case 'ui/open-dialog':
+    case 'ui/open-overlay':
     case 'ui/close-overlay':
       updateUi(command);
       return;
@@ -187,19 +156,11 @@ function executeViewerCommand(
     case 'navigation/move-pages':
       dependencies.stage?.movePages(command.delta);
       return;
-    case 'view/zoom-step': {
-      if (dependencies.stage) {
-        dependencies.stage.stepZoom(command.direction);
-        return;
-      }
-      const zoom = documentId ? registry?.tryCapability(StageToken, documentId) : null;
-      if (command.direction > 0) zoom?.zoomIn();
-      else zoom?.zoomOut();
+    case 'view/zoom-step':
+      dependencies.stage?.stepZoom(command.direction);
       return;
-    }
     case 'view/set-zoom':
-      if (dependencies.stage) dependencies.stage.setZoom(command.level);
-      else if (documentId) registry?.tryCapability(StageToken, documentId)?.zoomTo(typeof command.level === 'number' ? command.level : { mode: command.level });
+      dependencies.stage?.setZoom(command.level);
       return;
     case 'view/select-reading-region':
       updateUi({ type: 'ui/set-pan', enabled: false });
@@ -225,8 +186,7 @@ function executeViewerCommand(
       dependencies.stage?.setStrategy(command.strategy);
       return;
     case 'view/rotate':
-      if (dependencies.stage) dependencies.stage.rotate();
-      else if (documentId) registry?.tryCapability(StageToken, documentId)?.rotateViewBy(90);
+      dependencies.stage?.rotate();
       return;
     case 'annotation/toggle-tool': {
       const annotation = getAnnotationScope(registry, documentId);

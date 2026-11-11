@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict';
-import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
+import { withViewer, dropPdf } from '../support/browser-viewer.mjs';
 import { fixture } from '../support/pdf-editing-fixture.mjs';
 
-const browser = await chromium.launch({ channel: 'chrome' });
-try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
-  await page.getByRole('button', { name: 'Choose or drop a PDF file' }).waitFor();
-  const dataTransfer = await page.evaluateHandle(bytes => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([new Uint8Array(bytes)], 'pan.pdf', { type: 'application/pdf' }));
-    return transfer;
-  }, [...fixture({ secondPage: true })]);
-  await page.getByRole('button', { name: 'Choose or drop a PDF file' }).dispatchEvent('drop', { dataTransfer });
+await withViewer(async (page, errors) => {
+  await dropPdf(page, fixture({ secondPage: true }), 'pan.pdf');
   const paper = page.locator('[data-pdf-page-index="0"]').first();
   await paper.waitFor();
   await page.mouse.move(640, 25);
@@ -66,6 +55,4 @@ try {
   assert.equal(await pan.getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
   console.log('PASS pan toggling, page-tool reset, reading-area toggle, and presentation reset');
-} finally {
-  await browser.close();
-}
+});

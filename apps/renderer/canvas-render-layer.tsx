@@ -9,7 +9,7 @@ const EMPTY_PLAN: TilePaintPlan = { engaged: false, paint: [], fetching: [], sta
 const fill = { position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' } as const;
 
 /** Presentation only. The SDK owns keys, scheduling, deduplication, LRU and retention. */
-export function CanvasRenderLayer({ tiles = true, overlays }: { tiles?: boolean; overlays: boolean }) {
+export function CanvasRenderLayer({ overlays }: { overlays: boolean }) {
   const page = usePage();
   const render = useCapability(RenderToken);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -37,7 +37,7 @@ export function CanvasRenderLayer({ tiles = true, overlays }: { tiles?: boolean;
   }, [render, page.ref, page.view, key, layers]);
   return <>
     <canvas ref={canvas} data-plane="base" aria-hidden="true" style={fill} />
-    {tiles && settings.tiles && <CanvasTiles overlays={overlays} />}
+    {settings.tiles && <CanvasTiles overlays={overlays} />}
   </>;
 }
 

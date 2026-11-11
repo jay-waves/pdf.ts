@@ -1,4 +1,5 @@
 # Tag pushes publish; manual runs build and verify artifacts without publishing.
+# Browser integration scripts are ad hoc local tools, never release CI/CD steps.
 # Run checks locally before tagging. Only the frontend job installs pnpm packages;
 # packaging jobs reuse release/web. Chrome ZIPs remain a local build option.
 # Repository setup: Pages uses GitHub Actions, github-pages allows version tags,

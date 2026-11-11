@@ -29,25 +29,16 @@ export function useDocumentPersistence({
   const changesRef = useRef({ dirty: false });
   const [isDirty, setIsDirty] = useState(false);
   const [draft, setDraft] = useState<DraftState>({ draftStatus: 'clean', draftRevision: 0 });
-  const titleRef = useRef(title);
-
-  const renderTitle = useCallback(() => {
-    document.title = `${changesRef.current.dirty ? '*' : ''}${titleRef.current}`;
-  }, []);
-
   const setDirty = useCallback((dirty: boolean) => {
     const changes = changesRef.current;
     if (changes.dirty === dirty) return;
     changes.dirty = dirty;
     setIsDirty(dirty);
-
-    renderTitle();
-  }, [renderTitle]);
+  }, []);
 
   useEffect(() => {
-    titleRef.current = title;
-    renderTitle();
-  }, [renderTitle, title]);
+    document.title = `${isDirty ? '*' : ''}${title}`;
+  }, [isDirty, title]);
 
   useEffect(() => {
     if (!documentId) return;

@@ -37,7 +37,7 @@ export function getAnnotationCapability(kernel: Kernel | undefined, documentId?:
 }
 export function getAnnotationScope(kernel: Kernel | undefined, documentId: string | null | undefined) {
   const scope = documentId ? getAnnotationCapability(kernel, documentId) : null;
-  return scope && kernel ? { documentId: documentId!, capability: scope, scope, interaction: kernel.tryCapability(InteractionToken, documentId!) } : null;
+  return scope && kernel ? { scope, interaction: kernel.tryCapability(InteractionToken, documentId!) } : null;
 }
 export function isTextMarkupAnnotation(annotation: Annotation | undefined): annotation is TextMarkupAnnotation { return !!annotation && TEXT_MARKUP_TYPES.has(annotation.subtype); }
 export function isCaptureAnnotation(annotation: Annotation | undefined): annotation is CaptureAnnotation { return isTextMarkupAnnotation(annotation) || annotation?.subtype === 'square'; }
@@ -101,25 +101,26 @@ export function initializeAnnotationPalette(kernel: Kernel, documentId: string) 
 export function installAnnotationDirty(kernel: Kernel, onDirty: () => void) {
   return kernel.documents.onUnsavedChangesChanged((event) => { if (event.hasUnsavedChanges) onDirty(); });
 }
-export function installAnnotationLinks(kernel: Kernel, openExternal: (uri: string) => void) {
+function subscribeDocuments(kernel: Kernel, connect: (id: string) => (() => void) | undefined) {
   const cleanups = new Map<string, () => void>();
   const attach = (id: string) => {
     cleanups.get(id)?.();
-    const actions = kernel.tryCapability(ActionsToken, id);
-    if (actions) cleanups.set(id, actions.setUiAdapter({ openUri: openExternal, print: () => { void kernel.documents.print(id, { includeAnnotations: true }).catch(error => console.error('[pdf-ts] PDF action print failed', error)); } }));
+    cleanups.delete(id);
+    const cleanup = connect(id);
+    if (cleanup) cleanups.set(id, cleanup);
   };
   kernel.documents.list().forEach((info) => attach(info.id));
   const unsubscribe = kernel.documents.onOpened(({ documentId }) => attach(documentId));
   return () => { unsubscribe(); cleanups.forEach((cleanup) => cleanup()); };
 }
+export function installAnnotationLinks(kernel: Kernel, openExternal: (uri: string) => void) {
+  return subscribeDocuments(kernel, id => kernel.tryCapability(ActionsToken, id)?.setUiAdapter({
+    openUri: openExternal,
+    print: () => { void kernel.documents.print(id, { includeAnnotations: true }).catch(error => console.error('[pdf-ts] PDF action print failed', error)); },
+  }));
+}
 export function installCommentEditor(kernel: Kernel, onCreate: (id: string) => void) {
-  const cleanups = new Map<string, () => void>();
-  const attach = (id: string) => {
-    cleanups.get(id)?.();
-    const scope = getAnnotationCapability(kernel, id);
-    if (scope) cleanups.set(id, scope.onCreated(({ annotation }) => { if (annotation.subtype === 'text' && !annotation.reply) onCreate(annotationKey(annotation.ref)); }));
-  };
-  kernel.documents.list().forEach((info) => attach(info.id));
-  const unsubscribe = kernel.documents.onOpened(({ documentId }) => attach(documentId));
-  return () => { unsubscribe(); cleanups.forEach((cleanup) => cleanup()); };
+  return subscribeDocuments(kernel, id => getAnnotationCapability(kernel, id)?.onCreated(({ annotation }) => {
+    if (annotation.subtype === 'text' && !annotation.reply) onCreate(annotationKey(annotation.ref));
+  }));
 }

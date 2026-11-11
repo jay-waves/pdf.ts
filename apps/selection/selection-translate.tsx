@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
 import { SelectionToken } from '@embedpdf/plugin-selection';
 import { FloatingPopover } from '../components';
@@ -19,11 +19,9 @@ function TranslationPopover({ registry, request, onClose }: Props) {
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const controller = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const active = new AbortController();
-    controller.current = active;
     setSourceText(''); setText(''); setError(''); setLoading(true);
     const scope = registry?.tryCapability(SelectionToken, request.documentId);
     void (async () => {
@@ -47,7 +45,7 @@ function TranslationPopover({ registry, request, onClose }: Props) {
         if (!active.signal.aborted) setLoading(false);
       }
     })();
-    return () => { active.abort(); if (controller.current === active) controller.current = null; };
+    return () => active.abort();
   }, [registry, request]);
 
   return <FloatingPopover anchor={request.anchor} sideOffset={10} onClose={onClose}

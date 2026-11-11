@@ -20,7 +20,7 @@ export type SharedDocumentSnapshot = DraftState & {
 interface Entry {
   identity: SharedFileIdentity; document: LocalDocumentHandle; hashes: Set<string>; revision: number;
   persistence: DocumentSaveCoordinator; baseline: DraftBaseline | null; draft: DraftSession;
-  undo: string[]; redo: string[]; traveling: boolean; restoring: boolean; manualRevision: number; protection?: string | null; password?: string;
+  undo: string[]; redo: string[]; traveling: boolean; manualRevision: number; protection?: string | null; password?: string;
 }
 /** Owns native v3 documents, op-id history and draft writers. Tabs hold only handles. */
 export class SharedDocumentHost {
@@ -49,13 +49,13 @@ export class SharedDocumentHost {
     const id = doc.id;
     const entry: Entry = {
       identity, document: doc, hashes: new Set([hash]), revision: 0, persistence,
-      baseline: null, undo: [], redo: [], traveling: false, restoring: false, manualRevision: 0,
+      baseline: null, undo: [], redo: [], traveling: false, manualRevision: 0,
       password: options?.password,
       draft: new DraftSession({
         lane: persistence.lane, revision: () => entry.revision,
         savedRevision: () => persistence.savedRevision,
         capture: () => this.callbacks.run(() => this.capture(id)),
-        notify: () => this.callbacks.notify(id), settled: () => {},
+        notify: () => this.callbacks.notify(id),
       }),
     };
     this.entries.set(id, entry);
@@ -81,7 +81,6 @@ export class SharedDocumentHost {
       return entry.protection === undefined ? bytes : this.callbacks.protect(bytes, entry.password, entry.protection);
     });
     entry.document.events.subscribe(event => {
-      if (entry.restoring) return;
       const opId = 'origin' in event ? event.origin.transaction?.id : undefined;
       const undoable = 'meta' in event && event.meta.undoable;
       if (['document.versioned', 'pages.flattened', 'annotations.flattened', 'redaction.applied', 'forms.repaired', 'signatures.completed'].includes(event.type)) { entry.undo = []; entry.redo = []; }

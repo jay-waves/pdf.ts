@@ -15,10 +15,8 @@ import type { ViewerStage } from './viewer-stage';
 import { StageSurface } from './stage-surface';
 import { RenderLayer } from './viewer-render-layers';
 
-export function NativePdfStage({ documentId, stage, panMode, renderPage, renderDpr, className, ...props }: HTMLAttributes<HTMLDivElement> & {
-  documentId: string;
+export function NativePdfStage({ stage, renderPage, renderDpr, className, ...props }: HTMLAttributes<HTMLDivElement> & {
   stage?: ViewerStage | null;
-  panMode: boolean;
   renderDpr?: number;
   renderPage(page: { pageIndex: number; pageRef: PageRef; width: number; height: number }): ReactNode;
 }) {
@@ -35,7 +33,7 @@ export function NativePdfStage({ documentId, stage, panMode, renderPage, renderD
     if (renderDpr) native.setDevicePixelRatio(renderDpr);
   }, [native, renderDpr]);
   return <EnergySavingMotion stage={native}><div {...props} ref={root} className="pdf-viewer-scroll-area">
-    <Stage className={className ?? `viewer${panMode ? ' is-pan-mode' : ''}`} style={{ width: '100%', height: '100%' }}
+    <Stage className={className} style={{ width: '100%', height: '100%' }}
       overlay={<>
         <StageSurface stage={stage} containerRef={root} />
         <Scrollbar axis="x" autoHide={false} className="pdf-viewer-scrollbar pdf-viewer-scrollbar-horizontal" thumbClassName="pdf-viewer-scrollbar-thumb" />

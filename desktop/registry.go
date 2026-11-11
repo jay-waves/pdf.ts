@@ -214,7 +214,7 @@ func (registry *Registry) writeLocked() error {
 		return fmt.Errorf("encode document registry: %w", err)
 	}
 	content = append(content, '\n')
-	if err := writePrivateFileAtomically(filepath.Dir(registry.path), filepath.Base(registry.path), content); err != nil {
+	if err := writePrivateFileAtomically(registry.path, ".pdf.ts-*", content); err != nil {
 		return fmt.Errorf("write document registry: %w", err)
 	}
 	return nil

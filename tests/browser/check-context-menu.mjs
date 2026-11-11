@@ -1,3 +1,4 @@
+import { dropPdf } from '../support/browser-viewer.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
 import { fixture } from '../support/pdf-editing-fixture.mjs';
@@ -11,12 +12,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
   const bytes = fixture({ content: 'BT /Helv 20 Tf 60 700 Td (Select this PDF text for highlighting.) Tj 0 -35 Td (Comment directly on this second line.) Tj ET' });
-  const dataTransfer = await page.evaluateHandle(bytes => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([new Uint8Array(bytes)], 'context-menu.pdf', { type: 'application/pdf' }));
-    return transfer;
-  }, [...bytes]);
-  await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer });
+  await dropPdf(page, bytes, 'context-menu.pdf');
   await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   await page.mouse.move(640, 30);
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();

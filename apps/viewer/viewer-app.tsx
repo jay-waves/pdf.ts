@@ -38,7 +38,7 @@ import type { Engine } from '@embedpdf/engine-core/runtime';
 import { useDocumentPersistence } from '../document/viewer-document-persistence';
 import { SelectionTranslate } from '../selection/selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from '../navigation/reading-history';
-import { SignatureDialog, useDocumentSignatures } from '../document/signatures';
+import { SignatureDialog, useDocumentSignatures } from '../document/signatures/signatures';
 import { platform } from '#platform';
 import type { ManagedResource, PlatformDocument } from '../platform/types';
 import { PdfSurface } from './pdf-surface';
@@ -164,7 +164,7 @@ export function ViewerApp({
     ? uiSnapshot.overlay.request
     : null;
   const commentTarget = uiSnapshot.overlay?.type === 'comment-editor' ? uiSnapshot.overlay : null;
-  const documentPane: DocumentPane | null = sidePanel && sidePanel.type !== 'colors' ? sidePanel.type : null;
+  const documentPane: DocumentPane | null = sidePanel && sidePanel !== 'colors' ? sidePanel : null;
   const viewerRootRef = useRef<HTMLElement>(null);
   const sessionCleanupRef = useRef<(() => void) | null>(null);
   const closeOverlay = useCallback(() => {
@@ -202,7 +202,7 @@ export function ViewerApp({
       () => nextRegistry.documents.onOpened(({ documentId }) => initializeAnnotationPalette(nextRegistry, documentId)),
       () => installAnnotationLinks(nextRegistry, platform.openExternal),
       () => installCommentEditor(nextRegistry, (annotationId) => {
-        dispatchCommand({ type: 'ui/open-comments', annotationId });
+        dispatchCommand({ type: 'ui/open-overlay', overlay: { type: 'comment-editor', annotationId } });
       }),
       () => installAnnotationDirty(nextRegistry, () => setDirty(true)),
       () => installPlatformReadingHistory(nextStage, documentKey, !stagedCleanup),
@@ -236,7 +236,7 @@ export function ViewerApp({
   const toolbarSnapshot: ToolbarSnapshot = {
     section: toolbarSection,
     documentId,
-    thumbnailsOpen: sidePanel?.type === 'thumbnails',
+    thumbnailsOpen: sidePanel === 'thumbnails',
     panMode,
     signatureCount: signatures.length,
     canSave: isDirty,
@@ -301,7 +301,7 @@ export function ViewerApp({
         ) : null}
       </Dialog>
       <ColorPalette
-        open={sidePanel?.type === 'colors'}
+        open={sidePanel === 'colors'}
         onClose={closeOverlay}
       />
       {commentTarget && registry && documentId ? (

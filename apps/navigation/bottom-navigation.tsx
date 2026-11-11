@@ -143,7 +143,7 @@ export function BottomNav({
             aria-label="Open outline"
             onClick={() => {
               reveal();
-              dispatch({ type: 'ui/open-panel', panel: 'outline' });
+              dispatch({ type: 'ui/open-overlay', overlay: { type: 'side-panel', panel: 'outline' } });
             }}
           >
             <Menu
@@ -163,7 +163,7 @@ export function BottomNav({
             aria-label="Open thumbnails"
             onClick={() => {
               reveal();
-              dispatch({ type: 'ui/open-panel', panel: 'thumbnails' });
+              dispatch({ type: 'ui/open-overlay', overlay: { type: 'side-panel', panel: 'thumbnails' } });
             }}
           >
             <BookImage

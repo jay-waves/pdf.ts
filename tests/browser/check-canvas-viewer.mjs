@@ -1,3 +1,4 @@
+import { dropPdf } from '../support/browser-viewer.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
 import { fixture } from '../support/pdf-editing-fixture.mjs';
@@ -9,11 +10,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto(base);
-  const transfer = await page.evaluateHandle(bytes => {
-    const data = new DataTransfer(); data.items.add(new File([new Uint8Array(bytes)], 'canvas.pdf', { type: 'application/pdf' })); return data;
-  }, [...fixture({ notes: true, content: '0.1 0.3 0.8 rg 30 40 230 200 re f\nBT /Helv 24 Tf 60 700 Td (Canvas viewer) Tj ET\n' })]);
-  await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer: transfer });
-  await transfer.dispose();
+  await dropPdf(page, fixture({ notes: true, content: '0.1 0.3 0.8 rg 30 40 230 200 re f\nBT /Helv 24 Tf 60 700 Td (Canvas viewer) Tj ET\n' }), 'canvas.pdf');
   await page.locator('canvas[data-plane="tile"][data-painted="true"]').first().waitFor();
   assert.equal(await page.locator('.pdf-native-render-layer img').count(), 0);
   await page.mouse.move(640, 30);

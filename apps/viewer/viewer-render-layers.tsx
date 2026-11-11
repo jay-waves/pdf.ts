@@ -9,8 +9,7 @@ import { usePage } from '@embedpdf/react/runtime';
 import { completeStartupLog, writeStartupLogOnce } from './startup-log';
 
 /** v3 owns the retained base/tile planes and their cancellation and raster lifetime. */
-export function RenderLayer({ tiles = true, layers = 'overlays' }: {
-  tiles?: boolean;
+export function RenderLayer({ layers = 'overlays' }: {
   layers?: 'overlays' | 'flattened';
 }) {
   const page = usePage();
@@ -21,5 +20,5 @@ export function RenderLayer({ tiles = true, layers = 'overlays' }: {
   useEffect(() => {
     if (picture.status === 'ready') completeStartupLog('First page ready', `page ${page.pageIndex + 1}`);
   }, [page.pageIndex, picture.status]);
-  return <div className="pdf-native-render-layer" data-pdf-picture-layers={layers} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}><CanvasRenderLayer tiles={tiles} overlays={layers === 'overlays'} /></div>;
+  return <div className="pdf-native-render-layer" data-pdf-picture-layers={layers} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}><CanvasRenderLayer overlays={layers === 'overlays'} /></div>;
 }

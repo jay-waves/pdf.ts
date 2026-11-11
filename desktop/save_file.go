@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -40,4 +41,32 @@ func createSaveFile(source string) (*os.File, func(), error) {
 		return nil, nil, err
 	}
 	return file, cleanup, nil
+}
+
+func writePrivateFileAtomically(path, pattern string, content []byte) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), pattern)
+	if err != nil {
+		return fmt.Errorf("create temporary private file: %w", err)
+	}
+	tempPath := temp.Name()
+	defer func() {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+	}()
+	if err := temp.Chmod(0o600); err != nil {
+		return fmt.Errorf("protect private file: %w", err)
+	}
+	if _, err := temp.Write(content); err != nil {
+		return fmt.Errorf("write private file: %w", err)
+	}
+	if err := temp.Sync(); err != nil {
+		return fmt.Errorf("flush private file: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close private file: %w", err)
+	}
+	if err := atomicReplace(tempPath, path); err != nil {
+		return fmt.Errorf("replace private file: %w", err)
+	}
+	return nil
 }

@@ -91,7 +91,7 @@ function LoadedPdfDocument({ documentId, stage, presentationPage, ...props }: Su
   useEffect(() => props.onResourceConsumed(props.documentResource), [props.onResourceConsumed, props.documentResource]);
   return <>
     <AnnotationThemeStyles />
-    <NativePdfStage documentId={documentId} stage={stage} panMode={props.panMode} renderDpr={props.renderDpr}
+    <NativePdfStage stage={stage} renderDpr={props.renderDpr}
       className={`viewer${props.panMode ? ' is-pan-mode' : ''}`}
       inert={presentationPage !== null} aria-hidden={presentationPage !== null}
       renderPage={({ pageIndex }) => <>

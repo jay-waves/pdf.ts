@@ -17,9 +17,7 @@ export class DraftSession {
     savedRevision(): number;
     capture(): Promise<DocumentDraft>;
     notify(): void;
-    settled(): void;
   }) {}
-  get running() { return this.busy; }
   private publish(state: Partial<DraftState>) { this.state = { ...this.state, ...state }; this.options.notify(); }
   fail(error: unknown) {
     this.blocked = error instanceof DraftConflict;
@@ -61,7 +59,6 @@ export class DraftSession {
         // Edits arriving during IO remain pending and get their own snapshot.
         if (!this.blocked && this.state.draftStatus !== 'error' && this.options.revision() > this.state.draftRevision
           && this.options.revision() > this.options.savedRevision()) this.changed();
-        this.options.settled();
       }
     }).catch(error => this.fail(error));
   }

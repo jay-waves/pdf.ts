@@ -1,3 +1,4 @@
+import { dropPdf } from '../support/browser-viewer.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
 import { viewerFeaturesFixture } from '../support/viewer-features-fixture.mjs';
@@ -9,12 +10,7 @@ page.on('pageerror', error => { errors.push(error.message); console.error(error.
 page.on('console', message => { if (message.type() === 'error') console.error(message.text()); });
 try {
   await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
-  const welcome = page.getByRole('button', { name: 'Choose or drop a PDF file' });
-  await welcome.waitFor();
-  const data = await page.evaluateHandle(bytes => {
-    const transfer = new DataTransfer(); transfer.items.add(new File([new Uint8Array(bytes)], 'features.pdf', { type: 'application/pdf' })); return transfer;
-  }, [...viewerFeaturesFixture()]);
-  await welcome.dispatchEvent('drop', { dataTransfer: data });
+  await dropPdf(page, viewerFeaturesFixture(), 'features.pdf');
   await page.getByRole('textbox', { name: 'Current page', exact: true }).waitFor();
   await page.mouse.move(640, 880);
   await page.getByRole('button', { name: 'Open outline', exact: true }).click();

@@ -184,11 +184,9 @@ export function ContextMenu({
       const target = event.target instanceof Element ? event.target : null;
       const commentBadge = target?.closest<HTMLElement>('[data-annotation-comment-id]');
       if (event.button === 0 && commentBadge?.dataset.annotationCommentId) {
-        dispatch({
-          type: 'ui/open-comments',
-          annotationId: commentBadge.dataset.annotationCommentId,
-          pointerX: event.clientX,
-        });
+        dispatch({ type: 'ui/open-overlay', overlay: {
+          type: 'comment-editor', annotationId: commentBadge.dataset.annotationCommentId, pointerX: event.clientX,
+        } });
         setMenu(null);
         return;
       }
@@ -199,7 +197,7 @@ export function ContextMenu({
       // and only open after a click actually selected the annotation.
       if (!hit || !selected.some(item => annotationKey(item.ref) === annotationKey(hit.ref))) return;
       if (selected.length === 1 && selected[0].subtype === 'text') {
-        dispatch({ type: 'ui/open-comments', annotationId: annotationKey(selected[0].ref), pointerX: event.clientX });
+        dispatch({ type: 'ui/open-overlay', overlay: { type: 'comment-editor', annotationId: annotationKey(selected[0].ref), pointerX: event.clientX } });
         setMenu(null);
         return;
       }
@@ -281,13 +279,13 @@ export function ContextMenu({
         runTranslateAction({
           text: selectedText,
           llmEnabled: isLlmEnabled(platform.getPreference),
-          openLlm: () => dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'translate' }),
+          openLlm: () => dispatch({ type: 'ui/open-overlay', overlay: { type: 'translation', request: { documentId, anchor: menu, mode: 'translate' } } }),
           openExternal: platform.openExternal,
         });
         setMenu(null);
     } }] : []),
     ...(Boolean(platform.ai) && isLlmEnabled(platform.getPreference) ? [{ label: 'LLM', icon: Send, action: () => {
-      dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'llm' });
+      dispatch({ type: 'ui/open-overlay', overlay: { type: 'translation', request: { documentId, anchor: menu, mode: 'llm' } } });
       setMenu(null);
     } }] : []),
     { label: 'Search', icon: ExternalLink, action: () => {
@@ -346,7 +344,7 @@ export function ContextMenu({
         }
         commentId = await createCommentAnnotation(annotation, target, noteRect);
       }
-      dispatch({ type: 'ui/open-comments', annotationId: commentId, pointerX: menu.x - 8 });
+      dispatch({ type: 'ui/open-overlay', overlay: { type: 'comment-editor', annotationId: commentId, pointerX: menu.x - 8 } });
     }
     setMenu(null);
   };
@@ -371,7 +369,7 @@ export function ContextMenu({
     } }] : []),
     ...(commentTarget?.subtype !== 'text' && commentTarget?.contents?.trim() ? [{
       label: 'Edit existing comment', icon: MessageSquareMore, action: () => {
-        dispatch({ type: 'ui/open-comments', annotationId: annotationKey(commentTarget.ref), pointerX: menu.x - 8 });
+        dispatch({ type: 'ui/open-overlay', overlay: { type: 'comment-editor', annotationId: annotationKey(commentTarget.ref), pointerX: menu.x - 8 } });
         setMenu(null);
       },
     }] : []),
@@ -380,7 +378,7 @@ export function ContextMenu({
       setMenu(null);
     } },
     { label: 'Colors', icon: PaintBucket, action: () => {
-      dispatch({ type: 'ui/open-panel', panel: 'colors' });
+      dispatch({ type: 'ui/open-overlay', overlay: { type: 'side-panel', panel: 'colors' } });
       setMenu(null);
     } },
     { label: 'Delete', icon: Trash2, action: () => {

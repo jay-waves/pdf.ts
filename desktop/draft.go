@@ -5,11 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 )
 
 const maxDraftBytes int64 = 64 << 20
@@ -118,29 +116,11 @@ func (app *App) handleDraft(resource *Resource, response http.ResponseWriter, re
 	// A draft retains its original baseVersion even if the PDF changes externally.
 	// Only the sidecar version is compared here. Recovery and PDF replacement
 	// validate the base before applying edits or overwriting the document.
-	if err := writeDraft(path, incoming); err != nil {
+	if err := writePrivateFileAtomically(path, ".pdf.ts-draft-*", incoming); err != nil {
 		writeMutationError(response, err, "draft_failed")
 		return
 	}
 	sum := sha256.Sum256(incoming)
 	response.Header().Set("ETag", quoteETag(hex.EncodeToString(sum[:])))
 	response.WriteHeader(http.StatusNoContent)
-}
-
-func writeDraft(path string, data []byte) error {
-	file, err := os.CreateTemp(filepath.Dir(path), ".pdf.ts-draft-*")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close(); _ = os.Remove(file.Name()) }()
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("write draft: %w", err)
-	}
-	if err := file.Sync(); err != nil {
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	return atomicReplace(file.Name(), path)
 }

@@ -57,7 +57,7 @@ function draft(revision = 1) {
 }
 function session() {
   return new DraftSession({ lane: new SaveLane(), revision: () => 2, savedRevision: () => 0,
-    capture: async () => draft(2), notify() {}, settled() {} });
+    capture: async () => draft(2), notify() {} });
 }
 
 test('native-handle drafts retain their base without PDF reads and still reject stale writers', async t => {

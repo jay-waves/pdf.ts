@@ -1,19 +1,9 @@
 import assert from 'node:assert/strict';
-import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
+import { withViewer, dropPdf } from '../support/browser-viewer.mjs';
 import { fixture } from '../support/pdf-editing-fixture.mjs';
 
-const browser = await chromium.launch({ channel: 'chrome' });
-try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  const errors = [];
-  page.on('pageerror', error => errors.push(error.message));
-  await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
-  const dataTransfer = await page.evaluateHandle(bytes => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([new Uint8Array(bytes)], 'scroll.pdf', { type: 'application/pdf' }));
-    return transfer;
-  }, [...fixture({ secondPage: true })]);
-  await page.locator('[aria-label="Choose or drop a PDF file"]').dispatchEvent('drop', { dataTransfer });
+await withViewer(async (page, errors) => {
+  await dropPdf(page, fixture({ secondPage: true }), 'scroll.pdf');
   await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   assert.deepEqual(await page.locator('.viewer').evaluate(element => {
     const style = getComputedStyle(element);
@@ -63,6 +53,4 @@ try {
   assert.ok(reduced.positions.filter(y => y < -1 && y > -119).length <= 1, 'reduced motion retains native scrolling without easing');
   assert.deepEqual(errors, []);
   console.log('PASS eased wheel distance, reverse direction, interruption and reduced motion');
-} finally {
-  await browser.close();
-}
+});

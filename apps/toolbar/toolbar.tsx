@@ -442,19 +442,19 @@ export function Toolbar({
               label="Annotations"
               icon={NotebookPen}
               disabled={!canUseDocument}
-              onClick={() => dispatch({ type: 'ui/open-panel', panel: 'comments' })}
+              onClick={() => dispatch({ type: 'ui/open-overlay', overlay: { type: 'side-panel', panel: 'comments' } })}
             />
             <IconButton
               label="Print"
               icon={Printer}
               disabled={!canUseDocument}
-              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'print' })}
+              onClick={() => dispatch({ type: 'ui/open-overlay', overlay: { type: 'dialog', dialog: 'print' } })}
             />
             <IconButton
               label="Security"
               icon={Lock}
               disabled={!canUseDocument}
-              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'protect' })}
+              onClick={() => dispatch({ type: 'ui/open-overlay', overlay: { type: 'dialog', dialog: 'protect' } })}
             />
             <IconButton
               label="Export"
@@ -465,18 +465,18 @@ export function Toolbar({
             <IconButton
               label="Themes"
               icon={Palette}
-              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'theme' })}
+              onClick={() => dispatch({ type: 'ui/open-overlay', overlay: { type: 'dialog', dialog: 'theme' } })}
             />
             <IconButton
               label="Developer"
               icon={Wrench}
-              onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'developer' })}
+              onClick={() => dispatch({ type: 'ui/open-overlay', overlay: { type: 'dialog', dialog: 'developer' } })}
             />
             {signatureCount > 0 ? (
               <IconButton
                 label={`Digital signatures (${signatureCount})`}
                 icon={Signature}
-                onClick={() => dispatch({ type: 'ui/open-dialog', dialog: 'signatures' })}
+                onClick={() => dispatch({ type: 'ui/open-overlay', overlay: { type: 'dialog', dialog: 'signatures' } })}
               />
             ) : null}
           </FloatingToolbarGroup>

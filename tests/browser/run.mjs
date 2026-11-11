@@ -1,4 +1,4 @@
-// Explicit suites keep expensive browser checks out of the default unit-test loop.
+// Ad hoc local integration checks. Never run in release CI/CD or the default test loop.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const suites = {

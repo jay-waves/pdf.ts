@@ -1,5 +1,5 @@
 import type { PdfWritePlan, PdfWriteResult } from '../shared/pdf-file';
-import { fingerprintFile } from '../shared/file-fingerprint';
+import { createSHA256 } from 'hash-wasm';
 import { get, update } from 'idb-keyval';
 import { downloadPdf } from './browser-download';
 import type { PdfFileHandle } from './types';
@@ -106,4 +106,18 @@ export class BrowserPdfFileHandle implements PdfFileHandle {
 
     return createBrowserWriter(this.nativeHandle, this.storageKey);
   }
+}
+
+/** Hash a file without another full-file ArrayBuffer in the renderer. */
+async function fingerprintFile(file: Blob) {
+  const hash = await createSHA256();
+  const reader = file.stream().getReader();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      hash.update(value);
+    }
+    return hash.digest();
+  } finally { reader.releaseLock(); }
 }
