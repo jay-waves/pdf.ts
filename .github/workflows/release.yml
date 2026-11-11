@@ -75,10 +75,21 @@ jobs:
         with:
           name: web
           path: release/web
-      - name: Install packaging tools
+      - name: Install prebuilt nFPM
         if: runner.os == 'Linux'
         run: |
-          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.4
+          # Update the version and official Linux x86_64 archive digest together.
+          nfpm_dir="$RUNNER_TEMP/nfpm"
+          mkdir -p "$nfpm_dir"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/goreleaser/nfpm/releases/download/v2.43.4/nfpm_2.43.4_Linux_x86_64.tar.gz \
+            --output "$nfpm_dir/nfpm.tar.gz"
+          printf '%s  %s\n' \
+            cafb544650cb0305d1b164fc0ab261eb77a81af324e18011282d326b326d20fb \
+            "$nfpm_dir/nfpm.tar.gz" | sha256sum --check --strict
+          tar -xzf "$nfpm_dir/nfpm.tar.gz" -C "$nfpm_dir" nfpm
+          echo "$nfpm_dir" >> "$GITHUB_PATH"
+          "$nfpm_dir/nfpm" --version
       - name: Package Debian and Fedora
         if: runner.os == 'Linux'
         run: |

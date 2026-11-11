@@ -52,4 +52,6 @@
   Do not build the same output concurrently in one worktree.
 - `scripts/release.sh` validates and pushes the branch/tag; release CI packages,
   verifies installers, and uploads via `scripts/publish-release.sh`.
+  Linux CI downloads pinned nFPM binaries and verifies the archive SHA-256;
+  update the version and digest together in `.github/workflows/release.yml`.
   Keep browser integration checks local. Regenerate icons only when branding changes.
