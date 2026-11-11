@@ -1,5 +1,6 @@
 import type { Engine, Kernel } from '@embedpdf/core';
 import { getSharedDocumentClient } from '../engine/shared-document-client';
+import { ownedPdfBuffer } from '../shared/pdf-file';
 import { downloadPdf } from '../platform/browser-download';
 import type { PdfFileHandle } from '../platform/types';
 
@@ -15,7 +16,7 @@ export function createDocumentOutput({ engine, registry, documentId, fileHandle 
   async function serialize() {
     if (!registry || !documentId || registry.documents.get(documentId)?.status !== 'ready') return null;
     const bytes = await registry.documents.download(documentId, { mode: 'rewrite' });
-    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return ownedPdfBuffer(bytes);
   }
 
   return {
@@ -36,8 +37,7 @@ export function createDocumentOutput({ engine, registry, documentId, fileHandle 
       if (!target) return false;
       const shared = getSharedDocumentClient(engine);
       if (shared) return shared.save(documentId, target);
-      const data = await serialize();
-      return data ? target.save(data) : false;
+      throw new Error('Document save client is unavailable.');
     },
   };
 }

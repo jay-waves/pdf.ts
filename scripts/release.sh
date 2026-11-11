@@ -14,7 +14,7 @@ usage() {
 [[ $# -eq 1 ]] || { usage; exit 2; }
 release_tag="$1"
 
-version=$(node -p "require('$repo_root/package.json').version")
+version=$(node -p 'require(process.argv[1]).version' "$repo_root/package.json")
 [[ "$release_tag" == "v$version" ||
    ( "$release_tag" == "v$version-"* && "$release_tag" =~ -[0-9A-Za-z]+([.-][0-9A-Za-z]+)*$ ) ]] || {
   echo "Release tag must match package.json: v$version or v$version-<suffix>" >&2
@@ -36,13 +36,9 @@ if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
   exit 1
 fi
 
-remote_url="$(git -C "$repo_root" remote get-url "$remote")"
-[[ "$remote_url" == https://github.com/* ]] || {
-  echo "The $remote remote must use an https://github.com/ URL." >&2
-  exit 1
-}
-
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+remote_url="$(git -C "$repo_root" remote get-url --push "$remote")"
+# Git owns transport and authentication; SSH remotes need no HTTP token setup.
+if [[ "$remote_url" == https://github.com/* && -n "${GITHUB_TOKEN:-}" ]]; then
   auth_header="$(printf '%s' "x-access-token:$GITHUB_TOKEN" | base64 | tr -d '\n')"
   config_index="${GIT_CONFIG_COUNT:-0}"
   [[ "$config_index" =~ ^[0-9]+$ ]] || {

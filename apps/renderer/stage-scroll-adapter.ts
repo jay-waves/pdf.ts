@@ -5,7 +5,7 @@
  */
 import type { Kernel } from '@embedpdf/core';
 import type { Rect } from '@embedpdf/core-geometry';
-import { StageToken, type ScrollBehaviorKind, type Viewpoint } from '@embedpdf/plugin-stage';
+import { StageToken, type StageCapability, type ScrollBehaviorKind, type Viewpoint } from '@embedpdf/plugin-stage';
 import { StageToken as StageHostToken } from '@embedpdf/plugin-stage/contract/host';
 import { normalizeReadingRegion, readingRegionRect, type ReadingRegion } from '../shared/reading-region';
 import type { Insets } from './viewport-geometry';
@@ -73,7 +73,7 @@ export class StageScrollAdapter {
   onLayoutReady(listener: (totalPages: number, initial: boolean) => void) {
     let initialized = false;
     let disposed = false;
-    let current: ReturnType<Kernel['tryCapability']> = null;
+    let current: StageCapability | null = null;
     let offViewport = () => {};
     const notify = () => {
       if (disposed) return;

@@ -61,7 +61,7 @@ try {
   const saving = await tab('close-pending-merge');
   await create(saving, 'merge-before-close');
   await saving.evaluate(() => {
-    window.pendingSave = session.client.save('test', { save: async () => false, writeShared: plan => new Promise(resolve => {
+    window.pendingSave = session.client.save('test', { writeShared: plan => new Promise(resolve => {
       window.output = Array.from(new Uint8Array(plan.data)); window.ack = () => resolve({ status: 'saved', version: plan.outputVersion });
     }) });
   });

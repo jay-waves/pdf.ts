@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePdfRuntime } from './use-pdf-runtime';
+import { usePdfEngine } from './use-pdf-engine';
 import { platform } from '#platform';
 import type { ManagedResource, ViewerResources } from '../platform/types';
 import { LoadingStatus, VIEWER_STATUS_CLASS } from './pdf-surface';
@@ -91,7 +91,7 @@ function ReadyViewer({
   trackResource(resource?: ManagedResource): void;
   releaseResource(resource?: ManagedResource): void;
 }) {
-  const { pdfium, isLoading, error } = usePdfRuntime({
+  const { engine, isLoading, error } = usePdfEngine({
     wasmUrl: resources.wasm.url,
     fontFallback: PDFIUM_FONT_FALLBACK,
   });
@@ -101,12 +101,12 @@ function ReadyViewer({
   }, [isLoading, releaseResource, resources.wasm]);
 
   useEffect(() => {
-    if (pdfium && platform.openLocalDocument && !resources.document) {
+    if (engine && platform.openLocalDocument && !resources.document) {
       completeStartupLog('Viewer ready', 'choose a PDF document');
     }
-  }, [pdfium, resources.document]);
+  }, [engine, resources.document]);
 
-  if (!pdfium) {
+  if (!engine) {
     if (isLoading) {
       return <LoadingStatus label="Starting PDF engine…" />;
     }
@@ -136,7 +136,7 @@ function ReadyViewer({
   return (
     <ViewerApp
       key={resources.document?.resource.url}
-      pdfium={pdfium}
+      engine={engine}
       sourceDocument={resources.document}
       onResourceConsumed={releaseResource}
     />

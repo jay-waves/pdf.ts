@@ -1,6 +1,7 @@
+import { ownedPdfBuffer } from '../apps/shared/pdf-file.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DocumentSaveCoordinator, SaveLane, ownedPdfBuffer } from '../apps/engine/persistence/document-save.ts';
+import { DocumentSaveCoordinator, SaveLane } from '../apps/engine/persistence/document-save.ts';
 function deferred() {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });

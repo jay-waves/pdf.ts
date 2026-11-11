@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { platform } from '#platform';
-import { supportsLlm as platformSupportsLlm } from '../platform/llm';
 import type { AiConfig, AiConfigUpdate } from '../ai/types';
 import { createDefaultAiConfig } from '../ai/config';
 import { SettingsToggle } from './settings-toggle';
@@ -10,7 +9,7 @@ import cardStyles from '../components/settings-card.module.css';
 const EMPTY_CONFIG = createDefaultAiConfig();
 // Keep saves ordered even when the settings dialog is closed and reopened.
 let saveQueue: Promise<void> = Promise.resolve();
-const supportsLlm = platformSupportsLlm(platform);
+const supportsLlm = Boolean(platform.ai);
 
 export function LlmSettings({ enabled, onEnabledChange }: {
   enabled: boolean;

@@ -1,8 +1,8 @@
+import { getSharedDocumentClient } from '../engine/shared-document-client';
 import { energySavingStore, energySavingEnabled, setEnergySaving } from '../renderer/energy-saving';
 import { SettingsToggle } from './settings-toggle';
 import { isLlmEnabled, LLM_ENABLED_PREFERENCE } from '../selection/translation-settings';
 import { platform } from '#platform';
-import { supportsLlm } from '../platform/llm';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import type { Kernel } from '@embedpdf/core';
@@ -28,7 +28,7 @@ import {
   PDFIUM_FONT_FALLBACK_INFO,
   type PdfFontDiagnostic,
 } from '../fonts';
-import type { PdfRuntime } from '../engine/pdf-runtime';
+import type { Engine } from '@embedpdf/engine-core/runtime';
 import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import { LlmSettings } from './llm-settings';
 import { TranslatorSettings } from './translator-settings';
@@ -75,7 +75,7 @@ export function DeveloperDialog({
   fileName,
   pageCount,
   open,
-  pdfium,
+  engine,
   onClose,
 }: {
   registry?: Kernel;
@@ -83,7 +83,7 @@ export function DeveloperDialog({
   fileName?: string;
   pageCount: number;
   open: boolean;
-  pdfium: PdfRuntime;
+  engine: Engine;
   onClose(): void;
 }) {
   const [llmEnabled, setLlmEnabled] = useState(() => isLlmEnabled(platform.getPreference));
@@ -108,7 +108,7 @@ export function DeveloperDialog({
     let active = true;
     const sample = () => {
       sampleRasterPixels();
-      void pdfium.getFontDiagnostics().then((diagnostics) => {
+      void (getSharedDocumentClient(engine)?.getFontDiagnostics() ?? Promise.resolve([])).then((diagnostics) => {
         if (active) setFontDiagnostics(diagnostics);
       });
     };
@@ -118,7 +118,7 @@ export function DeveloperDialog({
       active = false;
       window.clearInterval(timer);
     };
-  }, [open, pdfium]);
+  }, [open, engine]);
 
   useEffect(() => {
     if (!open) return;
@@ -257,7 +257,7 @@ export function DeveloperDialog({
           </dl>
         </section>
 
-        {open && supportsLlm(platform) && <LlmSettings enabled={llmEnabled} onEnabledChange={toggleLlm} />}
+        {open && Boolean(platform.ai) && <LlmSettings enabled={llmEnabled} onEnabledChange={toggleLlm} />}
         {open && <TranslatorSettings llmEnabled={llmEnabled} />}
       </PanelContent>
     </Dialog>

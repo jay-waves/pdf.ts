@@ -34,7 +34,6 @@ import { FloatingPopover, IconButton } from '../components';
 import { isEditableTarget, normalizePdfText } from '../shared/utils';
 import { getExternalUrl, getSelectedExternalUrl } from '../shared/url';
 import { platform } from '#platform';
-import { supportsLlm } from '../platform/llm';
 import { getDocument } from '../document/viewer-document';
 import type { ViewerCommandDispatch } from '../viewer/viewer-controller';
 import { runTranslateAction, isTranslationEnabled, isLlmEnabled } from './translation-settings';
@@ -287,7 +286,7 @@ export function ContextMenu({
         });
         setMenu(null);
     } }] : []),
-    ...(supportsLlm(platform) && isLlmEnabled(platform.getPreference) ? [{ label: 'LLM', icon: Send, action: () => {
+    ...(Boolean(platform.ai) && isLlmEnabled(platform.getPreference) ? [{ label: 'LLM', icon: Send, action: () => {
       dispatch({ type: 'ui/open-translation', documentId, anchor: menu, mode: 'llm' });
       setMenu(null);
     } }] : []),

@@ -55,7 +55,7 @@ try {
   assert.equal(await page.evaluate(async () => (await doc.forms.list()).fields[0].value), 'draft field value');
   console.log('PASS native bundle recovery preserves edits, deletions, stamps and forms');
 
-  await page.evaluate(() => { window.pendingMerge = session.client.save('test', { save: async () => false,
+  await page.evaluate(() => { window.pendingMerge = session.client.save('test', {
     writeShared: plan => new Promise(resolve => { window.plan = plan; window.ack = () => resolve({ status: 'saved', version: plan.outputVersion }); }) }); });
   await page.waitForFunction(() => typeof ack === 'function');
   pdf = Buffer.from(await page.evaluate(() => Array.from(new Uint8Array(plan.data))));
@@ -70,7 +70,7 @@ try {
   assert.ok(restored.some(a => a.contents === 'edited during merge'));
   console.log('PASS concurrent merge edits rebase and restore without duplicate annotations');
   pdf = Buffer.from(await page.evaluate(async () => {
-    let output; await session.client.save('test', { save: async () => false, writeShared: async plan => {
+    let output; await session.client.save('test', { writeShared: async plan => {
       output = Array.from(new Uint8Array(plan.data)); return { status: 'saved', version: plan.outputVersion }; } }); return output;
   }));
   assert.equal((await drafts()).length, 0);
@@ -87,7 +87,7 @@ try {
   await page.evaluate(async () => { await session.annotations.create(0, { nm: 'crash-shape', subtype: 'square', box: { x: 20, y: 30, width: 40, height: 50 } }); await session.client.flush(); });
   await saved();
   pdf = Buffer.from(await page.evaluate(async () => { let output;
-    try { await session.client.save('test', { save: async () => false, writeShared: async plan => {
+    try { await session.client.save('test', { writeShared: async plan => {
       output = Array.from(new Uint8Array(plan.data)); throw new Error('lost acknowledgement'); } }); } catch {} return output;
   }));
   assert.ok(JSON.parse((await drafts())[0].text).mergeOutputVersion);

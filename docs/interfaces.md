@@ -54,3 +54,15 @@ pnpm typecheck
 - AI 测试覆盖密钥保存、端点更换、请求、流解析、用量和翻译行为。
 - 目录迁移由全项目 TypeScript 检查和 Vite 生产构建验证；现有 Node 测试集检查跨模块回归。
 - 本轮未运行浏览器端交互或桌面打包测试；没有修改桌面 Go 实现或安装器。
+
+## 文件结构与浅层转发复核
+
+- 删除 `platform/llm.ts`：完整 AI 服务收敛后，可直接判断 `platform.ai`，不再维护独立函数和对应布尔判断测试。流解析测试独立命名为 `ai-stream.test.mjs`。
+- `components/select-styles.ts` 合并到 Select 组件；样式常量与其组件由同一模块维护。
+- 删除 `engine/pdf-runtime.ts`：文档访问方法没有调用方，剩余能力只是转发 engine 与字体诊断。生命周期 hook 改为 `usePdfEngine`，返回 engine；诊断通过现有共享文档客户端获取。
+- 查看器导航目标判断移入 `viewer-input.ts`，不再把查看器 DOM 策略放入 shared/utils。
+- 复核 apps 的相对引用、测试与工具引用，以及 index.html、Vite 平台 alias、Worker URL 入口。未发现可确认孤立的应用源码文件。
+- 保留 components、fonts、signatures 的目录入口：它们有实际调用方，定义功能对外可用的组件、目录或类型。
+- 保留 viewport-geometry、tile-levels、ai-prompt 和 config：分别拥有坐标换算、分辨率策略、模板替换和默认配置语义，有明确使用者。
+
+本轮类型检查、164 项 Node 测试与生产构建通过；导航策略迁移后另外复跑输入测试。没有执行发布操作。

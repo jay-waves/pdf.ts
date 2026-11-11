@@ -163,7 +163,7 @@ export class SharedDocumentClient {
   private async write(message: { id: string; writerId: string; plan: PdfWritePlan }) {
     try {
       const writer = this.writers.get(message.writerId); if (!writer) throw new Error('The save destination is no longer available.');
-      const result = writer.writeShared ? await writer.writeShared(message.plan) : await writer.save(message.plan.data) ? { status: 'copy' } : { status: 'cancelled' };
+      const result = await writer.writeShared(message.plan);
       this.worker.postMessage({ type: 'writePdfResult', id: message.id, result });
     } catch (error) { this.worker.postMessage({ type: 'writePdfResult', id: message.id, error: error instanceof Error ? error.message : String(error) }); }
   }

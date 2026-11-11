@@ -40,7 +40,7 @@ PDF_TS_BROWSER_TEST=1 go test ./desktop -run '^TestDraftBrowser$' -count=1
 
 - `package-{chrome,launcher,linux,macos,windows}`：由 `packaging/build.mjs` 编排，package.json 和发布 CI 只调用统一入口。
 - `verify-{macos,windows}-package`：由对应平台的发布 CI 校验真实安装包。
-- `release.sh`：人工发布入口，校验版本与工作树后推送分支和 tag；具有远端写入副作用，不加入测试流程。
+- `release.sh`：人工发布入口，校验版本与工作树后推送分支和 tag；沿用 Git 的 SSH / HTTPS 认证，仅 GitHub HTTPS 推送可用 `GITHUB_TOKEN`。回归测试在临时本地仓库验证原子推送、失败回滚和脏工作树拒绝，不访问真实远端。
 - `publish-release.sh`：发布 CI 上传产物的步骤，与发起 release 不同。
 - `generate-icons.go`：修改品牌图标时重新生成各平台资源；按需执行，不必每次构建运行。
 

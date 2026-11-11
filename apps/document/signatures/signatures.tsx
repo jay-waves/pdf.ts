@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import type { Kernel } from '@embedpdf/core';
-import type { Engine } from '@embedpdf/engine-core/runtime';
 import { Button, Dialog, DialogActions } from '../../components';
 import type { ManagedResource } from '../../platform/types';
 import { onDocumentLoaded } from '../viewer-document';
@@ -114,7 +113,6 @@ export function SignatureDialog({ signatures, resource, open, onClose }: {
 }
 
 export function useDocumentSignatures(
-  engine: Engine,
   registry: Kernel | undefined,
   documentId: string | null,
 ) {
@@ -140,7 +138,7 @@ export function useDocumentSignatures(
       active = false;
       unsubscribe();
     };
-  }, [documentId, engine, registry]);
+  }, [documentId, registry]);
 
   return signatures;
 }

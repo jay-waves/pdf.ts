@@ -54,7 +54,7 @@ import type {
   ViewerCommandDispatch,
 } from '../viewer/viewer-controller';
 import styles from './toolbar.module.css';
-import { SELECT_TRIGGER_CLASSES } from '../components/select-styles';
+import { SELECT_TRIGGER_CLASSES } from '../components/select';
 import { usePortalContainer } from '../components/portal-container';
 import { useViewerFocus } from '../components/viewer-focus';
 import {

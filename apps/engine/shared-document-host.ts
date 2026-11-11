@@ -5,12 +5,13 @@
  * feature UI or platform adapters.
  */
 import type { DraftLocation, PdfWritePlan, PdfWriteResult } from '../shared/pdf-file';
+import { ownedPdfBuffer } from '../shared/pdf-file';
 import { sha256 } from 'hash-wasm';
 import { AbortablePromise, type LocalEngine, type LocalDocumentHandle, type OpenInput, type OpenOptions, type DocumentEvent } from '@embedpdf/engine-core/runtime';
 import { captureBaseline, buildDraft, restoreDraft, type DraftBaseline, type DraftState } from './persistence/document-draft';
 import { DraftSession } from './persistence/draft-session';
 import { DraftConflict, openDraftStorage } from './persistence/draft-storage';
-import { DocumentSaveCoordinator, ownedPdfBuffer } from './persistence/document-save';
+import { DocumentSaveCoordinator } from './persistence/document-save';
 export type SharedFileIdentity = string | FileSystemFileHandle;
 export type SharedDocumentSnapshot = DraftState & {
   documentId: string; sessionKey: string; revision: number; savedRevision: number; diskVersion: string; saving: boolean;
@@ -45,11 +46,18 @@ export class SharedDocumentHost {
     const nativeInput = { ...input, id: `pdf-ts:${crypto.randomUUID()}` };
     let doc = await this.engine.open(nativeInput, options);
     const persistence = new DocumentSaveCoordinator(hash, lane);
-    const entry = { identity, document: doc, hashes: new Set([hash]), revision: 0, persistence,
-      baseline: null, undo: [], redo: [], traveling: false, restoring: false, manualRevision: 0, password: options?.password } as unknown as Entry;
     const id = doc.id;
-    entry.draft = new DraftSession({ lane: persistence.lane, revision: () => entry.revision, savedRevision: () => persistence.savedRevision,
-      capture: () => this.callbacks.run(() => this.capture(id)), notify: () => this.callbacks.notify(id), settled: () => {} });
+    const entry: Entry = {
+      identity, document: doc, hashes: new Set([hash]), revision: 0, persistence,
+      baseline: null, undo: [], redo: [], traveling: false, restoring: false, manualRevision: 0,
+      password: options?.password,
+      draft: new DraftSession({
+        lane: persistence.lane, revision: () => entry.revision,
+        savedRevision: () => persistence.savedRevision,
+        capture: () => this.callbacks.run(() => this.capture(id)),
+        notify: () => this.callbacks.notify(id), settled: () => {},
+      }),
+    };
     this.entries.set(id, entry);
     if (doc.security.state.encryption.state !== 'none') entry.draft.unavailable('Encrypted PDFs require Save to PDF; automatic drafts are not stored in plaintext.');
     else {

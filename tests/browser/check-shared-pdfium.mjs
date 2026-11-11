@@ -72,7 +72,7 @@ try {
   console.log('PASS automatic draft after native annotation edit');
   const output = await a.evaluate(async () => {
     let bytes;
-    await session.client.save(doc.id, { save: async () => false, writeShared: async plan => {
+    await session.client.save(doc.id, { writeShared: async plan => {
       bytes = Array.from(new Uint8Array(plan.data)); return { status: 'saved', version: plan.outputVersion };
     } });
     return bytes;

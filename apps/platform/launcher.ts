@@ -1,6 +1,5 @@
 import { browserCapabilities } from './browser-capabilities';
 import type { PdfWritePlan, PdfWriteResult, SharedSaveState } from '../shared/pdf-file';
-import { sha256 } from 'hash-wasm';
 import type { PlatformDocument, ExternalDocumentChange, ViewerPlatform } from './types';
 
 type WriteResponse = {
@@ -156,16 +155,7 @@ class PdfLauncherSession {
   async prepareWrite() {
     return {
       writeShared: (plan: PdfWritePlan) => this.write(plan),
-      save: async (data: ArrayBuffer) => {
-        // Compatibility for callers outside the shared viewer. Shared saves
-        // always receive their expected version from the worker.
-        const plan: PdfWritePlan = { destination: 'original', data,
-          expectedVersion: this.version, outputVersion: await sha256(new Uint8Array(data)) };
-        let result = await this.write(plan);
-        if (result.status === 'retry-copy') result = await this.write({ ...plan, destination: 'copy' });
-        if (result.status === 'saved') this.version = result.version;
-        return result.status === 'saved' || result.status === 'copy';
-      },
+
     };
   }
 

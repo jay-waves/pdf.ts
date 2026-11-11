@@ -7,7 +7,7 @@ import { nextDocumentFrame } from './document-paint';
  */
 import type { Kernel } from '@embedpdf/core';
 import type { Rect, Rotation } from '@embedpdf/core-geometry';
-import { StageToken, type ScrollBehaviorKind } from '@embedpdf/plugin-stage';
+import { StageToken, type StageCapability, type ScrollBehaviorKind } from '@embedpdf/plugin-stage';
 import { InteractionToken, samplePointOn, type PointerSample } from '@embedpdf/plugin-interaction/contract/host';
 import { READING_REGION_MODE, type ReadingRegion } from '../shared/reading-region';
 import { StageScrollAdapter } from '../renderer/stage-scroll-adapter';
@@ -264,7 +264,7 @@ export class ViewerStage {
   }
 
   install() {
-    let current: ReturnType<Kernel['tryCapability']> = null;
+    let current: StageCapability | null = null;
     let dispose = () => {};
     const connect = () => {
       const ready = this.registry.tryCapability(StageToken, this.documentId);

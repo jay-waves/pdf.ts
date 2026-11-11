@@ -46,10 +46,6 @@ export function createDownloadWriter(fileName: string) {
       downloadPdf(plan.data, fileName);
       return { status: 'copy' };
     },
-    async save(data: ArrayBuffer) {
-      downloadPdf(data, fileName);
-      return true;
-    },
   };
 }
 
@@ -89,24 +85,6 @@ export function createBrowserWriter(
       }
       await remember();
       return { status: 'saved', version: plan.outputVersion };
-    },
-    async save(data: ArrayBuffer) {
-      const writable = await nativeHandle.createWritable();
-      try {
-        await writable.write(new Blob([data], { type: 'application/pdf' }));
-        await writable.close();
-      } catch (error) {
-        await writable.abort().catch(() => {});
-        throw error;
-      }
-
-      const writtenFile = await nativeHandle.getFile();
-      if (writtenFile.size !== data.byteLength) {
-        throw new DOMException('The PDF could not be verified after writing.', 'NotReadableError');
-      }
-
-      await remember();
-      return true;
     },
   };
 }

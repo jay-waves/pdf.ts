@@ -33,8 +33,8 @@ import { DeveloperDialog } from './developer-dialog';
 import { ContextMenu } from '../selection/context-menu';
 import { Dialog } from '../components';
 import { ViewerFocusContext } from '../components/viewer-focus';
-import { useRenderThemeVersion } from './use-pdf-runtime';
-import type { PdfRuntime } from '../engine/pdf-runtime';
+import { useRenderThemeVersion } from './use-pdf-engine';
+import type { Engine } from '@embedpdf/engine-core/runtime';
 import { useDocumentPersistence } from '../document/viewer-document-persistence';
 import { SelectionTranslate } from '../selection/selection-translate';
 import { installReadingHistory as installPlatformReadingHistory } from '../navigation/reading-history';
@@ -80,7 +80,7 @@ function installScrollAttribute(stage: ViewerStage) {
 
 
 interface AppProps {
-  pdfium: PdfRuntime;
+  engine: Engine;
   sourceDocument?: PlatformDocument;
   onResourceConsumed(resource?: ManagedResource): void;
 }
@@ -99,11 +99,10 @@ const DOCUMENT_PANE_TITLES: Record<DocumentPane, string> = {
 
 
 export function ViewerApp({
-  pdfium,
+  engine,
   sourceDocument,
   onResourceConsumed,
 }: AppProps) {
-  const engine = pdfium.engine;
   useEffect(() => installBrowserGestureZoomGuard(), []);
   const {
     resource: documentResource,
@@ -121,7 +120,7 @@ export function ViewerApp({
   ));
   const registry = session?.registry;
   const stage = session?.stage ?? null;
-  const signatures = useDocumentSignatures(engine, registry, documentId);
+  const signatures = useDocumentSignatures(registry, documentId);
   const renderThemeVersion = useRenderThemeVersion(engine);
   const viewerTheme = useStore(viewerThemeStore, (state) => state.theme);
   const { isDirty, draft, saveDocument, exportDocument, saveCopy, setDirty, hasUnsavedChanges } = useDocumentPersistence({
@@ -378,7 +377,7 @@ export function ViewerApp({
         fileName={resolvedDocumentName}
         pageCount={totalPages}
         open={activeDialog === 'developer'}
-        pdfium={pdfium}
+        engine={engine}
         onClose={closeOverlay}
       />
       <BottomNav

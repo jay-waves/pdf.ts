@@ -26,7 +26,7 @@ export function useDocumentPersistence({
   const output = useMemo(() => createDocumentOutput({ engine, registry, documentId, fileHandle }),
     [engine, registry, documentId, fileHandle]);
   const saveInProgressRef = useRef<Promise<boolean> | null>(null);
-  const changesRef = useRef({ dirty: false, version: 0 });
+  const changesRef = useRef({ dirty: false });
   const [isDirty, setIsDirty] = useState(false);
   const [draft, setDraft] = useState<DraftState>({ draftStatus: 'clean', draftRevision: 0 });
   const titleRef = useRef(title);
@@ -37,9 +37,7 @@ export function useDocumentPersistence({
 
   const setDirty = useCallback((dirty: boolean) => {
     const changes = changesRef.current;
-    if (dirty) {
-      changes.version++;
-    }
+    if (changes.dirty === dirty) return;
     changes.dirty = dirty;
     setIsDirty(dirty);
 
@@ -60,7 +58,7 @@ export function useDocumentPersistence({
       fileHandle?.observeSharedSave?.(snapshot);
       setDraft({ draftStatus: snapshot.draftStatus, draftRevision: snapshot.draftRevision, draftError: snapshot.draftError });
       const dirty = snapshot.revision !== snapshot.savedRevision;
-      if (changesRef.current.dirty !== dirty || dirty) setDirty(dirty);
+      setDirty(dirty);
     };
     const snapshot = shared.getSnapshot(documentId);
     if (snapshot) sync(snapshot);
@@ -74,15 +72,7 @@ export function useDocumentPersistence({
       if (!changes.dirty) return Promise.resolve(true);
       if (saveInProgressRef.current) return saveInProgressRef.current;
 
-      const versionAtStart = changes.version;
       const save = output.save()
-        .then((saved) => {
-          // Preserve edits made while serialization or disk I/O was in progress.
-          if (saved && !getSharedDocumentClient(engine) && changesRef.current.version === versionAtStart) {
-            setDirty(false);
-          }
-          return saved;
-        })
         .catch((error) => {
           if (!isAbortError(error)) {
             console.error('[pdf-ts] failed to save PDF', error);
@@ -95,7 +85,7 @@ export function useDocumentPersistence({
       saveInProgressRef.current = save;
       return save;
     },
-    [engine, output, setDirty],
+    [output],
   );
 
   useEffect(() => {

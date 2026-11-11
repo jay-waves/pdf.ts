@@ -1,12 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { supportsLlm } from '../apps/platform/llm.ts';
-
-test('LLM is exposed as one complete optional service', () => {
-  assert.equal(supportsLlm({}), false);
-  assert.equal(supportsLlm({ ai: { request: async () => 'result', getConfig: async () => ({}), configure: async () => {} } }), true);
-});
-
 const { readAiStream } = await import('../apps/ai/ai-stream.ts');
 function streamBytes(text) {
   const bytes = new TextEncoder().encode(text);

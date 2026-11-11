@@ -1,9 +1,10 @@
-import { SELECT_TRIGGER_CLASSES } from './select-styles';
 import { Check, ChevronDown } from 'lucide-react';
 import { Select as RadixSelect, Toolbar } from 'radix-ui';
 import { usePortalContainer } from './portal-container';
 import { useViewerFocus } from './viewer-focus';
 import { useInToolbar } from './floating-toolbar';
+
+export const SELECT_TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between gap-1 rounded-lg border border-border-subtle bg-[var(--pdf-control-background)] px-2 text-inherit leading-3.5 outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control hover:bg-hover focus-visible:border-accent focus-visible:shadow-control disabled:opacity-50 disabled:hover:bg-input disabled:hover:border-border-subtle disabled:hover:shadow-none';
 
 interface SelectOption {
   label: string;
