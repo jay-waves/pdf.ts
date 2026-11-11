@@ -10,10 +10,24 @@ import { getThemeRenderGeometry, toReverseByteOrderBitmapColor, type PdfRenderTh
 function installTheme(runtime: PdfRuntimeModule, getTheme: () => PdfRenderTheme | null) {
   const { fn, mem } = runtime;
   const original = fn.EPDF_RenderPageBitmapWithMatrix_Start;
+  const originalContinue = fn.EPDF_RenderPage_Continue;
+  const originalClose = fn.FPDF_RenderPage_Close;
+  let themedPage: Ptr | undefined;
+  let deadline = 0;
   const scheme = mem.alloc(16); const pause = mem.alloc(8);
   const wrapped = toWrappedPdfiumModule(runtime);
-  const callback = wrapped.pdfium.addFunction(() => 0, 'ii');
+  const callback = wrapped.pdfium.addFunction(() => Number(performance.now() >= deadline), 'ii');
   mem.poke(pause, 'i32', 1); mem.poke(pause, 'i32', callback, 4);
+  // Preserve the SDK's yield/abort loop, including its render-close cleanup.
+  fn.EPDF_RenderPage_Continue = (page, budget) => {
+    if (page !== themedPage) return originalContinue(page, budget);
+    deadline = performance.now() + budget;
+    return fn.FPDF_RenderPage_Continue(page, pause);
+  };
+  fn.FPDF_RenderPage_Close = page => {
+    try { return originalClose(page); }
+    finally { if (page === themedPage) themedPage = undefined; }
+  };
   fn.EPDF_RenderPageBitmapWithMatrix_Start = (bitmap, page, matrix, clip, flags, budget) => {
     const theme = getTheme(); if (!theme) return original(bitmap, page, matrix, clip, flags, budget);
     fn.FPDFBitmap_FillRect(bitmap, 0, 0, fn.FPDFBitmap_GetWidth(bitmap), fn.FPDFBitmap_GetHeight(bitmap), toReverseByteOrderBitmapColor(theme.background));
@@ -21,10 +35,10 @@ function installTheme(runtime: PdfRuntimeModule, getTheme: () => PdfRenderTheme 
     const values = new Float32Array(mem.readBytes(matrix, 24).buffer);
     const geometry = getThemeRenderGeometry(fn.FPDF_GetPageWidthF(page), fn.FPDF_GetPageHeightF(page), values);
     [theme.pathFill, theme.pathStroke, theme.textFill, theme.textStroke].forEach((color, i) => mem.poke(scheme, 'i32', color, i * 4));
-    let status = fn.FPDF_RenderPageBitmapWithColorScheme_Start(bitmap, page, geometry.startX, geometry.startY,
+    themedPage = page;
+    deadline = performance.now() + budget;
+    return fn.FPDF_RenderPageBitmapWithColorScheme_Start(bitmap, page, geometry.startX, geometry.startY,
       geometry.fullWidth, geometry.fullHeight, geometry.rotation, flags | 0x20, scheme, pause);
-    while (status === 1) status = fn.FPDF_RenderPage_Continue(page, pause);
-    return status;
   };
 }
 export async function createNativeRuntime(options: { wasmUrl?: string; fontFallback?: PdfFontFallbackConfig | null }, getTheme: () => PdfRenderTheme | null) {

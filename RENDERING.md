@@ -106,6 +106,11 @@ period precedes native runtime teardown. Reopening cancels teardown; opening
 after teardown initializes a new runtime through the existing tab ports.
 Shutdown explicitly cancels EmbedPDF 3.0's residual page-residency timer.
 
+Forced-color rendering uses a deadline-based PDFium pause callback and routes
+continuations through the SDK's normal slice/yield/abort loop. Render close
+clears the themed-page routing on completion or cancellation. Slice budgets
+are cooperative, not a hard bound on individual native operations.
+
 ## SDK patch
 
 `patches/@embedpdf__plugin-render@3.0.0.patch` adds raw viewer transport while
