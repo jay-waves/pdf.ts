@@ -54,7 +54,6 @@ export function Outline() {
               try { outline.activate(item.ref); }
               catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not open this outline entry.'); }
             }}>
-            {hasChildren ? <span aria-hidden="true">{expanded ? '▾' : '▸'}</span> : null}
             <span className={styles.title}>{item.title || 'Untitled'}</span>
             {pageIndex >= 0 ? <span className={styles.page}>{pages[pageIndex]?.label ?? pageIndex + 1}</span> : null}
           </button>
