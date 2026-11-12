@@ -5,7 +5,7 @@ import { fixture } from '../support/pdf-editing-fixture.mjs';
 const browser = await chromium.launch({ channel: 'chrome' });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  const bytes = fixture({ secondPage: true });
+  const bytes = fixture({ secondPage: true, openDestination: true });
   const key = `local:history.pdf:${bytes.length}:123`;
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -88,5 +88,5 @@ try {
   await page.getByRole('button', { name: 'Page', exact: true }).click();
   assert.notEqual(await zoom.inputValue(), wideZoom, 'fit-width must recalculate after a window resize');
   assert.deepEqual(errors, []);
-  console.log('PASS legacy migration, per-file records, zoom, same-page position and responsive fit-width restoration');
+  console.log('PASS history overrides PDF open destination, legacy migration, per-file records, zoom, same-page position and responsive fit-width restoration');
 } finally { await browser.close(); }

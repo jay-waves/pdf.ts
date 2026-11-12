@@ -50,3 +50,73 @@ test('allowlisted page reads alone can be reordered; exports, edits and unknown 
   assert.equal(displayRead({ type: 'call', method: 'download' }), null);
   assert.equal(displayRead({ type: 'call', method: 'list', path: ['annotations'] }), null);
 });
+
+test('a bulk snapshot yields to foreground reads but stays ahead of edits across every batch', async () => {
+  const queue = new RenderTaskQueue();
+  const first = deferred(), release = deferred();
+  const order = [];
+  async function* batches() {
+    order.push('batch1'); first.resolve(); await release.promise; yield;
+    order.push('batch2'); yield;
+    order.push('batch3'); return 3;
+  }
+  const bulk = queue.enqueueSteps(batches(), { priority: () => -10 });
+  await first.promise;
+  const foreground = queue.enqueue(async () => { order.push('visible'); }, { priority: () => 100 });
+  const edit = queue.enqueue(async () => { order.push('edit'); });
+  const later = queue.enqueue(async () => { order.push('later'); }, { priority: () => 200 });
+  release.resolve();
+  assert.equal(await bulk, 3);
+  await Promise.all([foreground, edit, later]);
+  assert.deepEqual(order, ['batch1', 'visible', 'batch2', 'batch3', 'edit', 'later']);
+});
+
+test('cancelling a suspended bulk read releases its generator and the next write', async () => {
+  const turns = [];
+  const queue = new RenderTaskQueue(next => turns.push(next));
+  let closed = false;
+  const bulk = queue.enqueueSteps((async function* () {
+    try { yield; assert.fail('cancelled batch must not execute'); }
+    finally { closed = true; }
+  })(), { key: 'bulk', priority: () => 0 });
+  const rejection = assert.rejects(bulk, { code: 'Aborted' });
+  turns.shift()();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(queue.cancel('bulk'), true);
+  await rejection;
+  assert.equal(closed, true);
+  const edit = queue.enqueue(async () => 7);
+  turns.shift()();
+  assert.equal(await edit, 7);
+});
+
+test('failed bulk reads reject without holding the write barrier', async () => {
+  const queue = new RenderTaskQueue();
+  const bulk = queue.enqueueSteps((async function* () { yield; throw Error('batch failed'); })(), { priority: () => 0 });
+  const rejected = assert.rejects(bulk, /batch failed/);
+  const edit = queue.enqueue(async () => 'edited');
+  await rejected;
+  assert.equal(await edit, 'edited');
+});
+
+test('cancelling an earlier queued read cannot move a suspended snapshot behind a write', async () => {
+  const queue = new RenderTaskQueue();
+  const occupied = deferred(), releaseLane = deferred(), entered = deferred(), releaseBatch = deferred();
+  const blocker = queue.enqueue(async () => { occupied.resolve(); await releaseLane.promise; });
+  await occupied.promise;
+  const obsolete = queue.enqueue(async () => assert.fail('obsolete read ran'), { key: 'obsolete', priority: () => -100 });
+  const rejected = assert.rejects(obsolete, { code: 'Aborted' });
+  const order = [];
+  const bulk = queue.enqueueSteps((async function* () {
+    order.push('batch1'); entered.resolve(); await releaseBatch.promise; yield;
+    order.push('batch2');
+  })(), { priority: () => 0 });
+  const edit = queue.enqueue(async () => { order.push('edit'); });
+  releaseLane.resolve();
+  await entered.promise;
+  assert.equal(queue.cancel('obsolete'), true);
+  await rejected;
+  releaseBatch.resolve();
+  await Promise.all([blocker, bulk, edit]);
+  assert.deepEqual(order, ['batch1', 'batch2', 'edit']);
+});

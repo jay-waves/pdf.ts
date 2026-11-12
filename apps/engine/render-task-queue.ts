@@ -1,9 +1,10 @@
 type Task = {
   key?: string;
   priority?: () => number;
-  execute(): Promise<unknown>;
+  execute(): Promise<IteratorResult<void, unknown>>;
   resolve(value: unknown): void;
   reject(error: unknown): void;
+  cancel?(): void;
 };
 
 export const cancelledRenderTask = () => Object.assign(new Error('PDF operation cancelled.'), { code: 'Aborted' });
@@ -13,7 +14,7 @@ export const cancelledRenderTask = () => Object.assign(new Error('PDF operation 
 export class RenderTaskQueue {
   private pending: Task[] = [];
   private scheduled = false;
-  private busy = false;
+  private active: Task | null = null;
   private postTurn: (callback: () => void) => void;
 
   constructor(postTurn: (callback: () => void) => void = callback => { setTimeout(callback, 0); }) {
@@ -22,21 +23,33 @@ export class RenderTaskQueue {
 
   enqueue<T>(execute: () => Promise<T>, options: { key?: string; priority?: () => number } = {}): Promise<T> {
     const promise = new Promise<unknown>((resolve, reject) => {
-      this.pending.push({ ...options, execute, resolve, reject });
+      this.pending.push({ ...options, execute: async () => ({ done: true, value: await execute() }), resolve, reject });
+    });
+    this.schedule();
+    return promise as Promise<T>;
+  }
+
+  /** Yielding reads retain their queue position, so later writes remain barriers. */
+  enqueueSteps<T>(steps: AsyncGenerator<void, T>, options: { key?: string; priority: () => number }): Promise<T> {
+    const promise = new Promise<unknown>((resolve, reject) => {
+      this.pending.push({ ...options, execute: () => steps.next(), resolve, reject,
+        cancel: () => { void steps.return(undefined as T).catch(() => {}); } });
     });
     this.schedule();
     return promise as Promise<T>;
   }
 
   cancel(key: string) {
-    const index = this.pending.findIndex(task => task.key === key);
+    const index = this.pending.findIndex(task => task !== this.active && task.key === key);
     if (index < 0) return false;
-    this.pending.splice(index, 1)[0].reject(cancelledRenderTask());
+    const task = this.pending.splice(index, 1)[0];
+    task.cancel?.();
+    task.reject(cancelledRenderTask());
     return true;
   }
 
   private schedule() {
-    if (this.busy || this.scheduled || !this.pending.length) return;
+    if (this.active || this.scheduled || !this.pending.length) return;
     this.scheduled = true;
     // Let queued viewport/abort messages arrive between native operations.
     // No debounce: an idle lane starts on the next event-loop turn.
@@ -44,7 +57,7 @@ export class RenderTaskQueue {
   }
 
   private async pump() {
-    if (this.busy || !this.pending.length) return;
+    if (this.active || !this.pending.length) return;
     let next = 0;
     if (this.pending[0].priority) {
       let best = this.pending[0].priority();
@@ -53,11 +66,20 @@ export class RenderTaskQueue {
         if (rank > best) { next = i; best = rank; }
       }
     }
-    const task = this.pending.splice(next, 1)[0];
-    this.busy = true;
-    try { task.resolve(await task.execute()); }
-    catch (error) { task.reject(error); }
-    finally { this.busy = false; this.schedule(); }
+    const task = this.pending[next];
+    this.active = task;
+    try {
+      const result = await task.execute();
+      if (result.done) {
+        this.pending.splice(this.pending.indexOf(task), 1);
+        task.resolve(result.value);
+      }
+    }
+    catch (error) {
+      this.pending.splice(this.pending.indexOf(task), 1);
+      task.reject(error);
+    }
+    finally { this.active = null; this.schedule(); }
   }
 }
 
@@ -89,4 +111,14 @@ export function displayRead(request: DisplayRequest) {
   const options = request.args?.[0] as { target?: unknown } | undefined;
   const pixels = operation === 'render.raw' || operation === 'render.image';
   return { page, view, detail: pixels ? (options?.target ? 2 : 3) : 1 };
+}
+
+/** Document reads that may share a read epoch with page work, never edits. */
+export function documentReadPriority(request: DisplayRequest): number | undefined {
+  if (request.type !== 'call' || request.path?.length !== 1 || typeof request.path[0] !== 'string') return;
+  switch (`${request.path[0]}.${request.method}`) {
+    case 'pages.list': case 'render.getPolicy': case 'actions.get': return 200;
+    case 'forms.list': case 'signatures.list': case 'outline.get': return 50;
+    case 'annotations.list': return -10;
+  }
 }

@@ -7,6 +7,7 @@
 import type { DraftLocation, PdfWritePlan, PdfWriteResult } from '../shared/pdf-file';
 import { ownedPdfBuffer } from '../shared/pdf-file';
 import { sha256 } from 'hash-wasm';
+import type { DisplayRequest } from './render-task-queue';
 import { AbortablePromise, type LocalEngine, type LocalDocumentHandle, type OpenInput, type OpenOptions, type DocumentEvent } from '@embedpdf/engine-core/runtime';
 import { captureBaseline, buildDraft, restoreDraft, type DraftBaseline, type DraftState } from './persistence/document-draft';
 import { DraftSession } from './persistence/draft-session';
@@ -17,6 +18,11 @@ export type SharedDocumentSnapshot = DraftState & {
   documentId: string; sessionKey: string; revision: number; savedRevision: number; diskVersion: string; saving: boolean;
   history: { global: { canUndo: boolean; canRedo: boolean } };
 };
+const BASELINE_READS = new Set([
+  'pages.list', 'annotations.list', 'forms.list', 'actions.get', 'outline.get',
+  'metadata.get', 'signatures.list', 'render.raw', 'render.image', 'text.layout',
+  'forms.renderAppearances', 'annotations.renderAppearances', 'render.getPolicy',
+]);
 interface Entry {
   identity: SharedFileIdentity; document: LocalDocumentHandle; hashes: Set<string>; revision: number;
   persistence: DocumentSaveCoordinator; baseline: DraftBaseline | null; draft: DraftSession;
@@ -44,6 +50,12 @@ export class SharedDocumentHost {
       if (same && (entry.hashes.has(hash) || entry.persistence.candidateVersion === hash)) return entry.document;
     }
     const nativeInput = { ...input, id: `pdf-ts:${crypto.randomUUID()}` };
+    // The SDK probes signature protection during open via EPDFSig_LoadModel,
+    // scanning revisions and page widgets even in unsigned PDFs. A warm Chrome
+    // profile of a 22 MB / 541-page PDF spent ~300 ms here (~224 ms on revisions).
+    // #TODO: Adopt an upstream split between permission checks and on-demand
+    // signature analysis (related: embedpdf/embed-pdf-viewer#860). Do not bypass
+    // the probe: deferred checks need edit/draft/save barriers and guard refresh.
     let doc = await this.engine.open(nativeInput, options);
     const persistence = new DocumentSaveCoordinator(hash, lane);
     const id = doc.id;
@@ -61,10 +73,10 @@ export class SharedDocumentHost {
     this.entries.set(id, entry);
     if (doc.security.state.encryption.state !== 'none') entry.draft.unavailable('Encrypted PDFs require Save to PDF; automatic drafts are not stored in plaintext.');
     else {
-      entry.baseline = await captureBaseline(doc);
       const draft = await entry.draft.initialize(openDraftStorage(identity, location), hash);
       if (draft) {
         try {
+          entry.baseline = await captureBaseline(doc);
           await restoreDraft(doc, draft, entry.baseline);
           entry.revision = draft.revision; entry.draft.restored(draft.revision);
         } catch (error) {
@@ -99,6 +111,17 @@ export class SharedDocumentHost {
     let lastOp: string | undefined;
     return entry.document;
   }
+  async prepareCall(id: string, request: DisplayRequest) {
+    const e = this.entries.get(id)!;
+    if (e.baseline || e.draft.state.draftStatus === 'unavailable'
+      || e.document.security.state.encryption.state !== 'none') return;
+    const service = (request.path ?? []).filter(part => typeof part === 'string').join('.');
+    // Only known reads bypass the original-state snapshot. Unknown operations
+    // conservatively capture before execution, so edits never become baseline.
+    if (BASELINE_READS.has(`${service}.${request.method}`)) return;
+    e.baseline = await captureBaseline(e.document);
+  }
+
   state(id: string): SharedDocumentSnapshot {
     const e = this.entries.get(id)!;
     return { documentId: id, sessionKey: id, revision: e.revision, savedRevision: e.persistence.savedRevision,

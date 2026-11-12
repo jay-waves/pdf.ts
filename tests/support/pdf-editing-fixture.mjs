@@ -1,4 +1,4 @@
-export function fixture({ secondPage = false, notes = false, content = '', fontName = 'Helvetica' } = {}) {
+export function fixture({ secondPage = false, notes = false, content = '', fontName = 'Helvetica', openDestination = false } = {}) {
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -8,6 +8,7 @@ export function fixture({ secondPage = false, notes = false, content = '', fontN
     '<< /Fields [5 0 R] /DR << /Font << /Helv 7 0 R >> >> /DA (/Helv 12 Tf 0 g) >>',
     `<< /Type /Font /Subtype /Type1 /BaseFont /${fontName} >>`,
   ];
+  if (openDestination) objects[0] = objects[0].replace('/Pages', '/OpenAction [3 0 R /Fit] /Pages');
   if (notes) {
     objects[2] = objects[2].replace('/Annots [5 0 R]', '/Annots [5 0 R 8 0 R 9 0 R]');
     objects.push('<< /Type /Annot /Subtype /Text /Rect [40 500 60 520] /Contents (original note) /F 4 >>');

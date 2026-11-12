@@ -6,7 +6,8 @@ import type { PdfFontFallbackConfig } from '../fonts/types';
 import type { PdfRenderTheme } from './pdf-render-theme';
 import type { LocalDocumentHandle, OpenInput, OpenOptions, DocumentEvent, AbortablePromise } from '@embedpdf/engine-core/runtime';
 import { SharedDocumentHost, type SharedFileIdentity } from './shared-document-host';
-import { RenderTaskQueue, displayRead } from './render-task-queue';
+import { RenderTaskQueue, displayRead, documentReadPriority } from './render-task-queue';
+import { readAnnotationBatches } from './annotation-read';
 import type { WorkingSetPage } from '@embedpdf/engine-core/runtime';
 
 type Endpoint = Pick<MessagePort, 'postMessage' | 'onmessage'> & { start?(): void; close?(): void };
@@ -59,7 +60,10 @@ function run<T>(operation: () => Promise<T>, options?: Parameters<RenderTaskQueu
 }
 function readPriority(s: Session, req: Request) {
   const read = displayRead(req);
-  if (!read) return undefined;
+  if (!read) {
+    const priority = documentReadPriority(req);
+    return priority === undefined ? undefined : () => priority;
+  }
   return () => {
     const views = s.workingSets.get(req.documentId!);
     const sets = read.view ? [views?.get(read.view) ?? []] : [...views?.values() ?? []];
@@ -71,6 +75,30 @@ function readPriority(s: Session, req: Request) {
     return visibility + read.detail * 10;
   };
 }
+function readAnnotations(s: Session, req: Request) {
+  // Capture the handle inside the generator, after earlier lifecycle barriers.
+  async function* steps() {
+    const key = `${s.key}:${req.id}`;
+    const check = () => {
+      if (s.closed || cancelled.delete(key) || !s.documents.has(req.documentId!))
+        throw Object.assign(new Error('PDF operation cancelled.'), { code: 'Aborted' });
+    };
+    check();
+    const doc = host!.document(req.documentId!)!;
+    const result = yield* readAnnotationBatches(doc, req.args?.[0] as Parameters<typeof doc.annotations.list>[0], async operation => {
+      check();
+      currentTheme = s.theme; native?.fonts?.setDiagnosticContext(s.key);
+      const pending = operation();
+      if ('abort' in pending) active.set(key, pending as AbortablePromise<unknown>);
+      try { return await pending; } finally { active.delete(key); }
+    });
+    return encodeEngineResult(result);
+  }
+  const result = queue.enqueueSteps(steps(), { key: `${s.key}:${req.id}`, priority: () => -10 });
+  serial = Promise.all([serial, result.catch(() => {})]).then(() => {});
+  return result;
+}
+
 function clearWorkingSets(s: Session, id: string) {
   for (const view of s.workingSets.get(id)?.keys() ?? []) host?.document(id)?.setWorkingSet(`${s.key}:${view}`, []);
   s.workingSets.delete(id);
@@ -165,6 +193,7 @@ async function dispatch(s: Session, req: Request) {
     }
   }
   if (['__proto__', 'constructor', 'prototype'].includes(req.method!) || typeof target?.[req.method!] !== 'function') throw new Error('Unknown document operation.');
+  await host!.prepareCall(id, req);
   const pending = target[req.method!](...args);
   if (pending?.abort) active.set(`${s.key}:${req.id}`, pending);
   try {
@@ -219,6 +248,7 @@ function connect(port: Endpoint) {
     // Saves wait on the disk lane outside the native operation lane, so other tabs can edit.
     const task = req.type === 'save' || req.type === 'close' ? dispatch(s, req)
       : req.type === 'open' ? Promise.all([...closing.values()]).then(() => run(() => dispatch(s, req)))
+      : documentReadPriority(req) === -10 ? readAnnotations(s, req)
       : run(() => dispatch(s, req), { key: `${s.key}:${req.id}`, priority: readPriority(s, req) });
     void task.then(result => { if (!s.closed) port.postMessage({ type: 'result', id: req.id, result }, engineResultTransfers(result)); }).catch(error => {
       if (!s.closed) port.postMessage({ type: 'result', id: req.id, error: { message: error?.message ?? String(error), code: error?.code, details: error?.details } });

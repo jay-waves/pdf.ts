@@ -125,6 +125,10 @@ export function useDocumentSignatures(
     let active = true;
     const unsubscribe = onDocumentLoaded(registry, documentId, (document) => {
       void (async () => {
+        // The SDK currently builds the signature model during engine.open();
+        // delaying this read alone cannot remove that opening cost.
+        // #TODO: When upstream makes full signature analysis lazy, defer this
+        // UI read too so document load does not immediately trigger it again.
         const snapshot = await document.signatures.list();
         const next = await Promise.all(snapshot.signatures.filter(s => s.signed).map(async signature => ({
           contents: (await document.signatures.getContents(signature.field)).slice().buffer,

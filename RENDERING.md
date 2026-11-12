@@ -57,6 +57,14 @@ in the tab; edits invalidate affected rendering, and Canvas reports presented
 coverage before older tiles are released. The request and presentation sections
 belong to the same tab. A dedicated worker replaces the shared worker when needed.
 
+Reading history restores after the SDK's document-open action queue settles,
+so a PDF's initial destination cannot overwrite the saved reading position.
+
+For files without a recoverable draft, opening does not scan all annotations
+and forms for a draft baseline. The worker captures that original-state snapshot
+inside its native lane before the first operation outside an explicit read
+allowlist. Draft recovery still captures it before applying recovered edits.
+
 Saving is a separate path: the host prepares a complete PDF write plan, the
 platform writer writes the file, and its result confirms the saved revision.
 
@@ -122,7 +130,14 @@ The worker has one native operation lane. Pending allowlisted page reads are
 ranked using the latest session/view working sets: visible pages before near or
 offscreen pages, then base pixels before tiles and auxiliary reads. Equal ranks
 stay FIFO. Unknown operations, edits and lifecycle tasks are ordering barriers;
-reads cannot cross them. Save/draft capture continues through this same lane.
+reads cannot cross them. Known document metadata reads share that read group;
+page lists, render policy and opening actions precede bulk annotation indexing.
+Whole-document annotation reads run in batches of 16 pages and yield between
+batches, letting visible pixels and metadata run first. Each continuation keeps
+its original queue position relative to edits and lifecycle barriers, so the SDK
+receives one complete, consistent annotation snapshot. Cancellation releases the
+remaining batches. Small and explicitly page-scoped reads retain their page
+ordering and results. Save/draft capture continues through this same lane.
 Running work is not forcibly preempted; caller cancellation follows the SDK's
 cooperative abort path. Cancelled queued requests are removed before execution.
 
@@ -216,3 +231,18 @@ worker/RPC and presentation-submission times.
 It excludes GPU compositing, pixel-readback timing, and RSS; it does not measure
 viewer scrolling. BMP adds only 66 bytes to transfer size, so raw transport saves
 encoding, copying, and decoding work rather than bandwidth.
+
+`tests/profiling/profile-open.mjs` measures
+file drop to the requested page's first painted base Canvas in system Chrome.
+It starts with the viewer shell loaded, includes reading-position restoration,
+and excludes OS/application launch and final tile refinement. Use
+`PDF_BENCH_OUTPUT` to save the per-sample JSON. Timing is diagnostic, not a gate.
+
+`tests/profiling/profile-engine-open.mjs` profiles the installed SDK's open path
+and individual WASM calls in a dedicated Chrome worker with an initialized
+runtime. It compares normal opening, an isolated signature-protection-probe
+bypass, deferred checking, and plain PDFium loading. Additional controls read
+forms or revisions before checking to isolate shared work. Deferred checking
+refreshes the SDK guard only in the diagnostic; no production permission policy
+is changed. These controls are not functionally equivalent viewer implementations. Timings exclude file fetching,
+application hashing, layout and painting; nested total times must not be added.

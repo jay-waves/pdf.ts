@@ -55,6 +55,14 @@
 - Keep packaging/release tools in `scripts/`, manual browser integration scripts
   in `tests/browser/`, shared fixtures/helpers in `tests/support/`, and manual
   diagnostics in `tests/profiling/`. Reuse existing helpers before adding files.
+- Measure opening a local PDF with
+  `node tests/profiling/profile-open.mjs <file.pdf> --page 200 --samples 5`
+  against Vite. It measures file drop to the target base Canvas, with the app
+  shell preloaded; it excludes OS launch and final tile refinement.
+- To isolate SDK and PDFium opening costs, run
+  `node tests/profiling/profile-engine-open.mjs <file.pdf> --samples 5`
+  against Vite. Its signature-probe bypass is an isolated diagnostic control,
+  never an application configuration; revalidate SDK-private hooks on upgrades.
 - Diagnostics are not test gates. `PDF_BENCH_OUTPUT` saves rendering benchmark JSON;
   `check-static-memory.mjs` needs `node --expose-gc` for explicit GC. Review tools
   that inspect SDK internals after dependency upgrades.

@@ -26,7 +26,7 @@ delete globalThis.__readingHistoryTestPlatform;
 
 const region = { left: 0.1, top: 0.2, right: 0.9, bottom: 0.8 };
 
-function setup(t, saved, deferredRead, restore = true) {
+function setup(t, saved, deferredRead, restore = true, opening = Promise.resolve()) {
   const timers = new Map();
   let nextId = 0;
   const events = new Map();
@@ -49,6 +49,7 @@ function setup(t, saved, deferredRead, restore = true) {
   let layoutReady;
   const cameraListeners = new Set();
   const stage = {
+    finishOpening: () => opening,
     getReadingViewpoint: () => viewpoint,
     onReadingPositionChange(listener) { cameraListeners.add(listener); return () => cameraListeners.delete(listener); },
     restoreReadingPosition(anchor) { viewpoint = anchor.viewpoint; this.goToPage(anchor.pageNumber); },
@@ -71,7 +72,7 @@ test('reading history restores page and layout and omits legacy reading-area fie
     pageNumber: 4, scrollStrategy: 'horizontal', spreadMode: 'none',
     readingRegion: region, regionFit: ZoomMode.FitWidth,
   });
-  await Promise.resolve();
+  await settle();
   assert.equal(stage.getSnapshot().pageNumber, 4);
   assert.equal(stage.getSnapshot().strategy, 'horizontal');
   assert.equal(stage.getSnapshot().spread, 'none');
@@ -84,7 +85,7 @@ test('reading history restores page and layout and omits legacy reading-area fie
 
 test('invalid saved page numbers do not restore layout', async (t) => {
   const { stage } = setup(t, { pageNumber: 0, scrollStrategy: 'horizontal', spreadMode: 'odd' });
-  await Promise.resolve();
+  await settle();
   assert.equal(stage.getSnapshot().pageNumber, 1);
   assert.equal(stage.getSnapshot().strategy, 'vertical');
   assert.equal(stage.getSnapshot().spread, 'none');
@@ -96,7 +97,7 @@ test('delayed history cannot overwrite an active selection', async (t) => {
   const pending = setup(t, undefined, deferred);
   pending.setSelection();
   resolve({ pageNumber: 7, readingRegion: region });
-  await Promise.resolve();
+  await settle();
   assert.equal(pending.stage.getSnapshot().pageNumber, 1);
   assert.equal(pending.stage.getSnapshot().selectingRegion, true);
   [...pending.timers.values()].at(-1)();
@@ -107,7 +108,7 @@ test('delayed history cannot overwrite an active selection', async (t) => {
 test('replacement keeps its prepared position instead of restoring old persisted history', async (t) => {
   const { stage, timers, writes } = setup(t, { pageNumber: 9 }, undefined, false);
   stage.goToPage(3);
-  await Promise.resolve();
+  await settle();
   assert.equal(stage.getSnapshot().pageNumber, 3);
   assert.equal(platform.readReadingProgress.mock.callCount(), 0);
   [...timers.values()].at(-1)();
@@ -115,7 +116,7 @@ test('replacement keeps its prepared position instead of restoring old persisted
 });
 
 const view = (y, zoom = { level: 1.75 }) => ({ anchor: { pageIndex: 3, fractionX: .2, fractionY: y }, zoom });
-const settle = async () => { await Promise.resolve(); await Promise.resolve(); };
+const settle = () => new Promise(resolve => setImmediate(resolve));
 
 test('restores precise page-relative position and zoom intent, and checkpoints same-page camera changes', async t => {
   const saved = { pageNumber: 4, viewpoint: view(.35, { mode: 'fit-width' }) };
@@ -161,4 +162,22 @@ test('invalid viewpoints fall back to the legacy page and pending writes keep on
   release();
   await settle();
   assert.deepEqual(recorded.map(p => p.viewpoint.anchor.fractionY), [.1, .3]);
+});
+
+
+test('opening actions finish before restoring history, without checkpointing their initial destination', async t => {
+  let finish;
+  const opening = new Promise(resolve => { finish = resolve; });
+  const pending = setup(t, { pageNumber: 9 }, undefined, true, opening);
+  pending.stage.goToPage(1);
+  pending.events.get('pagehide')();
+  await settle();
+  assert.equal(pending.writes.length, 0);
+  assert.equal(platform.readReadingProgress.mock.callCount(), 0);
+  finish();
+  await settle();
+  assert.equal(pending.stage.getSnapshot().pageNumber, 9);
+  pending.events.get('pagehide')();
+  await settle();
+  assert.equal(pending.writes.at(-1).pageNumber, 9);
 });

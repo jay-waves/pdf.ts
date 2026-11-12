@@ -6,6 +6,7 @@ import { nextDocumentFrame } from './document-paint';
  * creating annotations or dirtying the PDF.
  */
 import type { Kernel } from '@embedpdf/core';
+import { ActionsToken } from '@embedpdf/plugin-actions';
 import type { Rect, Rotation } from '@embedpdf/core-geometry';
 import { StageToken, type StageCapability, type ScrollBehaviorKind } from '@embedpdf/plugin-stage';
 import { InteractionToken, samplePointOn, type PointerSample } from '@embedpdf/plugin-interaction/contract/host';
@@ -249,6 +250,12 @@ export class ViewerStage {
 
   getCurrentPage() {
     return this.scroll.getCurrentPage();
+  }
+
+  async finishOpening() {
+    // Dispatch shares the SDK's queue: even an already-claimed open action
+    // finishes before this resolves, and cannot overwrite restored history.
+    await this.registry.tryCapability(ActionsToken, this.documentId)?.dispatch({ type: 'document', event: 'open' });
   }
 
   onLayoutReady(listener: (totalPages: number, initial: boolean) => void) {

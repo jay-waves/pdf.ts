@@ -138,30 +138,31 @@ export function installReadingHistory(
     unsubscribeLayoutReady = null;
     unsubscribePosition = stage.onReadingPositionChange(scheduleHistoryWrite);
     if (!restore) { historyReady = true; return; }
-    const initialView = getViewSnapshot();
-
-    platform.readReadingProgress(documentKey)
-      .then((saved) => {
-        if (disposed) return;
-        const viewChangedWhileReading = hasViewChanged(
-          initialView,
-          getViewSnapshot(),
+    void (async () => {
+      await stage.finishOpening();
+      if (disposed) return;
+      const initialView = getViewSnapshot();
+      const saved = await platform.readReadingProgress(documentKey);
+      if (disposed) return;
+      const viewChangedWhileReading = initialView.selectingRegion || hasViewChanged(
+        initialView,
+        getViewSnapshot(),
+      );
+      if (!viewChangedWhileReading && saved && isValidPageNumber(saved.pageNumber)) {
+        const view = stage.getSnapshot();
+        stage.applyLayout(
+          isScrollStrategy(saved.scrollStrategy) ? saved.scrollStrategy : view.strategy,
+          isSpreadMode(saved.spreadMode) ? saved.spreadMode : view.spread,
         );
-        if (!viewChangedWhileReading && saved && isValidPageNumber(saved.pageNumber)) {
-          const view = stage.getSnapshot();
-          stage.applyLayout(
-            isScrollStrategy(saved.scrollStrategy) ? saved.scrollStrategy : view.strategy,
-            isSpreadMode(saved.spreadMode) ? saved.spreadMode : view.spread,
-          );
-          if (validViewpoint(saved.viewpoint)
-            && saved.viewpoint.anchor.pageIndex < view.totalPages) {
-            stage.restoreReadingPosition({ pageNumber: saved.viewpoint.anchor.pageIndex + 1, viewpoint: saved.viewpoint });
-          } else stage.goToPage(saved.pageNumber);
-        }
-        historyReady = true;
-        // Also lazily migrate a legacy record to its per-document key.
-        if (viewChangedWhileReading || saved) scheduleHistoryWrite();
-      })
+        if (validViewpoint(saved.viewpoint)
+          && saved.viewpoint.anchor.pageIndex < view.totalPages) {
+          stage.restoreReadingPosition({ pageNumber: saved.viewpoint.anchor.pageIndex + 1, viewpoint: saved.viewpoint });
+        } else stage.goToPage(saved.pageNumber);
+      }
+      historyReady = true;
+      // Also lazily migrate a legacy record to its per-document key.
+      if (viewChangedWhileReading || saved) scheduleHistoryWrite();
+    })()
       .catch((error) => {
         if (disposed) return;
         historyReady = true;
