@@ -122,7 +122,7 @@ export function CommentEditor({ registry, documentId, annotationId, pointerX, on
       dismissOnFocusOutside={false}
       label="Edit comment"
       role="dialog"
-      className={`pdf-glass-surface pdf-glass-popover ${styles.commentPopover}`}
+      className={`ui-glass ui-popover ${styles.commentPopover}`}
     >
       <div className={styles.editorHeading}>
         <MessageSquareMore size={14} className="text-accent" />

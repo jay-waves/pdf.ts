@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
-import { fixture } from '../../tests/support/pdf-editing-fixture.mjs';
+import { fixture } from '../support/pdf-editing-fixture.mjs';
 const url = process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173';
 const bytes = fixture({ notes: true, content: '0.1 0.3 0.8 rg 30 40 230 200 re f\nBT /Helv 20 Tf 60 700 Td (Canvas vs BMP) Tj ET\n' });
 const browser = await chromium.launch({ channel: 'chrome' });

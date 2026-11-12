@@ -12,6 +12,10 @@
   --color-toolbar: var(--pdf-toolbar-background);
   --color-toolbar-secondary: var(--pdf-toolbar-secondary-background);
   --color-input: var(--pdf-background-input);
+  --color-control: var(--pdf-control-background);
+  --color-inset: var(--pdf-inset-background);
+  --color-section: var(--pdf-section-background);
+  --color-page: var(--pdf-page-background);
   --color-foreground: var(--pdf-foreground-primary);
   --color-secondary: var(--pdf-foreground-secondary);
   --color-muted: var(--pdf-foreground-muted);
@@ -231,23 +235,23 @@
   --pdf-annotation-auto-text: #2d332f;
 }
 
-@keyframes pdf-select-in {
+@keyframes ui-select-in {
   from { opacity: 0; transform: translateY(-2px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes pdf-select-out {
+@keyframes ui-select-out {
   from { opacity: 1; transform: translateY(0) scale(1); }
   to { opacity: 0; transform: translateY(-1px) scale(0.99); }
 }
 
-.pdf-select-content[data-state='open'] { animation: pdf-select-in 120ms ease-out; }
-.pdf-select-content[data-state='closed'] { animation: pdf-select-out 90ms ease-in; }
+.ui-select[data-state='open'] { animation: ui-select-in 120ms ease-out; }
+.ui-select[data-state='closed'] { animation: ui-select-out 90ms ease-in; }
 
 /* Shared translucent chrome. Keeping this outside Tailwind's layers lets the
    material consistently replace the opaque background utilities supplied by
    feature components without coupling those components to a theme. */
-.pdf-glass-surface {
+.ui-glass {
   border-color: var(--pdf-glass-border);
   background-color: var(--pdf-glass-background);
   background-clip: padding-box;
@@ -256,12 +260,12 @@
   -webkit-backdrop-filter: var(--pdf-glass-filter);
 }
 
-.pdf-glass-popover[data-state='open'] {
-  animation: pdf-glass-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+.ui-popover[data-state='open'] {
+  animation: ui-popover-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: var(--radix-popover-content-transform-origin, var(--radix-select-content-transform-origin, var(--radix-dropdown-menu-content-transform-origin)));
 }
 
-.pdf-glass-tooltip {
+.ui-tooltip {
   border-color: var(--pdf-tooltip-border);
   background-color: var(--pdf-tooltip-background);
   box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
@@ -269,7 +273,7 @@
   -webkit-backdrop-filter: blur(14px) saturate(135%);
 }
 
-.pdf-mica-surface {
+.ui-mica {
   border-color: var(--pdf-glass-border);
   background-color: var(--pdf-mica-background);
   background-clip: padding-box;
@@ -278,7 +282,7 @@
   -webkit-backdrop-filter: var(--pdf-mica-filter);
 }
 
-.pdf-mica-surface.pdf-dialog-content {
+.ui-mica.ui-dialog {
   border-color: var(--pdf-border-subtle);
   background-color: var(--pdf-panel-background);
   box-shadow: var(--pdf-panel-shadow);
@@ -286,13 +290,13 @@
   -webkit-backdrop-filter: none;
 }
 
-.pdf-dialog-overlay {
+.ui-overlay {
   background: var(--pdf-overlay-background);
   backdrop-filter: blur(4px) saturate(110%);
   -webkit-backdrop-filter: blur(4px) saturate(110%);
 }
 
-.pdf-mica-surface.pdf-dialog-content.pdf-navigation-panel {
+.ui-mica.ui-dialog.ui-nav-panel {
   background-color: var(--pdf-glass-background);
   border-color: var(--pdf-glass-border);
   box-shadow: 0 12px 36px rgb(0 0 0 / 14%);
@@ -300,45 +304,45 @@
   -webkit-backdrop-filter: var(--pdf-glass-filter);
 }
 
-.pdf-dialog-overlay.pdf-navigation-overlay {
+.ui-overlay.ui-nav-overlay {
   background: rgb(0 0 0 / 12%);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 @supports not (backdrop-filter: blur(1px)) {
-  .pdf-mica-surface.pdf-dialog-content.pdf-navigation-panel {
+  .ui-mica.ui-dialog.ui-nav-panel {
     background-color: var(--pdf-background-surface);
   }
 }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .pdf-mica-surface.pdf-dialog-content.pdf-navigation-panel {
+  .ui-mica.ui-dialog.ui-nav-panel {
     background-color: var(--pdf-background-surface);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
 }
 
-.pdf-dialog-overlay[data-state='open'] {
-  animation: pdf-overlay-in 160ms ease-out;
+.ui-overlay[data-state='open'] {
+  animation: ui-overlay-in 160ms ease-out;
 }
 
-.pdf-dialog-content[data-state='open'] {
-  animation: pdf-dialog-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
+.ui-dialog[data-state='open'] {
+  animation: ui-dialog-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes pdf-glass-in {
+@keyframes ui-popover-in {
   from { opacity: 0; transform: translateY(3px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes pdf-overlay-in {
+@keyframes ui-overlay-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-@keyframes pdf-dialog-in {
+@keyframes ui-dialog-in {
   from { opacity: 0; scale: 0.975; }
   to { opacity: 1; scale: 1; }
 }
@@ -363,10 +367,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pdf-select-content,
-  .pdf-glass-popover,
-  .pdf-dialog-overlay,
-  .pdf-dialog-content { animation: none !important; }
+  .ui-select,
+  .ui-popover,
+  .ui-overlay,
+  .ui-dialog { animation: none !important; }
 }
 
 /* All dark palettes use the same restrained edge lighting and shadow depth. */
@@ -387,5 +391,5 @@
     --pdf-glass-filter: none;
     --pdf-mica-filter: none;
   }
-  .pdf-dialog-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .ui-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }

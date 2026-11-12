@@ -26,7 +26,7 @@ export function waitForDocumentPaint(root: HTMLElement, documentId: string, sign
           && rect.left < bounds.right && rect.bottom > bounds.top && rect.top < bounds.bottom;
       }) : [];
       const ready = pages.length > 0 && pages.every((page) => {
-        const canvas = page.querySelector<HTMLCanvasElement>('.pdf-native-render-layer canvas[data-plane="base"][data-painted="true"]');
+        const canvas = page.querySelector<HTMLCanvasElement>('.pdf-render canvas[data-plane="base"][data-painted="true"]');
         return !!canvas && canvas.width > 0 && canvas.height > 0;
       });
       stableFrames = ready ? stableFrames + 1 : 0;

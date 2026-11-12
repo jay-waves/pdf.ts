@@ -4,7 +4,7 @@ import { usePortalContainer } from './portal-container';
 import { useViewerFocus } from './viewer-focus';
 import { useInToolbar } from './floating-toolbar';
 
-export const SELECT_TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between gap-1 rounded-lg border border-border-subtle bg-[var(--pdf-control-background)] px-2 text-inherit leading-3.5 outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control hover:bg-hover focus-visible:border-accent focus-visible:shadow-control disabled:opacity-50 disabled:hover:bg-input disabled:hover:border-border-subtle disabled:hover:shadow-none';
+export const SELECT_TRIGGER_CLASSES = 'group inline-flex h-6.5 items-center justify-between gap-1 rounded-lg border border-border-subtle bg-control px-2 text-inherit leading-3.5 outline-none transition-[background-color,border-color,box-shadow] duration-150 ease-control hover:bg-hover focus-visible:border-accent focus-visible:shadow-control disabled:opacity-50 disabled:hover:bg-input disabled:hover:border-border-subtle disabled:hover:shadow-none';
 
 interface SelectOption {
   label: string;
@@ -51,7 +51,7 @@ export function Select({
       {inToolbar ? <Toolbar.Button asChild disabled={disabled}>{trigger}</Toolbar.Button> : trigger}
       <RadixSelect.Portal container={portalContainer ?? undefined}>
         <RadixSelect.Content
-          className={`pdf-select-content pdf-glass-surface pdf-glass-popover z-50 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)] overflow-hidden rounded-lg border text-foreground ${contentClassName ?? ''}`.trim()}
+          className={`ui-select ui-glass ui-popover z-50 min-w-[var(--radix-select-trigger-width)] max-h-[var(--radix-select-content-available-height)] overflow-hidden rounded-lg border text-foreground ${contentClassName ?? ''}`.trim()}
           position="popper"
           sideOffset={sideOffset}
           collisionPadding={6}

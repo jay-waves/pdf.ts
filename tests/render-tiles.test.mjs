@@ -254,3 +254,41 @@ for (const [name, plugin] of [['ESM', renderPlugin], ['CJS', createRequire(impor
     view.destroy();
   });
 }
+
+for (const [name, plugin] of [['ESM', renderPlugin], ['CJS', createRequire(import.meta.url)('@embedpdf/plugin-render').renderPlugin]]) {
+  test(`${name}: explicit motion end flushes the latest demand without waiting or duplicating work`, async t => {
+    const f = setup(t, plugin, { maxInFlight: 2, demandWindowMs: 60 });
+    const view = f.api.createViewDemand('scrollbar');
+    const demand = { desiredDeviceWidth: 1224, visibleRect: { x: 0, y: 0, width: 150, height: 150 } };
+    view.setDemand(f.page, demand);
+    view.setDemand(f.page, { ...demand, desiredDeviceWidth: 2448 });
+    view.flush(f.page);
+    await Promise.resolve();
+    assert.equal(f.calls.length, 2, 'release starts the final viewport without advancing the clock');
+    assert.ok(f.calls.every(call => call.options.viewport.scale === 4));
+    await f.drain();
+    const count = f.calls.length;
+    f.clock.advance(60); await f.drain();
+    assert.equal(f.calls.length, count, 'flushed timer cannot start duplicate work');
+    view.destroy();
+    assert.equal(f.clock.pending.timers, 0);
+  });
+}
+
+for (const [name, plugin] of [['ESM', renderPlugin], ['CJS', createRequire(import.meta.url)('@embedpdf/plugin-render').renderPlugin]]) {
+  test(`${name}: pending demand includes deferred work and presentation, then becomes idle`, async t => {
+    const f = setup(t, plugin, { demandWindowMs: 60 });
+    const view = f.api.createViewDemand('prefetch-idle');
+    assert.equal(view.isPending(f.page), false);
+    view.setDemand(f.page, { desiredDeviceWidth: 1224, visibleRect: { x: 0, y: 0, width: 150, height: 150 } });
+    assert.equal(view.isPending(f.page), true, 'deferred demand is not idle');
+    f.clock.advance(60); await f.drain();
+    assert.equal(view.isPending(f.page), true, 'resolved pixels must be presented first');
+    view.getPlan(f.page).paint.forEach(tile => view.markPainted(f.page, tile.key));
+    await f.drain();
+    assert.equal(view.isPending(f.page), false);
+    view.setPaused(f.page, true); assert.equal(view.isPending(f.page), true);
+    view.release(f.page); assert.equal(view.isPending(f.page), false);
+    view.destroy();
+  });
+}

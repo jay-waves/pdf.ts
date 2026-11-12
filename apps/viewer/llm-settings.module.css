@@ -20,9 +20,8 @@
 .fieldset { @apply m-0 grid min-w-0 gap-4 border-0 p-0; }
 .field { @apply grid min-w-0 gap-2; }
 .field, .fieldTitle { @apply text-[11px] font-medium text-secondary; }
-.field input, .field textarea { @apply w-full min-w-0 rounded-md border border-border-subtle bg-transparent px-3 py-2 text-xs font-normal text-foreground shadow-none outline-none focus:border-accent disabled:opacity-50; }
+.field input, .field textarea { @apply w-full min-w-0 rounded-md border border-border-subtle bg-control px-3 py-2 text-xs font-normal text-foreground shadow-none outline-none focus:border-accent disabled:opacity-50; }
 .field textarea { @apply resize-y leading-5; }
-.field input, .field textarea { background: var(--pdf-control-background); }
 .field input:focus-visible, .field textarea:focus-visible { box-shadow: var(--pdf-control-ring); }
 .field input::placeholder { @apply text-muted; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
@@ -31,7 +30,7 @@
 .tokenCount { @apply ml-auto inline-flex items-center gap-1.5 px-2 text-[11px] text-secondary; }
 .tokenCount strong { @apply font-medium tabular-nums text-foreground; }
 .actions { @apply flex flex-wrap items-center gap-2; }
-.actions button { @apply cursor-pointer rounded-md border border-border-subtle px-3 py-1.5 text-[11px] font-medium text-secondary hover:text-foreground disabled:opacity-40; background: var(--pdf-control-background); }
+.actions button { @apply cursor-pointer rounded-md border border-border-subtle px-3 py-1.5 text-[11px] font-medium text-secondary hover:text-foreground disabled:opacity-40 bg-control; }
 
 .storageChoice { @apply grid gap-2; }
 .storageRow { @apply flex items-center justify-between gap-4; }

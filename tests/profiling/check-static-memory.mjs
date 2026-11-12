@@ -1,10 +1,10 @@
 // Read-only diagnostics of the pinned EmbedPDF runtime. No viewer configuration changes.
-// Run with: node --expose-gc tools/diagnostics/check-static-memory.mjs
+// Run with: node --expose-gc tests/profiling/check-static-memory.mjs
 import assert from 'node:assert/strict';
 import { createPdfRuntime } from '@embedpdf/engine-runtime';
 import { WorkerHost } from '@embedpdf/engine-services';
 import { LocalEngine } from '@embedpdf/engine';
-import { fixture } from '../../tests/support/pdf-editing-fixture.mjs';
+import { fixture } from '../support/pdf-editing-fixture.mjs';
 const runtime = await createPdfRuntime({ prefer: 'wasm' });
 const listeners = new Set();
 const host = new WorkerHost(runtime, pack => { for (const listener of listeners) listener(pack.payload); });

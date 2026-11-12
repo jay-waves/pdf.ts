@@ -67,7 +67,7 @@ async function open(fallback = false) {
   const page = await context.newPage();
   if (fallback) await page.addInitScript(() => { window.SharedWorker = undefined; });
   await page.goto(`${base}/?launcherDocument=shared-ui`);
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas')].some(i => i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-render img, .pdf-render canvas')].some(i => i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth));
   await page.mouse.move(640, 30);
   const pin = page.getByRole('button', { name: 'Pin toolbar', exact: true });
   if (await pin.getAttribute('aria-pressed') !== 'true') await pin.click();
@@ -77,7 +77,7 @@ async function draw(page, offset = 0) {
   await page.bringToFront();
   await page.getByRole('button', { name: 'Draw', exact: true }).click();
   await page.locator('[aria-label="Rectangle"]').click();
-  const rect = await page.locator('.pdf-page-surface').first().boundingBox();
+  const rect = await page.locator('.pdf-page').first().boundingBox();
   await page.mouse.move(rect.x + 100 + offset, rect.y + 100 + offset); await page.mouse.down();
   await page.mouse.move(rect.x + 220 + offset, rect.y + 180 + offset, { steps: 8 }); await page.mouse.up();
   await page.getByRole('button', { name: 'Back', exact: true }).click();
@@ -126,11 +126,11 @@ try {
   await a.waitForFunction(() => !document.title.startsWith('*'));
   await b.waitForFunction(() => !document.title.startsWith('*'));
   assert.equal(writes, 2);
-  const pictureStamp = () => { const el = document.querySelector('.pdf-native-render-layer img, .pdf-native-render-layer canvas'); return el?.getAttribute('src') ?? el?.getAttribute('data-paint-version'); };
+  const pictureStamp = () => { const el = document.querySelector('.pdf-render img, .pdf-render canvas'); return el?.getAttribute('src') ?? el?.getAttribute('data-paint-version'); };
   const beforeTheme = await b.evaluate(pictureStamp);
   await a.getByRole('button', { name: 'Dark theme', exact: true }).click();
   await b.waitForFunction(() => document.documentElement.dataset.viewerColorMode === 'dark');
-  await b.waitForFunction(stamp => { const el = document.querySelector('.pdf-native-render-layer img, .pdf-native-render-layer canvas'); return (el?.getAttribute('src') ?? el?.getAttribute('data-paint-version')) !== stamp; }, beforeTheme);
+  await b.waitForFunction(stamp => { const el = document.querySelector('.pdf-render img, .pdf-render canvas'); return (el?.getAttribute('src') ?? el?.getAttribute('data-paint-version')) !== stamp; }, beforeTheme);
   const c = await open(); // Reopen saved bytes should attach to the original session/history.
   await c.keyboard.press('Control+z');
   await a.waitForFunction(() => document.title.startsWith('*'));

@@ -1,5 +1,5 @@
 diff --git a/dist/contract-hCcLRGkU.d.cts b/dist/contract-hCcLRGkU.d.cts
-index bed4168..abb529e 100644
+index bed41681cccaac86396d276b7b60df7b9024b0b3..abb529ed673011fcdbb960d5cf9e2d5601e34ece 100644
 --- a/dist/contract-hCcLRGkU.d.cts
 +++ b/dist/contract-hCcLRGkU.d.cts
 @@ -1,4 +1,4 @@
@@ -18,7 +18,7 @@ index bed4168..abb529e 100644
  /**
   * What a tile plane paints right now. `paint` draws only from resolved
 diff --git a/dist/contract-hCcLRGkU.d.ts b/dist/contract-hCcLRGkU.d.ts
-index d93c1d4..ae54919 100644
+index d93c1d40f44534b4c5bbe8b443af92e086d68149..ae549192f12b6282fa35d6288e35b04b91a590d1 100644
 --- a/dist/contract-hCcLRGkU.d.ts
 +++ b/dist/contract-hCcLRGkU.d.ts
 @@ -1,4 +1,4 @@
@@ -37,7 +37,7 @@ index d93c1d4..ae54919 100644
  /**
   * What a tile plane paints right now. `paint` draws only from resolved
 diff --git a/dist/host-contract-1kMniEqe.d.cts b/dist/host-contract-1kMniEqe.d.cts
-index 7a3525d..083c815 100644
+index 7a3525d80fe96854e9e64502dc7cef8c1a931eb8..24e41ed0be4b825d1d3f50579d7264c58b877a42 100644
 --- a/dist/host-contract-1kMniEqe.d.cts
 +++ b/dist/host-contract-1kMniEqe.d.cts
 @@ -1,5 +1,5 @@
@@ -47,16 +47,20 @@ index 7a3525d..083c815 100644
  import { Rect } from "@embedpdf/core-geometry";
  //#region src/host-contract.d.ts
  /** Layer-facing paint settings (resolved config the view layers need). Reference-stable. */
-@@ -35,6 +35,8 @@ interface RenderSourceOptions extends PageLayerOptions {
+@@ -35,6 +35,12 @@ interface RenderSourceOptions extends PageLayerOptions {
   * `destroy`.
   */
  interface ViewDemand {
 +  /** Pause new tile work while preserving resolved paint sources. Call setDemand to resume. */
 +  setPaused(page: PageRef, paused: boolean): void;
++  /** Submit the latest pending demand without another coalescing wait. */
++  flush(page: PageRef): void;
++  /** Whether tile demand is deferred, queued, fetching, or awaiting presentation. */
++  isPending(page: PageRef): boolean;
    /** What this view wants for a page right now. Idempotent; schedules the want set. */
    setDemand(page: PageRef, demand: PageViewDemand, options?: PageLayerOptions): void;
    /** The current paint plan for a page under this view's demand. Pure. */
-@@ -90,7 +92,7 @@ interface RenderHostCapability extends RenderCapability {
+@@ -90,7 +96,7 @@ interface RenderHostCapability extends RenderCapability {
     * ladder under a lattice — with same-key asks collapsing in the raster
     * store. Layers key their fetch on {@link getSourceKey}.
     */
@@ -66,7 +70,7 @@ index 7a3525d..083c815 100644
     * The identity of the raster `renderSource` would produce — conformed
     * width + the parts it draws + epoch (+ format), as one stable string.
 diff --git a/dist/host-contract-DIjZWyjI.d.ts b/dist/host-contract-DIjZWyjI.d.ts
-index 8ff3029..1b40cd4 100644
+index 8ff30295faa4e5569d3419e5aae85be766c9226c..e95a538c035033022f9550d881e9b997d9574a9c 100644
 --- a/dist/host-contract-DIjZWyjI.d.ts
 +++ b/dist/host-contract-DIjZWyjI.d.ts
 @@ -1,5 +1,5 @@
@@ -76,16 +80,20 @@ index 8ff3029..1b40cd4 100644
  import { Rect } from "@embedpdf/core-geometry";
  //#region src/host-contract.d.ts
  /** Layer-facing paint settings (resolved config the view layers need). Reference-stable. */
-@@ -35,6 +35,8 @@ interface RenderSourceOptions extends PageLayerOptions {
+@@ -35,6 +35,12 @@ interface RenderSourceOptions extends PageLayerOptions {
   * `destroy`.
   */
  interface ViewDemand {
 +  /** Pause new tile work while preserving resolved paint sources. Call setDemand to resume. */
 +  setPaused(page: PageRef, paused: boolean): void;
++  /** Submit the latest pending demand without another coalescing wait. */
++  flush(page: PageRef): void;
++  /** Whether tile demand is deferred, queued, fetching, or awaiting presentation. */
++  isPending(page: PageRef): boolean;
    /** What this view wants for a page right now. Idempotent; schedules the want set. */
    setDemand(page: PageRef, demand: PageViewDemand, options?: PageLayerOptions): void;
    /** The current paint plan for a page under this view's demand. Pure. */
-@@ -90,7 +92,7 @@ interface RenderHostCapability extends RenderCapability {
+@@ -90,7 +96,7 @@ interface RenderHostCapability extends RenderCapability {
     * ladder under a lattice — with same-key asks collapsing in the raster
     * store. Layers key their fetch on {@link getSourceKey}.
     */
@@ -95,7 +103,7 @@ index 8ff3029..1b40cd4 100644
     * The identity of the raster `renderSource` would produce — conformed
     * width + the parts it draws + epoch (+ format), as one stable string.
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 36974a0..f780e3a 100644
+index 36974a03d65c72d0ef7463c4e03237113171e664..4a788dcb6f1711563015a2c4e51abf6dd81400db 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -419,6 +419,8 @@ var RasterStore = class {
@@ -334,10 +342,29 @@ index 36974a0..f780e3a 100644
  		},
  		onAdvance: wake,
  		debug: (message) => {
-@@ -1739,6 +1779,16 @@ function createRenderController(ctx) {
+@@ -1739,6 +1779,35 @@ function createRenderController(ctx) {
  				});
  				if (plan !== previous?.plan) ctx.notify();
  			},
++			isPending: (page) => {
++				const state = tiles.pages.get(stateKey(viewId, page.objectNumber));
++				if (!state) return false;
++				if (state.paused || state.cancelDemand || state.cancelSettle) return true;
++				if ([...state.entries.values()].some(entry => !entry.resolved || !entry.painted)) return true;
++				const queue = state.queue;
++				return !!queue && queue.coords.slice(queue.next).some(coord => {
++					const key = tiles.tileKey(state.pageObjectNumber, queue.wantWidth, coord, queue.layers, queue.epoch);
++					return !state.entries.has(key) && !state.failedKeys.has(key);
++				});
++			},
++			flush: (page) => {
++				const state = tiles.pageState(page.objectNumber, viewId);
++				if (state.paused) return;
++				state.cancelDemand?.(); state.cancelDemand = null;
++				const latest = state.pendingKickoff;
++				state.pendingKickoff = null;
++				latest?.();
++			},
 +			setPaused: (page, paused) => {
 +				const state = tiles.pageState(page.objectNumber, viewId);
 +				state.paused = paused;
@@ -351,7 +378,7 @@ index 36974a0..f780e3a 100644
  			getPlan: (page) => pages.get(page.objectNumber)?.plan ?? require_contract.EMPTY_TILE_PLAN,
  			markPainted: (page, key) => tiles.sourcePainted(viewId, page.objectNumber, key),
  			markUnpainted: (page, key) => tiles.sourceUnpainted(viewId, page.objectNumber, key),
-@@ -1753,6 +1803,7 @@ function createRenderController(ctx) {
+@@ -1753,6 +1822,7 @@ function createRenderController(ctx) {
  				if (view.refs > 0) return;
  				for (const pageObjectNumber of [...view.pages.keys()]) tiles.releasePage(viewId, pageObjectNumber);
  				view.pages.clear();
@@ -359,7 +386,7 @@ index 36974a0..f780e3a 100644
  			}
  		};
  		views.set(viewId, {
-@@ -1762,6 +1813,14 @@ function createRenderController(ctx) {
+@@ -1762,6 +1832,14 @@ function createRenderController(ctx) {
  		});
  		return handle;
  	}
@@ -374,7 +401,7 @@ index 36974a0..f780e3a 100644
  	const paintSettings = (0, _embedpdf_core.memo)(() => [resolvedOptions().tiles.enabled], (enabled) => Object.freeze({ tiles: enabled }));
  	ctx.listen(settings.api.onSettingsChanged, () => {
  		const shown = /* @__PURE__ */ new Set();
-@@ -1799,7 +1858,7 @@ function createRenderController(ctx) {
+@@ -1799,7 +1877,7 @@ function createRenderController(ctx) {
  			getSourceKey: (page, { scale, view: _view, thumbnail, ...options }) => {
  				if (thumbnail) return thumbnailKey(page.objectNumber, layersOf(options), currentStrategy().format, void 0);
  				const viewport = conformViewport(page, scale);
@@ -383,7 +410,7 @@ index 36974a0..f780e3a 100644
  			},
  			conformViewport,
  			getPaintSettings: paintSettings,
-@@ -1835,7 +1894,7 @@ function createRenderController(ctx) {
+@@ -1835,7 +1913,7 @@ function createRenderController(ctx) {
  * The interaction plugin is optional: with it, the plugin adds the
  * `snapshot` tool.
  */
@@ -392,7 +419,7 @@ index 36974a0..f780e3a 100644
  	id: "render",
  	scope: "document",
  	token: require_contract_host.RenderToken,
-@@ -1846,7 +1905,7 @@ const renderPlugin = (config) => (0, _embedpdf_core.definePlugin)({
+@@ -1846,7 +1924,7 @@ const renderPlugin = (config) => (0, _embedpdf_core.definePlugin)({
  		registered: config,
  		whole: ["snapshot.box"]
  	},
@@ -402,7 +429,7 @@ index 36974a0..f780e3a 100644
  //#endregion
  exports.RENDER_DEFAULTS = require_contract.RENDER_DEFAULTS;
 diff --git a/dist/index.d.cts b/dist/index.d.cts
-index 6c7b847..76e7b98 100644
+index 6c7b84708341698df42482cc97937ac1022ea9f7..76e7b98371cddd78f0c3e25d0576c8836f03486c 100644
 --- a/dist/index.d.cts
 +++ b/dist/index.d.cts
 @@ -50,7 +50,7 @@ interface SnapshotBox {
@@ -416,7 +443,7 @@ index 6c7b847..76e7b98 100644
  //# sourceMappingURL=index.d.cts.map
 \ No newline at end of file
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 3e3d2ab..0a84e23 100644
+index 3e3d2abc6506ab77d5afb36b26c984f722aa33e9..0a84e23caf5e9ce5dcb309f0c587bc1c99d25c23 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -50,7 +50,7 @@ interface SnapshotBox {
@@ -430,7 +457,7 @@ index 3e3d2ab..0a84e23 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 140d21c..4c6d4dc 100644
+index 140d21c06d4585b1afffea287a791284d3182d5a..4207ce9e476787b36efb1a07aa06f993ac9dc042 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -418,6 +418,8 @@ var RasterStore = class {
@@ -669,10 +696,29 @@ index 140d21c..4c6d4dc 100644
  		},
  		onAdvance: wake,
  		debug: (message) => {
-@@ -1738,6 +1778,16 @@ function createRenderController(ctx) {
+@@ -1738,6 +1778,35 @@ function createRenderController(ctx) {
  				});
  				if (plan !== previous?.plan) ctx.notify();
  			},
++			isPending: (page) => {
++				const state = tiles.pages.get(stateKey(viewId, page.objectNumber));
++				if (!state) return false;
++				if (state.paused || state.cancelDemand || state.cancelSettle) return true;
++				if ([...state.entries.values()].some(entry => !entry.resolved || !entry.painted)) return true;
++				const queue = state.queue;
++				return !!queue && queue.coords.slice(queue.next).some(coord => {
++					const key = tiles.tileKey(state.pageObjectNumber, queue.wantWidth, coord, queue.layers, queue.epoch);
++					return !state.entries.has(key) && !state.failedKeys.has(key);
++				});
++			},
++			flush: (page) => {
++				const state = tiles.pageState(page.objectNumber, viewId);
++				if (state.paused) return;
++				state.cancelDemand?.(); state.cancelDemand = null;
++				const latest = state.pendingKickoff;
++				state.pendingKickoff = null;
++				latest?.();
++			},
 +			setPaused: (page, paused) => {
 +				const state = tiles.pageState(page.objectNumber, viewId);
 +				state.paused = paused;
@@ -686,7 +732,7 @@ index 140d21c..4c6d4dc 100644
  			getPlan: (page) => pages.get(page.objectNumber)?.plan ?? EMPTY_TILE_PLAN,
  			markPainted: (page, key) => tiles.sourcePainted(viewId, page.objectNumber, key),
  			markUnpainted: (page, key) => tiles.sourceUnpainted(viewId, page.objectNumber, key),
-@@ -1752,6 +1802,7 @@ function createRenderController(ctx) {
+@@ -1752,6 +1821,7 @@ function createRenderController(ctx) {
  				if (view.refs > 0) return;
  				for (const pageObjectNumber of [...view.pages.keys()]) tiles.releasePage(viewId, pageObjectNumber);
  				view.pages.clear();
@@ -694,7 +740,7 @@ index 140d21c..4c6d4dc 100644
  			}
  		};
  		views.set(viewId, {
-@@ -1761,6 +1812,14 @@ function createRenderController(ctx) {
+@@ -1761,6 +1831,14 @@ function createRenderController(ctx) {
  		});
  		return handle;
  	}
@@ -709,7 +755,7 @@ index 140d21c..4c6d4dc 100644
  	const paintSettings = memo(() => [resolvedOptions().tiles.enabled], (enabled) => Object.freeze({ tiles: enabled }));
  	ctx.listen(settings.api.onSettingsChanged, () => {
  		const shown = /* @__PURE__ */ new Set();
-@@ -1798,7 +1857,7 @@ function createRenderController(ctx) {
+@@ -1798,7 +1876,7 @@ function createRenderController(ctx) {
  			getSourceKey: (page, { scale, view: _view, thumbnail, ...options }) => {
  				if (thumbnail) return thumbnailKey(page.objectNumber, layersOf(options), currentStrategy().format, void 0);
  				const viewport = conformViewport(page, scale);
@@ -718,7 +764,7 @@ index 140d21c..4c6d4dc 100644
  			},
  			conformViewport,
  			getPaintSettings: paintSettings,
-@@ -1834,7 +1893,7 @@ function createRenderController(ctx) {
+@@ -1834,7 +1912,7 @@ function createRenderController(ctx) {
  * The interaction plugin is optional: with it, the plugin adds the
  * `snapshot` tool.
  */
@@ -727,7 +773,7 @@ index 140d21c..4c6d4dc 100644
  	id: "render",
  	scope: "document",
  	token: RenderToken$1,
-@@ -1845,7 +1904,7 @@ const renderPlugin = (config) => definePlugin({
+@@ -1845,7 +1923,7 @@ const renderPlugin = (config) => definePlugin({
  		registered: config,
  		whole: ["snapshot.box"]
  	},

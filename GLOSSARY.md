@@ -52,6 +52,19 @@
 | Transferable buffer | Bytes transferred between workers and tabs; the sender loses access after transfer. |
 | Deep module | A small capability interface that encapsulates policy, invariants, and internal coordination. |
 
+## UI styles
+
+| Term | Meaning |
+| --- | --- |
+| Chrome | Application controls around the document, such as toolbars, dialogs, and popovers. |
+| `ui-*` | Shared chrome classes, such as `ui-glass`, `ui-dialog`, and `ui-overlay`. |
+| `pdf-*` | Viewer-owned surface classes, such as `pdf-page`, `pdf-render`, and `pdf-scrollbar`. SDK-owned selectors are separate contracts. |
+| Glass / mica | Shared surface materials defined by `ui-glass` and `ui-mica`; theme variables determine their colors, blur, and shadows. |
+| Theme token | A shared design value in `apps/tailwind.css`. Runtime `--pdf-*` variables supply values to Tailwind utilities such as `bg-control` and `text-accent`. |
+| `SettingsCard` | Shared settings section and styling; `asChild` applies the same styles to an existing element, such as a form, without adding a wrapper. |
+
+Style authoring and refactoring conventions are maintained in `AGENTS.md`.
+
 ## Capabilities
 
 | Term | Meaning |

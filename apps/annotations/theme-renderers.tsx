@@ -7,7 +7,6 @@ import { useStore } from 'zustand';
 import { isDarkViewerTheme, viewerThemeStore } from '../theme/theme';
 import { ANNOTATION_PALETTES, getAnnotationDisplayColors, getThemeAnnotationColor } from './theme-palette';
 import { getAnnotationRects, getThemeHighlightPolicy, hasAutoHighlightColor, VECTOR_ANNOTATION_OPACITY, VECTOR_ANNOTATION_STROKE_WIDTH } from './annotations';
-import styles from './theme-renderers.module.css';
 
 function ThemeMarkup({ annotation, frame }: AnnotationRendererProps) {
   const theme = useStore(viewerThemeStore, (state) => state.theme);
@@ -29,7 +28,7 @@ function ThemeMarkup({ annotation, frame }: AnnotationRendererProps) {
       height: annotation.subtype === 'strikeout' ? Math.max(1.5 / frame.scale, 1.75) : VECTOR_ANNOTATION_STROKE_WIDTH,
       borderRadius: 1, background: color, opacity: 'opacity' in annotation ? annotation.opacity : VECTOR_ANNOTATION_OPACITY,
     }} /> : null}</div>)}
-    {annotation.contents?.trim() ? <button type="button" className={styles.commentBadge}
+    {annotation.contents?.trim() ? <button type="button" className="pointer-events-auto absolute z-3 grid size-5 cursor-pointer place-items-center rounded-md border border-accent bg-control p-0 text-accent focus-visible:[outline:2px_solid_var(--pdf-accent-primary)] focus-visible:outline-offset-2"
       data-annotation-comment-id={annotationKey(annotation.ref)} aria-label="Edit annotation comment" title={annotation.contents}
       onPointerDown={(event) => event.stopPropagation()}
       style={{ left: last.x + last.width - annotation.rect.x + 3 / frame.scale, top: last.y - annotation.rect.y,

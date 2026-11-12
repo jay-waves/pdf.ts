@@ -12,8 +12,7 @@
   @apply relative grid min-w-0 cursor-pointer gap-1.5 rounded-lg border border-transparent bg-transparent p-1.5 text-secondary outline-none transition-colors duration-150 motion-reduce:transition-none;
   @apply hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:bg-transparent;
 }
-.themeOption[data-state='checked'] { @apply border-accent bg-hover text-foreground; }
-.themeOption[data-state='checked'] { box-shadow: var(--pdf-option-shadow); }
+.themeOption[data-state='checked'] { @apply border-accent bg-hover text-foreground; box-shadow: var(--pdf-option-shadow); }
 .themePreview { @apply relative flex aspect-[2/1] overflow-hidden rounded-md border border-border-subtle; }
 .themePreview > span { @apply flex-1; }
-.themeOptionLabel { @apply overflow-hidden text-center text-[11px] leading-4 font-medium text-ellipsis whitespace-nowrap; }
+.themeOptionLabel { @apply truncate text-center text-[11px] leading-4 font-medium; }

@@ -6,10 +6,13 @@ import type { PdfFontFallbackConfig } from '../fonts/types';
 import type { PdfRenderTheme } from './pdf-render-theme';
 import type { LocalDocumentHandle, OpenInput, OpenOptions, DocumentEvent, AbortablePromise } from '@embedpdf/engine-core/runtime';
 import { SharedDocumentHost, type SharedFileIdentity } from './shared-document-host';
+import { RenderTaskQueue, displayRead } from './render-task-queue';
+import type { WorkingSetPage } from '@embedpdf/engine-core/runtime';
 
 type Endpoint = Pick<MessagePort, 'postMessage' | 'onmessage'> & { start?(): void; close?(): void };
 type Request = { type: string; id: string; documentId?: string; method?: string; args?: unknown[]; path?: Array<string | { page: unknown } | { with: unknown }>; lease?: string; options?: LocalEngineRecipeOptions & { fontFallback?: PdfFontFallbackConfig | null }; result?: PdfWriteResult; error?: string };
-type Session = { key: string; port: Endpoint; documents: Set<string>; closed: boolean; lease: AbortController; theme: PdfRenderTheme | null };
+type Session = { key: string; port: Endpoint; documents: Set<string>; closed: boolean; lease: AbortController; theme: PdfRenderTheme | null;
+  workingSets: Map<string, Map<string, readonly WorkingSetPage[]>> };
 const sessions = new Set<Session>();
 let host: SharedDocumentHost | undefined;
 let native: Awaited<ReturnType<typeof createNativeRuntime>> | undefined;
@@ -37,14 +40,40 @@ function scheduleIdleRelease() {
 let initializing: Promise<void> | undefined;
 let currentTheme: PdfRenderTheme | null = null;
 let serial = Promise.resolve();
+// A message turn yields to input without the browser's nested-timer minimum delay.
+const taskTurns = new MessageChannel();
+let nextTurn: (() => void) | undefined;
+taskTurns.port1.onmessage = () => { const next = nextTurn; nextTurn = undefined; next?.(); };
+const queue = new RenderTaskQueue(next => { nextTurn = next; taskTurns.port2.postMessage(null); });
 let sequence = 0;
 const closing = new Map<string, Promise<void>>();
 const writes = new Map<string, { session: Session; resolve(value: PdfWriteResult): void; reject(error: Error): void }>();
 const cancelled = new Set<string>();
 const pendingKeys = new Set<string>();
 const active = new Map<string, AbortablePromise<unknown>>();
-function run<T>(operation: () => Promise<T>): Promise<T> {
-  const result = serial.then(operation); serial = result.then(() => {}, () => {}); return result;
+function run<T>(operation: () => Promise<T>, options?: Parameters<RenderTaskQueue['enqueue']>[1]): Promise<T> {
+  const result = queue.enqueue(operation, options);
+  // Closing waits for every previously submitted operation, including reordered reads.
+  serial = Promise.all([serial, result.catch(() => {})]).then(() => {});
+  return result;
+}
+function readPriority(s: Session, req: Request) {
+  const read = displayRead(req);
+  if (!read) return undefined;
+  return () => {
+    const views = s.workingSets.get(req.documentId!);
+    const sets = read.view ? [views?.get(read.view) ?? []] : [...views?.values() ?? []];
+    let visibility = 0;
+    for (const pages of sets) for (const page of pages) {
+      if (page.page.objectNumber === read.page) visibility = Math.max(visibility,
+        page.role === 'visible' ? 100 + Math.min(9, page.pixels / 1_000_000) : 40);
+    }
+    return visibility + read.detail * 10;
+  };
+}
+function clearWorkingSets(s: Session, id: string) {
+  for (const view of s.workingSets.get(id)?.keys() ?? []) host?.document(id)?.setWorkingSet(`${s.key}:${view}`, []);
+  s.workingSets.delete(id);
 }
 function broadcast(id: string, message: object) {
   for (const s of sessions) if (!s.closed && s.documents.has(id)) s.port.postMessage(message);
@@ -73,8 +102,11 @@ function releaseDocument(id: string) {
 }
 async function closeSession(s: Session) {
   if (s.closed) return; s.closed = true; sessions.delete(s); s.lease.abort(); native?.fonts?.releaseDiagnosticContext(s.key);
+  for (const key of pendingKeys) if (key.startsWith(`${s.key}:`)) {
+    queue.cancel(key); active.get(key)?.abort();
+  }
   for (const [id, w] of writes) if (w.session === s) { w.reject(new Error('The saving tab closed.')); writes.delete(id); }
-  for (const id of s.documents) await releaseDocument(id);
+  for (const id of s.documents) { clearWorkingSets(s, id); await releaseDocument(id); }
   s.documents.clear(); scheduleIdleRelease();
 }
 async function dispatch(s: Session, req: Request) {
@@ -99,6 +131,7 @@ async function dispatch(s: Session, req: Request) {
   if (!s.documents.has(id)) throw new Error('PDF document is not open in this session.');
   const doc = host!.document(id)!;
   if (req.type === 'close') {
+    clearWorkingSets(s, id);
     s.documents.delete(id);
     await releaseDocument(id);
     return;
@@ -126,7 +159,10 @@ async function dispatch(s: Session, req: Request) {
       if (['__proto__', 'constructor', 'prototype'].includes(segment)) throw new Error('Invalid document method.');
       target = target[segment];
     } else if ('page' in segment) target = target.page(segment.page);
-    else target = target.with(segment.with);
+    else {
+      const facts = segment.with as { view?: string };
+      target = target.with(typeof facts?.view === 'string' ? { ...facts, view: `${s.key}:${facts.view}` } : facts);
+    }
   }
   if (['__proto__', 'constructor', 'prototype'].includes(req.method!) || typeof target?.[req.method!] !== 'function') throw new Error('Unknown document operation.');
   const pending = target[req.method!](...args);
@@ -144,7 +180,7 @@ async function dispatch(s: Session, req: Request) {
   } finally { active.delete(`${s.key}:${req.id}`); }
 }
 function connect(port: Endpoint) {
-  const s: Session = { key: crypto.randomUUID(), port, documents: new Set(), closed: false, lease: new AbortController(), theme: null }; sessions.add(s);
+  const s: Session = { key: crypto.randomUUID(), port, documents: new Set(), closed: false, lease: new AbortController(), theme: null, workingSets: new Map() }; sessions.add(s);
   port.onmessage = (event: MessageEvent<Request>) => {
     const req = event.data;
     if (req.type === 'init') {
@@ -156,18 +192,34 @@ function connect(port: Endpoint) {
     if (req.type === 'disconnect') { void closeSession(s); return; }
     if (req.type === 'abort') {
       const key = `${s.key}:${req.id}`; const task = active.get(key);
-      if (task) task.abort(); else if (pendingKeys.has(key)) cancelled.add(key); return;
+      if (task) task.abort(); else if (!queue.cancel(key) && pendingKeys.has(key)) cancelled.add(key); return;
     }
     if (req.type === 'writePdfResult') {
       const w = writes.get(req.id); if (!w || w.session !== s) return; writes.delete(req.id);
       if (req.error) w.reject(new Error(req.error)); else w.resolve(req.result!); return;
+    }
+    // These are scheduling hints, not native operations. Keep both schedulers up to
+    // date even while an old render is yielding; never queue intermediate viewports.
+    if (req.type === 'call' && req.method === 'setWorkingSet' && !req.path?.length) {
+      const id = req.documentId!;
+      if (s.closed || !s.documents.has(id)) {
+        if (!s.closed) port.postMessage({ type: 'result', id: req.id, error: { message: 'PDF document is not open in this session.' } });
+        return;
+      }
+      const [view, pages] = req.args as [string, readonly WorkingSetPage[]];
+      let views = s.workingSets.get(id);
+      if (!views) s.workingSets.set(id, views = new Map());
+      if (pages.length) views.set(view, pages); else views.delete(view);
+      host!.document(id)!.setWorkingSet(`${s.key}:${view}`, pages);
+      port.postMessage({ type: 'result', id: req.id });
+      return;
     }
     if (req.type !== 'runtimeDiagnostics') cancelIdleRelease();
     pendingKeys.add(`${s.key}:${req.id}`);
     // Saves wait on the disk lane outside the native operation lane, so other tabs can edit.
     const task = req.type === 'save' || req.type === 'close' ? dispatch(s, req)
       : req.type === 'open' ? Promise.all([...closing.values()]).then(() => run(() => dispatch(s, req)))
-      : run(() => dispatch(s, req));
+      : run(() => dispatch(s, req), { key: `${s.key}:${req.id}`, priority: readPriority(s, req) });
     void task.then(result => { if (!s.closed) port.postMessage({ type: 'result', id: req.id, result }, engineResultTransfers(result)); }).catch(error => {
       if (!s.closed) port.postMessage({ type: 'result', id: req.id, error: { message: error?.message ?? String(error), code: error?.code, details: error?.details } });
     }).finally(() => { const key = `${s.key}:${req.id}`; pendingKeys.delete(key); cancelled.delete(key); scheduleIdleRelease(); });

@@ -4,14 +4,14 @@ import { fixture } from '../support/pdf-editing-fixture.mjs';
 
 await withViewer(async (page, errors) => {
   await dropPdf(page, fixture({ secondPage: true }), 'scroll.pdf');
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-render img, .pdf-render canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   assert.deepEqual(await page.locator('.viewer').evaluate(element => {
     const style = getComputedStyle(element);
     return [style.overflowX, style.overflowY, element.scrollTop, element.scrollLeft];
   }), ['hidden', 'hidden', 0, 0], 'Stage must not have a second browser scroll container');
   const sample = async (options = {}) => page.evaluate(async options => {
     const viewport = document.querySelector('.viewer');
-    const surface = document.querySelector('.pdf-page-surface');
+    const surface = document.querySelector('.pdf-page');
     const start = surface.getBoundingClientRect().y;
     const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120, ...options });
     viewport.dispatchEvent(event);
@@ -38,7 +38,7 @@ await withViewer(async (page, errors) => {
   assert.ok(Math.abs(reverse.positions.at(-1) - 120) < 1, 'reverse direction preserves distance');
   const interruption = await page.evaluate(async () => {
     const viewport = document.querySelector('.viewer');
-    const surface = document.querySelector('.pdf-page-surface');
+    const surface = document.querySelector('.pdf-page');
     viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 }));
     await new Promise(requestAnimationFrame);
     window.dispatchEvent(new Event('blur'));

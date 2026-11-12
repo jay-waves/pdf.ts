@@ -1,7 +1,7 @@
 // Targeted real-SharedWorker ownership/GC audit; run against Vite dev.
 import assert from 'node:assert/strict';
 import { chromium } from '/home/jay-waves/.local/lib/node_modules/playwright/index.mjs';
-import { fixture } from '../../tests/support/pdf-editing-fixture.mjs';
+import { fixture } from '../support/pdf-editing-fixture.mjs';
 const browser=await chromium.launch({channel:'chrome'});
 try {
  const page=await browser.newPage(); await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');

@@ -63,6 +63,24 @@ platform writer writes the file, and its result confirms the saved revision.
 
 ## Tiles and motion
 
+Content layers mount immediately for pages with a nonempty visible region;
+offscreen candidates from the SDK's scene query keep only their layout shells.
+Cached rasters and base requests have no admission or motion delay; only tile
+refinement uses the timing policy below. SDK annotation metadata loading still
+follows its own stage subscriptions.
+
+After visible base pictures and tile demands are presented, an idle callback
+warms one adjacent page's base raster in the reading direction (initially forward).
+It uses the ordinary source key and 32 MiB raster cache, without offscreen Canvas,
+text, annotation or form layers. The ordinary view priority keeps it behind
+visible pages and automatically promotes it when the neighbour enters the viewport.
+Camera changes, new foreground tile demand, hidden tabs and teardown cancel
+unfinished speculation; a matching in-flight base that becomes visible is handed
+to its foreground consumer instead of restarted. Failures are not retried for the
+same candidate until the candidate changes; prefetch never adds a wait to
+foreground rendering. Kernel notifications coalesce speculative checks to one per
+frame; camera changes and cancellation of active speculation remain immediate.
+
 | Setting | Value |
 | --- | --- |
 | Tile edge / bleed | 768 / 2 pixels |
@@ -77,7 +95,7 @@ platform writer writes the file, and its result confirms the saved revision.
 | During camera motion | Continue scheduling new tiles | Pause new tile work in the reading viewport |
 | Timing | Fixed 60 ms demand window; later updates do not restart it | Wait for 120 ms without camera changes; every change restarts the timer |
 | Demand selection | Submit the latest demand in each window | Resume with the latest demand after settling |
-| Additional delay after settling | Normal demand-window policy applies | None: `demandWindowMs = 0`, `settleMs = 0` |
+| Scrollbar release | Flush the latest tile demand immediately | Resume and submit immediately, without the remaining settle wait |
 | Concurrent tile requests | 2 per render controller | 1 per render controller |
 | Effective DPR | Selected profile; Auto uses `min(system DPR, 1.75)` | Fixed at 1.25, overriding the selected profile |
 | Already painted tiles | Retained until replacement coverage is presented | Same; pausing does not clear painted tiles |
@@ -89,12 +107,30 @@ scrollbar drags, and navigation. It pauses tile scheduling, not the entire rende
 or base-raster path. Concurrency limits apply per controller, not globally across
 workers or tabs. Neither mode changes save or draft behavior.
 
+The Canvas bridge submits only changed demands, using the SDK demand comparator.
+Pause/resume and layer changes also submit; motion-end flush shares that same
+submission path. SDK invalidation and tile arrivals continue to re-plan internally.
+
 Painted tiles remain during motion until replacement coverage is presented.
 Active tiles retain raster references independently of cache eviction, so the
 cache budget does not cap active pixels or Canvas memory. Unmounting releases
 canvas backing stores.
 
 ## Worker lifecycle
+
+The worker has one native operation lane. Pending allowlisted page reads are
+ranked using the latest session/view working sets: visible pages before near or
+offscreen pages, then base pixels before tiles and auxiliary reads. Equal ranks
+stay FIFO. Unknown operations, edits and lifecycle tasks are ordering barriers;
+reads cannot cross them. Save/draft capture continues through this same lane.
+Running work is not forcibly preempted; caller cancellation follows the SDK's
+cooperative abort path. Cancelled queued requests are removed before execution.
+
+Working-set hints bypass the operation queue and replace the previous hint
+immediately. View IDs are scoped by tab session and cleared on close. The lane
+yields an event-loop turn between operations to receive viewport and abort
+messages, with no additional debounce window. Offscreen reads that still have
+consumers run after higher-priority work; their promises are not discarded.
 
 A SharedWorker owns PDFium and shared document state. Without SharedWorker or
 Web Locks, a dedicated worker is used. Tabs keep separate rendering caches.
@@ -174,7 +210,7 @@ backing stores; its display cannot establish current renderer memory usage.
 
 ## Measurement limits
 
-`tools/diagnostics/compare-canvas-rendering.mjs` compares raw RGBA and encoded-image paths: warmup, 10 alternating
+`tests/profiling/compare-canvas-rendering.mjs` compares raw RGBA and encoded-image paths: warmup, 10 alternating
 samples per size, exact pixel equality including rotation/crop, and median
 worker/RPC and presentation-submission times.
 It excludes GPU compositing, pixel-readback timing, and RSS; it does not measure

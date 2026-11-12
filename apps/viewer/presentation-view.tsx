@@ -32,7 +32,7 @@ export function PresentationView({ documentId, pageNumber, onNavigate, onExit }:
   return <section className={styles.presentation} data-viewer-presentation aria-label="Presentation mode">
     <div ref={stageRef} className={styles.stage} onClick={endScreen ? onExit : undefined}>
       {ready ? <div className={styles.page} data-presentation-page onClick={() => onNavigate(1)}
-        style={{ width: width * scale, height: height * scale, position: 'relative' }}>
+        style={{ width: width * scale, height: height * scale }}>
         <div style={{ position: 'absolute', left: '50%', top: '50%', width: ownWidth * scale, height: ownHeight * scale,
           transform: `translate(-50%, -50%) rotate(${viewRotation}deg)` }}>
           <PageView documentId={documentId} page={page.ref} width={ownWidth * scale}>

@@ -8,9 +8,9 @@
 .breadcrumbs { @apply flex items-center gap-4 text-xs; }
 .dialogTitle { @apply font-semibold text-foreground; }
 .sectionTitle { @apply m-0 text-xs font-semibold text-foreground; }
-.stats { @apply m-0 grid grid-cols-2 gap-x-8 max-[480px]:grid-cols-1; }
+.stats, .metadata { @apply m-0 grid grid-cols-2 gap-x-8 max-[480px]:grid-cols-1; }
 .stats > div { @apply grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-border-subtle py-2; }
-.stats dt { @apply text-[11px] text-secondary; }
+.stats dt, .metadata dt { @apply text-[11px] text-secondary; }
 .stats dd,
 .metadata > div:not(.metadataTitle) dd {
   @apply m-0 max-w-40 overflow-x-auto overflow-y-hidden text-right text-[11px] text-foreground tabular-nums whitespace-nowrap;
@@ -21,17 +21,14 @@
 .metadata > div:not(.metadataTitle) dd::-webkit-scrollbar { display: none; }
 .stats dd > span,
 .metadata > div:not(.metadataTitle) dd > span { @apply inline-block min-w-max; direction: ltr; }
-.metadata { @apply m-0 grid grid-cols-2 gap-x-8 max-[480px]:grid-cols-1; }
 .metadata > div { @apply grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-4 border-b border-border-subtle py-2; }
-.metadata dt { @apply text-[11px] text-secondary; }
 .metadata dd { @apply m-0 min-w-0 text-right text-[11px] text-foreground; }
 .metadata .metadataTitle { @apply col-span-2 grid-cols-1 gap-1 max-[480px]:col-span-1; }
 .metadata .metadataTitle dd { @apply text-left text-xs; }
 .metadataStatus { @apply m-0 text-[11px] text-secondary; }
 .metadataError { @apply m-0 text-[11px] text-danger; }
 .control { @apply grid grid-cols-[minmax(0,1fr)_minmax(160px,240px)] items-center gap-4 pt-1 max-[480px]:grid-cols-1; }
-.select { @apply w-full border-border-subtle bg-transparent text-foreground shadow-none; }
-.select { background: var(--pdf-control-background); }
+.select { @apply w-full border-border-subtle bg-control text-foreground shadow-none; }
 .selectContent { @apply bg-surface; }
 .hint { @apply m-0 text-[10.5px] leading-4 text-muted; }
 @media (max-width: 640px) {

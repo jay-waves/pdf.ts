@@ -1,36 +1,21 @@
 /* Viewer-owned document surface and its EmbedPDF layers. */
-.pdf-reading-region-outline {
-  position: absolute;
-  z-index: 10;
-  pointer-events: none;
+@reference '../tailwind.css';
+
+.pdf-region {
+  @apply pointer-events-none absolute z-10;
   border: 1.5px dashed var(--pdf-accent-primary);
   background: color-mix(in srgb, var(--pdf-accent-primary) 12%, transparent);
-  box-sizing: border-box;
 }
 
-.pdf-reading-region-controls {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
+.pdf-region-tools {
+  @apply fixed bottom-6 left-1/2 z-32 flex max-w-[calc(100vw-24px)] items-center gap-2 rounded-[10px] border border-border-subtle px-2.5 py-1.5 text-[12px] text-foreground;
   transform: translateX(-50%);
-  z-index: 32;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: calc(100vw - 24px);
-  padding: 6px 10px;
-  border: 1px solid var(--pdf-border-subtle);
-  border-radius: 10px;
-  color: var(--pdf-foreground-primary);
-  font-size: 12px;
 }
 
-.pdf-reading-region-controls > span { min-width: 0; }
+.pdf-region-tools > span { @apply min-w-0; }
 
 .viewer {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+  @apply size-full overflow-hidden;
   /* Zoom/layout changes already preserve their own viewport anchor. Browser
      scroll anchoring can instead lock onto a recycled virtual page and move
      the viewport a second time during a large scale change. */
@@ -41,61 +26,44 @@
   -webkit-touch-callout: none;
 }
 
-.pdf-viewer-scroll-area {
-  --pdf-viewer-scrollbar-size: 8px;
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+.pdf-scroll-area {
+  --pdf-scrollbar-size: 10px;
+  @apply relative size-full overflow-hidden;
 }
 
-.pdf-viewer-scrollbar {
-  z-index: 2;
-  display: flex;
-  padding: 2px;
+.pdf-scrollbar {
+  @apply z-2 flex touch-none select-none p-0.5;
   background: var(--pdf-scrollbar-track);
-  touch-action: none;
-  user-select: none;
 }
 
-.pdf-viewer-scrollbar-horizontal {
-  height: var(--pdf-viewer-scrollbar-size);
-  flex-direction: column;
+.pdf-scrollbar-x {
+  @apply flex-col;
 }
 
-.pdf-viewer-scrollbar-vertical {
-  width: var(--pdf-viewer-scrollbar-size);
+.pdf-scroll-thumb {
+  @apply relative flex-1 rounded-[999px];
 }
 
-.pdf-viewer-scrollbar-thumb {
-  position: relative;
-  flex: 1;
-  border-radius: 999px;
-}
-
-.pdf-viewer-scrollbar-thumb::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
+.pdf-scroll-thumb::after {
+  @apply pointer-events-none absolute inset-0 rounded-[inherit];
   background: var(--pdf-scrollbar-thumb);
   content: '';
-  pointer-events: none;
   transition: background-color 150ms ease, transform 150ms ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pdf-viewer-scrollbar-thumb::after { transition: none; }
+  .pdf-scroll-thumb::after { transition: none; }
 }
 
-.pdf-viewer-scrollbar:hover .pdf-viewer-scrollbar-thumb::after {
+.pdf-scrollbar:hover .pdf-scroll-thumb::after {
   background: var(--pdf-scrollbar-thumb-hover);
 }
 
-.pdf-viewer-scrollbar-horizontal:hover .pdf-viewer-scrollbar-thumb::after {
+.pdf-scrollbar-x:hover .pdf-scroll-thumb::after {
   transform: scaleY(1.35);
 }
 
-.pdf-viewer-scrollbar-vertical:hover .pdf-viewer-scrollbar-thumb::after {
+.pdf-scrollbar-y:hover .pdf-scroll-thumb::after {
   transform: scaleX(1.35);
 }
 
@@ -109,27 +77,25 @@
   user-select: none;
 }
 
-.pdf-native-render-layer img {
-  display: block;
+.pdf-render img {
+  @apply block;
 }
 
-.pdf-page-surface {
+.pdf-page {
   box-shadow:
     0 0 0 0.5px color-mix(in srgb, var(--pdf-page-border) 45%, transparent),
     0 1px 3px color-mix(in srgb, var(--pdf-page-shadow) 40%, transparent),
     0 8px 24px -8px color-mix(in srgb, var(--pdf-page-shadow) 65%, transparent);
 }
 
-:root[data-viewer-color-mode="dark"] .pdf-page-surface {
+:root[data-viewer-color-mode="dark"] .pdf-page {
   box-shadow:
     0 0 0 0.5px color-mix(in srgb, var(--pdf-page-border) 70%, transparent),
     0 2px 8px -2px color-mix(in srgb, var(--pdf-page-shadow) 45%, transparent);
 }
 
-.pdf-text-selection-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.pdf-selection {
+  @apply pointer-events-none absolute inset-0;
 }
 
 /* Multiply preserves the printed-page look in light mode, but muddies both

@@ -60,7 +60,7 @@ export function installErrorDiagnostics() {
 }
 
 export function sampleRasterPixels(root: ParentNode = document) {
-  const images = [...root.querySelectorAll<HTMLImageElement>('.pdf-native-render-layer img')];
+  const images = [...root.querySelectorAll<HTMLImageElement>('.pdf-render img')];
   const rasterPixels = images.reduce((total, image) => total + image.naturalWidth * image.naturalHeight, 0);
   const rasterImages = images.length;
   const current = viewerDiagnosticsStore.getState();

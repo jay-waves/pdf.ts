@@ -29,15 +29,14 @@ import { DOCUMENT_ID } from '../document/viewer-document';
 import { completeStartupLog, failStartupLog, writeStartupLogOnce } from './startup-log';
 import { PresentationView } from './presentation-view';
 import './pdf-surface.css';
-import styles from './viewer.module.css';
 
 export const VIEWER_STATUS_CLASS = 'grid size-full place-items-center bg-app text-xs text-secondary';
 
 export function LoadingStatus({ label }: { label: string }) {
   return (
-    <div className={`${VIEWER_STATUS_CLASS} ${styles.loadingContainer}`} role="status" aria-live="polite">
-      <div className={styles.loadingStatus}>
-        <span className={styles.loadingSpinner} aria-hidden="true" />
+    <div className={`${VIEWER_STATUS_CLASS} p-4 pt-[max(16px,env(safe-area-inset-top))]`} role="status" aria-live="polite">
+      <div className="inline-flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2 text-secondary shadow-float">
+        <span className="size-4 shrink-0 rounded-full border-2 border-border border-t-accent animate-spin motion-reduce:animate-none" aria-hidden="true" />
         <span>{label}</span>
       </div>
     </div>
@@ -96,7 +95,7 @@ function LoadedPdfDocument({ documentId, stage, presentationPage, ...props }: Su
       inert={presentationPage !== null} aria-hidden={presentationPage !== null}
       renderPage={({ pageIndex }) => <>
         <SearchLayer documentId={documentId} pageIndex={pageIndex} />
-        <div className="pdf-text-selection-layer"><SelectionLayer /></div>
+        <div className="pdf-selection"><SelectionLayer /></div>
         <div className="pdf-annotation-layer"><AnnotationLayer renderers={themeAnnotationRenderers} /></div>
         <FormLayer />
         <SignatureFallbackLayer />

@@ -20,5 +20,5 @@ export function RenderLayer({ layers = 'overlays' }: {
   useEffect(() => {
     if (picture.status === 'ready') completeStartupLog('First page ready', `page ${page.pageIndex + 1}`);
   }, [page.pageIndex, picture.status]);
-  return <div className="pdf-native-render-layer" data-pdf-picture-layers={layers} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}><CanvasRenderLayer overlays={layers === 'overlays'} /></div>;
+  return <div className="pdf-render" data-pdf-picture-layers={layers} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}><CanvasRenderLayer overlays={layers === 'overlays'} /></div>;
 }

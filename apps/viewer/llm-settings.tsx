@@ -4,7 +4,7 @@ import type { AiConfig, AiConfigUpdate } from '../ai/types';
 import { createDefaultAiConfig } from '../ai/config';
 import { SettingsToggle } from './settings-toggle';
 import styles from './llm-settings.module.css';
-import cardStyles from '../components/settings-card.module.css';
+import { SettingsCard } from '../components/settings-card';
 
 const EMPTY_CONFIG = createDefaultAiConfig();
 // Keep saves ordered even when the settings dialog is closed and reopened.
@@ -132,7 +132,7 @@ export function LlmSettings({ enabled, onEnabledChange }: {
     }
   };
 
-  return <form className={`${cardStyles.card} ${styles.editorPanel}`} data-enabled={enabled} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
+  return <SettingsCard asChild><form className={styles.editorPanel} data-enabled={enabled} onBlur={() => save()} onSubmit={(event) => { event.preventDefault(); save(); }}>
     <div className={styles.heading}><div><h2>LLM</h2><p>{supportsLlm
       ? 'Connect directly to an OpenAI-compatible model. The provider must allow browser requests (CORS).'
       : 'LLM is unavailable in this environment.'}</p></div><SettingsToggle label="Enable LLM" checked={enabled}
@@ -187,5 +187,5 @@ export function LlmSettings({ enabled, onEnabledChange }: {
     {status && <div className={styles.footer}>
       <span className={styles.hint} role="status">{status}</span>
     </div>}
-  </form>;
+  </form></SettingsCard>;
 }

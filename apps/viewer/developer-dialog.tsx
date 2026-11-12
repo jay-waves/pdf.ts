@@ -33,7 +33,7 @@ import { formatStartupDiagnostics, startupLogStore } from './startup-log';
 import { LlmSettings } from './llm-settings';
 import { TranslatorSettings } from './translator-settings';
 import styles from './developer-dialog.module.css';
-import cardStyles from '../components/settings-card.module.css';
+import { SettingsCard } from '../components/settings-card';
 
 
 const DPR_OPTIONS: Array<{ value: RenderDprMode; label: string }> = [
@@ -203,7 +203,7 @@ export function DeveloperDialog({
         <div className={styles.breadcrumbs}>
           <span className={styles.dialogTitle}>Developer</span>
         </div>
-        <section className={cardStyles.card} aria-labelledby="developer-statistics">
+        <SettingsCard aria-labelledby="developer-statistics">
           <h2 id="developer-statistics" className={styles.sectionTitle}>PDF rendering</h2>
           <dl className={styles.stats}>
             <div><dt>Effective DPR</dt><dd><span>{formatDpr(dpr)}</span></dd></div>
@@ -230,9 +230,9 @@ export function DeveloperDialog({
             <span>Energy saving</span>
             <SettingsToggle label="Energy saving" checked={energySavingEnabled(energy)} onCheckedChange={enabled => setEnergySaving(enabled ? 'on' : 'off')} />
           </div>
-        </section>
+        </SettingsCard>
 
-        <section className={cardStyles.card} aria-labelledby="developer-metadata">
+        <SettingsCard aria-labelledby="developer-metadata">
           <h2 id="developer-metadata" className={styles.sectionTitle}>Metadata</h2>
           {metadataLoading ? <p className={styles.metadataStatus}>Loading metadata…</p> : null}
           {metadataError ? <p className={styles.metadataError} role="alert">{metadataError}</p> : null}
@@ -255,7 +255,7 @@ export function DeveloperDialog({
               </div>
             )) : null}
           </dl>
-        </section>
+        </SettingsCard>
 
         {open && Boolean(platform.ai) && <LlmSettings enabled={llmEnabled} onEnabledChange={toggleLlm} />}
         {open && <TranslatorSettings llmEnabled={llmEnabled} />}

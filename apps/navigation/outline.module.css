@@ -1,11 +1,6 @@
 @reference '../tailwind.css';
 
 .list { @apply m-0 list-none p-0; }
-.nestedList { @apply relative mt-1 mb-1.5 ml-4 list-none p-0 pl-2.75; }
-.nestedList::before {
-  @apply absolute top-0.75 bottom-0.75 left-0 w-px bg-border-subtle;
-  content: ' ';
-}
 
 .bookmark {
   @apply flex min-h-8 items-center gap-2.5 overflow-hidden rounded-md border border-transparent bg-transparent px-2.25 py-1.5;
@@ -21,10 +16,7 @@
 .bookmark:focus-visible { outline: 2px solid var(--pdf-accent-primary); outline-offset: -2px; }
 .bookmark:disabled { @apply cursor-default opacity-48; }
 
-summary.bookmark { @apply list-none; }
-summary.bookmark::-webkit-details-marker { display: none; }
-
-.title { @apply min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap; }
+.title { @apply min-w-0 flex-1 truncate; }
 
 .page { @apply min-w-7.75 flex-none text-right text-[10.5px] leading-3.75 text-muted tabular-nums; }
 .bookmark[data-current='true'] .page { @apply text-secondary; }

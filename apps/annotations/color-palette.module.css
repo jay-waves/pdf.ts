@@ -1,6 +1,6 @@
 @reference '../tailwind.css';
 
-.dialog:global(.pdf-mica-surface) {
+.dialog:global(.ui-mica) {
   background: var(--pdf-background-surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;

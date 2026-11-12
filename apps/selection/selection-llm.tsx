@@ -104,7 +104,7 @@ export function SelectionLlm({ registry, request, onClose }: {
 
   return <FloatingPopover anchor={request.anchor} sideOffset={10} onClose={onClose}
     dismissOnFocusOutside={false} stableSide label="Ask LLM" role="dialog"
-    className={`pdf-glass-surface pdf-glass-popover ${styles.commentPopover}`}>
+    className={`ui-glass ui-popover ${styles.commentPopover}`}>
     <div className={styles.editorHeading}>
       <MessageSquareMore size={14} className="text-accent" />
       <span className={styles.type}>{status === 'loading' || status === 'answer' ? 'Response' : 'Ask'}</span>

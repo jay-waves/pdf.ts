@@ -7,7 +7,6 @@ import { SelectionLlm } from './selection-llm';
 import { normalizePdfText } from '../shared/utils';
 import type { ViewerTranslationRequest } from '../viewer/viewer-controller';
 import { googleTranslationUrl, isLlmEnabled } from './translation-settings';
-import styles from './selection-translate.module.css';
 
 type Props = { registry?: Kernel; request: ViewerTranslationRequest; onClose(): void };
 export function SelectionTranslate(props: Props) {
@@ -50,10 +49,10 @@ function TranslationPopover({ registry, request, onClose }: Props) {
 
   return <FloatingPopover anchor={request.anchor} sideOffset={10} onClose={onClose}
     dismissOnFocusOutside={false} label="Translate" role="dialog"
-    className={`pdf-glass-surface pdf-glass-popover ${styles.panel}`}>
+    className="ui-glass ui-popover pointer-events-auto z-[2147483647] max-h-[min(256px,calc(100vh-24px))] w-72 max-w-[calc(100vw-24px)] overflow-auto rounded-xl border px-2.5 py-2 text-[10.5px] leading-[1.45] whitespace-pre-wrap text-foreground select-text [overflow-wrap:anywhere]">
     <div aria-busy={loading}>{text || (loading ? 'Translating with LLM…' : '')}</div>
     {error && <p className="text-danger" role="alert">{error}</p>}
-    {!loading && error && sourceText && <a className={styles.externalLink} href={googleTranslationUrl(sourceText)}
+    {!loading && error && sourceText && <a className="mt-2 block text-accent underline underline-offset-2" href={googleTranslationUrl(sourceText)}
       onClick={(event) => { event.preventDefault(); platform.openExternal(event.currentTarget.href); onClose(); }}>
       Open in Google Translate
     </a>}

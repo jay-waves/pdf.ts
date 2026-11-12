@@ -274,8 +274,8 @@ export function ViewerApp({
       <Dialog
         open={documentPane !== null}
         variant="flatPanel"
-        contentClassName={documentPane === 'thumbnails' || documentPane === 'outline' ? 'pdf-navigation-panel' : ''}
-        overlayClassName={documentPane === 'thumbnails' || documentPane === 'outline' ? 'pdf-navigation-overlay' : ''}
+        contentClassName={documentPane === 'thumbnails' || documentPane === 'outline' ? 'ui-nav-panel' : ''}
+        overlayClassName={documentPane === 'thumbnails' || documentPane === 'outline' ? 'ui-nav-overlay' : ''}
         onClose={closeOverlay}
         title={documentPane ? DOCUMENT_PANE_TITLES[documentPane] : 'PDF Document'}
       >

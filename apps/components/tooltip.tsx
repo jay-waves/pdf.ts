@@ -23,7 +23,7 @@ export function Tooltip({
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal container={portalContainer ?? undefined}>
         <RadixTooltip.Content
-          className="pdf-glass-tooltip pointer-events-none relative z-[2147483647] max-w-45 whitespace-nowrap rounded-lg border px-1.75 py-1 text-center text-[10px] leading-3.5 font-normal text-white"
+          className="ui-tooltip pointer-events-none relative z-[2147483647] max-w-45 whitespace-nowrap rounded-lg border px-1.75 py-1 text-center text-[10px] leading-3.5 font-normal text-white"
           side="bottom"
           sideOffset={8}
           collisionPadding={8}

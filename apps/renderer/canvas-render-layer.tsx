@@ -1,8 +1,9 @@
-import { useEnergyTilesPaused } from './energy-motion';
+import { useEnergyTilesPaused, useTileMotionEnd } from './energy-motion';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useCapability, usePage, useSelector } from '@embedpdf/react/runtime';
 import { RenderToken, type OpenPictureReport, type TilePaintPlan, type TilePaintSource, type ViewDemand } from '@embedpdf/plugin-render/contract/host';
 import type { PageRef } from '@embedpdf/core';
+import { tileDemandSubmitter } from './tile-demand';
 import { afterCanvasPaint, paintRaster, releaseCanvas } from './canvas-painter';
 
 const EMPTY_PLAN: TilePaintPlan = { engaged: false, paint: [], fetching: [], stamp: '' };
@@ -43,6 +44,7 @@ export function CanvasRenderLayer({ overlays }: { overlays: boolean }) {
 
 function CanvasTiles({ overlays }: { overlays: boolean }) {
   const tilesPaused = useEnergyTilesPaused();
+  const motionEnd = useTileMotionEnd();
   const page = usePage();
   const render = useCapability(RenderToken);
   const [view, setView] = useState<ViewDemand | null>(null);
@@ -52,11 +54,19 @@ function CanvasTiles({ overlays }: { overlays: boolean }) {
     setView(opened);
     return () => opened.destroy();
   }, [render, page.view]);
+  const submit = useMemo(() => view ? tileDemandSubmitter(view, page.ref) : null, [view, page.ref]);
   useLayoutEffect(() => {
-    view?.setPaused(page.ref, tilesPaused);
-    view?.setDemand(page.ref, page.getViewDemand?.() ?? { desiredDeviceWidth: page.transform.deviceWidth },
-      overlays ? { includeAnnotations: false, includeFormFields: false } : {});
+    submit?.(page.getViewDemand?.() ?? { desiredDeviceWidth: page.transform.deviceWidth }, overlays, tilesPaused);
   });
+  useLayoutEffect(() => {
+    if (!view || !submit || !motionEnd) return;
+    const flush = () => {
+      submit(page.getViewDemand?.() ?? { desiredDeviceWidth: page.transform.deviceWidth }, overlays, false);
+      view.flush(page.ref);
+    };
+    motionEnd.add(flush);
+    return () => { motionEnd.delete(flush); };
+  }, [view, submit, motionEnd, page, overlays]);
   const plan = useSelector(RenderToken, () => view?.getPlan(page.ref) ?? EMPTY_PLAN);
   useEffect(() => () => view?.release(page.ref), [view, page.ref]);
   const scale = page.transform.viewScale;

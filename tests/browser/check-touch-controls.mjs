@@ -4,7 +4,7 @@ import { fixture } from '../support/pdf-editing-fixture.mjs';
 
 await withViewer(async (page, errors) => {
   await dropPdf(page, fixture({ secondPage: true }), 'scroll.pdf');
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-render img, .pdf-render canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   const toolbar=page.locator('[data-toolbar-level]');
   await page.waitForFunction(()=>!document.querySelector('[data-toolbar-level]').hasAttribute('data-visible'));
   const rect=await page.locator('.viewer').boundingBox();

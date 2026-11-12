@@ -45,32 +45,32 @@ page.on('console', m => { if (process.env.DEBUG_PDF) console.log(m.type(), m.tex
 const activeId = () => page.locator('[data-pdf-document-layer][aria-hidden="false"]').getAttribute('data-pdf-document-layer');
 try {
   await page.goto(`${base}/?launcherDocument=reload-test`);
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(i => (i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth)));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-render img, .pdf-render canvas[data-plane=base]')].some(i => (i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth)));
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   await page.getByRole('button', { name: 'Page', exact: true }).click();
   await page.getByRole('textbox', { name: 'Zoom percentage' }).fill('150');
   await page.getByRole('textbox', { name: 'Zoom percentage' }).press('Enter');
   await page.getByRole('button', { name: 'Rotate', exact: true }).click();
   await page.waitForTimeout(300);
-  const originalPageSize = await page.locator('.pdf-page-surface').first().boundingBox();
+  const originalPageSize = await page.locator('.pdf-page').first().boundingBox();
   await page.locator('.viewer').hover(); await page.mouse.wheel(0, 950);
   await page.evaluate(async () => {
     let previous = NaN, stable = 0;
     for (let frames = 0; frames < 120 && stable < 6; frames++) {
       await new Promise(requestAnimationFrame);
-      const y = document.querySelector('.pdf-page-surface').getBoundingClientRect().y;
+      const y = document.querySelector('.pdf-page').getBoundingClientRect().y;
       stable = y === previous ? stable + 1 : 0; previous = y;
     }
   });
   const before = await activeId();
-  const position = (await page.locator('.pdf-page-surface').first().boundingBox()).y;
+  const position = (await page.locator('.pdf-page').first().boundingBox()).y;
   await page.evaluate(() => {
     window.framesChecked = 0; window.blankFrames = 0; window.watchFrames = true;
     const check = () => {
       if (!window.watchFrames) return;
       window.framesChecked++;
       const layer = document.querySelector('[data-pdf-document-layer][aria-hidden="false"]');
-      const images = layer ? [...layer.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')] : [];
+      const images = layer ? [...layer.querySelectorAll('.pdf-render img, .pdf-render canvas[data-plane=base]')] : [];
       if (!images.some(i => {
         const r = i.getBoundingClientRect();
         return (i.tagName === 'CANVAS' ? i.dataset.painted === 'true' : i.complete && i.naturalWidth) && r.bottom > 0 && r.top < innerHeight;
@@ -82,10 +82,10 @@ try {
   await page.waitForFunction(old => document.querySelector('[data-pdf-document-layer][aria-hidden="false"]')?.dataset.pdfDocumentLayer !== old, before, { timeout: 25000 });
   await page.waitForTimeout(300);
   const after = await activeId();
-  const nextPosition = (await page.locator('.pdf-page-surface').first().boundingBox()).y;
+  const nextPosition = (await page.locator('.pdf-page').first().boundingBox()).y;
   assert.ok(Math.abs(position - nextPosition) < 3, `Scroll moved: ${position} -> ${nextPosition}`);
   assert.equal(await page.locator('[data-pdf-document-layer]').count(), 1);
-  const nextPageSize = await page.locator('.pdf-page-surface').first().boundingBox();
+  const nextPageSize = await page.locator('.pdf-page').first().boundingBox();
   assert.equal(nextPageSize.width, originalPageSize.width);
   assert.equal(nextPageSize.height, originalPageSize.height);
   assert.equal(await page.getByRole('textbox', { name: 'Zoom percentage' }).inputValue(), '150%');
@@ -105,7 +105,7 @@ try {
   await page.getByRole('button', { name: 'Draw', exact: true }).click();
   await page.locator('[aria-label="Rectangle"]').click();
   await page.locator('.viewer').hover(); await page.mouse.wheel(0, -10000); await page.waitForTimeout(300);
-  const rect = await page.locator('.pdf-page-surface').first().boundingBox();
+  const rect = await page.locator('.pdf-page').first().boundingBox();
   await page.mouse.move(Math.max(50, rect.x + 150), Math.max(100, rect.y + 150));
   await page.mouse.down();
   await page.mouse.move(Math.max(50, rect.x + 150) + 120, Math.max(100, rect.y + 150) + 80, { steps: 8 });

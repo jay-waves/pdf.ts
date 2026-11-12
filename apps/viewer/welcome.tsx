@@ -24,7 +24,7 @@ export function Welcome({
     <main className={styles.welcome}>
       <section
         aria-label="Choose or drop a PDF file"
-        className={`pdf-glass-surface ${styles.welcomeCard}`}
+        className={`ui-glass ${styles.welcomeCard}`}
         data-dragging={dragging ? 'true' : undefined}
         onClick={() => void openDocument()}
         onDragEnter={(event) => {

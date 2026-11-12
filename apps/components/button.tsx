@@ -22,7 +22,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     'focus-visible:ring-accent',
   ].join(' '),
   secondary: [
-    'border-border-subtle bg-[var(--pdf-control-background)] text-foreground',
+    'border-border-subtle bg-control text-foreground',
     'hover:border-border hover:bg-hover',
     'focus-visible:ring-accent',
   ].join(' '),

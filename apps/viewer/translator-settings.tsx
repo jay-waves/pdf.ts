@@ -6,12 +6,12 @@ import { SettingsToggle } from './settings-toggle';
 import type { AiService } from '../ai/types';
 import { DEFAULT_AI_PROMPT } from '../ai/config';
 import styles from './llm-settings.module.css';
-import cardStyles from '../components/settings-card.module.css';
+import { SettingsCard } from '../components/settings-card';
 
 export function TranslatorSettings({ llmEnabled }: { llmEnabled: boolean }) {
   const [enabled, setEnabled] = useState(() => isTranslationEnabled(platform.getPreference));
   const editor = useTranslationPrompt(platform.ai);
-  return <section className={cardStyles.card} data-enabled={enabled} aria-labelledby="translator-title" onBlur={editor.save}>
+  return <SettingsCard data-enabled={enabled} aria-labelledby="translator-title" onBlur={editor.save}>
     <div className={styles.heading}><div><h2 id="translator-title">Translate</h2>
       <p>{llmEnabled ? 'Uses the model and API key configured in LLM. The prompt controls the translation language.' : 'LLM is off. Translate opens Google Translate in a new tab.'}</p>
     </div><SettingsToggle label="Enable Translate" checked={enabled} onCheckedChange={(value) => {
@@ -24,7 +24,7 @@ export function TranslatorSettings({ llmEnabled }: { llmEnabled: boolean }) {
       <p className={styles.hint}>{'{{browserDefault}}'} uses your browser language ({getBrowserDefaultLanguage()}). Replace it with a language of your choice. {'{{selectedText}}'} inserts the selected text. Clear the prompt to restore the default.</p>
     </fieldset>
     {editor.error && <p className={styles.error} role="alert">{editor.error}</p>}
-  </section>;
+  </SettingsCard>;
 }
 
 let promptSaveQueue: Promise<void> = Promise.resolve();

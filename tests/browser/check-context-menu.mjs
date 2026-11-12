@@ -13,17 +13,17 @@ try {
   await page.goto(process.env.PDF_TEST_URL ?? 'http://127.0.0.1:5173');
   const bytes = fixture({ content: 'BT /Helv 20 Tf 60 700 Td (Select this PDF text for highlighting.) Tj 0 -35 Td (Comment directly on this second line.) Tj ET' });
   await dropPdf(page, bytes, 'context-menu.pdf');
-  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
+  await page.waitForFunction(() => [...document.querySelectorAll('.pdf-render img, .pdf-render canvas[data-plane=base]')].some(image => (image.tagName === 'CANVAS' ? image.dataset.painted === 'true' : image.complete && image.naturalWidth)));
   await page.mouse.move(640, 30);
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
-  const surface = page.locator('.pdf-page-surface').first();
+  const surface = page.locator('.pdf-page').first();
   const box = await surface.boundingBox();
   const scale = box.width / 612;
   await page.mouse.move(box.x + 61 * scale, box.y + 85 * scale);
   await page.mouse.down();
   await page.mouse.move(box.x + 360 * scale, box.y + 85 * scale, { steps: 20 });
   await page.mouse.up();
-  await page.waitForFunction(() => document.querySelector('.pdf-text-selection-layer polygon'));
+  await page.waitForFunction(() => document.querySelector('.pdf-selection polygon'));
   const menu = page.getByRole('toolbar', { name: 'Text selection actions' });
   const rightClick = () => page.mouse.click(box.x + 125 * scale, box.y + 85 * scale, { button: 'right' });
   await rightClick();
@@ -72,7 +72,7 @@ try {
   await page.getByRole('button', { name: 'Page', exact: true }).click();
   await page.getByRole('button', { name: 'Rotate', exact: true }).click();
   await page.waitForFunction(() => {
-    const box = document.querySelector('.pdf-page-surface')?.getBoundingClientRect();
+    const box = document.querySelector('.pdf-page')?.getBoundingClientRect();
     return box && box.width > box.height;
   });
   const rotated = await surface.boundingBox();

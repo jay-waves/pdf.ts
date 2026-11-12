@@ -1,23 +1,15 @@
+@reference '../tailwind.css';
+
 .presentation {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: flex;
+  @apply fixed inset-0 z-20 flex;
   background: color-mix(in srgb, var(--pdf-accent-primary) 8%, var(--pdf-background-app));
 }
 
 .stage {
-  display: grid;
-  flex: 1;
-  min-height: 0;
-  place-items: center;
-  overflow: hidden;
-  touch-action: none;
+  @apply grid min-h-0 flex-1 touch-none place-items-center overflow-hidden;
 }
 
 .page {
-  position: relative;
-  flex: none;
-  background: var(--pdf-page-background);
+  @apply relative flex-none bg-page;
   box-shadow: 0 10px 38px color-mix(in srgb, var(--pdf-page-shadow) 55%, transparent);
 }

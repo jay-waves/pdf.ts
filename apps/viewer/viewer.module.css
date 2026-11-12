@@ -1,17 +1,5 @@
 @reference '../tailwind.css';
 
-.loadingContainer {
-  padding: max(16px, env(safe-area-inset-top)) 16px 16px;
-}
-
-.loadingStatus {
-  @apply inline-flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2 text-secondary shadow-float;
-}
-
-.loadingSpinner {
-  @apply size-4 shrink-0 rounded-full border-2 border-border border-t-accent animate-spin motion-reduce:animate-none;
-}
-
 .welcome {
   @apply grid min-h-screen place-items-center p-6;
   background:

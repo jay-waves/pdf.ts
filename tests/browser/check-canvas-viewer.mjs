@@ -12,14 +12,14 @@ try {
   await page.goto(base);
   await dropPdf(page, fixture({ notes: true, content: '0.1 0.3 0.8 rg 30 40 230 200 re f\nBT /Helv 24 Tf 60 700 Td (Canvas viewer) Tj ET\n' }), 'canvas.pdf');
   await page.locator('canvas[data-plane="tile"][data-painted="true"]').first().waitFor();
-  assert.equal(await page.locator('.pdf-native-render-layer img').count(), 0);
+  assert.equal(await page.locator('.pdf-render img').count(), 0);
   await page.mouse.move(640, 30);
   await page.getByRole('button', { name: 'Pin toolbar', exact: true }).click();
   await page.screenshot({ path: '/tmp/pdf-canvas-fit.png' });
   await page.getByRole('button', { name: 'Page', exact: true }).click();
   const zoom = page.getByRole('textbox', { name: 'Zoom percentage', exact: true });
   await zoom.fill('400%'); await zoom.press('Enter');
-  await page.waitForFunction(() => document.querySelector('.pdf-page-surface')?.getBoundingClientRect().width > 2000);
+  await page.waitForFunction(() => document.querySelector('.pdf-page')?.getBoundingClientRect().width > 2000);
   await page.waitForFunction(() => [...document.querySelectorAll('canvas[data-plane="tile"]')].some(c => Number(c.dataset.tileScale) >= 4));
   await page.waitForFunction(() => [...document.querySelectorAll('[data-canvas-tiles]')].every(p => p.dataset.fetching === '0'));
   const before = await page.evaluateHandle(() => [...document.querySelectorAll('canvas[data-plane="tile"]')]);

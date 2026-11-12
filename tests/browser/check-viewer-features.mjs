@@ -91,10 +91,10 @@ try {
   await page.mouse.move(550, 350);
   await page.mouse.down();
   await page.mouse.move(700, 500, { steps: 40 });
-  await page.locator('.pdf-reading-region-outline').waitFor();
+  await page.locator('.pdf-region').waitFor();
   await page.keyboard.press('Escape');
   await page.mouse.up();
-  await page.locator('.pdf-reading-region-outline').waitFor({ state: 'hidden' });
+  await page.locator('.pdf-region').waitFor({ state: 'hidden' });
   await page.getByRole('region', { name: 'Reading area', exact: true }).waitFor({ state: 'hidden' });
   console.log('PASS continuous reading-area preview and Escape cancellation');
   await page.getByRole('button', { name: 'Back', exact: true }).click();

@@ -6,7 +6,7 @@ const suites = {
   interaction: ['context-menu', 'pan-tool', 'smooth-scroll', 'touch-controls'],
   persistence: ['document-drafts', 'document-reload', 'reading-history'],
   shared: ['annotation-sync', 'shared-editing', 'shared-pdfium', 'shared-viewer', 'runtime-idle'],
-  rendering: ['canvas-viewer', 'energy-motion', 'font-fallback'],
+  rendering: ['canvas-viewer', 'energy-motion', 'scrollbar-jump', 'render-scheduling', 'page-prefetch', 'font-fallback'],
 };
 const requested = process.argv.slice(2);
 if (requested.includes('--list')) {

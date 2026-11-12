@@ -196,7 +196,7 @@ function ZoomControl({
         </RadixToolbar.Button>
         <DropdownMenu.Portal container={portalContainer ?? undefined}>
           <DropdownMenu.Content
-            className="pdf-select-content pdf-glass-surface pdf-glass-popover z-50 min-w-[var(--radix-dropdown-menu-trigger-width)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-auto rounded-lg border p-1.5 text-foreground"
+            className="ui-select ui-glass ui-popover z-50 min-w-[var(--radix-dropdown-menu-trigger-width)] max-h-[var(--radix-dropdown-menu-content-available-height)] overflow-auto rounded-lg border p-1.5 text-foreground"
             align="start"
             sideOffset={7}
             collisionPadding={6}

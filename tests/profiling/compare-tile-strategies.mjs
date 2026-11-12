@@ -1,7 +1,7 @@
 // Deterministic scheduler benchmark: real render plugin, synthetic RGBA producer.
 // Measures requests/pixels/retained buffers, not PDFium CPU or browser GPU memory.
 // Each demand fully settles before the next; this does not model cancellation under load.
-// Example: TILE_CACHE_MIB=48 TILE_STRATEGY=sqrt2 node tools/diagnostics/compare-tile-strategies.mjs
+// Example: TILE_CACHE_MIB=48 TILE_STRATEGY=sqrt2 node tests/profiling/compare-tile-strategies.mjs
 import { createTestContext, manualClock } from '@embedpdf/core/testing';
 import { AbortablePromise } from '@embedpdf/engine-core/runtime';
 import { toPageRef } from '@embedpdf/core';

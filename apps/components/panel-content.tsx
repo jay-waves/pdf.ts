@@ -1,4 +1,3 @@
-import scrollStyles from './quiet-scroll.module.css';
 import type { ComponentPropsWithRef, HTMLAttributes } from 'react';
 
 export function PanelContent({ overflow = 'auto', padding = 'default', className = '', ...props }: ComponentPropsWithRef<'div'> & {
@@ -7,7 +6,7 @@ export function PanelContent({ overflow = 'auto', padding = 'default', className
 }) {
   return (
     <div
-      className={`h-full ${padding === 'compact' ? 'p-2.5' : 'p-3.5 max-[640px]:p-3'} ${overflow === 'hidden' ? 'overflow-hidden' : `overflow-auto ${scrollStyles.quietScroll}`} ${className}`.trim()}
+      className={`h-full ${padding === 'compact' ? 'p-2.5' : 'p-3.5 max-[640px]:p-3'} ${overflow === 'hidden' ? 'overflow-hidden' : 'overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'} ${className}`.trim()}
       {...props}
     />
   );

@@ -7,7 +7,7 @@ export function useInToolbar() {
   return useContext(ToolbarContext);
 }
 
-const SURFACE_CLASS = 'pdf-glass-surface min-h-8.5 w-fit max-w-[calc(100vw-32px)] rounded-xl border p-1.5 max-[640px]:max-w-[calc(100vw-16px)]';
+const SURFACE_CLASS = 'ui-glass min-h-8.5 w-fit max-w-[calc(100vw-32px)] rounded-xl border p-1.5 max-[640px]:max-w-[calc(100vw-16px)]';
 
 export function FloatingSurface({
   as: Component = 'div',

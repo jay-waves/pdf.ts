@@ -8,11 +8,11 @@ const original=await readFile(path);
 const browser=await chromium.launch({channel:'chrome'});
 const context=await browser.newContext({viewport:{width:1280,height:900}});
 const errors=[];context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));if(process.env.DEBUG_PDF)p.on('console',m=>console.log(m.type(),m.text()));});
-async function open(){const page=await context.newPage();page.setDefaultTimeout(15000);await page.goto(`${base}/?launcherDocument=draft-browser`);await page.waitForFunction(()=>[...document.querySelectorAll('.pdf-native-render-layer img, .pdf-native-render-layer canvas[data-plane=base]')].some(i=>(i.tagName==='CANVAS'?i.dataset.painted==='true':i.complete&&i.naturalWidth)));await page.getByRole('button',{name:'Pin toolbar',exact:true}).click();return page;}
+async function open(){const page=await context.newPage();page.setDefaultTimeout(15000);await page.goto(`${base}/?launcherDocument=draft-browser`);await page.waitForFunction(()=>[...document.querySelectorAll('.pdf-render img, .pdf-render canvas[data-plane=base]')].some(i=>(i.tagName==='CANVAS'?i.dataset.painted==='true':i.complete&&i.naturalWidth)));await page.getByRole('button',{name:'Pin toolbar',exact:true}).click();return page;}
 try{
  const a=await open();const b=await open();
  await a.bringToFront();await a.getByRole('button',{name:'Draw',exact:true}).click();await a.locator('[aria-label="Rectangle"]').click();
- const rect=await a.locator('.pdf-page-surface').first().boundingBox();await a.mouse.move(rect.x+110,rect.y+110);await a.mouse.down();await a.mouse.move(rect.x+220,rect.y+180,{steps:8});await a.mouse.up();await a.getByRole('button',{name:'Back',exact:true}).click();
+ const rect=await a.locator('.pdf-page').first().boundingBox();await a.mouse.move(rect.x+110,rect.y+110);await a.mouse.down();await a.mouse.move(rect.x+220,rect.y+180,{steps:8});await a.mouse.up();await a.getByRole('button',{name:'Back',exact:true}).click();
  await a.locator('main[data-draft-status="saved"]').waitFor();await b.locator('main[data-draft-status="saved"]').waitFor();
  const draft=JSON.parse(await readFile(path+'.swp','utf8'));assert.equal(draft.format,'pdf.ts/swp');assert.equal(draft.bundle.items.length,1);
  assert.deepEqual(await readFile(path),original);

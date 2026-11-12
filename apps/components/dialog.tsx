@@ -6,7 +6,7 @@ type DialogVariant = 'panel' | 'flatPanel' | 'panelCompact' | 'popup' | 'popupWi
 type DialogTitleVariant = 'hidden' | 'panel' | 'popup';
 
 const VARIANT_CLASSES: Record<DialogVariant, string> = {
-  flatPanel: 'pdf-flat-panel h-[min(680px,calc(100dvh-48px))] w-[min(680px,calc(100vw-48px))] p-1 max-[640px]:h-[min(680px,calc(100dvh-32px))] max-[640px]:w-[calc(100vw-32px)]',
+  flatPanel: 'h-[min(680px,calc(100dvh-48px))] w-[min(680px,calc(100vw-48px))] p-1 max-[640px]:h-[min(680px,calc(100dvh-32px))] max-[640px]:w-[calc(100vw-32px)]',
   panel: 'h-[min(720px,calc(100vh-42px))] w-[min(720px,calc(100vw-42px))] max-[640px]:h-[min(640px,calc(100vh-22px))] max-[640px]:w-[calc(100vw-22px)]',
   panelCompact: 'w-[min(332px,calc(100vw-42px))]',
   popup: 'w-[min(360px,calc(100vw-32px))]',
@@ -46,9 +46,9 @@ export function Dialog({
       if (!nextOpen && !preventClose) onClose();
     }}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className={`pdf-dialog-overlay fixed inset-0 z-20 ${overlayClassName}`} />
+        <RadixDialog.Overlay className={`ui-overlay fixed inset-0 z-20 ${overlayClassName}`} />
         <RadixDialog.Content
-          className={`pdf-mica-surface pdf-dialog-content fixed top-1/2 left-1/2 z-21 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border ${VARIANT_CLASSES[variant]} ${contentClassName}`.trim()}
+          className={`ui-mica ui-dialog fixed top-1/2 left-1/2 z-21 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border ${VARIANT_CLASSES[variant]} ${contentClassName}`.trim()}
           aria-describedby={undefined}
           onCloseAutoFocus={focusViewer ? (event) => {
             event.preventDefault();

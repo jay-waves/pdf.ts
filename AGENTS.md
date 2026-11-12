@@ -12,6 +12,21 @@
   design rules elsewhere.
 - Keep development, testing, packaging, and release workflows here.
 
+## UI styles
+
+- Preserve existing appearance and interaction when refactoring styles.
+- Keep simple component styles in JSX with Tailwind utilities. Share repeated
+  markup and styles through small components; reserve CSS Modules and `@apply`
+  for complex selectors, effects, or cascade requirements. Reuse the tokens in
+  `apps/tailwind.css` for shared colors and keep theme values in CSS.
+- Keep runtime geometry and SDK inline-style overrides in `style` props. Preserve
+  cascade order and direct shadow declarations where they control focus rings.
+- Use short `ui-*` names for shared chrome and `pdf-*` for viewer-owned surfaces.
+  Keep SDK selectors intact. Update component markup, CSS, DOM queries, browser
+  checks, and diagnostics together when renaming classes. See `GLOSSARY.md` for
+  shared style terms.
+- Remove unused selectors when replacing component markup.
+
 ## Development and testing
 
 - Requires Node.js 24+ and pnpm 12 (`corepack install --global pnpm@12.3.4`).
@@ -39,7 +54,7 @@
 
 - Keep packaging/release tools in `scripts/`, manual browser integration scripts
   in `tests/browser/`, shared fixtures/helpers in `tests/support/`, and manual
-  diagnostics in `tools/diagnostics/`. Reuse existing helpers before adding files.
+  diagnostics in `tests/profiling/`. Reuse existing helpers before adding files.
 - Diagnostics are not test gates. `PDF_BENCH_OUTPUT` saves rendering benchmark JSON;
   `check-static-memory.mjs` needs `node --expose-gc` for explicit GC. Review tools
   that inspect SDK internals after dependency upgrades.

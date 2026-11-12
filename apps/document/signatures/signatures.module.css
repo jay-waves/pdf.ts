@@ -19,5 +19,5 @@
 }
 
 .widget span {
-  @apply overflow-hidden text-ellipsis whitespace-nowrap;
+  @apply truncate;
 }
