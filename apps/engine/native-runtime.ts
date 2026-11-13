@@ -5,6 +5,7 @@ import { WorkerHost, ensureInitialized, openFatMemoryDocument } from '@embedpdf/
 import { PdfiumFontFallbackManager } from '../fonts/font-fallback-manager';
 import type { PdfFontFallbackConfig } from '../fonts/types';
 import { getThemeRenderGeometry, toReverseByteOrderBitmapColor, type PdfRenderTheme } from './pdf-render-theme';
+import { AdaptivePageCache, PARSED_PAGE_BASE_BUDGET } from './adaptive-page-cache';
 
 /** Small native extensions for features v3 hasn't exposed on its document API yet. */
 function installTheme(runtime: PdfRuntimeModule, getTheme: () => PdfRenderTheme | null) {
@@ -48,11 +49,13 @@ export async function createNativeRuntime(options: { wasmUrl?: string; fontFallb
   if (fonts) fonts.initialize(toWrappedPdfiumModule(runtime) as Parameters<typeof fonts.initialize>[0], (data, pointer) => runtime.mem.writeBytes(BigInt(pointer) as Ptr, data));
   const listeners = new Set<(value: WorkerResponse) => void>();
   const host = new WorkerHost(runtime, pack => { for (const listener of listeners) listener(pack.payload); }, {
-    parsedPageBudgetBytes: 64 * 1024 * 1024,
+    parsedPageBudgetBytes: PARSED_PAGE_BASE_BUDGET,
     decodedImageBudgetBytes: 32 * 1024 * 1024,
   });
+  const pageCache = new AdaptivePageCache(host.parsedPageCache);
   const transport: Transport = { send: pack => host.receive(pack.payload), onMessage: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     terminate: async () => {
+      pageCache.dispose();
       // EmbedPDF 3.1 shutdown closes pages but leaves its 30s residency timer
       // holding the runtime. Cancel that final root before dropping the heap.
       (host as unknown as { residency: { disarmTimer(): void } }).residency.disarmTimer();
@@ -83,7 +86,7 @@ export async function createNativeRuntime(options: { wasmUrl?: string; fontFallb
     ownEngineResponseBuffer(buffer);
     return { width: raster.width, height: raster.height, format, mimeType, source: { kind: 'bytes' as const, bytes: new Uint8Array(buffer) } };
   } } });
-  return { engine, fonts,
+  return { engine, fonts, pageCache,
     protect(bytes: Uint8Array, sourcePassword: string | undefined, password: string | null) {
       const document = openFatMemoryDocument(runtime, bytes, sourcePassword);
       const length = runtime.mem.alloc(4);

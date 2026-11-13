@@ -56,3 +56,48 @@ await withViewer(async (page, errors) => {
   assert.deepEqual(errors, []);
   console.log('PASS bulk annotation snapshots yield to visible pixels without letting edits cross the snapshot.');
 });
+
+await withViewer(async (page, errors) => {
+  const result = await page.evaluate(async bytes => {
+    const { SharedDocumentClient } = await import('/apps/engine/shared-document-client.ts');
+    const { createPdfWorker } = await import('/apps/engine/pdf-worker-transport.ts');
+    const ports = [createPdfWorker(), createPdfWorker()];
+    const clients = ports.map(port => new SharedDocumentClient(port, { defaultFallbackFonts: false }));
+    clients.forEach(client => client.setIdentity('visibility-scheduling'));
+    try {
+      const docs = await Promise.all(clients.map((client, index) => client.engine.open({
+        kind: 'bytes', bytes: new Uint8Array(bytes), id: `visibility-${index}`,
+      })));
+      const { pages } = await docs[0].pages.list();
+      const documents = (await clients[0].getRuntimeDiagnostics()).documents;
+      const render = (session, index, width) => docs[session].with({ view: 'test' }).page(pages[index].ref)
+        .render.raw({ viewport: { kind: 'width', width } });
+      // Explicit protocol hints make this deterministic in headless Chrome;
+      // DOM visibility and BFCache delivery are covered by transport tests.
+      ports[0].postMessage({ type: 'visibility', visible: false });
+      ports[1].postMessage({ type: 'visibility', visible: true });
+      docs[0].setWorkingSet('test', [{ page: pages[1].ref, role: 'visible', pixels: 800_000 }]);
+      docs[1].setWorkingSet('test', [{ page: pages[2].ref, role: 'visible', pixels: 800_000 }]);
+      await Promise.all(docs.map(doc => doc.pages.list()));
+      const order = [];
+      const blocker = render(1, 0, 3000);
+      const hidden = render(0, 1, 800).then(() => order.push('hidden'));
+      const visible = render(1, 2, 800).then(() => order.push('visible'));
+      await Promise.all([blocker, hidden, visible]);
+
+      // A new viewport received while hidden must become effective on return.
+      docs[0].setWorkingSet('test', [{ page: pages[3].ref, role: 'visible', pixels: 800_000 }]);
+      ports[0].postMessage({ type: 'visibility', visible: true });
+      await docs[0].pages.list();
+      const restoredOrder = [];
+      const nextBlocker = render(0, 0, 3000);
+      const stale = render(0, 1, 800).then(() => restoredOrder.push('stale'));
+      const restored = render(0, 3, 800).then(() => restoredOrder.push('restored'));
+      await Promise.all([nextBlocker, stale, restored]);
+      return { documents, order, restoredOrder };
+    } finally { await Promise.all(clients.map(client => client.engine.destroy())); }
+  }, [...scrollingFixture({ pageCount: 4, pathCount: 5000 })]);
+  assert.deepEqual(result, { documents: 1, order: ['visible', 'hidden'], restoredOrder: ['restored', 'stale'] });
+  assert.deepEqual(errors, []);
+  console.log('PASS shared-document sessions deprioritize hidden reads and restore their latest viewport.');
+});

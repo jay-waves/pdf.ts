@@ -10,6 +10,7 @@ import type { PdfRenderTheme } from './pdf-render-theme';
 import type { PdfFontFallbackConfig, PdfFontDiagnostic } from '../fonts/types';
 import type { LocalEngineRecipeOptions } from '@embedpdf/engine';
 import { createPdfWorker } from './pdf-worker-transport';
+import type { AdaptivePageCache } from './adaptive-page-cache';
 import type { SharedDocumentSnapshot, SharedFileIdentity } from './shared-document-host';
 
 const clients = new WeakMap<Engine, SharedDocumentClient>();
@@ -147,7 +148,8 @@ export class SharedDocumentClient {
   }
   private nativeId(id: string) { return this.aliases.get(id) ?? id; }
   setRenderTheme(theme: PdfRenderTheme | null) { return this.rpc<boolean>('theme', { args: [theme] }); }
-  getRuntimeDiagnostics() { return this.rpc<{ active: boolean; generation: number; documents: number; idleMs: number; parsedPageBudgetBytes: number; decodedImageBudgetBytes: number }>('runtimeDiagnostics'); }
+  getRuntimeDiagnostics() { return this.rpc<{ active: boolean; generation: number; documents: number; idleMs: number; parsedPageBudgetBytes: number;
+    parsedPageCache: ReturnType<AdaptivePageCache['stats']> | null; decodedImageBudgetBytes: number }>('runtimeDiagnostics'); }
   getFontDiagnostics() { return this.rpc<PdfFontDiagnostic[]>('fontDiagnostics'); }
   setIdentity(identity: SharedFileIdentity, location?: DraftLocation) { this.identity = identity; this.draftLocation = location; }
   getDocument(id: string) { return this.documents.get(id) ?? null; }

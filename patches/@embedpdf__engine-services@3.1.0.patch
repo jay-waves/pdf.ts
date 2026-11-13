@@ -1,0 +1,308 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 65ca437340e1e977b4176cc079db0d4a571c6058..c6814ad83e26145af273726c537886cc5682a548 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -498,6 +498,17 @@ var PageResidency = class {
+ 		_defineProperty(this, "clock", 0);
+ 		_defineProperty(this, "timer", null);
+ 	}
++	/** Observe only cache facts; observers must not run native operations. */
++	observe(observer) { this.observer = observer; }
++	resetObservations(owner) { this.observer?.({ type: "reset", owner }); }
++	get budgetBytes() { return this.policy.budgetBytes; }
++	setBudget(bytes) {
++		if (!Number.isFinite(bytes) || bytes < 0) throw new RangeError("Invalid page cache budget");
++		const previous = this.policy.budgetBytes;
++		this.policy = { ...this.policy, budgetBytes: bytes };
++		// Never close pages from a timer while native work is suspended in a slice.
++		if (bytes < previous && !this.busy()) this.makeRoom(0);
++	}
+ 	/** The page, loaded in one go when it isn't parsed; held until {@link release}. */
+ 	acquire(owner, docPtr, pageObjectNumber) {
+ 		let page = this.take(owner, pageObjectNumber);
+@@ -514,6 +525,7 @@ var PageResidency = class {
+ 				throw loadFailed(pageObjectNumber);
+ 			}
+ 			page.loaded = true;
++			this.observer?.({ type: "load", owner, page: pageObjectNumber });
+ 		}
+ 		this.measure(page);
+ 		this.makeRoom(0);
+@@ -545,7 +557,10 @@ var PageResidency = class {
+ 			page.loaded = result === 1;
+ 			this.measure(page);
+ 			this.makeRoom(0);
+-			if (page.loaded) break;
++			if (page.loaded) {
++				this.observer?.({ type: "load", owner, page: pageObjectNumber });
++				break;
++			}
+ 			try {
+ 				await slices.between();
+ 				throwIfAborted(signal);
+@@ -608,6 +623,7 @@ var PageResidency = class {
+ 	}
+ 	/** Closes every page of `owner`, held or not: its document closes. */
+ 	closeOwner(owner) {
++		this.resetObservations(owner);
+ 		for (const page of [...this.pages.get(owner)?.values() ?? []]) this.close(page);
+ 		this.pages.delete(owner);
+ 		this.closedSizes.delete(owner);
+@@ -615,10 +631,12 @@ var PageResidency = class {
+ 	}
+ 	/** Closes the pages of `owner` no job holds: a write changed its content in place. */
+ 	closeIdleOf(owner) {
++		this.resetObservations(owner);
+ 		for (const page of [...this.pages.get(owner)?.values() ?? []]) if (page.refs === 0) this.close(page);
+ 	}
+ 	/** Closes every page no job holds. */
+ 	closeIdle() {
++		this.resetObservations();
+ 		for (const owned of [...this.pages.values()]) for (const page of [...owned.values()]) if (page.refs === 0) this.close(page);
+ 	}
+ 	/** Closes the pages no job holds and no viewer shows on screen: the idle timer. */
+@@ -663,6 +681,7 @@ var PageResidency = class {
+ 		}
+ 		owned.set(pageObjectNumber, page);
+ 		this.totalBytes += page.bytes;
++		if (loaded) this.observer?.({ type: "load", owner, page: pageObjectNumber });
+ 		return page;
+ 	}
+ 	measure(page) {
+@@ -690,9 +709,9 @@ var PageResidency = class {
+ 		let spared = this.policy.budgetBytes > 0 ? this.lastToCloseOverBudget() : null;
+ 		while (this.totalBytes - (spared?.bytes ?? 0) + incoming > this.policy.budgetBytes) {
+ 			const victim = this.firstToClose(spared);
+-			if (victim) this.close(victim);
++			if (victim) this.close(victim, "evict");
+ 			else if (spared && spared.refs === 0) {
+-				this.close(spared);
++				this.close(spared, "evict");
+ 				spared = null;
+ 			} else return;
+ 		}
+@@ -737,7 +756,7 @@ var PageResidency = class {
+ 		}
+ 		return best;
+ 	}
+-	close(page) {
++	close(page, reason = "forget") {
+ 		if (page.loaded) {
+ 			let sizes = this.closedSizes.get(page.owner);
+ 			if (!sizes) {
+@@ -746,16 +765,17 @@ var PageResidency = class {
+ 			}
+ 			sizes.set(page.pageObjectNumber, page.bytes);
+ 		}
+-		this.drop(page);
++		this.drop(page, reason);
+ 	}
+ 	/** Closes the page without remembering its size. */
+-	drop(page) {
++	drop(page, reason = "forget") {
+ 		this.runtime.fn.FPDF_ClosePage(page.ptr);
+ 		const owned = this.pages.get(page.owner);
+ 		owned?.delete(page.pageObjectNumber);
+ 		if (owned?.size === 0) this.pages.delete(page.owner);
+ 		this.totalBytes -= page.bytes;
+ 		if (this.totalBytes <= 0) this.disarmTimer();
++		this.observer?.({ type: reason === "evict" && page.loaded ? "evict" : "forget", owner: page.owner, page: page.pageObjectNumber });
+ 	}
+ 	armTimer() {
+ 		if (this.policy.idleMs <= 0) return;
+@@ -20955,6 +20975,7 @@ var WorkerHost = class {
+ 	* thread's fallback fonts. Browser engines drive fonts through the
+ 	* `fonts.*` wire path instead. Throws if any font fails to load.
+ 	*/
++	get parsedPageCache() { return this.residency; }
+ 	registerStartupFonts(specs) {
+ 		this.fonts.registerStartup(specs);
+ 	}
+@@ -21043,6 +21064,7 @@ var WorkerHost = class {
+ 		const effect = pageEffectOf(job);
+ 		this.closePagesChangedBy(job, effect);
+ 		this.decodedImages.beginJob(effect === "none");
++		if (effect !== "none") this.residency.resetObservations();
+ 		let msg;
+ 		try {
+ 			msg = requestInFileSpace(job, this.visibleBoxesFor(job));
+diff --git a/dist/index.d.cts b/dist/index.d.cts
+index a6934e0a2f41c856951cda29e5bb3ccc3e6b755d..77aca2be191a2fd6e737724aa8ba7a33aeb80110 100644
+--- a/dist/index.d.cts
++++ b/dist/index.d.cts
+@@ -210,7 +210,13 @@ interface PageResidencyPolicy {
+   /** Pages no job uses close after this many milliseconds; 0 disables the timer. */
+   idleMs: number;
+ }
++type PageCacheEvent = { type: 'load' | 'evict' | 'forget'; owner: object; page: number } | { type: 'reset'; owner?: object };
+ declare class PageResidency {
++  private observer;
++  observe(observer?: (event: PageCacheEvent) => void): void;
++  resetObservations(owner?: object): void;
++  get budgetBytes(): number;
++  setBudget(bytes: number): void;
+   private readonly runtime;
+   private readonly policy;
+   /**
+@@ -3213,6 +3219,7 @@ interface WorkerHostOptions {
+  * worker wire shape from @embedpdf/engine-core.
+  */
+ declare class WorkerHost {
++  get parsedPageCache(): PageResidency;
+   private readonly runtime;
+   /**
+    * Receives a fully-typed `WirePack<WorkerResponse>` (the envelope
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 6938b1bcc07f4d9b764e9f9dc245f6003b581e29..d713fc286e287ec3feb86a15088a5bfc8c20be34 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -210,7 +210,13 @@ interface PageResidencyPolicy {
+   /** Pages no job uses close after this many milliseconds; 0 disables the timer. */
+   idleMs: number;
+ }
++type PageCacheEvent = { type: 'load' | 'evict' | 'forget'; owner: object; page: number } | { type: 'reset'; owner?: object };
+ declare class PageResidency {
++  private observer;
++  observe(observer?: (event: PageCacheEvent) => void): void;
++  resetObservations(owner?: object): void;
++  get budgetBytes(): number;
++  setBudget(bytes: number): void;
+   private readonly runtime;
+   private readonly policy;
+   /**
+@@ -3213,6 +3219,7 @@ interface WorkerHostOptions {
+  * worker wire shape from @embedpdf/engine-core.
+  */
+ declare class WorkerHost {
++  get parsedPageCache(): PageResidency;
+   private readonly runtime;
+   /**
+    * Receives a fully-typed `WirePack<WorkerResponse>` (the envelope
+diff --git a/dist/index.js b/dist/index.js
+index 23155a7f9647d9a9778810cc4a8fe4d1eb22cac6..caa739ad61ac3afed280f4f37f9dc5b1afa8db74 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -497,6 +497,17 @@ var PageResidency = class {
+ 		_defineProperty(this, "clock", 0);
+ 		_defineProperty(this, "timer", null);
+ 	}
++	/** Observe only cache facts; observers must not run native operations. */
++	observe(observer) { this.observer = observer; }
++	resetObservations(owner) { this.observer?.({ type: "reset", owner }); }
++	get budgetBytes() { return this.policy.budgetBytes; }
++	setBudget(bytes) {
++		if (!Number.isFinite(bytes) || bytes < 0) throw new RangeError("Invalid page cache budget");
++		const previous = this.policy.budgetBytes;
++		this.policy = { ...this.policy, budgetBytes: bytes };
++		// Never close pages from a timer while native work is suspended in a slice.
++		if (bytes < previous && !this.busy()) this.makeRoom(0);
++	}
+ 	/** The page, loaded in one go when it isn't parsed; held until {@link release}. */
+ 	acquire(owner, docPtr, pageObjectNumber) {
+ 		let page = this.take(owner, pageObjectNumber);
+@@ -513,6 +524,7 @@ var PageResidency = class {
+ 				throw loadFailed(pageObjectNumber);
+ 			}
+ 			page.loaded = true;
++			this.observer?.({ type: "load", owner, page: pageObjectNumber });
+ 		}
+ 		this.measure(page);
+ 		this.makeRoom(0);
+@@ -544,7 +556,10 @@ var PageResidency = class {
+ 			page.loaded = result === 1;
+ 			this.measure(page);
+ 			this.makeRoom(0);
+-			if (page.loaded) break;
++			if (page.loaded) {
++				this.observer?.({ type: "load", owner, page: pageObjectNumber });
++				break;
++			}
+ 			try {
+ 				await slices.between();
+ 				throwIfAborted(signal);
+@@ -607,6 +622,7 @@ var PageResidency = class {
+ 	}
+ 	/** Closes every page of `owner`, held or not: its document closes. */
+ 	closeOwner(owner) {
++		this.resetObservations(owner);
+ 		for (const page of [...this.pages.get(owner)?.values() ?? []]) this.close(page);
+ 		this.pages.delete(owner);
+ 		this.closedSizes.delete(owner);
+@@ -614,10 +630,12 @@ var PageResidency = class {
+ 	}
+ 	/** Closes the pages of `owner` no job holds: a write changed its content in place. */
+ 	closeIdleOf(owner) {
++		this.resetObservations(owner);
+ 		for (const page of [...this.pages.get(owner)?.values() ?? []]) if (page.refs === 0) this.close(page);
+ 	}
+ 	/** Closes every page no job holds. */
+ 	closeIdle() {
++		this.resetObservations();
+ 		for (const owned of [...this.pages.values()]) for (const page of [...owned.values()]) if (page.refs === 0) this.close(page);
+ 	}
+ 	/** Closes the pages no job holds and no viewer shows on screen: the idle timer. */
+@@ -662,6 +680,7 @@ var PageResidency = class {
+ 		}
+ 		owned.set(pageObjectNumber, page);
+ 		this.totalBytes += page.bytes;
++		if (loaded) this.observer?.({ type: "load", owner, page: pageObjectNumber });
+ 		return page;
+ 	}
+ 	measure(page) {
+@@ -689,9 +708,9 @@ var PageResidency = class {
+ 		let spared = this.policy.budgetBytes > 0 ? this.lastToCloseOverBudget() : null;
+ 		while (this.totalBytes - (spared?.bytes ?? 0) + incoming > this.policy.budgetBytes) {
+ 			const victim = this.firstToClose(spared);
+-			if (victim) this.close(victim);
++			if (victim) this.close(victim, "evict");
+ 			else if (spared && spared.refs === 0) {
+-				this.close(spared);
++				this.close(spared, "evict");
+ 				spared = null;
+ 			} else return;
+ 		}
+@@ -736,7 +755,7 @@ var PageResidency = class {
+ 		}
+ 		return best;
+ 	}
+-	close(page) {
++	close(page, reason = "forget") {
+ 		if (page.loaded) {
+ 			let sizes = this.closedSizes.get(page.owner);
+ 			if (!sizes) {
+@@ -745,16 +764,17 @@ var PageResidency = class {
+ 			}
+ 			sizes.set(page.pageObjectNumber, page.bytes);
+ 		}
+-		this.drop(page);
++		this.drop(page, reason);
+ 	}
+ 	/** Closes the page without remembering its size. */
+-	drop(page) {
++	drop(page, reason = "forget") {
+ 		this.runtime.fn.FPDF_ClosePage(page.ptr);
+ 		const owned = this.pages.get(page.owner);
+ 		owned?.delete(page.pageObjectNumber);
+ 		if (owned?.size === 0) this.pages.delete(page.owner);
+ 		this.totalBytes -= page.bytes;
+ 		if (this.totalBytes <= 0) this.disarmTimer();
++		this.observer?.({ type: reason === "evict" && page.loaded ? "evict" : "forget", owner: page.owner, page: page.pageObjectNumber });
+ 	}
+ 	armTimer() {
+ 		if (this.policy.idleMs <= 0) return;
+@@ -20954,6 +20974,7 @@ var WorkerHost = class {
+ 	* thread's fallback fonts. Browser engines drive fonts through the
+ 	* `fonts.*` wire path instead. Throws if any font fails to load.
+ 	*/
++	get parsedPageCache() { return this.residency; }
+ 	registerStartupFonts(specs) {
+ 		this.fonts.registerStartup(specs);
+ 	}
+@@ -21042,6 +21063,7 @@ var WorkerHost = class {
+ 		const effect = pageEffectOf(job);
+ 		this.closePagesChangedBy(job, effect);
+ 		this.decodedImages.beginJob(effect === "none");
++		if (effect !== "none") this.residency.resetObservations();
+ 		let msg;
+ 		try {
+ 			msg = requestInFileSpace(job, this.visibleBoxesFor(job));

@@ -106,6 +106,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@embedpdf/engine-services@3.1.0': 0e3b04a3fbfadd21f1591405c0964cc0b71f9dae5449b0c54c99b44e33ca9816
   '@embedpdf/plugin-render@3.1.0': ae7a15acc2469edaf6d930a3d2d9f386a4aaf8dad7296a029aebaa7fd55a50eb
 
 importers:
@@ -135,7 +136,7 @@ importers:
         version: 3.1.0
       '@embedpdf/engine-services':
         specifier: 3.1.0
-        version: 3.1.0
+        version: 3.1.0(patch_hash=0e3b04a3fbfadd21f1591405c0964cc0b71f9dae5449b0c54c99b44e33ca9816)
       '@embedpdf/plugin-actions':
         specifier: 3.1.0
         version: 3.1.0
@@ -1997,7 +1998,7 @@ snapshots:
       '@embedpdf/engine-runtime-win32-arm64': 3.1.0
       '@embedpdf/engine-runtime-win32-x64': 3.1.0
 
-  '@embedpdf/engine-services@3.1.0':
+  '@embedpdf/engine-services@3.1.0(patch_hash=0e3b04a3fbfadd21f1591405c0964cc0b71f9dae5449b0c54c99b44e33ca9816)':
     dependencies:
       '@embedpdf/core-fonts': 3.1.0
       '@embedpdf/engine-core': 3.1.0
@@ -2010,7 +2011,7 @@ snapshots:
       '@embedpdf/engine-core': 3.1.0
       '@embedpdf/engine-runtime': 3.1.0
       '@embedpdf/engine-runtime-wasm32': 3.1.0
-      '@embedpdf/engine-services': 3.1.0
+      '@embedpdf/engine-services': 3.1.0(patch_hash=0e3b04a3fbfadd21f1591405c0964cc0b71f9dae5449b0c54c99b44e33ca9816)
 
   '@embedpdf/plugin-actions@3.1.0':
     dependencies:

@@ -12,11 +12,18 @@ class PdfWorkerTransport extends EventTarget {
   constructor() {
     super();
     window.addEventListener('pagehide', this.onPageHide);
+    window.addEventListener('pageshow', this.onVisibility);
+    document.addEventListener('visibilitychange', this.onVisibility);
   }
 
   private readonly onPageHide = (event: PageTransitionEvent) => {
     // Keep a suspended page's document and edits intact when it enters BFCache.
     if (!event.persisted) this.terminate();
+    else this.endpoint?.postMessage({ type: 'visibility', visible: false });
+  };
+
+  private readonly onVisibility = () => {
+    this.endpoint?.postMessage({ type: 'visibility', visible: document.visibilityState === 'visible' });
   };
 
   private readonly onMessage = (rawEvent: Event) => {
@@ -54,6 +61,8 @@ class PdfWorkerTransport extends EventTarget {
     endpoint.addEventListener('messageerror', this.onMessageError);
     if ('start' in endpoint) endpoint.start();
     else endpoint.addEventListener('error', this.onError);
+    // Send before init, including on fallback; background opens must start hidden.
+    this.onVisibility();
   }
 
   private detach() {
@@ -129,6 +138,8 @@ class PdfWorkerTransport extends EventTarget {
     if (this.closed) return;
     this.closed = true;
     window.removeEventListener('pagehide', this.onPageHide);
+    window.removeEventListener('pageshow', this.onVisibility);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.leaseAbort.abort();
     this.detach();
   }

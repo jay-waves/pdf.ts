@@ -9,11 +9,13 @@ import { SharedDocumentHost, type SharedFileIdentity } from './shared-document-h
 import { RenderTaskQueue, displayRead, documentReadPriority } from './render-task-queue';
 import { readAnnotationBatches } from './annotation-read';
 import type { WorkingSetPage } from '@embedpdf/engine-core/runtime';
+import { SessionWorkingSets } from './session-working-sets';
+import { PARSED_PAGE_BASE_BUDGET } from './adaptive-page-cache';
 
 type Endpoint = Pick<MessagePort, 'postMessage' | 'onmessage'> & { start?(): void; close?(): void };
-type Request = { type: string; id: string; documentId?: string; method?: string; args?: unknown[]; path?: Array<string | { page: unknown } | { with: unknown }>; lease?: string; options?: LocalEngineRecipeOptions & { fontFallback?: PdfFontFallbackConfig | null }; result?: PdfWriteResult; error?: string };
+type Request = { type: string; id: string; visible?: boolean; documentId?: string; method?: string; args?: unknown[]; path?: Array<string | { page: unknown } | { with: unknown }>; lease?: string; options?: LocalEngineRecipeOptions & { fontFallback?: PdfFontFallbackConfig | null }; result?: PdfWriteResult; error?: string };
 type Session = { key: string; port: Endpoint; documents: Set<string>; closed: boolean; lease: AbortController; theme: PdfRenderTheme | null;
-  workingSets: Map<string, Map<string, readonly WorkingSetPage[]>> };
+  workingSets: SessionWorkingSets };
 const sessions = new Set<Session>();
 let host: SharedDocumentHost | undefined;
 let native: Awaited<ReturnType<typeof createNativeRuntime>> | undefined;
@@ -62,7 +64,7 @@ function readPriority(s: Session, req: Request) {
   const read = displayRead(req);
   if (!read) {
     const priority = documentReadPriority(req);
-    return priority === undefined ? undefined : () => priority;
+    return priority === undefined ? undefined : () => s.workingSets.priority(priority);
   }
   return () => {
     const views = s.workingSets.get(req.documentId!);
@@ -72,7 +74,7 @@ function readPriority(s: Session, req: Request) {
       if (page.page.objectNumber === read.page) visibility = Math.max(visibility,
         page.role === 'visible' ? 100 + Math.min(9, page.pixels / 1_000_000) : 40);
     }
-    return visibility + read.detail * 10;
+    return s.workingSets.priority(visibility + read.detail * 10);
   };
 }
 function readAnnotations(s: Session, req: Request) {
@@ -94,13 +96,12 @@ function readAnnotations(s: Session, req: Request) {
     });
     return encodeEngineResult(result);
   }
-  const result = queue.enqueueSteps(steps(), { key: `${s.key}:${req.id}`, priority: () => -10 });
+  const result = queue.enqueueSteps(steps(), { key: `${s.key}:${req.id}`, priority: () => s.workingSets.priority(-10) });
   serial = Promise.all([serial, result.catch(() => {})]).then(() => {});
   return result;
 }
 
 function clearWorkingSets(s: Session, id: string) {
-  for (const view of s.workingSets.get(id)?.keys() ?? []) host?.document(id)?.setWorkingSet(`${s.key}:${view}`, []);
   s.workingSets.delete(id);
 }
 function broadcast(id: string, message: object) {
@@ -142,7 +143,8 @@ async function dispatch(s: Session, req: Request) {
   if (s.closed) throw new Error('PDF session is closed.');
   const args = req.args ?? [];
   if (req.type === 'runtimeDiagnostics') return { active: !!native, generation: runtimeGeneration, documents: host?.all().length ?? 0, idleMs: RUNTIME_IDLE_MS,
-    parsedPageBudgetBytes: 64 * 1024 * 1024, decodedImageBudgetBytes: 32 * 1024 * 1024 };
+    parsedPageBudgetBytes: native?.pageCache.stats().budgetBytes ?? PARSED_PAGE_BASE_BUDGET,
+    parsedPageCache: native?.pageCache.stats() ?? null, decodedImageBudgetBytes: 32 * 1024 * 1024 };
   if (req.type === 'open') await initialize();
   currentTheme = s.theme; native?.fonts?.setDiagnosticContext(s.key);
   if (req.type === 'theme') { s.theme = args[0] as PdfRenderTheme | null; return true; }
@@ -209,9 +211,15 @@ async function dispatch(s: Session, req: Request) {
   } finally { active.delete(`${s.key}:${req.id}`); }
 }
 function connect(port: Endpoint) {
-  const s: Session = { key: crypto.randomUUID(), port, documents: new Set(), closed: false, lease: new AbortController(), theme: null, workingSets: new Map() }; sessions.add(s);
+  const key = crypto.randomUUID();
+  const workingSets = new SessionWorkingSets((id, view, pages) => host?.document(id)?.setWorkingSet(`${key}:${view}`, pages));
+  const s: Session = { key, port, documents: new Set(), closed: false, lease: new AbortController(), theme: null, workingSets }; sessions.add(s);
   port.onmessage = (event: MessageEvent<Request>) => {
     const req = event.data;
+    if (req.type === 'visibility') {
+      if (!s.closed && typeof req.visible === 'boolean') s.workingSets.setVisible(req.visible);
+      return;
+    }
     if (req.type === 'init') {
       cancelIdleRelease();
       void run(() => initialize(req.options)).then(() => { port.postMessage({ type: 'ready' }); scheduleIdleRelease(); }, error => port.postMessage({ type: 'error', error: String(error) }));
@@ -236,10 +244,7 @@ function connect(port: Endpoint) {
         return;
       }
       const [view, pages] = req.args as [string, readonly WorkingSetPage[]];
-      let views = s.workingSets.get(id);
-      if (!views) s.workingSets.set(id, views = new Map());
-      if (pages.length) views.set(view, pages); else views.delete(view);
-      host!.document(id)!.setWorkingSet(`${s.key}:${view}`, pages);
+      s.workingSets.set(id, view, pages);
       port.postMessage({ type: 'result', id: req.id });
       return;
     }
